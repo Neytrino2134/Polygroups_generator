@@ -1,95 +1,33 @@
 import bpy
 
 
-BISECT_OPERATOR_IDS = {"MESH_OT_bisect", "mesh.bisect"}
 POST_CUT_RETRY_LIMIT = 20
 POST_CUT_INTERVAL = 0.1
 
 
-def _has_running_operator(window_manager, operator_ids):
-    for operator in window_manager.operators:
-        identifier = getattr(operator, "bl_idname", None)
-        if not identifier:
-            bl_rna = getattr(operator, "bl_rna", None)
-            identifier = getattr(bl_rna, "identifier", "")
-
-        if identifier in operator_ids:
-            return True
-
-    return False
-
-
-def _edge_key(edge):
-    return tuple(sorted((edge.vertices[0], edge.vertices[1])))
-
-
-def _capture_edge_keys(obj):
-    return {_edge_key(edge) for edge in obj.data.edges}
-
-
 def _select_all_edit_mesh():
-    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
+    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="EDGE")
     bpy.ops.mesh.select_all(action="SELECT")
 
 
-def _apply_post_cut_bmesh(obj_name, original_edge_keys, mark_seam, clear_selection_after_cutting):
+def _mark_selected_edges(obj_name, clear_selection_after_cutting):
     obj = bpy.data.objects.get(obj_name)
     if obj is None or obj.type != "MESH" or obj.mode != "EDIT":
-        return False
-
-    import bmesh
-
-    bm = bmesh.from_edit_mesh(obj.data)
-    bm.verts.ensure_lookup_table()
-    bm.edges.ensure_lookup_table()
-    bm.faces.ensure_lookup_table()
-
-    if mark_seam:
-        for edge in bm.edges:
-            current_key = tuple(sorted((edge.verts[0].index, edge.verts[1].index)))
-            if current_key not in original_edge_keys:
-                edge.seam = True
-
-    if clear_selection_after_cutting:
-        for vertex in bm.verts:
-            vertex.select = False
-        for edge in bm.edges:
-            edge.select = False
-        for face in bm.faces:
-            face.select = False
-        bm.select_flush_mode()
-
-    bmesh.update_edit_mesh(obj.data)
-    return True
-
-
-def _schedule_post_cut_processing(obj_name, original_edge_keys, mark_seam, clear_selection_after_cutting):
-    state = {"attempts": 0}
-
-    def _callback():
-        if _has_running_operator(bpy.context.window_manager, BISECT_OPERATOR_IDS):
-            state["attempts"] += 1
-            return POST_CUT_INTERVAL if state["attempts"] < POST_CUT_RETRY_LIMIT else None
-
-        result = _apply_post_cut_bmesh(
-            obj_name,
-            original_edge_keys,
-            mark_seam,
-            clear_selection_after_cutting,
-        )
-        if result is False:
-            state["attempts"] += 1
-            return POST_CUT_INTERVAL if state["attempts"] < POST_CUT_RETRY_LIMIT else None
-
         return None
 
-    bpy.app.timers.register(_callback, first_interval=POST_CUT_INTERVAL)
+    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="EDGE")
+    bpy.ops.mesh.mark_seam(clear=False)
+
+    if clear_selection_after_cutting:
+        bpy.ops.mesh.select_all(action="DESELECT")
+
+    return True
 
 
 class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
     bl_idname = "mesh.polygroups_quick_knife_seam"
     bl_label = "Quick Knife Seam"
-    bl_description = "Single-gesture cut through the mesh, then mark the cut as seams and optionally clear selection"
+    bl_description = "Use Bisect and mark its cut line as seams after confirming"
     bl_options = {"REGISTER", "UNDO"}
 
     use_fill: bpy.props.BoolProperty(
@@ -107,7 +45,7 @@ class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
     )
     mark_seam: bpy.props.BoolProperty(
         name="Mark As Seam",
-        description="Mark newly created cut edges as seams",
+        description="Mark the Bisect cut line as seams after confirming the cut",
         default=True,
     )
     clear_selection_after_cutting: bpy.props.BoolProperty(
@@ -119,8 +57,10 @@ class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
     _timer = None
     _object_name = ""
     _finished = False
-    _postprocess_delay = 0
-    _original_edge_keys = None
+    _confirmation_requested = False
+    _confirmation_delay = 0
+    _postprocess_attempts = 0
+    _cancel_requested = False
 
     @classmethod
     def poll(cls, context):
@@ -134,15 +74,16 @@ class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
 
         self._object_name = obj.name
         self._finished = False
-        self._postprocess_delay = 0
-        self._original_edge_keys = _capture_edge_keys(obj)
+        self._confirmation_requested = False
+        self._confirmation_delay = 0
+        self._postprocess_attempts = 0
+        self._cancel_requested = False
         self.use_fill = settings.use_fill
         self.threshold = settings.threshold
         self.mark_seam = settings.mark_seam
         self.clear_selection_after_cutting = settings.clear_selection_after_cutting
 
         _select_all_edit_mesh()
-
         result = bpy.ops.mesh.bisect(
             "INVOKE_DEFAULT",
             use_fill=self.use_fill,
@@ -153,36 +94,63 @@ class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
         if "RUNNING_MODAL" not in result:
             return result
 
-        self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
+        self._timer = context.window_manager.event_timer_add(
+            POST_CUT_INTERVAL,
+            window=context.window,
+        )
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
+        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+            self._cancel_requested = True
+            return {"PASS_THROUGH"}
+
+        if event.value == "PRESS" and event.type in {"SPACE", "RET", "NUMPAD_ENTER"}:
+            self._confirmation_requested = True
+            self._confirmation_delay = 0
+            self._postprocess_attempts = 0
+            return {"PASS_THROUGH"}
+
+        if event.type == "LEFTMOUSE" and event.value == "RELEASE":
+            self._confirmation_requested = True
+            self._confirmation_delay = 0
+            self._postprocess_attempts = 0
+            return {"PASS_THROUGH"}
+
         if event.type != "TIMER":
             return {"PASS_THROUGH"}
 
-        obj = bpy.data.objects.get(self._object_name)
-        if obj is None:
+        if self._cancel_requested:
             self._finish(context)
             return {"CANCELLED"}
 
-        if _has_running_operator(context.window_manager, BISECT_OPERATOR_IDS):
-            self._postprocess_delay = 0
+        if not self._confirmation_requested:
             return {"PASS_THROUGH"}
 
-        if self._postprocess_delay < 2:
-            self._postprocess_delay += 1
+        if self._confirmation_delay < 2:
+            self._confirmation_delay += 1
             return {"PASS_THROUGH"}
 
-        _schedule_post_cut_processing(
+        if not self.mark_seam:
+            self._finish(context)
+            return {"FINISHED"}
+
+        marked_count = _mark_selected_edges(
             self._object_name,
-            self._original_edge_keys,
-            mark_seam=self.mark_seam,
-            clear_selection_after_cutting=self.clear_selection_after_cutting,
+            self.clear_selection_after_cutting,
         )
+        if marked_count is not None:
+            self._finish(context)
+            return {"FINISHED"}
 
-        self._finish(context)
-        return {"FINISHED"}
+        self._postprocess_attempts += 1
+        if self._postprocess_attempts >= POST_CUT_RETRY_LIMIT:
+            self.report({"WARNING"}, "Bisect finished, but selected edges were not ready")
+            self._finish(context)
+            return {"CANCELLED"}
+
+        return {"PASS_THROUGH"}
 
     def _finish(self, context):
         if self._finished:

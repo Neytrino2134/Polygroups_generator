@@ -1,11 +1,61 @@
 import bpy
 
 
+def quad_remesher_status(context):
+    try:
+        import addon_utils
+    except ImportError:
+        addon_utils = None
+
+    installed = addon_utils is not None and any(
+        module.__name__ == "quad_remesher"
+        for module in addon_utils.modules()
+    )
+    loaded = False
+    enabled = False
+
+    if addon_utils is not None:
+        try:
+            loaded, enabled = addon_utils.check("quad_remesher")
+        except Exception:
+            loaded = False
+            enabled = False
+
+    has_settings = hasattr(context.scene, "qremesher")
+    has_operator = hasattr(bpy.ops, "qremesher") and hasattr(
+        bpy.ops.qremesher,
+        "remesh",
+    )
+
+    return installed, enabled or loaded, has_settings and has_operator
+
+
+def draw_collapsible_box(layout, settings, property_name, label, icon):
+    box = layout.box()
+    header = box.row(align=True)
+    is_open = getattr(settings, property_name)
+    header.prop(
+        settings,
+        property_name,
+        text=label,
+        icon="TRIA_DOWN" if is_open else "TRIA_RIGHT",
+        emboss=False,
+    )
+
+    if not is_open:
+        return None
+
+    content = box.column(align=True)
+    content.separator()
+    return content
+
+
 class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     bl_label = "PolyGroups Generator"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
+    bl_order = 0
 
     def draw(self, context):
         self.layout.label(text="Retopology tools for generated meshes")
@@ -18,9 +68,10 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 3
 
     def draw(self, context):
-        layout = self.layout
+        layout = self.layout.box()
         settings = context.scene.polygroups_model_preparation_settings
 
         column = layout.column(align=True)
@@ -37,6 +88,7 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 1
 
     def draw(self, context):
         layout = self.layout
@@ -65,9 +117,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 2
 
     def draw(self, context):
-        layout = self.layout
+        layout = self.layout.box()
         settings = context.scene.polygroups_model_preparation_settings
 
         folder_row = layout.row(align=True)
@@ -103,62 +156,261 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         )
 
 
+class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
+    bl_label = "Remesh"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "PolyGroups"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 6
+
+    def draw(self, context):
+        layout = self.layout.box()
+        installed, enabled, available = quad_remesher_status(context)
+
+        if not installed:
+            layout.label(text="Quad Remesher add-on is not installed.", icon="ERROR")
+            layout.label(text="Install it to use these controls.")
+            return
+
+        if not enabled or not available:
+            layout.label(text="Quad Remesher add-on is installed but not enabled.", icon="ERROR")
+            layout.label(text="Enable it in Blender Preferences.")
+            return
+
+        qremesher = context.scene.qremesher
+
+        layout.label(text="Uses the installed Quad Remesher add-on.", icon="CHECKMARK")
+        layout.operator("qremesher.remesh", icon="MOD_REMESH")
+        layout.prop(qremesher, "target_count")
+        layout.prop(qremesher, "use_materials")
+
+        symmetry_row = layout.row(align=True)
+        symmetry_row.label(text="Symmetry:")
+        symmetry_row.prop(qremesher, "symmetry_x")
+
+
+class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
+    bl_label = "Seam Preparation"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "PolyGroups"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 4
+
+    def draw(self, context):
+        layout = self.layout
+        seam_settings = context.scene.polygroups_seam_preparation_settings
+
+        tools_box = layout.box()
+        tools_column = tools_box.column(align=True)
+        tools_column.prop(seam_settings, "selection_smooth_iterations")
+
+        smooth_operator = tools_column.operator(
+            "mesh.polygroups_smooth_face_selection",
+            icon="MOD_SMOOTH",
+        )
+        smooth_operator.iterations = seam_settings.selection_smooth_iterations
+
+        tools_column.operator(
+            "mesh.polygroups_mark_selected_edges_seam",
+            icon="EDGESEL",
+        )
+        tools_column.operator(
+            "mesh.polygroups_mark_selection_boundary_seam",
+            icon="EDGESEL",
+        )
+
+        layout.separator()
+        knife_content = draw_collapsible_box(
+            layout,
+            seam_settings,
+            "show_knife_seam_settings",
+            "Knife Seam",
+            "MOD_BEVEL",
+        )
+        if knife_content is not None:
+            self.draw_knife_seam(context, knife_content)
+
+        quick_knife_content = draw_collapsible_box(
+            layout,
+            seam_settings,
+            "show_quick_knife_seam_settings",
+            "Quick Knife Seam",
+            "MOD_BEVEL",
+        )
+        if quick_knife_content is not None:
+            self.draw_quick_knife_seam(context, quick_knife_content)
+
+        object_cutter_content = draw_collapsible_box(
+            layout,
+            seam_settings,
+            "show_object_seam_cutter_settings",
+            "Object Seam Cutter",
+            "MESH_PLANE",
+        )
+        if object_cutter_content is not None:
+            self.draw_object_seam_cutter(context, object_cutter_content)
+
+    def draw_knife_seam(self, context, layout):
+        settings = context.scene.polygroups_knife_seam_settings
+
+        layout.prop(settings, "stable_view_cut")
+        layout.prop(settings, "xray")
+        layout.prop(settings, "use_occlude_geometry")
+        layout.prop(settings, "only_selected")
+        layout.prop(settings, "mark_seam")
+        layout.prop(settings, "clear_selection_after_cutting")
+
+        tool_operator = layout.operator(
+            "mesh.polygroups_select_seam_tool",
+            text="Select Knife Seam Tool",
+            icon="SCULPTMODE_HLT",
+        )
+        tool_operator.tool_id = "polygroups_generator.knife_seam_tool"
+
+    def draw_quick_knife_seam(self, context, layout):
+        quick_settings = context.scene.polygroups_quick_knife_seam_settings
+
+        layout.prop(quick_settings, "use_fill")
+        layout.prop(quick_settings, "threshold")
+        layout.prop(quick_settings, "mark_seam")
+        layout.prop(quick_settings, "clear_selection_after_cutting")
+
+        tool_operator = layout.operator(
+            "mesh.polygroups_select_seam_tool",
+            text="Select Quick Knife Seam Tool",
+            icon="MOD_BEVEL",
+        )
+        tool_operator.tool_id = "polygroups_generator.quick_knife_seam_tool"
+
+    def draw_object_seam_cutter(self, context, layout):
+        settings = context.scene.polygroups_object_seam_cutter_settings
+
+        layout.prop(settings, "cutter_size_multiplier")
+        layout.prop(settings, "cutter_alpha")
+        layout.prop(settings, "cutter_solidify_thickness")
+        layout.prop(settings, "hide_cutters_after_apply")
+        layout.prop(settings, "delete_cutters_after_apply")
+
+        layout.separator()
+        tool_operator = layout.operator(
+            "wm.tool_set_by_id",
+            text="Select Draw Cutter Plane Tool",
+            icon="MESH_PLANE",
+        )
+        tool_operator.name = "polygroups_generator.draw_cutter_plane_tool"
+        layout.operator(
+            "object.polygroups_draw_cutter_plane",
+            icon="MESH_PLANE",
+        )
+        layout.operator(
+            "object.polygroups_apply_cutter_seams",
+            icon="MOD_BOOLEAN",
+        )
+
+        utility_row = layout.row(align=True)
+        utility_row.operator(
+            "object.polygroups_select_cutter_planes",
+            text="Select",
+            icon="RESTRICT_SELECT_OFF",
+        )
+        utility_row.operator(
+            "object.polygroups_clear_cutter_planes",
+            text="Clear",
+            icon="TRASH",
+        )
+
+        if settings.last_cutter_count or settings.last_marked_edge_count:
+            layout.separator()
+            layout.label(text=f"Last Cutters: {settings.last_cutter_count}")
+            layout.label(text=f"Last Seam Edges: {settings.last_marked_edge_count}")
+
+
 class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
     bl_label = "PolyGroups"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_order = 5
 
     def draw(self, context):
-        layout = self.layout
+        layout = self.layout.box()
+        settings = context.scene.polygroups_generator_settings
         column = layout.column(align=True)
+        column.prop(settings, "material_mode", expand=True)
+        column.separator()
         column.operator("object.generate_polygroups", icon="MATERIAL")
+        column.operator(
+            "mesh.polygroups_mark_material_boundaries_seam",
+            icon="EDGE_SEAM",
+        )
+        column.operator(
+            "object.polygroups_unwrap_angle_based",
+            icon="UV",
+        )
+        column.separator()
         column.operator("object.face_sets_to_materials", icon="SHADING_TEXTURE")
         column.operator("object.clear_polygroups_materials", icon="TRASH")
 
-        layout.separator()
 
-        settings = context.scene.polygroups_knife_seam_settings
-        box = layout.box()
-        box.label(text="Knife Seam", icon="MOD_BEVEL")
-        box.prop(settings, "xray")
-        box.prop(settings, "use_occlude_geometry")
-        box.prop(settings, "only_selected")
-        box.prop(settings, "mark_seam")
-        box.prop(settings, "clear_selection_after_cutting")
+class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
+    bl_label = "Baking"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "PolyGroups"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 7
 
-        operator = box.operator("mesh.polygroups_knife_seam", icon="SCULPTMODE_HLT")
-        operator.xray = settings.xray
-        operator.use_occlude_geometry = settings.use_occlude_geometry
-        operator.only_selected = settings.only_selected
-        operator.mark_seam = settings.mark_seam
-        operator.clear_selection_after_cutting = settings.clear_selection_after_cutting
+    def draw(self, context):
+        layout = self.layout.box()
+        settings = context.scene.polygroups_baking_settings
 
-        quick_settings = context.scene.polygroups_quick_knife_seam_settings
-        quick_box = layout.box()
-        quick_box.label(text="Quick Knife Seam", icon="MOD_BEVEL")
-        quick_box.prop(quick_settings, "use_fill")
-        quick_box.prop(quick_settings, "threshold")
-        quick_box.prop(quick_settings, "mark_seam")
-        quick_box.prop(quick_settings, "clear_selection_after_cutting")
+        column = layout.column(align=True)
+        column.prop(settings, "bake_resolution")
+        column.prop(settings, "bake_margin")
+        column.prop(settings, "ray_distance")
+        column.prop(settings, "cage_extrusion")
+        column.prop(settings, "image_prefix")
+        column.prop(settings, "use_selected_to_active")
 
-        quick_operator = quick_box.operator(
-            "mesh.polygroups_quick_knife_seam",
-            icon="MOD_BEVEL",
+        pass_row = column.row(align=True)
+        pass_row.prop(settings, "bake_base_color")
+        pass_row.prop(settings, "bake_normal")
+
+        column.separator()
+        column.operator(
+            "object.polygroups_prepare_highpoly_bake_materials",
+            icon="MATERIAL",
         )
-        quick_operator.use_fill = quick_settings.use_fill
-        quick_operator.threshold = quick_settings.threshold
-        quick_operator.mark_seam = quick_settings.mark_seam
-        quick_operator.clear_selection_after_cutting = quick_settings.clear_selection_after_cutting
+        column.operator(
+            "object.polygroups_prepare_lowpoly_bake_material",
+            icon="TEXTURE",
+        )
+        column.operator(
+            "object.polygroups_bake_selected_to_active",
+            icon="RENDER_STILL",
+        )
+        column.separator()
+        column.operator(
+            "object.polygroups_prepare_and_bake",
+            icon="RENDER_RESULT",
+        )
 
 
 CLASSES = (
     VIEW3D_PT_polygroups_generator,
-    VIEW3D_PT_polygroups_model_preparation,
     VIEW3D_PT_polygroups_import,
     VIEW3D_PT_polygroups_batch_import,
+    VIEW3D_PT_polygroups_model_preparation,
+    VIEW3D_PT_polygroups_seam_preparation,
     VIEW3D_PT_polygroups_tools,
+    VIEW3D_PT_polygroups_remesh,
+    VIEW3D_PT_polygroups_baking,
 )
 
 

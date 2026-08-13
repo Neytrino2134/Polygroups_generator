@@ -1,6 +1,29 @@
 import bpy
 
 
+CUTTER_COLLECTION_NAME = "Seam Cutters"
+CUTTER_PROP = "polygroups_object_seam_cutter"
+CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
+
+
+def _sync_cutter_solidify_thickness(self, context):
+    del context
+    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+    if collection is None:
+        return
+
+    for obj in collection.objects:
+        if obj.type != "MESH" or not obj.get(CUTTER_PROP):
+            continue
+
+        modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
+        if modifier is None:
+            modifier = obj.modifiers.new(CUTTER_SOLIDIFY_MODIFIER_NAME, "SOLIDIFY")
+
+        modifier.thickness = self.cutter_solidify_thickness
+        modifier.offset = 0.0
+
+
 class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     weld_distance: bpy.props.FloatProperty(
         name="Weld Distance",
@@ -88,6 +111,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
+    stable_view_cut: bpy.props.BoolProperty(
+        name="Stable View Cut",
+        description="Use a viewport-plane cut that stays continuous on dense meshes when zoomed out",
+        default=True,
+    )
     use_occlude_geometry: bpy.props.BoolProperty(
         name="Occlude Geometry",
         description="Limit the cut to visible geometry only",
@@ -112,6 +140,77 @@ class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
         name="Clear Selection After Cutting",
         description="Deselect vertices, edges, and faces after post-cut processing",
         default=False,
+    )
+
+
+class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
+    selection_smooth_iterations: bpy.props.IntProperty(
+        name="Smooth Iterations",
+        description="Number of smoothing passes for the selected face region",
+        default=2,
+        min=1,
+        max=25,
+        soft_max=10,
+    )
+    show_knife_seam_settings: bpy.props.BoolProperty(
+        name="Knife Seam",
+        default=False,
+    )
+    show_quick_knife_seam_settings: bpy.props.BoolProperty(
+        name="Quick Knife Seam",
+        default=False,
+    )
+    show_object_seam_cutter_settings: bpy.props.BoolProperty(
+        name="Object Seam Cutter",
+        default=False,
+    )
+
+
+class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
+    cutter_size_multiplier: bpy.props.FloatProperty(
+        name="Cutter Size",
+        description="Cutter plane size relative to the active object's bounding box diagonal",
+        default=1.5,
+        min=0.1,
+        soft_max=5.0,
+        precision=2,
+    )
+    cutter_alpha: bpy.props.FloatProperty(
+        name="Cutter Alpha",
+        description="Viewport opacity for newly created cutter planes",
+        default=0.25,
+        min=0.05,
+        max=1.0,
+        subtype="FACTOR",
+    )
+    cutter_solidify_thickness: bpy.props.FloatProperty(
+        name="Plane Thickness",
+        description="Visual Solidify thickness for cutter planes; seam calculation still uses the original center plane",
+        default=0.001,
+        min=0.0,
+        soft_max=0.01,
+        precision=5,
+        update=_sync_cutter_solidify_thickness,
+    )
+    hide_cutters_after_apply: bpy.props.BoolProperty(
+        name="Hide Cutters After Apply",
+        description="Hide cutter plane objects after applying seams",
+        default=True,
+    )
+    delete_cutters_after_apply: bpy.props.BoolProperty(
+        name="Delete Cutters After Apply",
+        description="Delete cutter plane objects after applying seams",
+        default=False,
+    )
+    last_cutter_count: bpy.props.IntProperty(
+        name="Last Cutters",
+        default=0,
+        min=0,
+    )
+    last_marked_edge_count: bpy.props.IntProperty(
+        name="Last Seams",
+        default=0,
+        min=0,
     )
 
 
@@ -141,10 +240,81 @@ class POLYGROUPS_PG_quick_knife_seam_settings(bpy.types.PropertyGroup):
     )
 
 
+class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
+    material_mode: bpy.props.EnumProperty(
+        name="Material Mode",
+        description="How generated PolyGroup materials use the source material textures",
+        items=(
+            ("TEXTURE_ONLY", "Source Texture", "Use the source material texture color"),
+            ("TEXTURE_TINT", "Texture + Color", "Multiply source texture color by a random PolyGroup color"),
+            ("COLOR_ONLY", "Random Color", "Use random PolyGroup colors without source textures"),
+        ),
+        default="TEXTURE_TINT",
+    )
+
+
+class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
+    bake_resolution: bpy.props.IntProperty(
+        name="Bake Resolution",
+        description="Width and height for generated bake images",
+        default=2048,
+        min=16,
+        max=16384,
+        soft_max=8192,
+    )
+    bake_margin: bpy.props.IntProperty(
+        name="Bake Margin",
+        description="Bake margin in pixels",
+        default=16,
+        min=0,
+        max=256,
+    )
+    ray_distance: bpy.props.FloatProperty(
+        name="Ray Distance",
+        description="Maximum ray distance for selected-to-active baking",
+        default=0.05,
+        min=0.0,
+        soft_max=1.0,
+        precision=4,
+    )
+    cage_extrusion: bpy.props.FloatProperty(
+        name="Cage Extrusion",
+        description="Cage extrusion for selected-to-active baking",
+        default=0.0,
+        min=0.0,
+        soft_max=1.0,
+        precision=4,
+    )
+    image_prefix: bpy.props.StringProperty(
+        name="Image Prefix",
+        description="Prefix for generated bake images",
+        default="Bake_Temp",
+    )
+    use_selected_to_active: bpy.props.BoolProperty(
+        name="Selected To Active",
+        description="Bake from selected source meshes to the active target mesh",
+        default=True,
+    )
+    bake_base_color: bpy.props.BoolProperty(
+        name="Base Color",
+        description="Bake source Base Color to the active target",
+        default=True,
+    )
+    bake_normal: bpy.props.BoolProperty(
+        name="Normal",
+        description="Bake source normals to the active target",
+        default=True,
+    )
+
+
 CLASSES = (
     POLYGROUPS_PG_model_preparation_settings,
     POLYGROUPS_PG_knife_seam_settings,
+    POLYGROUPS_PG_seam_preparation_settings,
     POLYGROUPS_PG_quick_knife_seam_settings,
+    POLYGROUPS_PG_object_seam_cutter_settings,
+    POLYGROUPS_PG_polygroups_settings,
+    POLYGROUPS_PG_baking_settings,
 )
 
 
@@ -158,13 +328,29 @@ def register():
     bpy.types.Scene.polygroups_knife_seam_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_knife_seam_settings,
     )
+    bpy.types.Scene.polygroups_seam_preparation_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_seam_preparation_settings,
+    )
     bpy.types.Scene.polygroups_quick_knife_seam_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_quick_knife_seam_settings,
+    )
+    bpy.types.Scene.polygroups_object_seam_cutter_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_object_seam_cutter_settings,
+    )
+    bpy.types.Scene.polygroups_generator_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_polygroups_settings,
+    )
+    bpy.types.Scene.polygroups_baking_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_baking_settings,
     )
 
 
 def unregister():
+    del bpy.types.Scene.polygroups_baking_settings
+    del bpy.types.Scene.polygroups_generator_settings
+    del bpy.types.Scene.polygroups_object_seam_cutter_settings
     del bpy.types.Scene.polygroups_quick_knife_seam_settings
+    del bpy.types.Scene.polygroups_seam_preparation_settings
     del bpy.types.Scene.polygroups_knife_seam_settings
     del bpy.types.Scene.polygroups_model_preparation_settings
 

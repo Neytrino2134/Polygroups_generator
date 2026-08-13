@@ -37,7 +37,8 @@ class OBJECT_OT_generate_polygroups(bpy.types.Operator):
             self.report({"WARNING"}, "No face groups were generated")
             return {"CANCELLED"}
 
-        assign_materials(obj, groups)
+        settings = context.scene.polygroups_generator_settings
+        assign_materials(obj, groups, material_mode=settings.material_mode)
         bmesh.update_edit_mesh(obj.data)
 
         bpy.ops.object.mode_set(mode="OBJECT")

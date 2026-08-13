@@ -1,0 +1,503 @@
+import bpy
+from mathutils import Vector
+
+
+CUTTER_COLLECTION_NAME = "Seam Cutters"
+CUTTER_PROP = "polygroups_object_seam_cutter"
+CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
+
+
+def _view3d_under_mouse(context, event):
+    screen = context.window.screen
+    for area in screen.areas:
+        if area.type != "VIEW_3D":
+            continue
+
+        region = next((item for item in area.regions if item.type == "WINDOW"), None)
+        space = next((item for item in area.spaces if item.type == "VIEW_3D"), None)
+        if region is None or space is None or space.region_3d is None:
+            continue
+
+        inside_x = region.x <= event.mouse_x < region.x + region.width
+        inside_y = region.y <= event.mouse_y < region.y + region.height
+        if inside_x and inside_y:
+            region_pos = (event.mouse_x - region.x, event.mouse_y - region.y)
+            return area, region, space.region_3d, region_pos
+
+    return None, None, None, None
+
+
+def _target_bounds(target):
+    corners = [target.matrix_world @ Vector(corner) for corner in target.bound_box]
+    center = sum(corners, Vector()) / len(corners)
+    diagonal = max((corner - center).length for corner in corners) * 2.0
+    return center, max(diagonal, 1.0)
+
+
+def _collection():
+    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+    if collection is None:
+        collection = bpy.data.collections.new(CUTTER_COLLECTION_NAME)
+        bpy.context.scene.collection.children.link(collection)
+    return collection
+
+
+def _material(alpha):
+    material = bpy.data.materials.get("PolyGroups Cutter Plane")
+    if material is None:
+        material = bpy.data.materials.new("PolyGroups Cutter Plane")
+    material.diffuse_color = (0.1, 0.55, 1.0, alpha)
+    material.use_nodes = False
+    try:
+        material.blend_method = "BLEND"
+    except Exception:
+        pass
+    return material
+
+
+def _screen_cut_plane(area, region, rv3d, start_pos, end_pos, target, size_multiplier):
+    del area
+    from bpy_extras import view3d_utils
+
+    start = Vector(start_pos)
+    end = Vector(end_pos)
+    if (end - start).length < 2.0:
+        return None
+
+    target_center, target_diagonal = _target_bounds(target)
+    start_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, start)
+    end_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, end)
+    start_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, start)
+    end_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, end)
+
+    if rv3d.is_perspective:
+        plane_co = start_origin
+        plane_no = start_vector.cross(end_vector)
+    else:
+        plane_co = start_origin
+        plane_no = (end_origin - start_origin).cross(start_vector)
+
+    if plane_no.length < 0.000001:
+        return None
+
+    plane_no.normalize()
+    center = target_center - plane_no * (target_center - plane_co).dot(plane_no)
+
+    start_depth = view3d_utils.region_2d_to_location_3d(region, rv3d, start, target_center)
+    end_depth = view3d_utils.region_2d_to_location_3d(region, rv3d, end, target_center)
+    axis_a = end_depth - start_depth
+    if axis_a.length < 0.000001:
+        axis_a = plane_no.cross(start_vector)
+    if axis_a.length < 0.000001:
+        return None
+    axis_a.normalize()
+
+    axis_b = plane_no.cross(axis_a)
+    if axis_b.length < 0.000001:
+        return None
+    axis_b.normalize()
+
+    size = target_diagonal * size_multiplier
+    return center, axis_a, axis_b, size
+
+
+def _add_solidify_modifier(obj, thickness):
+    modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
+    if modifier is None:
+        modifier = obj.modifiers.new(CUTTER_SOLIDIFY_MODIFIER_NAME, "SOLIDIFY")
+    modifier.thickness = thickness
+    modifier.offset = 0.0
+    return modifier
+
+
+def _create_cutter_plane(name, center, axis_a, axis_b, size, alpha, thickness):
+    half = size * 0.5
+    vertices = [
+        (-axis_a - axis_b) * half,
+        (axis_a - axis_b) * half,
+        (axis_a + axis_b) * half,
+        (-axis_a + axis_b) * half,
+    ]
+
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(vertex) for vertex in vertices], [], [(0, 1, 2, 3)])
+    mesh.update()
+
+    obj = bpy.data.objects.new(name, mesh)
+    obj.location = center
+    obj.show_in_front = True
+    obj.display_type = "TEXTURED"
+    obj[CUTTER_PROP] = True
+    obj.data.materials.append(_material(alpha))
+    _add_solidify_modifier(obj, thickness)
+    _collection().objects.link(obj)
+    return obj
+
+
+def _selected_cutters(context, target):
+    cutters = [
+        obj
+        for obj in context.selected_objects
+        if obj != target and obj.type == "MESH" and obj.get(CUTTER_PROP)
+    ]
+    if cutters:
+        return cutters
+
+    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+    if collection is None:
+        return []
+
+    return [obj for obj in collection.objects if obj.type == "MESH" and obj.get(CUTTER_PROP)]
+
+
+def _cutter_plane_world(cutter):
+    if cutter.type != "MESH" or not cutter.data.polygons:
+        return None
+
+    polygon = cutter.data.polygons[0]
+    verts = [cutter.data.vertices[index].co for index in polygon.vertices]
+    local_center = sum(verts, Vector()) / len(verts)
+    world_center = cutter.matrix_world @ local_center
+    normal = cutter.matrix_world.to_3x3().inverted().transposed() @ polygon.normal
+    if normal.length < 0.000001:
+        return None
+    normal.normalize()
+    return world_center, normal
+
+
+def _world_plane_to_local(target, plane_co, plane_no):
+    matrix = target.matrix_world
+    local_co = matrix.inverted() @ plane_co
+    local_no = matrix.to_3x3().transposed() @ plane_no
+    if local_no.length < 0.000001:
+        return None
+    local_no.normalize()
+    return local_co, local_no
+
+
+def _apply_cutters_to_mesh(target, cutters):
+    import bmesh
+
+    mesh = target.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+
+    marked_edges = 0
+    for cutter in cutters:
+        plane = _cutter_plane_world(cutter)
+        if plane is None:
+            continue
+
+        local_plane = _world_plane_to_local(target, plane[0], plane[1])
+        if local_plane is None:
+            continue
+
+        geom = list(bm.verts) + list(bm.edges) + list(bm.faces)
+        result = bmesh.ops.bisect_plane(
+            bm,
+            geom=geom,
+            plane_co=local_plane[0],
+            plane_no=local_plane[1],
+            clear_inner=False,
+            clear_outer=False,
+        )
+
+        for element in result.get("geom_cut", ()):
+            if isinstance(element, bmesh.types.BMEdge):
+                if not element.seam:
+                    marked_edges += 1
+                element.seam = True
+
+    bm.normal_update()
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return marked_edges
+
+
+def _draw_cutter_overlay(operator):
+    if operator._start_pos is None:
+        return
+
+    try:
+        import blf
+        import gpu
+        from gpu_extras.batch import batch_for_shader
+    except Exception:
+        return
+
+    start = Vector(operator._start_pos)
+    end = Vector(operator._mouse_pos or operator._start_pos)
+    color = (0.1, 0.65, 1.0, 1.0)
+    label_color = (1.0, 1.0, 1.0, 1.0)
+
+    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+
+    def draw_lines(points, line_color):
+        batch = batch_for_shader(shader, "LINES", {"pos": points})
+        shader.bind()
+        shader.uniform_float("color", line_color)
+        batch.draw(shader)
+
+    cross_size = 7.0
+    points = [
+        (start.x - cross_size, start.y),
+        (start.x + cross_size, start.y),
+        (start.x, start.y - cross_size),
+        (start.x, start.y + cross_size),
+    ]
+
+    if (end - start).length > 1.0:
+        points.extend(
+            [
+                (start.x, start.y),
+                (end.x, end.y),
+                (end.x - cross_size, end.y),
+                (end.x + cross_size, end.y),
+                (end.x, end.y - cross_size),
+                (end.x, end.y + cross_size),
+            ]
+        )
+
+    draw_lines(points, color)
+
+    font_id = 0
+    try:
+        blf.size(font_id, 14)
+    except TypeError:
+        blf.size(font_id, 14, 72)
+
+    blf.color(font_id, *label_color)
+    blf.position(font_id, start.x + 10.0, start.y + 10.0, 0)
+    blf.draw(font_id, "A")
+
+    if (end - start).length > 1.0:
+        blf.position(font_id, end.x + 10.0, end.y + 10.0, 0)
+        blf.draw(font_id, "B")
+
+
+class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
+    bl_idname = "object.polygroups_draw_cutter_plane"
+    bl_label = "Draw Cutter Plane"
+    bl_description = "Draw an object-mode cutter plane from two viewport clicks"
+    bl_options = {"REGISTER", "UNDO"}
+
+    use_event_as_start: bpy.props.BoolProperty(
+        name="Use Event As Start",
+        description="Use the invoking mouse event as the cutter start point",
+        default=False,
+        options={"HIDDEN"},
+    )
+
+    _target_name = ""
+    _start_area = None
+    _start_region = None
+    _start_rv3d = None
+    _start_pos = None
+    _mouse_pos = None
+    _draw_handle = None
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+
+    def invoke(self, context, event):
+        self._target_name = context.active_object.name
+        self._start_area = None
+        self._start_region = None
+        self._start_rv3d = None
+        self._start_pos = None
+        self._mouse_pos = None
+        self._draw_handle = None
+
+        if self.use_event_as_start:
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if region is None:
+                return {"CANCELLED"}
+
+            self._start_area = area
+            self._start_region = region
+            self._start_rv3d = rv3d
+            self._start_pos = region_pos
+            self._mouse_pos = region_pos
+            self._add_draw_handler()
+            context.workspace.status_text_set("Object Seam Cutter: A placed, click B")
+        else:
+            context.workspace.status_text_set("Object Seam Cutter: click A in the viewport")
+
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+            self._finish(context)
+            return {"CANCELLED"}
+
+        if event.type == "MOUSEMOVE":
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if self._start_pos is not None and area == self._start_area and region == self._start_region:
+                del rv3d
+                self._mouse_pos = region_pos
+                self._tag_redraw()
+            return {"RUNNING_MODAL"}
+
+        if event.type != "LEFTMOUSE" or event.value != "PRESS":
+            return {"RUNNING_MODAL"}
+
+        area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+        if region is None:
+            return {"RUNNING_MODAL"}
+
+        if self._start_pos is None:
+            self._start_area = area
+            self._start_region = region
+            self._start_rv3d = rv3d
+            self._start_pos = region_pos
+            self._mouse_pos = region_pos
+            self._add_draw_handler()
+            context.workspace.status_text_set("Object Seam Cutter: A placed, click B")
+            return {"RUNNING_MODAL"}
+
+        if area != self._start_area or region != self._start_region:
+            self.report({"WARNING"}, "Use the same viewport for both cutter points")
+            return {"RUNNING_MODAL"}
+
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            self._finish(context)
+            return {"CANCELLED"}
+
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        plane = _screen_cut_plane(
+            self._start_area,
+            self._start_region,
+            self._start_rv3d,
+            self._start_pos,
+            region_pos,
+            target,
+            settings.cutter_size_multiplier,
+        )
+        if plane is None:
+            self.report({"WARNING"}, "Cutter line is too short")
+            return {"RUNNING_MODAL"}
+
+        cutter = _create_cutter_plane(
+            "Seam_Cutter",
+            plane[0],
+            plane[1],
+            plane[2],
+            plane[3],
+            settings.cutter_alpha,
+            settings.cutter_solidify_thickness,
+        )
+        cutter.select_set(True)
+        target.select_set(True)
+        context.view_layer.objects.active = target
+        self._finish(context)
+        return {"FINISHED"}
+
+    def _add_draw_handler(self):
+        if self._draw_handle is not None:
+            return
+
+        self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_cutter_overlay,
+            (self,),
+            "WINDOW",
+            "POST_PIXEL",
+        )
+        self._tag_redraw()
+
+    def _tag_redraw(self):
+        if self._start_area is not None:
+            self._start_area.tag_redraw()
+
+    def _finish(self, context):
+        if self._draw_handle is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self._draw_handle, "WINDOW")
+            self._draw_handle = None
+        context.workspace.status_text_set(None)
+        self._tag_redraw()
+
+
+class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
+    bl_idname = "object.polygroups_apply_cutter_seams"
+    bl_label = "Apply Cutter Seams To Active"
+    bl_description = "Apply selected cutter planes to the active mesh and mark cut edges as seams"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+
+    def execute(self, context):
+        target = context.active_object
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        cutters = _selected_cutters(context, target)
+        if not cutters:
+            self.report({"WARNING"}, "No cutter planes found")
+            return {"CANCELLED"}
+
+        marked_edges = _apply_cutters_to_mesh(target, cutters)
+        settings.last_cutter_count = len(cutters)
+        settings.last_marked_edge_count = marked_edges
+
+        if settings.delete_cutters_after_apply:
+            for cutter in cutters:
+                bpy.data.objects.remove(cutter, do_unlink=True)
+        elif settings.hide_cutters_after_apply:
+            for cutter in cutters:
+                cutter.hide_set(True)
+                cutter.hide_viewport = True
+
+        self.report(
+            {"INFO"},
+            f"Applied {len(cutters)} cutter plane(s), marked {marked_edges} seam edge(s)",
+        )
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_select_cutter_planes(bpy.types.Operator):
+    bl_idname = "object.polygroups_select_cutter_planes"
+    bl_label = "Select Cutter Planes"
+    bl_description = "Select all PolyGroups cutter plane objects"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        bpy.ops.object.select_all(action="DESELECT")
+        collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+        if collection is None:
+            return {"CANCELLED"}
+
+        selected = 0
+        for obj in collection.objects:
+            if obj.type == "MESH" and obj.get(CUTTER_PROP):
+                obj.hide_set(False)
+                obj.hide_viewport = False
+                obj.select_set(True)
+                selected += 1
+
+        if selected:
+            context.view_layer.objects.active = next(
+                obj for obj in collection.objects if obj.select_get()
+            )
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_clear_cutter_planes(bpy.types.Operator):
+    bl_idname = "object.polygroups_clear_cutter_planes"
+    bl_label = "Clear Cutter Planes"
+    bl_description = "Delete all PolyGroups cutter plane objects"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+        if collection is None:
+            return {"CANCELLED"}
+
+        cutters = [obj for obj in collection.objects if obj.type == "MESH" and obj.get(CUTTER_PROP)]
+        for cutter in cutters:
+            bpy.data.objects.remove(cutter, do_unlink=True)
+        return {"FINISHED"}

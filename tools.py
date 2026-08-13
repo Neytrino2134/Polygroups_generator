@@ -2,6 +2,91 @@ import bpy
 from bpy.types import WorkSpaceTool
 
 
+DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
+VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
+
+
+def _tool_id(item):
+    return getattr(item, "idname", None)
+
+
+def _remove_tool_from_items(items, tool_id):
+    for index, item in enumerate(items):
+        if _tool_id(item) == tool_id:
+            return items.pop(index)
+
+        if isinstance(item, tuple):
+            group_items = list(item)
+            for group_index, group_item in enumerate(group_items):
+                if _tool_id(group_item) == tool_id:
+                    tool = group_items.pop(group_index)
+                    if group_items:
+                        items[index] = tuple(group_items)
+                    else:
+                        items.pop(index)
+                    return tool
+
+    return None
+
+
+def _move_draw_cutter_tool_after_cursor():
+    try:
+        from bl_ui.space_toolsystem_toolbar import VIEW3D_PT_tools_active
+    except Exception:
+        return
+
+    tools = VIEW3D_PT_tools_active._tools.get("OBJECT")
+    if not tools:
+        return
+
+    tool = _remove_tool_from_items(tools, DRAW_CUTTER_TOOL_ID)
+    if tool is None:
+        return
+
+    insert_index = None
+    for index, item in enumerate(tools):
+        if _tool_id(item) == VIEW3D_CURSOR_TOOL_ID:
+            insert_index = index + 1
+            break
+
+    if insert_index is None:
+        tools.append(tool)
+    else:
+        tools.insert(insert_index, tool)
+
+
+class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_idname = DRAW_CUTTER_TOOL_ID
+    bl_label = "Draw Cutter Plane"
+    bl_description = "Draw object-mode cutter planes for applying seams to a highpoly mesh"
+    bl_icon = "ops.mesh.bisect"
+    bl_cursor = "CROSSHAIR"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        (
+            "object.polygroups_draw_cutter_plane",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        del tool
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        layout.prop(settings, "cutter_size_multiplier")
+        layout.prop(settings, "cutter_alpha")
+        layout.prop(settings, "cutter_solidify_thickness")
+        layout.operator(
+            "object.polygroups_apply_cutter_seams",
+            text="Apply Cutter Seams To Active",
+            icon="MOD_BOOLEAN",
+        )
+
+
 class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
     bl_context_mode = "EDIT_MESH"
@@ -24,6 +109,7 @@ class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         del context
         props = tool.operator_properties("mesh.polygroups_knife_seam")
+        layout.prop(props, "stable_view_cut")
         layout.prop(props, "use_occlude_geometry")
         layout.prop(props, "only_selected")
         layout.prop(props, "xray")
@@ -36,7 +122,7 @@ class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = "polygroups_generator.quick_knife_seam_tool"
     bl_label = "Quick Knife Seam"
-    bl_description = "Single-gesture cut through the full mesh, then mark the cut as seams"
+    bl_description = "Bisect through the full mesh, then mark the cut line as seams"
     bl_icon = "ops.mesh.bisect"
     bl_cursor = "KNIFE"
     bl_options = {"KEYMAP_FALLBACK"}
@@ -61,6 +147,13 @@ class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
 
 def register():
     bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_draw_cutter_plane,
+        after={"builtin.cursor"},
+        separator=False,
+        group=False,
+    )
+    _move_draw_cutter_tool_after_cursor()
+    bpy.utils.register_tool(
         VIEW3D_WST_polygroups_knife_seam,
         after={"builtin.bevel"},
         separator=True,
@@ -77,3 +170,4 @@ def register():
 def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)
