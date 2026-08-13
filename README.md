@@ -7,8 +7,13 @@ The add-on currently targets Blender 5.0-5.2 and adds a `PolyGroups` tab to the 
 ## Current Tools
 
 - `Model Preparation`
-  - `Apply Weld`: adds or updates a Weld modifier on selected mesh objects.
+  - `Rename Objects`: renames selected objects as `Highpoly_Generated.001`, `Highpoly_Generated.002`, and so on, then moves them to the `Generated` collection.
+  - `Apply Weld`: adds and applies a Weld modifier on selected mesh objects.
   - Default weld distance: `0.0001`.
+- `Import`
+  - `Import Files`: imports several selected files one by one through Blender's file browser, with its own auto rename and Weld options.
+  - `Batch Import`: imports supported mesh files from a folder one by one, with separate auto rename and Weld options.
+  - `Scan Folder`: counts supported mesh files in the selected batch folder without importing them.
 - `PolyGroups`
   - Generate material-based PolyGroups from seam-bounded mesh islands.
   - Convert sculpt Face Sets to materials.

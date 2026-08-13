@@ -10,6 +10,81 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         soft_max=0.01,
         precision=5,
     )
+    batch_import_directory: bpy.props.StringProperty(
+        name="Folder",
+        description="Folder with mesh files to import one by one",
+        default="",
+        subtype="DIR_PATH",
+    )
+    batch_import_format: bpy.props.EnumProperty(
+        name="Format",
+        description="Mesh file format for batch import",
+        items=(
+            ("AUTO", "Auto", "Import supported mesh files by extension"),
+            ("USD", "USD", "Import USD, USDA, and USDC files"),
+            ("FBX", "FBX", "Import FBX files"),
+            ("OBJ", "OBJ", "Import OBJ files"),
+            ("STL", "STL", "Import STL files"),
+            ("GLB", "GLB", "Import GLB and GLTF files"),
+            ("3MF", "3MF", "Import 3MF files"),
+        ),
+        default="GLB",
+    )
+    file_import_auto_rename_objects: bpy.props.BoolProperty(
+        name="Auto Rename Objects",
+        description="Rename selected imported files and move them to the Generated collection",
+        default=True,
+    )
+    file_import_apply_weld: bpy.props.BoolProperty(
+        name="Apply Weld",
+        description="Apply Weld to mesh objects imported through file selection",
+        default=True,
+    )
+    batch_auto_rename_objects: bpy.props.BoolProperty(
+        name="Auto Rename Objects",
+        description="Rename imported objects and move them to the Generated collection",
+        default=True,
+    )
+    batch_apply_weld: bpy.props.BoolProperty(
+        name="Apply Weld",
+        description="Apply Weld to imported mesh objects after each file import",
+        default=True,
+    )
+    batch_is_running: bpy.props.BoolProperty(
+        name="Running",
+        default=False,
+    )
+    batch_total_count: bpy.props.IntProperty(
+        name="Total",
+        default=0,
+        min=0,
+    )
+    batch_imported_count: bpy.props.IntProperty(
+        name="Imported Files",
+        default=0,
+        min=0,
+    )
+    batch_imported_object_count: bpy.props.IntProperty(
+        name="Imported Objects",
+        default=0,
+        min=0,
+    )
+    batch_remaining_count: bpy.props.IntProperty(
+        name="Remaining",
+        default=0,
+        min=0,
+    )
+    batch_import_progress: bpy.props.FloatProperty(
+        name="Progress",
+        default=0.0,
+        min=0.0,
+        max=100.0,
+        subtype="PERCENTAGE",
+    )
+    batch_current_file: bpy.props.StringProperty(
+        name="Current File",
+        default="",
+    )
 
 
 class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):

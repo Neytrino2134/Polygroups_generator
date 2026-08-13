@@ -1,12 +1,20 @@
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
+from .batch_import import OBJECT_OT_polygroups_batch_import
+from .batch_import import OBJECT_OT_polygroups_scan_import_folder
+from .batch_import import OBJECT_OT_polygroups_select_import_folder
 from .clear_materials import OBJECT_OT_clear_polygroups_materials
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .generate_polygroups import OBJECT_OT_generate_polygroups
 from .knife_seam_tool import MESH_OT_polygroups_knife_seam
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
+from .rename_objects import OBJECT_OT_polygroups_rename_objects
 
 CLASSES = (
     OBJECT_OT_polygroups_apply_weld,
+    OBJECT_OT_polygroups_select_import_folder,
+    OBJECT_OT_polygroups_scan_import_folder,
+    OBJECT_OT_polygroups_batch_import,
+    OBJECT_OT_polygroups_rename_objects,
     OBJECT_OT_generate_polygroups,
     OBJECT_OT_face_sets_to_materials,
     OBJECT_OT_clear_polygroups_materials,

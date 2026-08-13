@@ -1,8 +1,8 @@
 bl_info = {
     "name": "PolyGroups Generator",
     "author": "OpenAI",
-    "version": (0, 1, 0),
-    "blender": (5, 1, 0),
+    "version": (0, 2, 0),
+    "blender": (5, 0, 0),
     "location": "View3D > Sidebar > PolyGroups",
     "description": "Split a mesh into seam-bounded islands, assign materials, and build sculpt Face Sets",
     "category": "Mesh",
