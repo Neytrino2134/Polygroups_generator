@@ -1,0 +1,33 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Blender temporary and backup files
+*.blend1
+*.blend2
+*.blend@
+*.blend~
+*.tmp
+*.bak
+
+# Local editor and OS metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build and release artifacts
+build/
+dist/
+*.egg-info/
+*.zip
+
+# Logs and local runtime files
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
