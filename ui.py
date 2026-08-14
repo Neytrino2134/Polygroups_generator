@@ -182,7 +182,7 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
         qremesher = context.scene.qremesher
 
         layout.label(text="Uses the installed Quad Remesher add-on.", icon="CHECKMARK")
-        layout.operator("qremesher.remesh", icon="MOD_REMESH")
+        layout.operator("object.polygroups_checked_quad_remesh", icon="MOD_REMESH")
         layout.prop(qremesher, "target_count")
         layout.prop(qremesher, "use_materials")
 
@@ -364,7 +364,7 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 7
+    bl_order = 8
 
     def draw(self, context):
         layout = self.layout.box()
@@ -402,6 +402,43 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         )
 
 
+class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
+    bl_label = "Resculpting"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "PolyGroups"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 7
+
+    def draw(self, context):
+        layout = self.layout.box()
+        settings = context.scene.polygroups_resculpting_settings
+
+        column = layout.column(align=True)
+        column.prop(settings, "multires_levels")
+        column.prop(settings, "shrinkwrap_limit")
+        column.prop(settings, "shrinkwrap_offset")
+
+        column.separator()
+        column.operator(
+            "object.polygroups_setup_resculpting",
+            icon="MOD_MULTIRES",
+        )
+
+        row = column.row(align=True)
+        row.operator(
+            "object.polygroups_add_multires",
+            text="Multires",
+            icon="MOD_MULTIRES",
+        )
+        row.operator(
+            "object.polygroups_add_shrinkwrap_to_highpoly",
+            text="Shrinkwrap",
+            icon="MOD_SHRINKWRAP",
+        )
+
+
 CLASSES = (
     VIEW3D_PT_polygroups_generator,
     VIEW3D_PT_polygroups_import,
@@ -410,6 +447,7 @@ CLASSES = (
     VIEW3D_PT_polygroups_seam_preparation,
     VIEW3D_PT_polygroups_tools,
     VIEW3D_PT_polygroups_remesh,
+    VIEW3D_PT_polygroups_resculpting,
     VIEW3D_PT_polygroups_baking,
 )
 

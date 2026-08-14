@@ -307,6 +307,35 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     )
 
 
+class POLYGROUPS_PG_resculpting_settings(bpy.types.PropertyGroup):
+    multires_levels: bpy.props.IntProperty(
+        name="Multires Levels",
+        description="Subdivision levels to create on the active lowpoly mesh",
+        default=2,
+        min=0,
+        max=6,
+        soft_max=3,
+    )
+    shrinkwrap_limit: bpy.props.FloatProperty(
+        name="Shrinkwrap Limit",
+        description="Projection limit for the Shrinkwrap modifier",
+        default=0.01,
+        min=0.0,
+        soft_max=0.1,
+        precision=4,
+        unit="LENGTH",
+    )
+    shrinkwrap_offset: bpy.props.FloatProperty(
+        name="Shrinkwrap Offset",
+        description="Surface offset for the Shrinkwrap modifier",
+        default=0.0,
+        soft_min=-0.1,
+        soft_max=0.1,
+        precision=4,
+        unit="LENGTH",
+    )
+
+
 CLASSES = (
     POLYGROUPS_PG_model_preparation_settings,
     POLYGROUPS_PG_knife_seam_settings,
@@ -315,6 +344,7 @@ CLASSES = (
     POLYGROUPS_PG_object_seam_cutter_settings,
     POLYGROUPS_PG_polygroups_settings,
     POLYGROUPS_PG_baking_settings,
+    POLYGROUPS_PG_resculpting_settings,
 )
 
 
@@ -343,9 +373,13 @@ def register():
     bpy.types.Scene.polygroups_baking_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_baking_settings,
     )
+    bpy.types.Scene.polygroups_resculpting_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_resculpting_settings,
+    )
 
 
 def unregister():
+    del bpy.types.Scene.polygroups_resculpting_settings
     del bpy.types.Scene.polygroups_baking_settings
     del bpy.types.Scene.polygroups_generator_settings
     del bpy.types.Scene.polygroups_object_seam_cutter_settings

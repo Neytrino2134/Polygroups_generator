@@ -19,7 +19,13 @@ from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
 from .object_seam_cutter import OBJECT_OT_polygroups_select_cutter_planes
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
+from .resculpting import OBJECT_OT_polygroups_add_multires
+from .resculpting import OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly
+from .resculpting import OBJECT_OT_polygroups_setup_resculpting
 from .select_seam_tool import MESH_OT_polygroups_select_seam_tool
+from .safety_checks import OBJECT_OT_polygroups_checked_quad_remesh
+from .safety_checks import OBJECT_OT_polygroups_make_lowpoly_active
+from .safety_checks import OBJECT_OT_polygroups_rename_and_apply_weld
 from .smooth_face_selection import MESH_OT_polygroups_smooth_face_selection
 from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 
@@ -33,6 +39,12 @@ CLASSES = (
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_prepare_and_bake,
+    OBJECT_OT_polygroups_add_multires,
+    OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly,
+    OBJECT_OT_polygroups_setup_resculpting,
+    OBJECT_OT_polygroups_rename_and_apply_weld,
+    OBJECT_OT_polygroups_checked_quad_remesh,
+    OBJECT_OT_polygroups_make_lowpoly_active,
     OBJECT_OT_generate_polygroups,
     MESH_OT_polygroups_mark_material_boundaries_seam,
     OBJECT_OT_polygroups_unwrap_angle_based,
