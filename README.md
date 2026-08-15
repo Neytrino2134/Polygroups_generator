@@ -1,8 +1,9 @@
-# PolyGroups Generator
+# AI Retopo Toolkit
 
 Blender add-on for accelerating semi-automatic retopology workflows on generated AI 3D models.
 
-The add-on currently targets Blender 5.0-5.2 and adds a `PolyGroups` tab to the 3D View sidebar.
+The add-on currently targets Blender 5.0-5.2 and adds an `AI Retopo` tab to the 3D View sidebar.
+The interface can be switched between English and Russian in the add-on preferences or directly in the main panel.
 
 ## Current Tools
 
@@ -38,7 +39,7 @@ Blender/5.2/scripts/addons/polygroups_generator
 Then enable the add-on in Blender:
 
 ```text
-Edit > Preferences > Add-ons > PolyGroups Generator
+Edit > Preferences > Add-ons > AI Retopo Toolkit
 ```
 
 ## Development Notes

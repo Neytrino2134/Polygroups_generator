@@ -1,13 +1,15 @@
 bl_info = {
-    "name": "PolyGroups Generator",
+    "name": "AI Retopo Toolkit",
     "author": "OpenAI",
     "version": (0, 2, 0),
     "blender": (5, 0, 0),
-    "location": "View3D > Sidebar > PolyGroups",
-    "description": "Split a mesh into seam-bounded islands, assign materials, and build sculpt Face Sets",
+    "location": "View3D > Sidebar > AI Retopo",
+    "description": "Semi-automatic retopology toolkit for generated AI meshes",
     "category": "Mesh",
 }
 
+from .preferences import register as register_preferences
+from .preferences import unregister as unregister_preferences
 from .operators import register as register_operators
 from .operators import unregister as unregister_operators
 from .properties import register as register_properties
@@ -19,6 +21,7 @@ from .ui import unregister as unregister_ui
 
 
 def register():
+    register_preferences()
     register_properties()
     register_operators()
     register_tools()
@@ -30,3 +33,4 @@ def unregister():
     unregister_tools()
     unregister_operators()
     unregister_properties()
+    unregister_preferences()

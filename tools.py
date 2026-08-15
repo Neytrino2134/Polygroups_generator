@@ -1,6 +1,8 @@
 import bpy
 from bpy.types import WorkSpaceTool
 
+from .localization import t
+
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
 DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
@@ -84,12 +86,12 @@ class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
         settings = context.scene.polygroups_object_seam_cutter_settings
         layout.operator(
             "object.polygroups_apply_cutter_seams",
-            text="Apply Cutter Seams To Active",
+            text=t(context, "apply_cutter_seams"),
             icon="MOD_BOOLEAN",
         )
-        layout.prop(settings, "cutter_size_multiplier")
-        layout.prop(settings, "cutter_alpha")
-        layout.prop(settings, "cutter_solidify_thickness")
+        layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
+        layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
+        layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
 
 
 class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
@@ -116,13 +118,13 @@ class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
         settings = context.scene.polygroups_object_seam_cutter_settings
         layout.operator(
             "object.polygroups_apply_cutter_seams",
-            text="Apply Cutter Seams To Active",
+            text=t(context, "apply_cutter_seams"),
             icon="MOD_BOOLEAN",
         )
-        layout.prop(settings, "cutter_size_multiplier")
-        layout.prop(settings, "cutter_arc_segments")
-        layout.prop(settings, "cutter_alpha")
-        layout.prop(settings, "cutter_solidify_thickness")
+        layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
+        layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
+        layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
+        layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
 
 
 class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
@@ -145,14 +147,17 @@ class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
 
     @staticmethod
     def draw_settings(context, layout, tool):
-        del context
         props = tool.operator_properties("mesh.polygroups_knife_seam")
-        layout.prop(props, "stable_view_cut")
-        layout.prop(props, "use_occlude_geometry")
-        layout.prop(props, "only_selected")
-        layout.prop(props, "xray")
-        layout.prop(props, "mark_seam")
-        layout.prop(props, "clear_selection_after_cutting")
+        layout.prop(props, "stable_view_cut", text=t(context, "stable_view_cut"))
+        layout.prop(props, "use_occlude_geometry", text=t(context, "occlude_geometry"))
+        layout.prop(props, "only_selected", text=t(context, "only_selected"))
+        layout.prop(props, "xray", text=t(context, "xray"))
+        layout.prop(props, "mark_seam", text=t(context, "mark_as_seam"))
+        layout.prop(
+            props,
+            "clear_selection_after_cutting",
+            text=t(context, "clear_selection_after_cutting"),
+        )
 
 
 class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
@@ -175,12 +180,15 @@ class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
 
     @staticmethod
     def draw_settings(context, layout, tool):
-        del context
         props = tool.operator_properties("mesh.polygroups_quick_knife_seam")
-        layout.prop(props, "use_fill")
-        layout.prop(props, "threshold")
-        layout.prop(props, "mark_seam")
-        layout.prop(props, "clear_selection_after_cutting")
+        layout.prop(props, "use_fill", text=t(context, "fill"))
+        layout.prop(props, "threshold", text=t(context, "threshold"))
+        layout.prop(props, "mark_seam", text=t(context, "mark_as_seam"))
+        layout.prop(
+            props,
+            "clear_selection_after_cutting",
+            text=t(context, "clear_selection_after_cutting"),
+        )
 
 
 def register():
