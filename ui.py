@@ -50,6 +50,10 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
     return content
 
 
+def draw_section_header_icon(self, context):
+    self.layout.label(text="", icon=self.bl_icon)
+
+
 class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     bl_label = "PolyGroups Generator"
     bl_space_type = "VIEW_3D"
@@ -62,13 +66,15 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
-    bl_label = "Model Preparation"
+    bl_label = "03 | Model Preparation"
+    bl_icon = "AUTOMERGE_ON"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 3
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout.box()
@@ -82,24 +88,21 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_import(bpy.types.Panel):
-    bl_label = "Import"
+    bl_label = "01 | Import"
+    bl_icon = "FILE_FOLDER"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 1
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout
         settings = context.scene.polygroups_model_preparation_settings
 
         files_box = layout.box()
-        files_box.label(text="Import Files", icon="FILE_FOLDER")
-        files_box.prop(settings, "batch_import_format")
-        files_box.prop(settings, "file_import_auto_rename_objects")
-        files_box.prop(settings, "file_import_apply_weld")
-
         files_row = files_box.row(align=True)
         files_row.enabled = not settings.batch_is_running
         file_operator = files_row.operator(
@@ -109,15 +112,22 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
         )
         file_operator.use_file_selection = True
 
+        files_box.separator()
+        files_box.prop(settings, "batch_import_format")
+        files_box.prop(settings, "file_import_auto_rename_objects")
+        files_box.prop(settings, "file_import_apply_weld")
+
 
 class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
-    bl_label = "Batch Import"
+    bl_label = "02 | Batch Import"
+    bl_icon = "FILE_REFRESH"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 2
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout.box()
@@ -157,13 +167,15 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
-    bl_label = "Remesh"
+    bl_label = "06 | Remesh"
+    bl_icon = "MOD_REMESH"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 6
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout.box()
@@ -192,13 +204,15 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
-    bl_label = "Seam Preparation"
+    bl_label = "04 | Seam Preparation"
+    bl_icon = "EDGE_SEAM"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 4
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout
@@ -330,12 +344,14 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
-    bl_label = "PolyGroups"
+    bl_label = "05 | PolyGroups"
+    bl_icon = "MATERIAL"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_order = 5
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout.box()
@@ -358,13 +374,15 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
-    bl_label = "Baking"
+    bl_label = "08 | Baking"
+    bl_icon = "RENDER_STILL"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 8
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout.box()
@@ -403,13 +421,15 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
-    bl_label = "Resculpting"
+    bl_label = "07 | Resculpting"
+    bl_icon = "MOD_MULTIRES"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
     bl_order = 7
+    draw_header = draw_section_header_icon
 
     def draw(self, context):
         layout = self.layout.box()
