@@ -1,4 +1,5 @@
 import os
+import sys
 
 import bpy
 
@@ -59,6 +60,13 @@ def draw_section_header_icon(self, context):
     self.layout.label(text="", icon=self.bl_icon)
 
 
+def addon_version_string():
+    package_name = __package__.split(".")[0]
+    addon_module = sys.modules.get(package_name)
+    version = getattr(addon_module, "bl_info", {}).get("version", (0, 0, 0))
+    return ".".join(str(item) for item in version)
+
+
 def update_panel_labels(context=None):
     for cls in CLASSES:
         text_key = getattr(cls, "bl_text_key", None)
@@ -107,7 +115,7 @@ def draw_material_mode_buttons(layout, context, settings):
 
 
 class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
-    bl_label = "AI Retopo Toolkit"
+    bl_label = f"AI Retopo Toolkit v{addon_version_string()}"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "AI Retopo"

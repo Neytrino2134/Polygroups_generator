@@ -4,6 +4,7 @@ Blender add-on for accelerating semi-automatic retopology workflows on generated
 
 The add-on currently targets Blender 5.0-5.2 and adds an `AI Retopo` tab to the 3D View sidebar.
 The interface can be switched between English and Russian in the add-on preferences or directly in the main panel.
+Add-on preferences include Git-based update checks and fast-forward updates from the configured `origin` remote.
 
 ## Current Tools
 
@@ -51,3 +52,5 @@ Edit > Preferences > Add-ons > AI Retopo Toolkit
 ## Development Notes
 
 This repository should track source files only. Python caches, Blender backups, local editor settings, build folders, archives, and logs are ignored through `.gitignore`.
+The built-in updater expects this folder to stay a clean git repository; commit or stash local changes before running `Update`.
+Before each commit, bump the add-on patch version in `bl_info` by `0.0.1`.
