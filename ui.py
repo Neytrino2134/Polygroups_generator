@@ -81,8 +81,12 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
         settings = context.scene.polygroups_model_preparation_settings
 
         column = layout.column(align=True)
-        column.operator("object.polygroups_rename_objects", icon="OUTLINER_COLLECTION")
+        column.operator(
+            "object.polygroups_rename_and_apply_weld",
+            icon="AUTOMERGE_ON",
+        )
         column.separator()
+        column.operator("object.polygroups_rename_objects", icon="OUTLINER_COLLECTION")
         column.prop(settings, "weld_distance")
         column.operator("object.polygroups_apply_weld", icon="AUTOMERGE_ON")
 
@@ -195,6 +199,24 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
 
         layout.label(text="Uses the installed Quad Remesher add-on.", icon="CHECKMARK")
         layout.operator("object.polygroups_checked_quad_remesh", icon="MOD_REMESH")
+
+        preset_row = layout.row(align=True)
+        low_preset = preset_row.operator(
+            "object.polygroups_set_quad_count_preset",
+            text="LOW",
+        )
+        low_preset.quad_count = 500
+        mid_preset = preset_row.operator(
+            "object.polygroups_set_quad_count_preset",
+            text="MID",
+        )
+        mid_preset.quad_count = 3000
+        high_preset = preset_row.operator(
+            "object.polygroups_set_quad_count_preset",
+            text="HIGH",
+        )
+        high_preset.quad_count = 75000
+
         layout.prop(qremesher, "target_count")
         layout.prop(qremesher, "use_materials")
 
@@ -370,7 +392,11 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
         column = layout.column(align=True)
         column.prop(settings, "material_mode", expand=True)
         column.separator()
-        column.operator("object.generate_polygroups", icon="MATERIAL")
+        column.operator("object.polygroups_checked_generate_polygroups", icon="MATERIAL")
+        column.operator(
+            "object.polygroups_apply_material_mode",
+            icon="NODE_MATERIAL",
+        )
         column.operator(
             "mesh.polygroups_mark_material_boundaries_seam",
             icon="EDGE_SEAM",

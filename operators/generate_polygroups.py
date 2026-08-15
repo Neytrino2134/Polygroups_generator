@@ -2,6 +2,7 @@ import bmesh
 import bpy
 
 from ..core.facesets import assign_face_sets_from_materials
+from ..core.materials import apply_material_mode_to_object
 from ..core.materials import assign_materials
 from ..core.mesh_segmentation import get_seam_edges, split_into_groups
 
@@ -47,5 +48,32 @@ class OBJECT_OT_generate_polygroups(bpy.types.Operator):
         self.report(
             {"INFO"},
             f"Generated {len(groups)} PolyGroups from {len(seam_edges)} seam edges",
+        )
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_apply_material_mode(bpy.types.Operator):
+    bl_idname = "object.polygroups_apply_material_mode"
+    bl_label = "Apply Material Mode"
+    bl_description = "Apply the selected PolyGroups material mode to all materials on the active mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH"
+
+    def execute(self, context):
+        obj = context.active_object
+        settings = context.scene.polygroups_generator_settings
+        changed_count, applied_mode = apply_material_mode_to_object(obj, settings.material_mode)
+
+        if not changed_count:
+            self.report({"WARNING"}, "No materials were updated")
+            return {"CANCELLED"}
+
+        self.report(
+            {"INFO"},
+            f"Applied {applied_mode} to {changed_count} material(s)",
         )
         return {"FINISHED"}

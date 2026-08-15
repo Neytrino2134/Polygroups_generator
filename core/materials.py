@@ -13,6 +13,8 @@ TEXTURE_BSDF_INPUTS = (
 )
 
 SOURCE_TEXTURE_GROUP_PREFIX = "PolyGroups Source Textures"
+SOURCE_TEXTURE_GROUP_NODE_LABEL = "Source Texture Group"
+POLYGROUP_COLOR_TINT_LABEL = "PolyGroup Color Tint"
 
 
 def clear_materials(obj):
@@ -180,7 +182,50 @@ def _texture_links_from_material(source_material):
     return links
 
 
+def _source_texture_group_node(material):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return None
+
+    for node in material.node_tree.nodes:
+        if node.bl_idname != "ShaderNodeGroup" or node.node_tree is None:
+            continue
+        if node.label == SOURCE_TEXTURE_GROUP_NODE_LABEL or node.name.startswith(SOURCE_TEXTURE_GROUP_NODE_LABEL):
+            return node
+
+    return None
+
+
+def _source_texture_group_from_object(obj):
+    if obj is None or obj.type != "MESH":
+        return None, set()
+
+    for material in obj.data.materials:
+        group_node = _source_texture_group_node(material)
+        if group_node is None:
+            continue
+
+        output_names = {
+            output.name
+            for output in group_node.outputs
+            if output.name and output.name != "Geometry"
+        }
+        if output_names:
+            return group_node.node_tree, output_names
+
+    return None, set()
+
+
 def create_source_texture_group(source_material):
+    existing_group_node = _source_texture_group_node(source_material)
+    if existing_group_node is not None:
+        output_names = {
+            output.name
+            for output in existing_group_node.outputs
+            if output.name and output.name != "Geometry"
+        }
+        if output_names:
+            return existing_group_node.node_tree, output_names
+
     texture_links = _texture_links_from_material(source_material)
     if not texture_links:
         return None, set()
@@ -234,32 +279,117 @@ def _new_principled_material(name):
     return material, bsdf
 
 
+def _clear_input_links(tree, input_socket):
+    if input_socket is None:
+        return
+    for link in list(input_socket.links):
+        tree.links.remove(link)
+
+
+def _find_source_texture_group_node(material, texture_group):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return None
+
+    fallback = None
+    for node in material.node_tree.nodes:
+        if node.bl_idname != "ShaderNodeGroup" or node.node_tree is None:
+            continue
+        if node.node_tree == texture_group:
+            return node
+        if node.label == SOURCE_TEXTURE_GROUP_NODE_LABEL or node.name.startswith(SOURCE_TEXTURE_GROUP_NODE_LABEL):
+            fallback = node
+
+    return fallback
+
+
+def _ensure_source_texture_group_node(material, texture_group):
+    nodes = material.node_tree.nodes
+    group_node = _find_source_texture_group_node(material, texture_group)
+    if group_node is None:
+        group_node = nodes.new("ShaderNodeGroup")
+        group_node.location = (-520, 80)
+
+    group_node.node_tree = texture_group
+    group_node.label = SOURCE_TEXTURE_GROUP_NODE_LABEL
+    return group_node
+
+
+def _find_tint_node(material):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return None
+
+    for node in material.node_tree.nodes:
+        if node.label == POLYGROUP_COLOR_TINT_LABEL or node.name.startswith(POLYGROUP_COLOR_TINT_LABEL):
+            return node
+
+    return None
+
+
+def _ensure_tint_node(material):
+    tint_node = _find_tint_node(material)
+    if tint_node is None:
+        tint_node = material.node_tree.nodes.new("ShaderNodeMix")
+        tint_node.location = (-240, 130)
+
+    tint_node.label = POLYGROUP_COLOR_TINT_LABEL
+    tint_node.data_type = "RGBA"
+    tint_node.blend_type = "MULTIPLY"
+    tint_node.inputs["Factor"].default_value = 1.0
+    return tint_node
+
+
+def _polygroup_color_from_material(material):
+    tint_node = _find_tint_node(material)
+    if tint_node is not None and len(tint_node.inputs) > 7:
+        try:
+            return tuple(tint_node.inputs[7].default_value)
+        except Exception:
+            pass
+
+    bsdf = _principled_bsdf(material)
+    if bsdf is not None:
+        base_input = bsdf.inputs.get("Base Color")
+        if base_input is not None and hasattr(base_input, "default_value"):
+            try:
+                return tuple(base_input.default_value)
+            except Exception:
+                pass
+
+    return tuple(material.diffuse_color) if material is not None else random_color()
+
+
+def _link_once(tree, from_socket, to_socket):
+    if from_socket is None or to_socket is None:
+        return False
+
+    for link in tree.links:
+        if link.from_socket == from_socket and link.to_socket == to_socket:
+            return False
+
+    tree.links.new(from_socket, to_socket)
+    return True
+
+
 def _connect_source_textures(material, bsdf, texture_group, texture_outputs, color, material_mode):
     if bsdf is None or texture_group is None:
         return False
 
-    nodes = material.node_tree.nodes
     links = material.node_tree.links
-    group_node = nodes.new("ShaderNodeGroup")
-    group_node.node_tree = texture_group
-    group_node.label = "Source Texture Group"
-    group_node.location = (-520, 80)
+    group_node = _ensure_source_texture_group_node(material, texture_group)
 
     used_base_texture = False
     base_output = group_node.outputs.get("Base Color")
     base_input = bsdf.inputs.get("Base Color")
 
     if base_output is not None and base_input is not None and material_mode == "TEXTURE_ONLY":
+        _clear_input_links(material.node_tree, base_input)
         links.new(base_output, base_input)
         used_base_texture = True
     elif base_output is not None and base_input is not None and material_mode == "TEXTURE_TINT":
-        mix_node = nodes.new("ShaderNodeMix")
-        mix_node.label = "PolyGroup Color Tint"
-        mix_node.data_type = "RGBA"
-        mix_node.blend_type = "MULTIPLY"
-        mix_node.location = (-240, 130)
-        mix_node.inputs["Factor"].default_value = 1.0
+        mix_node = _ensure_tint_node(material)
         mix_node.inputs[7].default_value = color
+        _clear_input_links(material.node_tree, mix_node.inputs[6])
+        _clear_input_links(material.node_tree, base_input)
         links.new(base_output, mix_node.inputs[6])
         links.new(mix_node.outputs[2], base_input)
         used_base_texture = True
@@ -274,6 +404,7 @@ def _connect_source_textures(material, bsdf, texture_group, texture_outputs, col
             continue
 
         try:
+            _clear_input_links(material.node_tree, input_socket)
             links.new(output_socket, input_socket)
         except Exception:
             pass
@@ -281,9 +412,42 @@ def _connect_source_textures(material, bsdf, texture_group, texture_outputs, col
     return used_base_texture
 
 
+def apply_material_mode(material, material_mode, texture_group=None, texture_outputs=None, color=None):
+    if material is None:
+        return False
+
+    material.use_nodes = True
+    bsdf = _principled_bsdf(material)
+    if bsdf is None:
+        return False
+
+    texture_outputs = texture_outputs or set()
+    color = color or _polygroup_color_from_material(material)
+    material.diffuse_color = color
+
+    if material_mode == "COLOR_ONLY" or texture_group is None:
+        for input_name in TEXTURE_BSDF_INPUTS:
+            _clear_input_links(material.node_tree, bsdf.inputs.get(input_name))
+        base_input = bsdf.inputs.get("Base Color")
+        if base_input is not None:
+            base_input.default_value = color
+        return True
+
+    _connect_source_textures(
+        material,
+        bsdf,
+        texture_group,
+        texture_outputs,
+        color,
+        material_mode,
+    )
+    return True
+
+
 def create_material(name, color, texture_group=None, texture_outputs=None, material_mode="COLOR_ONLY"):
     texture_outputs = texture_outputs or set()
     material, bsdf = _new_principled_material(name)
+    material.diffuse_color = color
 
     use_textures = material_mode in {"TEXTURE_ONLY", "TEXTURE_TINT"} and texture_group is not None
     used_base_texture = False
@@ -303,15 +467,41 @@ def create_material(name, color, texture_group=None, texture_outputs=None, mater
     return material
 
 
-def assign_materials(obj, groups, prefix="FaceSet", material_mode="COLOR_ONLY"):
-    source_material = source_material_from_object(obj)
+def texture_group_for_object(obj, material_mode):
     texture_group = None
     texture_outputs = set()
 
-    if material_mode in {"TEXTURE_ONLY", "TEXTURE_TINT"}:
-        texture_group, texture_outputs = create_source_texture_group(source_material)
-        if texture_group is None:
-            material_mode = "COLOR_ONLY"
+    if material_mode not in {"TEXTURE_ONLY", "TEXTURE_TINT"}:
+        return None, set(), material_mode
+
+    texture_group, texture_outputs = _source_texture_group_from_object(obj)
+    if texture_group is None:
+        texture_group, texture_outputs = create_source_texture_group(source_material_from_object(obj))
+
+    if texture_group is None:
+        material_mode = "COLOR_ONLY"
+
+    return texture_group, texture_outputs, material_mode
+
+
+def apply_material_mode_to_object(obj, material_mode):
+    texture_group, texture_outputs, material_mode = texture_group_for_object(obj, material_mode)
+    changed_count = 0
+
+    for material in obj.data.materials:
+        if apply_material_mode(
+            material,
+            material_mode,
+            texture_group=texture_group,
+            texture_outputs=texture_outputs,
+        ):
+            changed_count += 1
+
+    return changed_count, material_mode
+
+
+def assign_materials(obj, groups, prefix="FaceSet", material_mode="COLOR_ONLY"):
+    texture_group, texture_outputs, material_mode = texture_group_for_object(obj, material_mode)
 
     clear_materials(obj)
 

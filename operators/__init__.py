@@ -9,6 +9,7 @@ from .batch_import import OBJECT_OT_polygroups_select_import_folder
 from .clear_materials import OBJECT_OT_clear_polygroups_materials
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .generate_polygroups import OBJECT_OT_generate_polygroups
+from .generate_polygroups import OBJECT_OT_polygroups_apply_material_mode
 from .knife_seam_tool import MESH_OT_polygroups_knife_seam
 from .mark_material_boundaries_seam import MESH_OT_polygroups_mark_material_boundaries_seam
 from .mark_selection_boundary_seam import MESH_OT_polygroups_mark_selection_boundary_seam
@@ -20,13 +21,16 @@ from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
 from .object_seam_cutter import OBJECT_OT_polygroups_select_cutter_planes
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
+from .remesh_presets import OBJECT_OT_polygroups_set_quad_count_preset
 from .resculpting import OBJECT_OT_polygroups_add_multires
 from .resculpting import OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly
 from .resculpting import OBJECT_OT_polygroups_setup_resculpting
 from .select_seam_tool import MESH_OT_polygroups_select_seam_tool
 from .safety_checks import OBJECT_OT_polygroups_checked_quad_remesh
+from .safety_checks import OBJECT_OT_polygroups_checked_generate_polygroups
 from .safety_checks import OBJECT_OT_polygroups_make_lowpoly_active
 from .safety_checks import OBJECT_OT_polygroups_rename_and_apply_weld
+from .safety_checks import OBJECT_OT_polygroups_skip_quad_remesh
 from .smooth_face_selection import MESH_OT_polygroups_smooth_face_selection
 from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 
@@ -45,8 +49,12 @@ CLASSES = (
     OBJECT_OT_polygroups_setup_resculpting,
     OBJECT_OT_polygroups_rename_and_apply_weld,
     OBJECT_OT_polygroups_checked_quad_remesh,
+    OBJECT_OT_polygroups_checked_generate_polygroups,
+    OBJECT_OT_polygroups_skip_quad_remesh,
     OBJECT_OT_polygroups_make_lowpoly_active,
+    OBJECT_OT_polygroups_set_quad_count_preset,
     OBJECT_OT_generate_polygroups,
+    OBJECT_OT_polygroups_apply_material_mode,
     MESH_OT_polygroups_mark_material_boundaries_seam,
     OBJECT_OT_polygroups_unwrap_angle_based,
     OBJECT_OT_face_sets_to_materials,

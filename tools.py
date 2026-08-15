@@ -82,14 +82,14 @@ class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         del tool
         settings = context.scene.polygroups_object_seam_cutter_settings
-        layout.prop(settings, "cutter_size_multiplier")
-        layout.prop(settings, "cutter_alpha")
-        layout.prop(settings, "cutter_solidify_thickness")
         layout.operator(
             "object.polygroups_apply_cutter_seams",
             text="Apply Cutter Seams To Active",
             icon="MOD_BOOLEAN",
         )
+        layout.prop(settings, "cutter_size_multiplier")
+        layout.prop(settings, "cutter_alpha")
+        layout.prop(settings, "cutter_solidify_thickness")
 
 
 class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
@@ -114,15 +114,15 @@ class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         del tool
         settings = context.scene.polygroups_object_seam_cutter_settings
-        layout.prop(settings, "cutter_size_multiplier")
-        layout.prop(settings, "cutter_arc_segments")
-        layout.prop(settings, "cutter_alpha")
-        layout.prop(settings, "cutter_solidify_thickness")
         layout.operator(
             "object.polygroups_apply_cutter_seams",
             text="Apply Cutter Seams To Active",
             icon="MOD_BOOLEAN",
         )
+        layout.prop(settings, "cutter_size_multiplier")
+        layout.prop(settings, "cutter_arc_segments")
+        layout.prop(settings, "cutter_alpha")
+        layout.prop(settings, "cutter_solidify_thickness")
 
 
 class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
