@@ -256,8 +256,25 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
             ("TEXTURE_ONLY", "Source Texture", "Use the source material texture color"),
             ("TEXTURE_TINT", "Texture + Color", "Multiply source texture color by a random PolyGroup color"),
             ("COLOR_ONLY", "Random Color", "Use random PolyGroup colors without source textures"),
+            ("CHECKER_TEXTURE", "Checker Texture", "Use a UV checker texture material"),
         ),
         default="TEXTURE_TINT",
+    )
+    checker_scale: bpy.props.FloatProperty(
+        name="Checker Scale",
+        description="Mapping scale for generated checker texture materials",
+        default=16.0,
+        min=0.01,
+        soft_max=100.0,
+        precision=2,
+    )
+
+
+class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
+    auto_unwrap_after_seam: bpy.props.BoolProperty(
+        name="Auto Unwrap",
+        description="Run Angle Based unwrap on selected faces after final seam operators",
+        default=False,
     )
 
 
@@ -351,6 +368,7 @@ CLASSES = (
     POLYGROUPS_PG_quick_knife_seam_settings,
     POLYGROUPS_PG_object_seam_cutter_settings,
     POLYGROUPS_PG_polygroups_settings,
+    POLYGROUPS_PG_seam_finalization_settings,
     POLYGROUPS_PG_baking_settings,
     POLYGROUPS_PG_resculpting_settings,
 )
@@ -378,6 +396,9 @@ def register():
     bpy.types.Scene.polygroups_generator_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_polygroups_settings,
     )
+    bpy.types.Scene.polygroups_seam_finalization_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_seam_finalization_settings,
+    )
     bpy.types.Scene.polygroups_baking_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_baking_settings,
     )
@@ -389,6 +410,7 @@ def register():
 def unregister():
     del bpy.types.Scene.polygroups_resculpting_settings
     del bpy.types.Scene.polygroups_baking_settings
+    del bpy.types.Scene.polygroups_seam_finalization_settings
     del bpy.types.Scene.polygroups_generator_settings
     del bpy.types.Scene.polygroups_object_seam_cutter_settings
     del bpy.types.Scene.polygroups_quick_knife_seam_settings

@@ -391,11 +391,16 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
         settings = context.scene.polygroups_generator_settings
         column = layout.column(align=True)
         column.prop(settings, "material_mode", expand=True)
+        column.prop(settings, "checker_scale")
         column.separator()
         column.operator("object.polygroups_checked_generate_polygroups", icon="MATERIAL")
         column.operator(
             "object.polygroups_apply_material_mode",
             icon="NODE_MATERIAL",
+        )
+        column.operator(
+            "object.polygroups_apply_checker_material",
+            icon="TEXTURE",
         )
         column.operator(
             "mesh.polygroups_mark_material_boundaries_seam",
@@ -509,7 +514,11 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout.box()
+        settings = context.scene.polygroups_generator_settings
+        seam_settings = context.scene.polygroups_seam_finalization_settings
         column = layout.column(align=True)
+        column.prop(seam_settings, "auto_unwrap_after_seam")
+        column.separator()
         column.operator(
             "mesh.polygroups_mark_selected_edges_seam",
             icon="EDGESEL",
@@ -532,6 +541,12 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         )
 
         column.separator()
+        column.prop(settings, "checker_scale")
+        column.operator(
+            "object.polygroups_apply_checker_material",
+            icon="TEXTURE",
+        )
+        column.separator()
         column.operator(
             "object.polygroups_unwrap_angle_based",
             icon="UV",
@@ -539,6 +554,10 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         column.operator(
             "object.polygroups_smart_uv_project",
             icon="UV",
+        )
+        column.operator(
+            "object.polygroups_average_islands_scale",
+            icon="UV_SYNC_SELECT",
         )
 
 

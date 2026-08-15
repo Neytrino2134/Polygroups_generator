@@ -15,6 +15,9 @@ TEXTURE_BSDF_INPUTS = (
 SOURCE_TEXTURE_GROUP_PREFIX = "PolyGroups Source Textures"
 SOURCE_TEXTURE_GROUP_NODE_LABEL = "Source Texture Group"
 POLYGROUP_COLOR_TINT_LABEL = "PolyGroup Color Tint"
+CHECKER_COORDINATE_LABEL = "PolyGroups Checker Coordinates"
+CHECKER_MAPPING_LABEL = "PolyGroups Checker Mapping"
+CHECKER_TEXTURE_LABEL = "PolyGroups Checker Texture"
 
 
 def clear_materials(obj):
@@ -325,6 +328,19 @@ def _find_tint_node(material):
     return None
 
 
+def _node_by_label_or_name(material, label, bl_idname=None):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return None
+
+    for node in material.node_tree.nodes:
+        if bl_idname is not None and node.bl_idname != bl_idname:
+            continue
+        if node.label == label or node.name.startswith(label):
+            return node
+
+    return None
+
+
 def _ensure_tint_node(material):
     tint_node = _find_tint_node(material)
     if tint_node is None:
@@ -336,6 +352,15 @@ def _ensure_tint_node(material):
     tint_node.blend_type = "MULTIPLY"
     tint_node.inputs["Factor"].default_value = 1.0
     return tint_node
+
+
+def _ensure_node(material, label, bl_idname, location):
+    node = _node_by_label_or_name(material, label, bl_idname)
+    if node is None:
+        node = material.node_tree.nodes.new(bl_idname)
+        node.location = location
+    node.label = label
+    return node
 
 
 def _polygroup_color_from_material(material):
@@ -367,6 +392,58 @@ def _link_once(tree, from_socket, to_socket):
             return False
 
     tree.links.new(from_socket, to_socket)
+    return True
+
+
+def _ensure_checker_texture(material, bsdf, checker_scale):
+    tree = material.node_tree
+    texcoord_node = _ensure_node(
+        material,
+        CHECKER_COORDINATE_LABEL,
+        "ShaderNodeTexCoord",
+        (-720, 0),
+    )
+    mapping_node = _ensure_node(
+        material,
+        CHECKER_MAPPING_LABEL,
+        "ShaderNodeMapping",
+        (-500, 0),
+    )
+    checker_node = _ensure_node(
+        material,
+        CHECKER_TEXTURE_LABEL,
+        "ShaderNodeTexChecker",
+        (-260, 0),
+    )
+
+    scale_input = mapping_node.inputs.get("Scale")
+    if scale_input is not None:
+        scale_input.default_value = (checker_scale, checker_scale, checker_scale)
+
+    checker_scale_input = checker_node.inputs.get("Scale")
+    if checker_scale_input is not None:
+        checker_scale_input.default_value = 1.0
+
+    color_a = checker_node.inputs.get("Color1")
+    color_b = checker_node.inputs.get("Color2")
+    if color_a is not None:
+        color_a.default_value = (0.03, 0.03, 0.03, 1.0)
+    if color_b is not None:
+        color_b.default_value = (0.85, 0.85, 0.85, 1.0)
+
+    vector_output = texcoord_node.outputs.get("UV") or texcoord_node.outputs.get("Generated")
+    mapping_input = mapping_node.inputs.get("Vector")
+    mapping_output = mapping_node.outputs.get("Vector")
+    checker_input = checker_node.inputs.get("Vector")
+    checker_output = checker_node.outputs.get("Color")
+    base_input = bsdf.inputs.get("Base Color")
+
+    _clear_input_links(tree, mapping_input)
+    _clear_input_links(tree, checker_input)
+    _clear_input_links(tree, base_input)
+    _link_once(tree, vector_output, mapping_input)
+    _link_once(tree, mapping_output, checker_input)
+    _link_once(tree, checker_output, base_input)
     return True
 
 
@@ -412,7 +489,7 @@ def _connect_source_textures(material, bsdf, texture_group, texture_outputs, col
     return used_base_texture
 
 
-def apply_material_mode(material, material_mode, texture_group=None, texture_outputs=None, color=None):
+def apply_material_mode(material, material_mode, texture_group=None, texture_outputs=None, color=None, checker_scale=16.0):
     if material is None:
         return False
 
@@ -424,6 +501,13 @@ def apply_material_mode(material, material_mode, texture_group=None, texture_out
     texture_outputs = texture_outputs or set()
     color = color or _polygroup_color_from_material(material)
     material.diffuse_color = color
+
+    if material_mode == "CHECKER_TEXTURE":
+        for input_name in TEXTURE_BSDF_INPUTS:
+            if input_name == "Base Color":
+                continue
+            _clear_input_links(material.node_tree, bsdf.inputs.get(input_name))
+        return _ensure_checker_texture(material, bsdf, checker_scale)
 
     if material_mode == "COLOR_ONLY" or texture_group is None:
         for input_name in TEXTURE_BSDF_INPUTS:
@@ -448,6 +532,10 @@ def create_material(name, color, texture_group=None, texture_outputs=None, mater
     texture_outputs = texture_outputs or set()
     material, bsdf = _new_principled_material(name)
     material.diffuse_color = color
+
+    if material_mode == "CHECKER_TEXTURE":
+        apply_material_mode(material, material_mode)
+        return material
 
     use_textures = material_mode in {"TEXTURE_ONLY", "TEXTURE_TINT"} and texture_group is not None
     used_base_texture = False
@@ -484,7 +572,7 @@ def texture_group_for_object(obj, material_mode):
     return texture_group, texture_outputs, material_mode
 
 
-def apply_material_mode_to_object(obj, material_mode):
+def apply_material_mode_to_object(obj, material_mode, checker_scale=16.0):
     texture_group, texture_outputs, material_mode = texture_group_for_object(obj, material_mode)
     changed_count = 0
 
@@ -494,13 +582,32 @@ def apply_material_mode_to_object(obj, material_mode):
             material_mode,
             texture_group=texture_group,
             texture_outputs=texture_outputs,
+            checker_scale=checker_scale,
         ):
             changed_count += 1
 
     return changed_count, material_mode
 
 
-def assign_materials(obj, groups, prefix="FaceSet", material_mode="COLOR_ONLY"):
+def apply_checker_material_to_object(obj, checker_scale=16.0):
+    if not obj.data.materials:
+        material = create_material(
+            "PolyGroups_Checker",
+            (1.0, 1.0, 1.0, 1.0),
+            material_mode="CHECKER_TEXTURE",
+        )
+        obj.data.materials.append(material)
+        for polygon in obj.data.polygons:
+            polygon.material_index = 0
+
+    return apply_material_mode_to_object(
+        obj,
+        "CHECKER_TEXTURE",
+        checker_scale=checker_scale,
+    )
+
+
+def assign_materials(obj, groups, prefix="FaceSet", material_mode="COLOR_ONLY", checker_scale=16.0):
     texture_group, texture_outputs, material_mode = texture_group_for_object(obj, material_mode)
 
     clear_materials(obj)
@@ -513,6 +620,8 @@ def assign_materials(obj, groups, prefix="FaceSet", material_mode="COLOR_ONLY"):
             texture_outputs=texture_outputs,
             material_mode=material_mode,
         )
+        if material_mode == "CHECKER_TEXTURE":
+            apply_material_mode(material, material_mode, checker_scale=checker_scale)
         obj.data.materials.append(material)
         material_index = len(obj.data.materials) - 1
 

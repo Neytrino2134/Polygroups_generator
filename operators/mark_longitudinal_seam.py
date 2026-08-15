@@ -5,6 +5,8 @@ import bmesh
 import bpy
 from mathutils import Vector
 
+from .unwrap_angle_based import unwrap_selected_angle_based
+
 
 def _selected_faces(bm):
     return {face for face in bm.faces if face.select}
@@ -248,7 +250,12 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
             return {"CANCELLED"}
 
         bmesh.update_edit_mesh(mesh)
-        self.report({"INFO"}, f"Marked {result[0]} longitudinal seam edge(s)")
+        auto_unwrapped = False
+        if context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam:
+            auto_unwrapped = unwrap_selected_angle_based(context)
+
+        suffix = " and unwrapped selected faces" if auto_unwrapped else ""
+        self.report({"INFO"}, f"Marked {result[0]} longitudinal seam edge(s){suffix}")
         return {"FINISHED"}
 
 
@@ -280,8 +287,13 @@ class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator)
         boundary_count = _mark_boundary_edges(boundary_edges)
 
         bmesh.update_edit_mesh(mesh)
+        auto_unwrapped = False
+        if context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam:
+            auto_unwrapped = unwrap_selected_angle_based(context)
+
+        suffix = " and unwrapped selected faces" if auto_unwrapped else ""
         self.report(
             {"INFO"},
-            f"Marked {boundary_count} boundary seam edge(s) and {longitudinal_count} longitudinal seam edge(s)",
+            f"Marked {boundary_count} boundary seam edge(s) and {longitudinal_count} longitudinal seam edge(s){suffix}",
         )
         return {"FINISHED"}

@@ -1,6 +1,8 @@
 import bmesh
 import bpy
 
+from .unwrap_angle_based import unwrap_selected_angle_based
+
 
 class MESH_OT_polygroups_mark_selection_boundary_seam(bpy.types.Operator):
     bl_idname = "mesh.polygroups_mark_selection_boundary_seam"
@@ -41,5 +43,11 @@ class MESH_OT_polygroups_mark_selection_boundary_seam(bpy.types.Operator):
                 marked_count += 1
 
         bmesh.update_edit_mesh(mesh)
-        self.report({"INFO"}, f"Marked {marked_count} boundary seam edge(s)")
+
+        auto_unwrapped = False
+        if context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam:
+            auto_unwrapped = unwrap_selected_angle_based(context)
+
+        suffix = " and unwrapped selected faces" if auto_unwrapped else ""
+        self.report({"INFO"}, f"Marked {marked_count} boundary seam edge(s){suffix}")
         return {"FINISHED"}
