@@ -36,6 +36,38 @@ def quad_remesher_status(context):
     return installed, enabled or loaded, has_settings and has_operator
 
 
+def uvpackmaster_status(context):
+    try:
+        import addon_utils
+    except ImportError:
+        addon_utils = None
+
+    installed = addon_utils is not None and any(
+        module.__name__ == "uvpackmaster4"
+        for module in addon_utils.modules()
+    )
+    loaded = False
+    enabled = False
+
+    if addon_utils is not None:
+        try:
+            loaded, enabled = addon_utils.check("uvpackmaster4")
+        except Exception:
+            loaded = False
+            enabled = False
+
+    has_settings = hasattr(context.scene, "uvpm4_props") and hasattr(
+        context.scene.uvpm4_props,
+        "default_main_props",
+    )
+    has_operator = hasattr(bpy.ops, "uvpackmaster4") and hasattr(
+        bpy.ops.uvpackmaster4,
+        "pack",
+    )
+
+    return installed, enabled or loaded, has_settings and has_operator
+
+
 def draw_collapsible_box(layout, settings, property_name, label, icon):
     box = layout.box()
     header = box.row(align=True)
@@ -638,7 +670,7 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
-    bl_label = "09 |"
+    bl_label = "10 |"
     bl_text_key = "section_baking"
     bl_icon = "RENDER_STILL"
     bl_space_type = "VIEW_3D"
@@ -646,7 +678,7 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
     bl_category = "AI Retopo"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 9
+    bl_order = 10
     draw_header = draw_section_header_icon
 
     def draw(self, context):
@@ -710,8 +742,58 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         )
 
 
+class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
+    bl_label = "09 |"
+    bl_text_key = "section_uv_preparation"
+    bl_icon = "UV"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 9
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        layout = self.layout.box()
+        installed, enabled, available = uvpackmaster_status(context)
+
+        if not installed:
+            layout.label(text=t(context, "uvpackmaster_not_installed"), icon="ERROR")
+            layout.label(text=t(context, "uvpackmaster_install_hint"))
+            return
+
+        if not enabled or not available:
+            layout.label(text=t(context, "uvpackmaster_not_enabled"), icon="ERROR")
+            layout.label(text=t(context, "uvpackmaster_enable_hint"))
+            return
+
+        main_props = context.scene.uvpm4_props.default_main_props
+        layout.label(text=t(context, "uvpackmaster_available"), icon="CHECKMARK")
+
+        pack_row = layout.row(align=True)
+        pack_row.scale_y = 1.3
+        pack_operator = pack_row.operator(
+            "uvpackmaster4.pack",
+            text=t(context, "uvpackmaster_pack"),
+            icon="UV",
+        )
+        pack_operator.mode_id = "__active__"
+        pack_operator.pack_op_type = "0"
+
+        layout.separator()
+        layout.prop(main_props, "rotation_enable", text=t(context, "uvpackmaster_rotation_enable"))
+        layout.prop(main_props, "margin", text=t(context, "uvpackmaster_margin"))
+
+        rotation_row = layout.row(align=True)
+        rotation_row.enabled = main_props.rotation_enable
+        rotation_row.prop(main_props, "rotation_step", text=t(context, "uvpackmaster_rotation_step"))
+
+        layout.prop(main_props, "heuristic_enable", text=t(context, "uvpackmaster_heuristic_search"))
+
+
 class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
-    bl_label = "10 |"
+    bl_label = "11 |"
     bl_text_key = "section_ai_generation"
     bl_icon = "IMAGE_DATA"
     bl_space_type = "VIEW_3D"
@@ -719,7 +801,7 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
     bl_category = "AI Retopo"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 10
+    bl_order = 11
     draw_header = draw_section_header_icon
 
     def draw(self, context):
@@ -1039,6 +1121,7 @@ CLASSES = (
     VIEW3D_PT_polygroups_remesh,
     VIEW3D_PT_polygroups_resculpting,
     VIEW3D_PT_polygroups_seam_finalization,
+    VIEW3D_PT_polygroups_uv_preparation,
     VIEW3D_PT_polygroups_baking,
     VIEW3D_PT_airetopo_ai_generation,
 )
