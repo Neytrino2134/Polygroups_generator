@@ -8,6 +8,11 @@ DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
 DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
 DRAW_CUTTER_PATH_TOOL_ID = "polygroups_generator.draw_cutter_path_tool"
 VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
+CUTTER_TOOL_ORDER = (
+    DRAW_CUTTER_TOOL_ID,
+    DRAW_CUTTER_ARC_TOOL_ID,
+    DRAW_CUTTER_PATH_TOOL_ID,
+)
 
 
 def _tool_id(item):
@@ -43,8 +48,11 @@ def _move_draw_cutter_tool_after_cursor():
     if not tools:
         return
 
-    tool = _remove_tool_from_items(tools, DRAW_CUTTER_TOOL_ID)
-    if tool is None:
+    cutter_tools = {
+        tool_id: _remove_tool_from_items(tools, tool_id)
+        for tool_id in CUTTER_TOOL_ORDER
+    }
+    if cutter_tools[DRAW_CUTTER_TOOL_ID] is None:
         return
 
     insert_index = None
@@ -53,116 +61,143 @@ def _move_draw_cutter_tool_after_cursor():
             insert_index = index + 1
             break
 
+    cutter_group = tuple(
+        cutter_tools[tool_id]
+        for tool_id in CUTTER_TOOL_ORDER
+        if cutter_tools[tool_id] is not None
+    )
+    if not cutter_group:
+        return
+
     if insert_index is None:
-        tools.append(tool)
+        tools.append(cutter_group)
     else:
-        tools.insert(insert_index, tool)
+        tools.insert(insert_index, cutter_group)
 
-    arc_tool = _remove_tool_from_items(tools, DRAW_CUTTER_ARC_TOOL_ID)
-    if arc_tool is not None:
-        tools.insert(tools.index(tool) + 1, arc_tool)
 
-    path_tool = _remove_tool_from_items(tools, DRAW_CUTTER_PATH_TOOL_ID)
-    if path_tool is not None:
-        insert_after = arc_tool if arc_tool is not None else tool
-        tools.insert(tools.index(insert_after) + 1, path_tool)
+def _active_cutter_label_key(tool_id):
+    if tool_id == DRAW_CUTTER_ARC_TOOL_ID:
+        return "draw_cutter_arc"
+    if tool_id == DRAW_CUTTER_PATH_TOOL_ID:
+        return "draw_cutter_path"
+    return "draw_cutter_plane"
+
+
+def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
+    settings = context.scene.polygroups_object_seam_cutter_settings
+    layout.operator(
+        "object.polygroups_apply_cutter_seams",
+        text=t(context, "apply_cutter_seams"),
+        icon="MOD_BOOLEAN",
+    )
+
+    row = layout.row(align=True)
+    row.label(text=t(context, "ctrl_draw_hint"))
+    row.menu(
+        "VIEW3D_MT_polygroups_cutter_tool_type",
+        text=t(context, _active_cutter_label_key(tool.idname)),
+        icon="TOOL_SETTINGS",
+    )
+
+    if cutter_type in {"PLANE", "ARC"}:
+        layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
+    if cutter_type == "ARC":
+        layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
+    if cutter_type == "PATH":
+        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
+        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
+        layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+    layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
+    if cutter_type in {"PLANE", "ARC"}:
+        layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
+
+
+class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
+    bl_label = "Cutter Type"
+
+    def draw(self, context):
+        layout = self.layout
+        items = (
+            (DRAW_CUTTER_TOOL_ID, "draw_cutter_plane", "MESH_PLANE"),
+            (DRAW_CUTTER_ARC_TOOL_ID, "draw_cutter_arc", "CURVE_BEZCURVE"),
+            (DRAW_CUTTER_PATH_TOOL_ID, "draw_cutter_path", "CURVE_PATH"),
+        )
+        for tool_id, text_key, icon in items:
+            operator = layout.operator(
+                "wm.tool_set_by_id",
+                text=t(context, text_key),
+                icon=icon,
+            )
+            operator.name = tool_id
 
 
 class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
     bl_context_mode = "OBJECT"
     bl_idname = DRAW_CUTTER_TOOL_ID
-    bl_label = "Draw Cutter Plane"
-    bl_description = "Draw object-mode cutter planes for applying seams to a highpoly mesh"
+    bl_label = "Cutter Tweak: Plane"
+    bl_description = "Select normally; hold Ctrl and click to draw object-mode cutter planes"
     bl_icon = "ops.mesh.bisect"
-    bl_cursor = "CROSSHAIR"
+    bl_cursor = "DEFAULT"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
         (
             "object.polygroups_draw_cutter_plane",
-            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
             {"properties": [("use_event_as_start", True)]},
         ),
     )
 
     @staticmethod
     def draw_settings(context, layout, tool):
-        del tool
-        settings = context.scene.polygroups_object_seam_cutter_settings
-        layout.operator(
-            "object.polygroups_apply_cutter_seams",
-            text=t(context, "apply_cutter_seams"),
-            icon="MOD_BOOLEAN",
-        )
-        layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
-        layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
-        layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
+        _draw_cutter_tool_settings(context, layout, tool, "PLANE")
 
 
 class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
     bl_context_mode = "OBJECT"
     bl_idname = DRAW_CUTTER_ARC_TOOL_ID
-    bl_label = "Draw Cutter Arc"
-    bl_description = "Draw object-mode cutter arcs from three viewport points"
-    bl_icon = "ops.curve.draw"
-    bl_cursor = "CROSSHAIR"
+    bl_label = "Cutter Tweak: Arc"
+    bl_description = "Select normally; hold Ctrl and click to draw object-mode cutter arcs"
+    bl_icon = "ops.mesh.bisect"
+    bl_cursor = "DEFAULT"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
         (
             "object.polygroups_draw_cutter_arc",
-            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
             {"properties": [("use_event_as_start", True)]},
         ),
     )
 
     @staticmethod
     def draw_settings(context, layout, tool):
-        del tool
-        settings = context.scene.polygroups_object_seam_cutter_settings
-        layout.operator(
-            "object.polygroups_apply_cutter_seams",
-            text=t(context, "apply_cutter_seams"),
-            icon="MOD_BOOLEAN",
-        )
-        layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
-        layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
-        layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
-        layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
+        _draw_cutter_tool_settings(context, layout, tool, "ARC")
 
 
 class VIEW3D_WST_polygroups_draw_cutter_path(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
     bl_context_mode = "OBJECT"
     bl_idname = DRAW_CUTTER_PATH_TOOL_ID
-    bl_label = "Draw Cutter Path"
-    bl_description = "Draw object-mode cutter paths snapped to mesh faces"
-    bl_icon = "ops.curve.draw"
-    bl_cursor = "CROSSHAIR"
+    bl_label = "Cutter Tweak: Path"
+    bl_description = "Select normally; hold Ctrl and click to draw object-mode cutter paths"
+    bl_icon = "ops.mesh.bisect"
+    bl_cursor = "DEFAULT"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
         (
             "object.polygroups_draw_cutter_path",
-            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
             {"properties": [("use_event_as_start", True)]},
         ),
     )
 
     @staticmethod
     def draw_settings(context, layout, tool):
-        del tool
-        settings = context.scene.polygroups_object_seam_cutter_settings
-        layout.operator(
-            "object.polygroups_apply_cutter_seams",
-            text=t(context, "apply_cutter_seams"),
-            icon="MOD_BOOLEAN",
-        )
-        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
-        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
-        layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+        _draw_cutter_tool_settings(context, layout, tool, "PATH")
 
 
 class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
@@ -230,11 +265,12 @@ class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
 
 
 def register():
+    bpy.utils.register_class(VIEW3D_MT_polygroups_cutter_tool_type)
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_draw_cutter_plane,
         after={"builtin.cursor"},
         separator=False,
-        group=False,
+        group=True,
     )
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_draw_cutter_arc,
@@ -269,3 +305,4 @@ def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_arc)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)
+    bpy.utils.unregister_class(VIEW3D_MT_polygroups_cutter_tool_type)
