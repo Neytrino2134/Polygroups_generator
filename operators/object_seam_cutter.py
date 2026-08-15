@@ -1,5 +1,4 @@
 import json
-import heapq
 import bpy
 from math import atan2
 from math import cos
@@ -44,6 +43,26 @@ def _target_bounds(target):
     center = sum(corners, Vector()) / len(corners)
     diagonal = max((corner - center).length for corner in corners) * 2.0
     return center, max(diagonal, 1.0)
+
+
+def _axis_lock_mode(start_pos, end_pos):
+    start = Vector(start_pos)
+    end = Vector(end_pos)
+    delta = end - start
+    if abs(delta.x) >= abs(delta.y):
+        return "HORIZONTAL"
+    return "VERTICAL"
+
+
+def _axis_locked_region_pos(start_pos, end_pos, enabled):
+    if not enabled:
+        return end_pos
+
+    start = Vector(start_pos)
+    end = Vector(end_pos)
+    if _axis_lock_mode(start, end) == "HORIZONTAL":
+        return (end.x, start.y)
+    return (start.x, end.y)
 
 
 def _surface_hit_from_region_pos(region, rv3d, region_pos, target):
@@ -363,164 +382,6 @@ def _cutter_planes_world(cutter):
     return planes
 
 
-def _arc_surface_path_points_world(target, cutter):
-    if cutter.type != "MESH" or len(cutter.data.vertices) < 4:
-        return []
-
-    matrix_inv = target.matrix_world.inverted()
-    normal_matrix = target.matrix_world.to_3x3().inverted().transposed()
-    path_points = []
-    for index in range(0, len(cutter.data.vertices) - 1, 2):
-        start = cutter.matrix_world @ cutter.data.vertices[index].co
-        end = cutter.matrix_world @ cutter.data.vertices[index + 1].co
-        direction = end - start
-        distance = direction.length
-        if distance < 0.000001:
-            continue
-        direction.normalize()
-
-        local_origin = matrix_inv @ start
-        local_direction = matrix_inv.to_3x3() @ direction
-        if local_direction.length < 0.000001:
-            continue
-        local_direction.normalize()
-
-        hit, location, normal, face_index = target.ray_cast(
-            local_origin,
-            local_direction,
-            distance=distance,
-        )
-        if not hit:
-            local_origin = matrix_inv @ end
-            local_direction = matrix_inv.to_3x3() @ -direction
-            if local_direction.length < 0.000001:
-                continue
-            local_direction.normalize()
-            hit, location, normal, face_index = target.ray_cast(
-                local_origin,
-                local_direction,
-                distance=distance,
-            )
-        if not hit:
-            continue
-
-        world_location = target.matrix_world @ location
-        world_normal = normal_matrix @ normal
-        if world_normal.length < 0.000001:
-            world_normal = direction
-        world_normal.normalize()
-
-        if path_points and (world_location - path_points[-1]["location"]).length < 0.000001:
-            continue
-        path_points.append(
-            {
-                "location": world_location,
-                "normal": world_normal,
-            },
-        )
-
-    return path_points
-
-
-def _arc_path_vertex_indices(target, path_points):
-    if len(path_points) < 2:
-        return []
-
-    from mathutils import kdtree
-
-    mesh = target.data
-    kd = kdtree.KDTree(len(mesh.vertices))
-    for vertex in mesh.vertices:
-        kd.insert(vertex.co, vertex.index)
-    kd.balance()
-
-    matrix_inv = target.matrix_world.inverted()
-    vertex_indices = []
-    for item in path_points:
-        location = matrix_inv @ item["location"]
-        _, index, _ = kd.find(location)
-        if vertex_indices and vertex_indices[-1] == index:
-            continue
-        vertex_indices.append(index)
-
-    return vertex_indices
-
-
-def _mesh_adjacency(mesh):
-    adjacency = [[] for _ in mesh.vertices]
-    for edge in mesh.edges:
-        start, end = edge.vertices
-        start_co = mesh.vertices[start].co
-        end_co = mesh.vertices[end].co
-        length = max((end_co - start_co).length, 0.000001)
-        adjacency[start].append((end, edge.index, length))
-        adjacency[end].append((start, edge.index, length))
-    return adjacency
-
-
-def _shortest_edge_path(mesh, adjacency, start_index, end_index):
-    if start_index == end_index:
-        return []
-
-    target_co = mesh.vertices[end_index].co
-    queue = [(0.0, start_index)]
-    cost_so_far = {start_index: 0.0}
-    came_from = {}
-
-    while queue:
-        _, current = heapq.heappop(queue)
-        if current == end_index:
-            break
-
-        current_cost = cost_so_far[current]
-        for neighbor, edge_index, edge_length in adjacency[current]:
-            new_cost = current_cost + edge_length
-            if new_cost >= cost_so_far.get(neighbor, float("inf")):
-                continue
-
-            cost_so_far[neighbor] = new_cost
-            heuristic = (mesh.vertices[neighbor].co - target_co).length
-            heapq.heappush(queue, (new_cost + heuristic, neighbor))
-            came_from[neighbor] = (current, edge_index)
-
-    if end_index not in came_from:
-        return []
-
-    edge_indices = []
-    current = end_index
-    while current != start_index:
-        previous, edge_index = came_from[current]
-        edge_indices.append(edge_index)
-        current = previous
-    edge_indices.reverse()
-    return edge_indices
-
-
-def _apply_arc_cutters_to_mesh(target, cutters):
-    mesh = target.data
-    if not mesh.vertices or not mesh.edges:
-        return 0
-
-    adjacency = _mesh_adjacency(mesh)
-    marked_edges = 0
-
-    for cutter in cutters:
-        path_points = _arc_surface_path_points_world(target, cutter)
-        vertex_indices = _arc_path_vertex_indices(target, path_points)
-        if len(vertex_indices) < 2:
-            continue
-
-        for start_index, end_index in zip(vertex_indices, vertex_indices[1:]):
-            for edge_index in _shortest_edge_path(mesh, adjacency, start_index, end_index):
-                edge = mesh.edges[edge_index]
-                if not edge.use_seam:
-                    marked_edges += 1
-                edge.use_seam = True
-
-    mesh.update()
-    return marked_edges
-
-
 def _path_cutter_planes_world(cutter):
     return [
         (segment["plane_co"], segment["plane_no"])
@@ -628,6 +489,16 @@ def _world_plane_to_local(target, plane_co, plane_no):
     return local_co, local_no
 
 
+def _clear_mesh_component_selection(mesh):
+    for vertex in mesh.vertices:
+        vertex.select = False
+    for edge in mesh.edges:
+        edge.select = False
+    for polygon in mesh.polygons:
+        polygon.select = False
+    mesh.update()
+
+
 def _path_boolean_material():
     material = bpy.data.materials.new(BOOLEAN_PATH_TEMP_MATERIAL_NAME)
     material.diffuse_color = (1.0, 0.08, 0.02, 1.0)
@@ -665,7 +536,45 @@ def _prepare_target_path_boolean_materials(target, temp_material):
     return len(target.data.materials) - 1, placeholder_index, placeholder_material
 
 
-def _duplicate_boolean_cutter_as_mesh(context, cutter, material):
+def _extend_arc_cutter_mesh_ends(obj, extension_distance):
+    if obj.type != "MESH" or obj.get(CUTTER_TYPE_PROP) != "ARC" or extension_distance <= 0.0:
+        return
+
+    vertices = obj.data.vertices
+    if len(vertices) < 4:
+        return
+
+    def pair_center(index):
+        return (vertices[index].co + vertices[index + 1].co) * 0.5
+
+    first_center = pair_center(0)
+    second_center = pair_center(2)
+    first_direction = first_center - second_center
+    if first_direction.length > 0.000001:
+        first_direction.normalize()
+        vertices[0].co += first_direction * extension_distance
+        vertices[1].co += first_direction * extension_distance
+
+    last_index = len(vertices) - 2
+    previous_index = len(vertices) - 4
+    last_center = pair_center(last_index)
+    previous_center = pair_center(previous_index)
+    last_direction = last_center - previous_center
+    if last_direction.length > 0.000001:
+        last_direction.normalize()
+        vertices[last_index].co += last_direction * extension_distance
+        vertices[last_index + 1].co += last_direction * extension_distance
+
+    obj.data.update()
+
+
+def _duplicate_boolean_cutter_as_mesh(
+    context,
+    cutter,
+    material,
+    boolean_solidify_thickness=None,
+    extension_distance=0.0,
+):
     work = cutter.copy()
     work.data = cutter.data.copy()
     work.name = f"{cutter.name}_Boolean"
@@ -673,9 +582,18 @@ def _duplicate_boolean_cutter_as_mesh(context, cutter, material):
     work.hide_viewport = False
     work.hide_render = False
     work.hide_set(False)
-    for modifier in list(work.modifiers):
-        if modifier.name == CUTTER_SOLIDIFY_MODIFIER_NAME:
-            work.modifiers.remove(modifier)
+    if boolean_solidify_thickness is None:
+        for modifier in list(work.modifiers):
+            if modifier.name == CUTTER_SOLIDIFY_MODIFIER_NAME:
+                work.modifiers.remove(modifier)
+    else:
+        modifier = work.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
+        if modifier is None:
+            modifier = work.modifiers.new(CUTTER_SOLIDIFY_MODIFIER_NAME, "SOLIDIFY")
+        modifier.thickness = boolean_solidify_thickness
+        modifier.offset = 0.0
+        if hasattr(modifier, "use_rim"):
+            modifier.use_rim = True
 
     target_collection = cutter.users_collection[0] if cutter.users_collection else context.scene.collection
     target_collection.objects.link(work)
@@ -696,11 +614,27 @@ def _duplicate_boolean_cutter_as_mesh(context, cutter, material):
             bpy.data.objects.remove(work, do_unlink=True)
         return None
 
+    _extend_arc_cutter_mesh_ends(work, extension_distance)
+
     material_index = _ensure_material_slot(work, material)
     for polygon in work.data.polygons:
         polygon.material_index = material_index
         polygon.select = True
     work.data.update()
+
+    if boolean_solidify_thickness is not None:
+        modifier = work.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
+        if modifier is not None:
+            try:
+                bpy.ops.object.modifier_apply(modifier=modifier.name)
+            except RuntimeError:
+                pass
+        material_index = _ensure_material_slot(work, material)
+        for polygon in work.data.polygons:
+            polygon.material_index = material_index
+            polygon.select = True
+        work.data.update()
+
     return work
 
 
@@ -752,6 +686,7 @@ def _mark_boolean_path_boundaries_and_remove_faces(target, temp_material_index, 
 
             boundary_edges.add(edge)
             edge.seam = True
+            edge.select_set(True)
 
     bmesh.ops.delete(bm, geom=temp_faces, context="FACES_ONLY")
     loose_temp_edges = [
@@ -773,6 +708,35 @@ def _mark_boolean_path_boundaries_and_remove_faces(target, temp_material_index, 
     return max(0, final_seam_count - initial_seam_count)
 
 
+def _mesh_has_selected_edges(mesh):
+    return any(edge.select for edge in mesh.edges)
+
+
+def _split_selected_edges(context, target, separate_objects):
+    if not _mesh_has_selected_edges(target.data):
+        return []
+
+    if context.object and context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    bpy.ops.object.select_all(action="DESELECT")
+    target.select_set(True)
+    context.view_layer.objects.active = target
+
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_mode(type="EDGE")
+    bpy.ops.mesh.edge_split()
+
+    if separate_objects:
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.separate(type="LOOSE")
+        bpy.ops.object.mode_set(mode="OBJECT")
+        return [obj for obj in context.selected_objects if obj.type == "MESH"]
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return [target]
+
+
 def _remove_material_slot_by_index(obj, material_index):
     if material_index < 0 or material_index >= len(obj.data.materials):
         return
@@ -788,14 +752,26 @@ def _remove_material_if_unused(material):
         bpy.data.materials.remove(material)
 
 
-def _apply_boolean_cutter_to_mesh(context, target, cutter):
+def _apply_boolean_cutter_to_mesh(
+    context,
+    target,
+    cutter,
+    boolean_solidify_thickness=None,
+    extension_distance=0.0,
+):
     material = _path_boolean_material()
     temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
         target,
         material,
     )
     original_face_count = len(target.data.polygons)
-    work = _duplicate_boolean_cutter_as_mesh(context, cutter, material)
+    work = _duplicate_boolean_cutter_as_mesh(
+        context,
+        cutter,
+        material,
+        boolean_solidify_thickness=boolean_solidify_thickness,
+        extension_distance=extension_distance,
+    )
     if work is None:
         _remove_material_slot_by_index(target, temp_material_index)
         if placeholder_index is not None:
@@ -827,6 +803,106 @@ def _apply_boolean_cutter_to_mesh(context, target, cutter):
         _remove_material_if_unused(placeholder_material)
 
 
+def _arc_boolean_thickness(context):
+    model_settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
+    weld_distance = getattr(model_settings, "weld_distance", 0.0001)
+    return max(min(weld_distance * 0.01, 0.000001), 0.0000001)
+
+
+def _arc_heal_distance(context):
+    model_settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
+    weld_distance = getattr(model_settings, "weld_distance", 0.0001)
+    return weld_distance
+
+
+def _merge_selected_cut_vertices(target, merge_distance):
+    import bmesh
+
+    mesh = target.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.edges.ensure_lookup_table()
+
+    selected_edges = [edge for edge in bm.edges if edge.select]
+    if not selected_edges:
+        bm.free()
+        return 0
+
+    selected_verts = {vert for edge in selected_edges for vert in edge.verts}
+    before_vert_count = len(bm.verts)
+    bmesh.ops.remove_doubles(
+        bm,
+        verts=list(selected_verts),
+        dist=merge_distance,
+    )
+
+    for edge in bm.edges:
+        if edge.is_valid and edge.select:
+            edge.seam = True
+
+    after_vert_count = len([vert for vert in bm.verts if vert.is_valid])
+    bm.normal_update()
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return max(0, before_vert_count - after_vert_count)
+
+
+def _merge_open_boundary_vertices(target, merge_distance):
+    import bmesh
+
+    mesh = target.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.edges.ensure_lookup_table()
+
+    boundary_edges = [edge for edge in bm.edges if len(edge.link_faces) < 2]
+    if not boundary_edges:
+        bm.free()
+        return 0
+
+    boundary_verts = {vert for edge in boundary_edges for vert in edge.verts}
+    before_vert_count = len(bm.verts)
+    bmesh.ops.remove_doubles(
+        bm,
+        verts=list(boundary_verts),
+        dist=merge_distance,
+    )
+
+    after_vert_count = len([vert for vert in bm.verts if vert.is_valid])
+    bm.normal_update()
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return max(0, before_vert_count - after_vert_count)
+
+
+def _count_open_boundary_edges(target):
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(target.data)
+    count = sum(1 for edge in bm.edges if len(edge.link_faces) < 2)
+    bm.free()
+    return count
+
+
+def _apply_arc_cutters_to_mesh(context, target, cutters):
+    marked_edges = 0
+    boolean_thickness = _arc_boolean_thickness(context)
+    _center, target_diagonal = _target_bounds(target)
+    extension_distance = target_diagonal * 2.0
+    for cutter in cutters:
+        marked_edges += _apply_boolean_cutter_to_mesh(
+            context,
+            target,
+            cutter,
+            boolean_solidify_thickness=boolean_thickness,
+            extension_distance=extension_distance,
+        )
+    return marked_edges
+
+
 def _apply_plane_cutters_to_mesh(target, cutters):
     import bmesh
 
@@ -856,6 +932,7 @@ def _apply_plane_cutters_to_mesh(target, cutters):
                     if not element.seam:
                         marked_edges += 1
                     element.seam = True
+                    element.select_set(True)
 
     bm.normal_update()
     bm.to_mesh(mesh)
@@ -877,12 +954,24 @@ def _apply_cutters_to_mesh(context, target, cutters):
     if plane_cutters:
         marked_edges += _apply_plane_cutters_to_mesh(target, plane_cutters)
     if arc_cutters:
-        marked_edges += _apply_arc_cutters_to_mesh(target, arc_cutters)
+        marked_edges += _apply_arc_cutters_to_mesh(context, target, arc_cutters)
 
     for cutter in boolean_cutters:
         marked_edges += _apply_boolean_cutter_to_mesh(context, target, cutter)
 
     return marked_edges
+
+
+def _has_arc_cutters(cutters):
+    return any(cutter.get(CUTTER_TYPE_PROP) == "ARC" for cutter in cutters)
+
+
+def _split_supported_cutters(cutters):
+    return [
+        cutter
+        for cutter in cutters
+        if cutter.get(CUTTER_TYPE_PROP) in {"PLANE", "ARC"}
+    ]
 
 
 def _draw_cutter_overlay(operator):
@@ -899,6 +988,7 @@ def _draw_cutter_overlay(operator):
     start = Vector(operator._start_pos)
     end = Vector(operator._mouse_pos or operator._start_pos)
     color = (0.1, 0.65, 1.0, 1.0)
+    guide_color = (1.0, 0.78, 0.18, 0.55)
     label_color = (1.0, 1.0, 1.0, 1.0)
 
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
@@ -918,6 +1008,13 @@ def _draw_cutter_overlay(operator):
     ]
 
     if (end - start).length > 1.0:
+        if getattr(operator, "_shift_locked", False) and operator._start_region is not None:
+            if _axis_lock_mode(start, end) == "HORIZONTAL":
+                guide = [(0.0, start.y), (operator._start_region.width, start.y)]
+            else:
+                guide = [(start.x, 0.0), (start.x, operator._start_region.height)]
+            draw_lines(guide, guide_color)
+
         points.extend(
             [
                 (start.x, start.y),
@@ -1092,6 +1189,7 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
     _start_pos = None
     _mouse_pos = None
     _draw_handle = None
+    _shift_locked = False
 
     @classmethod
     def poll(cls, context):
@@ -1106,6 +1204,7 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
         self._start_pos = None
         self._mouse_pos = None
         self._draw_handle = None
+        self._shift_locked = False
 
         if self.use_event_as_start:
             area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
@@ -1118,9 +1217,9 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
             self._start_pos = region_pos
             self._mouse_pos = region_pos
             self._add_draw_handler()
-            context.workspace.status_text_set("Object Seam Cutter: A placed, click B")
+            context.workspace.status_text_set("Object Seam Cutter: A placed, click B. Hold Shift for horizontal/vertical lock")
         else:
-            context.workspace.status_text_set("Object Seam Cutter: click A in the viewport")
+            context.workspace.status_text_set("Object Seam Cutter: click A in the viewport. Hold Shift after A to lock axis")
 
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
@@ -1134,7 +1233,12 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
             area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
             if self._start_pos is not None and area == self._start_area and region == self._start_region:
                 del rv3d
-                self._mouse_pos = region_pos
+                self._shift_locked = event.shift
+                self._mouse_pos = _axis_locked_region_pos(
+                    self._start_pos,
+                    region_pos,
+                    self._shift_locked,
+                )
                 self._tag_redraw()
             return {"RUNNING_MODAL"}
 
@@ -1152,7 +1256,7 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
             self._start_pos = region_pos
             self._mouse_pos = region_pos
             self._add_draw_handler()
-            context.workspace.status_text_set("Object Seam Cutter: A placed, click B")
+            context.workspace.status_text_set("Object Seam Cutter: A placed, click B. Hold Shift for horizontal/vertical lock")
             return {"RUNNING_MODAL"}
 
         if area != self._start_area or region != self._start_region:
@@ -1165,12 +1269,14 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
             return {"CANCELLED"}
 
         settings = context.scene.polygroups_object_seam_cutter_settings
+        self._shift_locked = event.shift
+        end_pos = _axis_locked_region_pos(self._start_pos, region_pos, self._shift_locked)
         plane = _screen_cut_plane(
             self._start_area,
             self._start_region,
             self._start_rv3d,
             self._start_pos,
-            region_pos,
+            end_pos,
             target,
             settings.cutter_size_multiplier,
         )
@@ -1655,7 +1761,21 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             self.report({"WARNING"}, "No cutter planes found")
             return {"CANCELLED"}
 
+        use_arc_split_cleanup = _has_arc_cutters(cutters)
+        open_edges_before = _count_open_boundary_edges(target) if use_arc_split_cleanup else 0
+        _clear_mesh_component_selection(target.data)
         marked_edges = _apply_cutters_to_mesh(context, target, cutters)
+        if use_arc_split_cleanup and marked_edges:
+            heal_distance = _arc_heal_distance(context)
+            _merge_selected_cut_vertices(target, heal_distance)
+            _merge_open_boundary_vertices(target, heal_distance)
+            open_edges_after = _count_open_boundary_edges(target)
+            if open_edges_after > open_edges_before:
+                self.report(
+                    {"WARNING"},
+                    "Arc seam applied, but open boundary edges remain. The local weld distance was not increased.",
+                )
+
         settings.last_cutter_count = len(cutters)
         settings.last_marked_edge_count = marked_edges
 
@@ -1670,6 +1790,49 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
         self.report(
             {"INFO"},
             f"Applied {len(cutters)} cutter object(s), marked {marked_edges} seam edge(s)",
+        )
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_split_object_by_cutters(bpy.types.Operator):
+    bl_idname = "object.polygroups_split_object_by_cutters"
+    bl_label = "Split Object"
+    bl_description = "Split the active mesh into separate objects using selected cutter planes or arcs"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+
+    def execute(self, context):
+        target = context.active_object
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        cutters = _split_supported_cutters(_selected_cutters(context, target))
+        if not cutters:
+            self.report({"WARNING"}, "Select at least one cutter plane or arc")
+            return {"CANCELLED"}
+
+        _clear_mesh_component_selection(target.data)
+        marked_edges = _apply_cutters_to_mesh(context, target, cutters)
+        if not marked_edges:
+            self.report({"WARNING"}, "No cut edges were created")
+            return {"CANCELLED"}
+
+        parts = _split_selected_edges(context, target, separate_objects=True)
+        settings.last_cutter_count = len(cutters)
+        settings.last_marked_edge_count = marked_edges
+
+        if len(parts) > 4:
+            self.report(
+                {"WARNING"},
+                "Split created many parts. Make sure the plane or arc fully crosses the mesh.",
+            )
+            return {"FINISHED"}
+
+        self.report(
+            {"INFO"},
+            f"Split object with {len(cutters)} cutter object(s), created {len(parts)} part(s)",
         )
         return {"FINISHED"}
 

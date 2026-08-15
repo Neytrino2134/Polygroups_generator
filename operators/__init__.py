@@ -36,6 +36,7 @@ from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_arc
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_path
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
 from .object_seam_cutter import OBJECT_OT_polygroups_select_cutter_planes
+from .object_seam_cutter import OBJECT_OT_polygroups_split_object_by_cutters
 from .object_seam_cutter import OBJECT_OT_polygroups_tilt_cutter_path
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
@@ -112,6 +113,7 @@ CLASSES = (
     OBJECT_OT_polygroups_draw_cutter_path,
     OBJECT_OT_polygroups_tilt_cutter_path,
     OBJECT_OT_polygroups_apply_cutter_seams,
+    OBJECT_OT_polygroups_split_object_by_cutters,
     OBJECT_OT_polygroups_select_cutter_planes,
     OBJECT_OT_polygroups_clear_cutter_planes,
 )

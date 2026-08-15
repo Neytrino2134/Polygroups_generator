@@ -594,6 +594,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             text=t(context, "apply_cutter_seams"),
             icon="MOD_BOOLEAN",
         )
+        layout.operator(
+            "object.polygroups_split_object_by_cutters",
+            text=t(context, "split_object"),
+            icon="MOD_EXPLODE",
+        )
 
         utility_row = layout.row(align=True)
         utility_row.operator(
