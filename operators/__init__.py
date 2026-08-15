@@ -15,6 +15,7 @@ from .mark_selection_boundary_seam import MESH_OT_polygroups_mark_selection_boun
 from .mark_selected_edges_seam import MESH_OT_polygroups_mark_selected_edges_seam
 from .object_seam_cutter import OBJECT_OT_polygroups_apply_cutter_seams
 from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
+from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_arc
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
 from .object_seam_cutter import OBJECT_OT_polygroups_select_cutter_planes
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
@@ -57,6 +58,7 @@ CLASSES = (
     MESH_OT_polygroups_quick_knife_seam,
     MESH_OT_polygroups_select_seam_tool,
     OBJECT_OT_polygroups_draw_cutter_plane,
+    OBJECT_OT_polygroups_draw_cutter_arc,
     OBJECT_OT_polygroups_apply_cutter_seams,
     OBJECT_OT_polygroups_select_cutter_planes,
     OBJECT_OT_polygroups_clear_cutter_planes,

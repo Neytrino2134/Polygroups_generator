@@ -3,6 +3,7 @@ from bpy.types import WorkSpaceTool
 
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
+DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
 VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
 
 
@@ -54,6 +55,10 @@ def _move_draw_cutter_tool_after_cursor():
     else:
         tools.insert(insert_index, tool)
 
+    arc_tool = _remove_tool_from_items(tools, DRAW_CUTTER_ARC_TOOL_ID)
+    if arc_tool is not None:
+        tools.insert(tools.index(tool) + 1, arc_tool)
+
 
 class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
@@ -78,6 +83,39 @@ class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
         del tool
         settings = context.scene.polygroups_object_seam_cutter_settings
         layout.prop(settings, "cutter_size_multiplier")
+        layout.prop(settings, "cutter_alpha")
+        layout.prop(settings, "cutter_solidify_thickness")
+        layout.operator(
+            "object.polygroups_apply_cutter_seams",
+            text="Apply Cutter Seams To Active",
+            icon="MOD_BOOLEAN",
+        )
+
+
+class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_idname = DRAW_CUTTER_ARC_TOOL_ID
+    bl_label = "Draw Cutter Arc"
+    bl_description = "Draw object-mode cutter arcs from three viewport points"
+    bl_icon = "ops.curve.draw"
+    bl_cursor = "CROSSHAIR"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        (
+            "object.polygroups_draw_cutter_arc",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        del tool
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        layout.prop(settings, "cutter_size_multiplier")
+        layout.prop(settings, "cutter_arc_segments")
         layout.prop(settings, "cutter_alpha")
         layout.prop(settings, "cutter_solidify_thickness")
         layout.operator(
@@ -152,6 +190,12 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_draw_cutter_arc,
+        after={DRAW_CUTTER_TOOL_ID},
+        separator=False,
+        group=False,
+    )
     _move_draw_cutter_tool_after_cursor()
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_knife_seam,
@@ -170,4 +214,5 @@ def register():
 def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_arc)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)

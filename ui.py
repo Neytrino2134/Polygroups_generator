@@ -304,6 +304,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         settings = context.scene.polygroups_object_seam_cutter_settings
 
         layout.prop(settings, "cutter_size_multiplier")
+        layout.prop(settings, "cutter_arc_segments")
         layout.prop(settings, "cutter_alpha")
         layout.prop(settings, "cutter_solidify_thickness")
         layout.prop(settings, "hide_cutters_after_apply")
@@ -319,6 +320,16 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.operator(
             "object.polygroups_draw_cutter_plane",
             icon="MESH_PLANE",
+        )
+        tool_operator = layout.operator(
+            "wm.tool_set_by_id",
+            text="Select Draw Cutter Arc Tool",
+            icon="CURVE_BEZCURVE",
+        )
+        tool_operator.name = "polygroups_generator.draw_cutter_arc_tool"
+        layout.operator(
+            "object.polygroups_draw_cutter_arc",
+            icon="CURVE_BEZCURVE",
         )
         layout.operator(
             "object.polygroups_apply_cutter_seams",

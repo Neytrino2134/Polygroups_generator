@@ -192,6 +192,14 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         precision=5,
         update=_sync_cutter_solidify_thickness,
     )
+    cutter_arc_segments: bpy.props.IntProperty(
+        name="Cylinder Segments",
+        description="Number of segments used for the open arc cylinder cutter",
+        default=16,
+        min=3,
+        max=96,
+        soft_max=32,
+    )
     hide_cutters_after_apply: bpy.props.BoolProperty(
         name="Hide Cutters After Apply",
         description="Hide cutter plane objects after applying seams",

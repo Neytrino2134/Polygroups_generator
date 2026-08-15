@@ -1,9 +1,14 @@
 import bpy
+from math import atan2
+from math import cos
+from math import sin
+from math import tau
 from mathutils import Vector
 
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
+CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 
 
@@ -101,6 +106,89 @@ def _screen_cut_plane(area, region, rv3d, start_pos, end_pos, target, size_multi
     return center, axis_a, axis_b, size
 
 
+def _arc_center_2d(a, b, c):
+    ax, ay = a.x, a.y
+    bx, by = b.x, b.y
+    cx, cy = c.x, c.y
+    determinant = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    if abs(determinant) < 0.000001:
+        return None
+
+    a_sq = ax * ax + ay * ay
+    b_sq = bx * bx + by * by
+    c_sq = cx * cx + cy * cy
+    ux = (a_sq * (by - cy) + b_sq * (cy - ay) + c_sq * (ay - by)) / determinant
+    uy = (a_sq * (cx - bx) + b_sq * (ax - cx) + c_sq * (bx - ax)) / determinant
+    return Vector((ux, uy))
+
+
+def _angle_delta_ccw(start_angle, end_angle):
+    return (end_angle - start_angle) % tau
+
+
+def _screen_arc_points(start_pos, middle_pos, end_pos, segments):
+    start = Vector(start_pos)
+    middle = Vector(middle_pos)
+    end = Vector(end_pos)
+    center = _arc_center_2d(start, middle, end)
+    if center is None:
+        return None
+
+    radius = (start - center).length
+    if radius < 2.0:
+        return None
+
+    start_angle = atan2(start.y - center.y, start.x - center.x)
+    middle_angle = atan2(middle.y - center.y, middle.x - center.x)
+    end_angle = atan2(end.y - center.y, end.x - center.x)
+
+    ccw_total = _angle_delta_ccw(start_angle, end_angle)
+    ccw_to_middle = _angle_delta_ccw(start_angle, middle_angle)
+    if ccw_to_middle <= ccw_total:
+        total = ccw_total
+    else:
+        total = ccw_total - tau
+
+    if abs(total) < 0.000001 or abs(abs(total) - tau) < 0.000001:
+        return None
+
+    points = []
+    for index in range(segments + 1):
+        angle = start_angle + total * (index / segments)
+        points.append(
+            (
+                center.x + radius * cos(angle),
+                center.y + radius * sin(angle),
+            )
+        )
+    return points
+
+
+def _screen_arc_surface(area, region, rv3d, start_pos, middle_pos, end_pos, target, size_multiplier, segments):
+    del area
+    from bpy_extras import view3d_utils
+
+    arc_points = _screen_arc_points(start_pos, middle_pos, end_pos, segments)
+    if arc_points is None:
+        return None
+
+    target_center, target_diagonal = _target_bounds(target)
+    center_points = [
+        view3d_utils.region_2d_to_location_3d(region, rv3d, Vector(point), target_center)
+        for point in arc_points
+    ]
+    if len(center_points) < 2:
+        return None
+
+    region_center = Vector((region.width * 0.5, region.height * 0.5))
+    depth_axis = view3d_utils.region_2d_to_vector_3d(region, rv3d, region_center)
+    if depth_axis.length < 0.000001:
+        return None
+    depth_axis.normalize()
+
+    return center_points, depth_axis, target_diagonal * size_multiplier
+
+
 def _add_solidify_modifier(obj, thickness):
     modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
     if modifier is None:
@@ -128,8 +216,41 @@ def _create_cutter_plane(name, center, axis_a, axis_b, size, alpha, thickness):
     obj.show_in_front = True
     obj.display_type = "TEXTURED"
     obj[CUTTER_PROP] = True
+    obj[CUTTER_TYPE_PROP] = "PLANE"
     obj.data.materials.append(_material(alpha))
     _add_solidify_modifier(obj, thickness)
+    _collection().objects.link(obj)
+    return obj
+
+
+def _create_cutter_arc(name, center_points, depth_axis, size, alpha, thickness):
+    vertices = []
+    faces = []
+    half = size * 0.5
+
+    for center in center_points:
+        vertices.append(center - depth_axis * half)
+        vertices.append(center + depth_axis * half)
+
+    for index in range(len(center_points) - 1):
+        start = index * 2
+        faces.append((start, start + 1, start + 3, start + 2))
+
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(vertex) for vertex in vertices], [], faces)
+    mesh.update()
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+
+    obj = bpy.data.objects.new(name, mesh)
+    obj.show_in_front = True
+    obj.display_type = "TEXTURED"
+    obj[CUTTER_PROP] = True
+    obj[CUTTER_TYPE_PROP] = "ARC"
+    obj.data.materials.append(_material(alpha))
+    modifier = _add_solidify_modifier(obj, thickness)
+    if hasattr(modifier, "use_rim"):
+        modifier.use_rim = False
     _collection().objects.link(obj)
     return obj
 
@@ -150,19 +271,22 @@ def _selected_cutters(context, target):
     return [obj for obj in collection.objects if obj.type == "MESH" and obj.get(CUTTER_PROP)]
 
 
-def _cutter_plane_world(cutter):
+def _cutter_planes_world(cutter):
     if cutter.type != "MESH" or not cutter.data.polygons:
-        return None
+        return []
 
-    polygon = cutter.data.polygons[0]
-    verts = [cutter.data.vertices[index].co for index in polygon.vertices]
-    local_center = sum(verts, Vector()) / len(verts)
-    world_center = cutter.matrix_world @ local_center
-    normal = cutter.matrix_world.to_3x3().inverted().transposed() @ polygon.normal
-    if normal.length < 0.000001:
-        return None
-    normal.normalize()
-    return world_center, normal
+    planes = []
+    polygons = cutter.data.polygons if cutter.get(CUTTER_TYPE_PROP) == "ARC" else cutter.data.polygons[:1]
+    for polygon in polygons:
+        verts = [cutter.data.vertices[index].co for index in polygon.vertices]
+        local_center = sum(verts, Vector()) / len(verts)
+        world_center = cutter.matrix_world @ local_center
+        normal = cutter.matrix_world.to_3x3().inverted().transposed() @ polygon.normal
+        if normal.length < 0.000001:
+            continue
+        normal.normalize()
+        planes.append((world_center, normal))
+    return planes
 
 
 def _world_plane_to_local(target, plane_co, plane_no):
@@ -184,29 +308,26 @@ def _apply_cutters_to_mesh(target, cutters):
 
     marked_edges = 0
     for cutter in cutters:
-        plane = _cutter_plane_world(cutter)
-        if plane is None:
-            continue
+        for plane in _cutter_planes_world(cutter):
+            local_plane = _world_plane_to_local(target, plane[0], plane[1])
+            if local_plane is None:
+                continue
 
-        local_plane = _world_plane_to_local(target, plane[0], plane[1])
-        if local_plane is None:
-            continue
+            geom = list(bm.verts) + list(bm.edges) + list(bm.faces)
+            result = bmesh.ops.bisect_plane(
+                bm,
+                geom=geom,
+                plane_co=local_plane[0],
+                plane_no=local_plane[1],
+                clear_inner=False,
+                clear_outer=False,
+            )
 
-        geom = list(bm.verts) + list(bm.edges) + list(bm.faces)
-        result = bmesh.ops.bisect_plane(
-            bm,
-            geom=geom,
-            plane_co=local_plane[0],
-            plane_no=local_plane[1],
-            clear_inner=False,
-            clear_outer=False,
-        )
-
-        for element in result.get("geom_cut", ()):
-            if isinstance(element, bmesh.types.BMEdge):
-                if not element.seam:
-                    marked_edges += 1
-                element.seam = True
+            for element in result.get("geom_cut", ()):
+                if isinstance(element, bmesh.types.BMEdge):
+                    if not element.seam:
+                        marked_edges += 1
+                    element.seam = True
 
     bm.normal_update()
     bm.to_mesh(mesh)
@@ -274,6 +395,73 @@ def _draw_cutter_overlay(operator):
     if (end - start).length > 1.0:
         blf.position(font_id, end.x + 10.0, end.y + 10.0, 0)
         blf.draw(font_id, "B")
+
+
+def _draw_cutter_arc_overlay(operator):
+    if not operator._points:
+        return
+
+    try:
+        import blf
+        import gpu
+        from gpu_extras.batch import batch_for_shader
+    except Exception:
+        return
+
+    color = (0.1, 0.85, 1.0, 1.0)
+    label_color = (1.0, 1.0, 1.0, 1.0)
+    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+
+    preview_points = list(operator._points)
+    if operator._mouse_pos is not None and len(preview_points) < 3:
+        preview_points.append(operator._mouse_pos)
+
+    line_points = []
+    if len(preview_points) == 3:
+        arc_points = _screen_arc_points(
+            preview_points[0],
+            preview_points[1],
+            preview_points[2],
+            max(operator._preview_segments, 8),
+        )
+        if arc_points is not None:
+            for start, end in zip(arc_points, arc_points[1:]):
+                line_points.extend([start, end])
+
+    if not line_points and len(preview_points) > 1:
+        for start, end in zip(preview_points, preview_points[1:]):
+            line_points.extend([start, end])
+
+    cross_size = 7.0
+    for point in preview_points:
+        position = Vector(point)
+        line_points.extend(
+            [
+                (position.x - cross_size, position.y),
+                (position.x + cross_size, position.y),
+                (position.x, position.y - cross_size),
+                (position.x, position.y + cross_size),
+            ]
+        )
+
+    if line_points:
+        batch = batch_for_shader(shader, "LINES", {"pos": line_points})
+        shader.bind()
+        shader.uniform_float("color", color)
+        batch.draw(shader)
+
+    font_id = 0
+    try:
+        blf.size(font_id, 14)
+    except TypeError:
+        blf.size(font_id, 14, 72)
+
+    labels = ("A", "B", "C")
+    blf.color(font_id, *label_color)
+    for index, point in enumerate(preview_points[:3]):
+        position = Vector(point)
+        blf.position(font_id, position.x + 10.0, position.y + 10.0, 0)
+        blf.draw(font_id, labels[index])
 
 
 class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
@@ -421,6 +609,162 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
         self._tag_redraw()
 
 
+class OBJECT_OT_polygroups_draw_cutter_arc(bpy.types.Operator):
+    bl_idname = "object.polygroups_draw_cutter_arc"
+    bl_label = "Draw Cutter Arc"
+    bl_description = "Draw an object-mode cutter arc from three viewport clicks"
+    bl_options = {"REGISTER", "UNDO"}
+
+    use_event_as_start: bpy.props.BoolProperty(
+        name="Use Event As Start",
+        description="Use the invoking mouse event as the arc start point",
+        default=False,
+        options={"HIDDEN"},
+    )
+
+    _target_name = ""
+    _start_area = None
+    _start_region = None
+    _start_rv3d = None
+    _points = None
+    _mouse_pos = None
+    _draw_handle = None
+    _preview_segments = 16
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+
+    def invoke(self, context, event):
+        self._target_name = context.active_object.name
+        self._start_area = None
+        self._start_region = None
+        self._start_rv3d = None
+        self._points = []
+        self._mouse_pos = None
+        self._draw_handle = None
+        self._preview_segments = context.scene.polygroups_object_seam_cutter_settings.cutter_arc_segments
+
+        if self.use_event_as_start:
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if region is None:
+                return {"CANCELLED"}
+
+            self._start_area = area
+            self._start_region = region
+            self._start_rv3d = rv3d
+            self._points.append(region_pos)
+            self._mouse_pos = region_pos
+            self._add_draw_handler()
+            context.workspace.status_text_set("Object Seam Arc Cutter: A placed, click B")
+        else:
+            context.workspace.status_text_set("Object Seam Arc Cutter: click A in the viewport")
+
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+            self._finish(context)
+            return {"CANCELLED"}
+
+        if event.type == "MOUSEMOVE":
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if self._points and area == self._start_area and region == self._start_region:
+                del rv3d
+                self._mouse_pos = region_pos
+                self._tag_redraw()
+            return {"RUNNING_MODAL"}
+
+        if event.type != "LEFTMOUSE" or event.value != "PRESS":
+            return {"RUNNING_MODAL"}
+
+        area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+        if region is None:
+            return {"RUNNING_MODAL"}
+
+        if not self._points:
+            self._start_area = area
+            self._start_region = region
+            self._start_rv3d = rv3d
+            self._points.append(region_pos)
+            self._mouse_pos = region_pos
+            self._add_draw_handler()
+            context.workspace.status_text_set("Object Seam Arc Cutter: A placed, click B")
+            return {"RUNNING_MODAL"}
+
+        if area != self._start_area or region != self._start_region:
+            self.report({"WARNING"}, "Use the same viewport for all arc points")
+            return {"RUNNING_MODAL"}
+
+        self._points.append(region_pos)
+        self._mouse_pos = region_pos
+        if len(self._points) == 2:
+            context.workspace.status_text_set("Object Seam Arc Cutter: B placed, click C")
+            self._tag_redraw()
+            return {"RUNNING_MODAL"}
+
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            self._finish(context)
+            return {"CANCELLED"}
+
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        surface = _screen_arc_surface(
+            self._start_area,
+            self._start_region,
+            self._start_rv3d,
+            self._points[0],
+            self._points[1],
+            self._points[2],
+            target,
+            settings.cutter_size_multiplier,
+            settings.cutter_arc_segments,
+        )
+        if surface is None:
+            self.report({"WARNING"}, "Arc points are too close or almost collinear")
+            self._points.pop()
+            return {"RUNNING_MODAL"}
+
+        cutter = _create_cutter_arc(
+            "Seam_Cutter_Arc",
+            surface[0],
+            surface[1],
+            surface[2],
+            settings.cutter_alpha,
+            settings.cutter_solidify_thickness,
+        )
+        cutter.select_set(True)
+        target.select_set(True)
+        context.view_layer.objects.active = target
+        self._finish(context)
+        return {"FINISHED"}
+
+    def _add_draw_handler(self):
+        if self._draw_handle is not None:
+            return
+
+        self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_cutter_arc_overlay,
+            (self,),
+            "WINDOW",
+            "POST_PIXEL",
+        )
+        self._tag_redraw()
+
+    def _tag_redraw(self):
+        if self._start_area is not None:
+            self._start_area.tag_redraw()
+
+    def _finish(self, context):
+        if self._draw_handle is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self._draw_handle, "WINDOW")
+            self._draw_handle = None
+        context.workspace.status_text_set(None)
+        self._tag_redraw()
+
+
 class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
     bl_idname = "object.polygroups_apply_cutter_seams"
     bl_label = "Apply Cutter Seams To Active"
@@ -454,7 +798,7 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
 
         self.report(
             {"INFO"},
-            f"Applied {len(cutters)} cutter plane(s), marked {marked_edges} seam edge(s)",
+            f"Applied {len(cutters)} cutter object(s), marked {marked_edges} seam edge(s)",
         )
         return {"FINISHED"}
 
