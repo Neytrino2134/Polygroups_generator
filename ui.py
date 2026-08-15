@@ -433,8 +433,8 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         column = layout.column(align=True)
         column.prop(settings, "bake_resolution")
         column.prop(settings, "bake_margin")
-        column.prop(settings, "ray_distance")
         column.prop(settings, "cage_extrusion")
+        column.prop(settings, "ray_distance")
         column.prop(settings, "image_prefix")
         column.prop(settings, "use_selected_to_active")
 
@@ -459,6 +459,10 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         column.operator(
             "object.polygroups_prepare_and_bake",
             icon="RENDER_RESULT",
+        )
+        column.operator(
+            "object.polygroups_save_bake_textures",
+            icon="FILE_FOLDER",
         )
 
 

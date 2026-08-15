@@ -297,17 +297,19 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     ray_distance: bpy.props.FloatProperty(
         name="Ray Distance",
         description="Maximum ray distance for selected-to-active baking",
-        default=0.05,
+        default=0.0,
         min=0.0,
         soft_max=1.0,
+        step=0.5,
         precision=4,
     )
     cage_extrusion: bpy.props.FloatProperty(
         name="Cage Extrusion",
         description="Cage extrusion for selected-to-active baking",
-        default=0.0,
+        default=0.01,
         min=0.0,
         soft_max=1.0,
+        step=0.5,
         precision=4,
     )
     image_prefix: bpy.props.StringProperty(

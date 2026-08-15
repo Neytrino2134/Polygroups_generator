@@ -1,9 +1,17 @@
+import os
+import re
+
 import bpy
 
 
 BAKE_MATERIAL_NAME = "Bake_Target"
 BAKE_BASE_COLOR_NODE = "PolyGroups Bake Base Color"
 BAKE_NORMAL_NODE = "PolyGroups Bake Normal"
+
+
+def _safe_path_name(name):
+    safe_name = re.sub(r'[<>:"/\\|?*]+', "_", name).strip(" .")
+    return safe_name or "Object"
 
 
 def _active_mesh(context):
@@ -166,6 +174,31 @@ def _ensure_bake_material(target, settings):
     return material, base_node, normal_node
 
 
+def _find_bake_image(target, node_name):
+    for material_slot in target.material_slots:
+        material = material_slot.material
+        if material is None or not material.use_nodes or material.node_tree is None:
+            continue
+
+        node = material.node_tree.nodes.get(node_name)
+        if node is not None and getattr(node, "image", None) is not None:
+            return node.image
+
+    return None
+
+
+def _save_image_as_png(image, filepath):
+    original_filepath = image.filepath_raw
+    original_format = image.file_format
+
+    image.filepath_raw = filepath
+    image.file_format = "PNG"
+    image.save()
+
+    image.filepath_raw = original_filepath
+    image.file_format = original_format
+
+
 def _set_active_bake_node(target, node):
     material = target.active_material
     if material is None or material.node_tree is None:
@@ -257,6 +290,48 @@ class OBJECT_OT_polygroups_prepare_lowpoly_bake_material(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="OBJECT")
         _ensure_bake_material(target, settings)
         self.report({"INFO"}, "Prepared lowpoly bake material and images")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
+    bl_idname = "object.polygroups_save_bake_textures"
+    bl_label = "Save Textures"
+    bl_description = "Save baked Base Color and Normal images next to the blend file"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        return _active_mesh(context) is not None
+
+    def execute(self, context):
+        target = _active_mesh(context)
+        if not bpy.data.filepath:
+            self.report({"ERROR"}, "Save the blend file first")
+            return {"CANCELLED"}
+
+        base_image = _find_bake_image(target, BAKE_BASE_COLOR_NODE)
+        normal_image = _find_bake_image(target, BAKE_NORMAL_NODE)
+        if base_image is None and normal_image is None:
+            self.report({"WARNING"}, "No bake images found on the active mesh")
+            return {"CANCELLED"}
+
+        blend_dir = os.path.dirname(bpy.data.filepath)
+        object_name = _safe_path_name(target.name)
+        output_dir = os.path.join(blend_dir, "Bakes", object_name)
+        os.makedirs(output_dir, exist_ok=True)
+
+        saved_paths = []
+        if base_image is not None:
+            filepath = os.path.join(output_dir, f"{object_name}_Bake_BaseColor.png")
+            _save_image_as_png(base_image, filepath)
+            saved_paths.append(filepath)
+
+        if normal_image is not None:
+            filepath = os.path.join(output_dir, f"{object_name}_Bake_Normal.png")
+            _save_image_as_png(normal_image, filepath)
+            saved_paths.append(filepath)
+
+        self.report({"INFO"}, f"Saved {len(saved_paths)} texture(s) to {output_dir}")
         return {"FINISHED"}
 
 

@@ -3,6 +3,7 @@ from .baking import OBJECT_OT_polygroups_bake_selected_to_active
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
 from .baking import OBJECT_OT_polygroups_prepare_highpoly_bake_materials
 from .baking import OBJECT_OT_polygroups_prepare_lowpoly_bake_material
+from .baking import OBJECT_OT_polygroups_save_bake_textures
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
@@ -49,6 +50,7 @@ CLASSES = (
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_prepare_and_bake,
+    OBJECT_OT_polygroups_save_bake_textures,
     OBJECT_OT_polygroups_add_multires,
     OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly,
     OBJECT_OT_polygroups_setup_resculpting,
