@@ -411,14 +411,14 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
 
 
 class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
-    bl_label = "08 | Baking"
+    bl_label = "09 | Baking"
     bl_icon = "RENDER_STILL"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "PolyGroups"
     bl_parent_id = "VIEW3D_PT_polygroups_generator"
     bl_options = {"DEFAULT_CLOSED"}
-    bl_order = 8
+    bl_order = 9
     draw_header = draw_section_header_icon
 
     def draw(self, context):
@@ -496,6 +496,52 @@ class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
         )
 
 
+class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
+    bl_label = "08 | Seam Finalization"
+    bl_icon = "EDGE_SEAM"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "PolyGroups"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 8
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        layout = self.layout.box()
+        column = layout.column(align=True)
+        column.operator(
+            "mesh.polygroups_mark_selected_edges_seam",
+            icon="EDGESEL",
+        )
+        column.operator(
+            "mesh.polygroups_mark_selection_boundary_seam",
+            icon="EDGESEL",
+        )
+        column.operator(
+            "mesh.polygroups_mark_material_boundaries_seam",
+            icon="EDGE_SEAM",
+        )
+        column.operator(
+            "mesh.polygroups_mark_longitudinal_seam",
+            icon="EDGESEL",
+        )
+        column.operator(
+            "mesh.polygroups_mark_boundary_and_longitudinal_seam",
+            icon="EDGE_SEAM",
+        )
+
+        column.separator()
+        column.operator(
+            "object.polygroups_unwrap_angle_based",
+            icon="UV",
+        )
+        column.operator(
+            "object.polygroups_smart_uv_project",
+            icon="UV",
+        )
+
+
 CLASSES = (
     VIEW3D_PT_polygroups_generator,
     VIEW3D_PT_polygroups_import,
@@ -505,6 +551,7 @@ CLASSES = (
     VIEW3D_PT_polygroups_tools,
     VIEW3D_PT_polygroups_remesh,
     VIEW3D_PT_polygroups_resculpting,
+    VIEW3D_PT_polygroups_seam_finalization,
     VIEW3D_PT_polygroups_baking,
 )
 
