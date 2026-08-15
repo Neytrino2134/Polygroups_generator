@@ -672,7 +672,7 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             icon="MATERIAL",
         )
         column.operator(
-            "object.polygroups_prepare_lowpoly_bake_material",
+            "object.polygroups_checked_prepare_lowpoly_bake_material",
             text=t(context, "prepare_lowpoly_bake_material"),
             icon="TEXTURE",
         )
@@ -683,7 +683,7 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         )
         column.separator()
         column.operator(
-            "object.polygroups_prepare_and_bake",
+            "object.polygroups_checked_prepare_and_bake",
             text=t(context, "prepare_and_bake"),
             icon="RENDER_RESULT",
         )
@@ -691,6 +691,11 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             "object.polygroups_save_bake_textures",
             text=t(context, "save_textures"),
             icon="FILE_FOLDER",
+        )
+        column.operator(
+            "object.polygroups_merge_bake_textures",
+            text=t(context, "merge_materials_textures"),
+            icon="NODE_COMPOSITING",
         )
 
 

@@ -9,6 +9,7 @@ from .ai_generation import OBJECT_OT_airetopo_refresh_prompt_library
 from .ai_generation import OBJECT_OT_airetopo_save_generated_image
 from .ai_generation import OBJECT_OT_airetopo_select_material_image
 from .baking import OBJECT_OT_polygroups_bake_selected_to_active
+from .baking import OBJECT_OT_polygroups_merge_bake_textures
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
 from .baking import OBJECT_OT_polygroups_prepare_highpoly_bake_materials
 from .baking import OBJECT_OT_polygroups_prepare_lowpoly_bake_material
@@ -43,6 +44,8 @@ from .resculpting import OBJECT_OT_polygroups_setup_resculpting
 from .select_seam_tool import MESH_OT_polygroups_select_seam_tool
 from .safety_checks import OBJECT_OT_polygroups_checked_quad_remesh
 from .safety_checks import OBJECT_OT_polygroups_checked_generate_polygroups
+from .safety_checks import OBJECT_OT_polygroups_checked_prepare_and_bake
+from .safety_checks import OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material
 from .safety_checks import OBJECT_OT_polygroups_make_lowpoly_active
 from .safety_checks import OBJECT_OT_polygroups_rename_and_apply_weld
 from .safety_checks import OBJECT_OT_polygroups_skip_quad_remesh
@@ -71,12 +74,15 @@ CLASSES = (
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_prepare_and_bake,
     OBJECT_OT_polygroups_save_bake_textures,
+    OBJECT_OT_polygroups_merge_bake_textures,
     OBJECT_OT_polygroups_add_multires,
     OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly,
     OBJECT_OT_polygroups_setup_resculpting,
     OBJECT_OT_polygroups_rename_and_apply_weld,
     OBJECT_OT_polygroups_checked_quad_remesh,
     OBJECT_OT_polygroups_checked_generate_polygroups,
+    OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material,
+    OBJECT_OT_polygroups_checked_prepare_and_bake,
     OBJECT_OT_polygroups_skip_quad_remesh,
     OBJECT_OT_polygroups_make_lowpoly_active,
     OBJECT_OT_polygroups_set_quad_count_preset,

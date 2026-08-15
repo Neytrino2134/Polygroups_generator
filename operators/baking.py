@@ -1,5 +1,6 @@
 import os
 import re
+from array import array
 
 import bpy
 
@@ -7,6 +8,13 @@ import bpy
 BAKE_MATERIAL_NAME = "Bake_Target"
 BAKE_BASE_COLOR_NODE = "PolyGroups Bake Base Color"
 BAKE_NORMAL_NODE = "PolyGroups Bake Normal"
+BAKE_TARGET_MATERIAL_PROP = "polygroups_bake_target_material"
+BAKE_BASE_COLOR_IMAGE_PROP = "polygroups_bake_base_color_image"
+BAKE_NORMAL_IMAGE_PROP = "polygroups_bake_normal_image"
+BAKE_SOURCE_BASE_COLOR_IMAGE_PROP = "polygroups_bake_source_base_color_image"
+BAKE_SOURCE_NORMAL_IMAGE_PROP = "polygroups_bake_source_normal_image"
+BAKE_MERGED_BASE_COLOR_IMAGE_PROP = "polygroups_bake_merged_base_color_image"
+BAKE_MERGED_NORMAL_IMAGE_PROP = "polygroups_bake_merged_normal_image"
 
 
 def _safe_path_name(name):
@@ -95,13 +103,65 @@ def _make_image(name, resolution, colorspace):
     return image
 
 
-def _ensure_bake_material(target, settings):
+def _bake_data_name(settings, target, suffix):
+    object_name = _safe_path_name(target.name)
+    prefix = _safe_path_name(settings.image_prefix)
+    return f"{prefix}_{object_name}_{suffix}"
+
+
+def _image_matches_resolution(image, resolution):
+    return image is not None and image.size[0] == resolution and image.size[1] == resolution
+
+
+def _ensure_target_image(
+    target,
+    settings,
+    prop_name,
+    suffix,
+    colorspace,
+    generated_color=None,
+    source_prop_name=None,
+):
+    image = None
+    image_name = target.get(prop_name, "")
+    if image_name:
+        image = bpy.data.images.get(image_name)
+
+    if not _image_matches_resolution(image, settings.bake_resolution):
+        image = _make_image(
+            _bake_data_name(settings, target, suffix),
+            settings.bake_resolution,
+            colorspace,
+        )
+        target[prop_name] = image.name
+
+    if source_prop_name is not None:
+        target[source_prop_name] = image.name
+
+    if generated_color is not None:
+        image.generated_color = generated_color
+
+    return image
+
+
+def _ensure_target_bake_material(target, settings):
+    material = None
+    material_name = target.get(BAKE_TARGET_MATERIAL_PROP, "")
+    if material_name:
+        material = bpy.data.materials.get(material_name)
+
+    if material is None:
+        material = bpy.data.materials.new(_bake_data_name(settings, target, "Material"))
+        target[BAKE_TARGET_MATERIAL_PROP] = material.name
+
+    return material
+
+
+def _ensure_bake_material(target, settings, base_image=None, normal_image=None, update_source_images=True):
     if target.data.uv_layers.active is None:
         target.data.uv_layers.new(name="UVMap")
 
-    material = bpy.data.materials.get(BAKE_MATERIAL_NAME)
-    if material is None:
-        material = bpy.data.materials.new(BAKE_MATERIAL_NAME)
+    material = _ensure_target_bake_material(target, settings)
     material.use_nodes = True
 
     if target.data.materials:
@@ -117,22 +177,34 @@ def _ensure_bake_material(target, settings):
     if bsdf is None:
         bsdf = nodes.new("ShaderNodeBsdfPrincipled")
 
-    base_image = bpy.data.images.get(f"{settings.image_prefix}_BaseColor")
-    if base_image is None or base_image.size[0] != settings.bake_resolution:
-        base_image = _make_image(
-            f"{settings.image_prefix}_BaseColor",
-            settings.bake_resolution,
+    if base_image is None:
+        base_image = _ensure_target_image(
+            target,
+            settings,
+            BAKE_BASE_COLOR_IMAGE_PROP,
+            "BaseColor",
             "sRGB",
+            source_prop_name=BAKE_SOURCE_BASE_COLOR_IMAGE_PROP,
         )
+    else:
+        target[BAKE_BASE_COLOR_IMAGE_PROP] = base_image.name
+        if update_source_images:
+            target[BAKE_SOURCE_BASE_COLOR_IMAGE_PROP] = base_image.name
 
-    normal_image = bpy.data.images.get(f"{settings.image_prefix}_Normal")
-    if normal_image is None or normal_image.size[0] != settings.bake_resolution:
-        normal_image = _make_image(
-            f"{settings.image_prefix}_Normal",
-            settings.bake_resolution,
+    if normal_image is None:
+        normal_image = _ensure_target_image(
+            target,
+            settings,
+            BAKE_NORMAL_IMAGE_PROP,
+            "Normal",
             "Non-Color",
+            generated_color=(0.5, 0.5, 1.0, 1.0),
+            source_prop_name=BAKE_SOURCE_NORMAL_IMAGE_PROP,
         )
-        normal_image.generated_color = (0.5, 0.5, 1.0, 1.0)
+    else:
+        target[BAKE_NORMAL_IMAGE_PROP] = normal_image.name
+        if update_source_images:
+            target[BAKE_SOURCE_NORMAL_IMAGE_PROP] = normal_image.name
 
     base_node = nodes.get(BAKE_BASE_COLOR_NODE)
     if base_node is None:
@@ -187,16 +259,295 @@ def _find_bake_image(target, node_name):
     return None
 
 
-def _save_image_as_png(image, filepath):
-    original_filepath = image.filepath_raw
-    original_format = image.file_format
+def _find_object_bake_image(target, node_name, prop_name):
+    image_name = target.get(prop_name, "")
+    if image_name:
+        image = bpy.data.images.get(image_name)
+        if image is not None:
+            return image
 
+    return _find_bake_image(target, node_name)
+
+
+def _is_merged_image(image):
+    return image is not None and "_Merged_" in image.name
+
+
+def _image_from_object_prop(target, prop_name):
+    image_name = target.get(prop_name, "")
+    return bpy.data.images.get(image_name) if image_name else None
+
+
+def _find_object_source_bake_image(target, settings, node_name, current_prop_name, source_prop_name, suffix):
+    image = _image_from_object_prop(target, current_prop_name)
+    if image is not None and not _is_merged_image(image):
+        target[source_prop_name] = image.name
+        return image
+
+    image = _image_from_object_prop(target, source_prop_name)
+    if image is not None:
+        return image
+
+    image = bpy.data.images.get(_bake_data_name(settings, target, suffix))
+    if image is not None:
+        target[source_prop_name] = image.name
+        return image
+
+    image = _find_bake_image(target, node_name)
+    if image is not None and not _is_merged_image(image):
+        target[source_prop_name] = image.name
+        return image
+
+    return None
+
+
+def _selected_bake_targets(context):
+    return [
+        obj
+        for obj in context.selected_objects
+        if obj.type == "MESH"
+    ]
+
+
+def _image_resolution(image):
+    if image is None:
+        return None
+
+    for should_reload in (False, True):
+        if should_reload:
+            try:
+                image.reload()
+            except Exception:
+                pass
+
+        width = int(image.size[0])
+        height = int(image.size[1])
+        try:
+            pixel_length = len(image.pixels)
+        except Exception:
+            pixel_length = 0
+
+        if width > 0 and height > 0 and pixel_length == width * height * 4:
+            return width, height
+
+        if width <= 0 or height <= 0:
+            pixel_count = pixel_length // 4
+            if pixel_count == 1:
+                return 1, 1
+
+    return None
+
+
+def _image_is_readable(image, resolution):
+    image_resolution = _image_resolution(image)
+    return image_resolution is not None and image_resolution == resolution
+
+
+def _read_image_pixels(image, resolution):
+    pixel_count = resolution[0] * resolution[1] * 4
+    if not _image_is_readable(image, resolution):
+        raise ValueError(f"Image {image.name if image else '<None>'} has no readable pixel buffer")
+
+    pixels = array("f", [0.0]) * pixel_count
+    image.pixels.foreach_get(pixels)
+    return pixels
+
+
+def _ensure_output_image(name, resolution, colorspace, generated_color):
+    resolution = max(1, int(resolution[0])), max(1, int(resolution[1]))
+    image = bpy.data.images.get(name)
+    if image is None or image.size[0] != resolution[0] or image.size[1] != resolution[1]:
+        if image is not None:
+            bpy.data.images.remove(image)
+        image = bpy.data.images.new(name=name, width=resolution[0], height=resolution[1], alpha=True)
+
+    image.generated_color = generated_color
+    try:
+        image.colorspace_settings.name = colorspace
+    except Exception:
+        pass
+    return image
+
+
+def _collect_bake_texture_packs(objects, settings):
+    packs = []
+    for obj in objects:
+        base_image = _find_object_source_bake_image(
+            obj,
+            settings,
+            BAKE_BASE_COLOR_NODE,
+            BAKE_BASE_COLOR_IMAGE_PROP,
+            BAKE_SOURCE_BASE_COLOR_IMAGE_PROP,
+            "BaseColor",
+        )
+        normal_image = _find_object_source_bake_image(
+            obj,
+            settings,
+            BAKE_NORMAL_NODE,
+            BAKE_NORMAL_IMAGE_PROP,
+            BAKE_SOURCE_NORMAL_IMAGE_PROP,
+            "Normal",
+        )
+        if base_image is None and normal_image is None:
+            continue
+
+        packs.append(
+            {
+                "object": obj,
+                "base": base_image,
+                "normal": normal_image,
+            },
+        )
+    return packs
+
+
+def _pack_resolution(pack):
+    base_resolution = _image_resolution(pack["base"])
+    normal_resolution = _image_resolution(pack["normal"])
+    if base_resolution is not None and normal_resolution is not None and base_resolution != normal_resolution:
+        return None
+
+    return base_resolution or normal_resolution
+
+
+def _validate_pack_resolutions(packs):
+    resolution = _pack_resolution(packs[0])
+    if resolution is None:
+        return None
+
+    for pack in packs[1:]:
+        pack_resolution = _pack_resolution(pack)
+        if pack_resolution is None or pack_resolution != resolution:
+            return None
+    return resolution
+
+
+def _merge_base_color_pixels(packs, resolution):
+    pixel_count = resolution[0] * resolution[1] * 4
+    output = array("f", [0.0]) * pixel_count
+    for pack in packs:
+        image = pack["base"]
+        if image is None or not _image_is_readable(image, resolution):
+            continue
+
+        pixels = _read_image_pixels(image, resolution)
+        for index in range(0, pixel_count, 4):
+            source_alpha = max(0.0, min(1.0, pixels[index + 3]))
+            if source_alpha <= 0.0:
+                continue
+
+            destination_alpha = max(0.0, min(1.0, output[index + 3]))
+            out_alpha = source_alpha + destination_alpha * (1.0 - source_alpha)
+            if out_alpha <= 0.0:
+                continue
+
+            for channel in range(3):
+                source_value = pixels[index + channel]
+                destination_value = output[index + channel]
+                output[index + channel] = (
+                    source_value * source_alpha
+                    + destination_value * destination_alpha * (1.0 - source_alpha)
+                ) / out_alpha
+            output[index + 3] = out_alpha
+
+    return output
+
+
+def _normal_to_vector(pixels, index):
+    return [
+        pixels[index] * 2.0 - 1.0,
+        pixels[index + 1] * 2.0 - 1.0,
+        pixels[index + 2] * 2.0 - 1.0,
+    ]
+
+
+def _normalized_to_color(vector):
+    length = sum(item * item for item in vector) ** 0.5
+    if length <= 0.000001:
+        return 0.5, 0.5, 1.0
+
+    return tuple((item / length) * 0.5 + 0.5 for item in vector)
+
+
+def _merge_normal_pixels(packs, resolution):
+    pixel_count = resolution[0] * resolution[1] * 4
+    output = array("f", [0.0]) * pixel_count
+    for index in range(0, pixel_count, 4):
+        output[index] = 0.5
+        output[index + 1] = 0.5
+        output[index + 2] = 1.0
+        output[index + 3] = 1.0
+
+    for pack in packs:
+        normal_image = pack["normal"]
+        if normal_image is None or not _image_is_readable(normal_image, resolution):
+            continue
+
+        normal_pixels = _read_image_pixels(normal_image, resolution)
+        base_pixels = (
+            _read_image_pixels(pack["base"], resolution)
+            if pack["base"] is not None and _image_is_readable(pack["base"], resolution)
+            else None
+        )
+        for index in range(0, pixel_count, 4):
+            mask = base_pixels[index + 3] if base_pixels is not None else normal_pixels[index + 3]
+            mask = max(0.0, min(1.0, mask))
+            if mask <= 0.001:
+                continue
+
+            if mask >= 0.999:
+                output[index] = normal_pixels[index]
+                output[index + 1] = normal_pixels[index + 1]
+                output[index + 2] = normal_pixels[index + 2]
+            else:
+                destination = _normal_to_vector(output, index)
+                source = _normal_to_vector(normal_pixels, index)
+                blended = [
+                    source[channel] * mask + destination[channel] * (1.0 - mask)
+                    for channel in range(3)
+                ]
+                output[index], output[index + 1], output[index + 2] = _normalized_to_color(blended)
+            output[index + 3] = 1.0
+
+    return output
+
+
+def _count_unreadable_pack_images(packs, resolution):
+    count = 0
+    for pack in packs:
+        for key in ("base", "normal"):
+            image = pack[key]
+            if image is not None and not _image_is_readable(image, resolution):
+                count += 1
+    return count
+
+
+def _write_pixels(image, pixels):
+    if len(pixels) != len(image.pixels):
+        raise ValueError(
+            f"Image pixel buffer mismatch: image expects {len(image.pixels)}, got {len(pixels)}",
+        )
+    image.pixels.foreach_set(pixels)
+    image.update()
+
+
+def _save_image_as_png(image, filepath):
     image.filepath_raw = filepath
     image.file_format = "PNG"
     image.save()
 
-    image.filepath_raw = original_filepath
-    image.file_format = original_format
+    try:
+        image.filepath = bpy.path.relpath(filepath)
+        image.filepath_raw = bpy.path.relpath(filepath)
+    except Exception:
+        image.filepath = filepath
+        image.filepath_raw = filepath
+    image.file_format = "PNG"
+
+    try:
+        image.reload()
+    except Exception:
+        pass
 
 
 def _set_active_bake_node(target, node):
@@ -332,6 +683,73 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             saved_paths.append(filepath)
 
         self.report({"INFO"}, f"Saved {len(saved_paths)} texture(s) to {output_dir}")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
+    bl_idname = "object.polygroups_merge_bake_textures"
+    bl_label = "Merge Materials/Textures"
+    bl_description = "Merge baked texture packs from selected objects into one pack on the active object"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        target = _active_mesh(context)
+        return target is not None and len(_selected_bake_targets(context)) >= 2
+
+    def execute(self, context):
+        target = _active_mesh(context)
+        settings = context.scene.polygroups_baking_settings
+        objects = _selected_bake_targets(context)
+        packs = _collect_bake_texture_packs(objects, settings)
+        if len(packs) < 2:
+            self.report({"WARNING"}, "Select at least two objects with baked texture packs")
+            return {"CANCELLED"}
+
+        resolution = _validate_pack_resolutions(packs)
+        if resolution is None:
+            self.report({"ERROR"}, "Selected bake textures must be loaded and have the same resolution")
+            return {"CANCELLED"}
+
+        base_pixels = _merge_base_color_pixels(packs, resolution)
+        normal_pixels = _merge_normal_pixels(packs, resolution)
+
+        base_image = _ensure_output_image(
+            _bake_data_name(settings, target, "Merged_BaseColor"),
+            resolution,
+            "sRGB",
+            (0.0, 0.0, 0.0, 0.0),
+        )
+        normal_image = _ensure_output_image(
+            _bake_data_name(settings, target, "Merged_Normal"),
+            resolution,
+            "Non-Color",
+            (0.5, 0.5, 1.0, 1.0),
+        )
+        _write_pixels(base_image, base_pixels)
+        _write_pixels(normal_image, normal_pixels)
+
+        target[BAKE_MERGED_BASE_COLOR_IMAGE_PROP] = base_image.name
+        target[BAKE_MERGED_NORMAL_IMAGE_PROP] = normal_image.name
+        material, base_node, normal_node = _ensure_bake_material(
+            target,
+            settings,
+            base_image=base_image,
+            normal_image=normal_image,
+            update_source_images=False,
+        )
+        base_node.image = base_image
+        normal_node.image = normal_image
+        target.active_material = material
+
+        skipped = len(objects) - len(packs)
+        message = f"Merged {len(packs)} texture pack(s)"
+        if skipped:
+            message += f", skipped {skipped} object(s)"
+        unreadable_images = _count_unreadable_pack_images(packs, resolution)
+        if unreadable_images:
+            message += f", ignored {unreadable_images} unreadable image(s)"
+        self.report({"INFO"}, message)
         return {"FINISHED"}
 
 

@@ -37,6 +37,37 @@ def find_selected_lowpoly(context):
     return lowpoly_objects[0]
 
 
+def make_selected_lowpoly_active(context):
+    lowpoly = find_selected_lowpoly(context)
+    if lowpoly is None:
+        return None
+
+    if context.active_object and context.active_object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    lowpoly.select_set(True)
+    context.view_layer.objects.active = lowpoly
+    return lowpoly
+
+
+def run_bake_action(operator, context, action):
+    if action == "PREPARE_LOWPOLY":
+        try:
+            return bpy.ops.object.polygroups_prepare_lowpoly_bake_material()
+        except Exception as error:
+            operator.report({"ERROR"}, f"Prepare lowpoly bake material failed: {error}")
+            return {"CANCELLED"}
+
+    if action == "PREPARE_AND_BAKE":
+        try:
+            return bpy.ops.object.polygroups_prepare_and_bake()
+        except Exception as error:
+            operator.report({"ERROR"}, f"Prepare and bake failed: {error}")
+            return {"CANCELLED"}
+
+    operator.report({"ERROR"}, "Unknown bake action")
+    return {"CANCELLED"}
+
+
 class OBJECT_OT_polygroups_rename_and_apply_weld(bpy.types.Operator):
     bl_idname = "object.polygroups_rename_and_apply_weld"
     bl_label = "Rename And Apply Weld"
@@ -269,3 +300,80 @@ class OBJECT_OT_polygroups_make_lowpoly_active(bpy.types.Operator):
         context.view_layer.objects.active = lowpoly
         self.report({"INFO"}, f"Active lowpoly: {lowpoly.name}")
         return {"FINISHED"}
+
+
+class PolygroupsBakeLowpolyCheckMixin:
+    bake_action = ""
+    confirm_label = "Make Lowpoly Active + Continue"
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH"
+
+    def invoke(self, context, event):
+        active_object = context.active_object
+        if (
+            active_object
+            and active_object.type == "MESH"
+            and is_lowpoly_name(active_object.name)
+        ):
+            return self.execute(context)
+
+        return context.window_manager.invoke_props_dialog(
+            self,
+            width=470,
+            confirm_text=self.confirm_label,
+        )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Active object does not look like a lowpoly target.", icon="ERROR")
+        layout.label(text="Make sure the active mesh is named Retopo_... or Retopology...")
+        layout.label(text="Confirm to make the selected lowpoly active and continue.")
+
+    def execute(self, context):
+        active_object = context.active_object
+        if (
+            active_object
+            and active_object.type == "MESH"
+            and is_lowpoly_name(active_object.name)
+        ):
+            return run_bake_action(self, context, self.bake_action)
+
+        lowpoly = make_selected_lowpoly_active(context)
+        if lowpoly is None:
+            self.report(
+                {"ERROR"},
+                "Select a mesh named Retopo_... or Retopology... with the highpoly source",
+            )
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, f"Active lowpoly: {lowpoly.name}")
+        return run_bake_action(self, context, self.bake_action)
+
+
+class OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material(
+    PolygroupsBakeLowpolyCheckMixin,
+    bpy.types.Operator,
+):
+    bl_idname = "object.polygroups_checked_prepare_lowpoly_bake_material"
+    bl_label = "Prepare Lowpoly Bake Material"
+    bl_description = "Check that a Retopo or Retopology mesh is active before preparing bake material"
+    bl_options = {"REGISTER", "UNDO"}
+
+    bake_action = "PREPARE_LOWPOLY"
+    confirm_label = "Make Lowpoly Active + Prepare"
+
+
+class OBJECT_OT_polygroups_checked_prepare_and_bake(
+    PolygroupsBakeLowpolyCheckMixin,
+    bpy.types.Operator,
+):
+    bl_idname = "object.polygroups_checked_prepare_and_bake"
+    bl_label = "Prepare And Bake"
+    bl_description = "Check that a Retopo or Retopology mesh is active before preparing and baking"
+    bl_options = {"REGISTER", "UNDO"}
+
+    bake_action = "PREPARE_AND_BAKE"
+    confirm_label = "Make Lowpoly Active + Bake"
