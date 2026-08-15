@@ -39,6 +39,17 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         default="",
         subtype="PASSWORD",
     )
+    use_env_gemini_api_key: bpy.props.BoolProperty(
+        name="Use GEMINI_API_KEY",
+        description="Prefer the GEMINI_API_KEY environment variable when it is available",
+        default=True,
+    )
+    gemini_api_key: bpy.props.StringProperty(
+        name="Google Gemini API Key",
+        description="Fallback Google Gemini API key used when GEMINI_API_KEY is disabled or empty",
+        default="",
+        subtype="PASSWORD",
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -46,6 +57,9 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         layout.separator()
         layout.prop(self, "use_env_openai_api_key", text=t(context, "use_env_openai_api_key"))
         layout.prop(self, "openai_api_key", text=t(context, "openai_api_key"))
+        layout.separator()
+        layout.prop(self, "use_env_gemini_api_key", text=t(context, "use_env_gemini_api_key"))
+        layout.prop(self, "gemini_api_key", text=t(context, "gemini_api_key"))
 
 
 class AIRETOPO_OT_toggle_panel_settings(bpy.types.Operator):

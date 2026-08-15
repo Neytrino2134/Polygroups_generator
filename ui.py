@@ -137,6 +137,13 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                 text=t(context, "use_env_openai_api_key"),
             )
             box.prop(preferences, "openai_api_key", text=t(context, "openai_api_key"))
+            box.separator()
+            box.prop(
+                preferences,
+                "use_env_gemini_api_key",
+                text=t(context, "use_env_gemini_api_key"),
+            )
+            box.prop(preferences, "gemini_api_key", text=t(context, "gemini_api_key"))
 
 
 class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
@@ -628,10 +635,32 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
-        layout = self.layout.box()
+        layout = self.layout
+        openai_settings = context.scene.airetopo_ai_generation_settings
+
+        openai_content = draw_collapsible_box(
+            layout,
+            openai_settings,
+            "show_openai_image_settings",
+            t(context, "openai_image"),
+            "IMAGE_DATA",
+        )
+        if openai_content is not None:
+            self.draw_openai_image(context, openai_content)
+
+        google_content = draw_collapsible_box(
+            layout,
+            openai_settings,
+            "show_google_image_settings",
+            t(context, "google_image"),
+            "IMAGE_DATA",
+        )
+        if google_content is not None:
+            self.draw_google_image(context, google_content)
+
+    def draw_openai_image(self, context, layout):
         settings = context.scene.airetopo_ai_generation_settings
         preferences = get_preferences(context)
-
         has_env_key = bool(os.environ.get("OPENAI_API_KEY", ""))
         has_saved_key = bool(preferences and preferences.openai_api_key)
         uses_env_key = bool(preferences and preferences.use_env_openai_api_key)
@@ -650,23 +679,72 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
         generate_row = column.row(align=True)
         generate_row.enabled = not settings.is_generating
         generate_row.operator(
-            "object.airetopo_generate_image",
-            text=t(context, "generate_image"),
+            "object.airetopo_generate_openai_image",
+            text=t(context, "generate_openai_image"),
             icon="IMAGE_DATA",
         )
 
         result_row = column.row(align=True)
         result_row.enabled = bool(settings.last_image_name or settings.last_image_path)
-        result_row.operator(
+        open_operator = result_row.operator(
             "object.airetopo_open_generated_image",
             text=t(context, "open_image_editor"),
             icon="IMAGE",
         )
-        result_row.operator(
+        open_operator.provider = "OPENAI"
+        save_operator = result_row.operator(
             "object.airetopo_save_generated_image",
             text=t(context, "save_image"),
             icon="FILE_FOLDER",
         )
+        save_operator.provider = "OPENAI"
+
+        column.separator()
+        status = t(context, "ai_generating") if settings.is_generating else settings.last_status
+        column.label(text=t(context, "ai_status", value=status or t(context, "ai_no_status")))
+        if settings.last_image_name:
+            column.label(text=t(context, "ai_last_image", value=settings.last_image_name), icon="IMAGE")
+
+    def draw_google_image(self, context, layout):
+        settings = context.scene.airetopo_google_image_settings
+        preferences = get_preferences(context)
+        has_env_key = bool(os.environ.get("GEMINI_API_KEY", ""))
+        has_saved_key = bool(preferences and preferences.gemini_api_key)
+        uses_env_key = bool(preferences and preferences.use_env_gemini_api_key)
+        has_api_key = (has_env_key or has_saved_key) if uses_env_key else has_saved_key
+        if not has_api_key:
+            layout.label(text=t(context, "google_key_missing"), icon="ERROR")
+
+        column = layout.column(align=True)
+        column.prop(settings, "prompt", text=t(context, "ai_prompt"))
+        column.prop(settings, "model", text=t(context, "ai_model"))
+        column.prop(settings, "aspect_ratio", text=t(context, "ai_aspect_ratio"))
+        column.prop(settings, "image_size", text=t(context, "ai_image_size"))
+        column.prop(settings, "output_format", text=t(context, "ai_output_format"))
+
+        column.separator()
+        generate_row = column.row(align=True)
+        generate_row.enabled = not settings.is_generating
+        generate_row.operator(
+            "object.airetopo_generate_google_image",
+            text=t(context, "generate_google_image"),
+            icon="IMAGE_DATA",
+        )
+
+        result_row = column.row(align=True)
+        result_row.enabled = bool(settings.last_image_name or settings.last_image_path)
+        open_operator = result_row.operator(
+            "object.airetopo_open_generated_image",
+            text=t(context, "open_image_editor"),
+            icon="IMAGE",
+        )
+        open_operator.provider = "GOOGLE"
+        save_operator = result_row.operator(
+            "object.airetopo_save_generated_image",
+            text=t(context, "save_image"),
+            icon="FILE_FOLDER",
+        )
+        save_operator.provider = "GOOGLE"
 
         column.separator()
         status = t(context, "ai_generating") if settings.is_generating else settings.last_status

@@ -364,6 +364,14 @@ class POLYGROUPS_PG_resculpting_settings(bpy.types.PropertyGroup):
 
 
 class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
+    show_openai_image_settings: bpy.props.BoolProperty(
+        name="OpenAI Image",
+        default=True,
+    )
+    show_google_image_settings: bpy.props.BoolProperty(
+        name="Google Image",
+        default=False,
+    )
     prompt: bpy.props.StringProperty(
         name="Prompt",
         description="Prompt for OpenAI image generation",
@@ -429,6 +437,80 @@ class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
     )
 
 
+class AIRETOPO_PG_google_image_settings(bpy.types.PropertyGroup):
+    prompt: bpy.props.StringProperty(
+        name="Prompt",
+        description="Prompt for Google Gemini image generation",
+        default="",
+        options={"TEXTEDIT_UPDATE"},
+    )
+    model: bpy.props.EnumProperty(
+        name="Model",
+        description="Google Gemini image generation model",
+        items=(
+            ("gemini-3.1-flash-image", "Gemini 3.1 Flash Image", "Nano Banana 2 general image generation model"),
+            ("gemini-3.1-flash-lite-image", "Gemini 3.1 Flash Lite Image", "Nano Banana 2 Lite fast and low-cost image model"),
+            ("gemini-3-pro-image", "Gemini 3 Pro Image", "Nano Banana Pro premium image generation model"),
+            ("gemini-2.5-flash-image", "Gemini 2.5 Flash Image", "Legacy Nano Banana image model"),
+        ),
+        default="gemini-3.1-flash-image",
+    )
+    aspect_ratio: bpy.props.EnumProperty(
+        name="Aspect Ratio",
+        description="Generated image aspect ratio",
+        items=(
+            ("1:1", "1:1", "Square"),
+            ("2:3", "2:3", "Portrait"),
+            ("3:2", "3:2", "Landscape"),
+            ("3:4", "3:4", "Portrait"),
+            ("4:3", "4:3", "Landscape"),
+            ("4:5", "4:5", "Portrait"),
+            ("5:4", "5:4", "Landscape"),
+            ("9:16", "9:16", "Vertical"),
+            ("16:9", "16:9", "Widescreen"),
+            ("21:9", "21:9", "Ultrawide"),
+        ),
+        default="1:1",
+    )
+    image_size: bpy.props.EnumProperty(
+        name="Image Size",
+        description="Generated image size class",
+        items=(
+            ("1K", "1K", "Standard image size"),
+            ("2K", "2K", "High image size"),
+            ("4K", "4K", "Ultra image size"),
+        ),
+        default="1K",
+    )
+    output_format: bpy.props.EnumProperty(
+        name="Save Format",
+        description="File format used when saving generated Google images from Blender",
+        items=(
+            ("png", "PNG", "Save generated images as PNG"),
+            ("jpeg", "JPEG", "Save generated images as JPEG"),
+            ("webp", "WebP", "Save generated images as WebP"),
+        ),
+        default="png",
+    )
+    is_generating: bpy.props.BoolProperty(
+        name="Generating",
+        default=False,
+    )
+    last_status: bpy.props.StringProperty(
+        name="Status",
+        default="",
+    )
+    last_image_name: bpy.props.StringProperty(
+        name="Last Image",
+        default="",
+    )
+    last_image_path: bpy.props.StringProperty(
+        name="Last Image Path",
+        default="",
+        subtype="FILE_PATH",
+    )
+
+
 CLASSES = (
     POLYGROUPS_PG_model_preparation_settings,
     POLYGROUPS_PG_knife_seam_settings,
@@ -440,6 +522,7 @@ CLASSES = (
     POLYGROUPS_PG_baking_settings,
     POLYGROUPS_PG_resculpting_settings,
     AIRETOPO_PG_ai_generation_settings,
+    AIRETOPO_PG_google_image_settings,
 )
 
 
@@ -477,9 +560,13 @@ def register():
     bpy.types.Scene.airetopo_ai_generation_settings = bpy.props.PointerProperty(
         type=AIRETOPO_PG_ai_generation_settings,
     )
+    bpy.types.Scene.airetopo_google_image_settings = bpy.props.PointerProperty(
+        type=AIRETOPO_PG_google_image_settings,
+    )
 
 
 def unregister():
+    del bpy.types.Scene.airetopo_google_image_settings
     del bpy.types.Scene.airetopo_ai_generation_settings
     del bpy.types.Scene.polygroups_resculpting_settings
     del bpy.types.Scene.polygroups_baking_settings

@@ -28,9 +28,11 @@ The interface can be switched between English and Russian in the add-on preferen
   - Convert sculpt Face Sets to materials.
   - Clear PolyGroups materials.
 - `AI Generation`
-  - Generate OpenAI image references from a prompt through `gpt-image-1` or `gpt-image-1-mini`.
-  - Show the generated result in Blender's Image Editor and save it next to the `.blend` file.
-  - Configure the API key in add-on preferences or through the `OPENAI_API_KEY` environment variable.
+  - Generate image references from collapsible OpenAI Image and Google Image groups.
+  - OpenAI supports `gpt-image-1` and `gpt-image-1-mini`.
+  - Google supports Gemini image models such as `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, and `gemini-3-pro-image`.
+  - Show generated results in Blender's Image Editor and save them next to the `.blend` file.
+  - Configure API keys in add-on preferences or through `OPENAI_API_KEY` and `GEMINI_API_KEY` environment variables.
 
 ## Installation
 

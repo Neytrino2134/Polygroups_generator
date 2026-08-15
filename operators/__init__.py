@@ -1,5 +1,6 @@
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
-from .ai_generation import OBJECT_OT_airetopo_generate_image
+from .ai_generation import OBJECT_OT_airetopo_generate_google_image
+from .ai_generation import OBJECT_OT_airetopo_generate_openai_image
 from .ai_generation import OBJECT_OT_airetopo_open_generated_image
 from .ai_generation import OBJECT_OT_airetopo_save_generated_image
 from .baking import OBJECT_OT_polygroups_bake_selected_to_active
@@ -46,7 +47,8 @@ from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 CLASSES = (
     OBJECT_OT_polygroups_apply_weld,
     OBJECT_OT_polygroups_select_import_folder,
-    OBJECT_OT_airetopo_generate_image,
+    OBJECT_OT_airetopo_generate_openai_image,
+    OBJECT_OT_airetopo_generate_google_image,
     OBJECT_OT_airetopo_open_generated_image,
     OBJECT_OT_airetopo_save_generated_image,
     OBJECT_OT_polygroups_scan_import_folder,
