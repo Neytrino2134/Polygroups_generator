@@ -162,6 +162,20 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
 
 
+class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
+    show_import_section: bpy.props.BoolProperty(default=True)
+    show_batch_import_section: bpy.props.BoolProperty(default=True)
+    show_model_preparation_section: bpy.props.BoolProperty(default=True)
+    show_seam_preparation_section: bpy.props.BoolProperty(default=True)
+    show_polygroups_section: bpy.props.BoolProperty(default=True)
+    show_remesh_section: bpy.props.BoolProperty(default=True)
+    show_resculpting_section: bpy.props.BoolProperty(default=True)
+    show_seam_finalization_section: bpy.props.BoolProperty(default=True)
+    show_uv_preparation_section: bpy.props.BoolProperty(default=True)
+    show_baking_section: bpy.props.BoolProperty(default=True)
+    show_ai_generation_section: bpy.props.BoolProperty(default=True)
+
+
 class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
     stable_view_cut: bpy.props.BoolProperty(
         name="Stable View Cut",
@@ -618,6 +632,7 @@ class AIRETOPO_PG_google_image_settings(bpy.types.PropertyGroup):
 
 
 CLASSES = (
+    AIRETOPO_PG_panel_visibility_settings,
     POLYGROUPS_PG_model_preparation_settings,
     POLYGROUPS_PG_knife_seam_settings,
     POLYGROUPS_PG_seam_preparation_settings,
@@ -636,6 +651,9 @@ def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
 
+    bpy.types.Scene.airetopo_panel_visibility_settings = bpy.props.PointerProperty(
+        type=AIRETOPO_PG_panel_visibility_settings,
+    )
     bpy.types.Scene.polygroups_model_preparation_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_model_preparation_settings,
     )
@@ -672,6 +690,7 @@ def register():
 
 
 def unregister():
+    del bpy.types.Scene.airetopo_panel_visibility_settings
     del bpy.types.Scene.airetopo_google_image_settings
     del bpy.types.Scene.airetopo_ai_generation_settings
     del bpy.types.Scene.polygroups_resculpting_settings

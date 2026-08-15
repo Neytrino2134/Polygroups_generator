@@ -1,5 +1,6 @@
 import os
 import sys
+from types import SimpleNamespace
 
 import bpy
 
@@ -75,10 +76,11 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
     header.prop(
         settings,
         property_name,
-        text=label,
+        text="",
         icon="TRIA_DOWN" if is_open else "TRIA_RIGHT",
         emboss=False,
     )
+    header.label(text=label, icon=icon)
 
     if not is_open:
         return None
@@ -100,12 +102,37 @@ def addon_version_string():
 
 
 def update_panel_labels(context=None):
-    for cls in CLASSES:
+    for cls in SECTION_PANEL_CLASSES:
         text_key = getattr(cls, "bl_text_key", None)
         if text_key is None:
             continue
 
         cls.bl_label = f"{cls.bl_order:02d} | {t(context, text_key)}"
+
+
+def section_content_visible(panel, context):
+    settings = getattr(context.scene, "airetopo_panel_visibility_settings", None)
+    if settings is None:
+        return True
+
+    property_name = getattr(panel, "visibility_property", "")
+    return bool(getattr(settings, property_name, True))
+
+
+def draw_section_panel_content(panel_class, context, layout, visibility_property):
+    panel = SimpleNamespace(
+        layout=layout,
+        visibility_property=visibility_property,
+    )
+    for name in dir(panel_class):
+        if not name.startswith("draw"):
+            continue
+
+        value = getattr(panel_class, name, None)
+        if callable(value):
+            setattr(panel, name, value.__get__(panel, panel_class))
+
+    panel_class.draw(panel, context)
 
 
 def draw_material_mode_buttons(layout, context, settings):
@@ -191,7 +218,19 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         preferences = get_preferences(context)
         layout = self.layout
         header = layout.row(align=True)
-        header.alignment = "RIGHT"
+        collapse_operator = header.operator(
+            "object.airetopo_set_all_section_visibility",
+            text=t(context, "hide_all_sections"),
+            icon="TRIA_RIGHT",
+        )
+        collapse_operator.visible = False
+        expand_operator = header.operator(
+            "object.airetopo_set_all_section_visibility",
+            text=t(context, "show_all_sections"),
+            icon="TRIA_DOWN",
+        )
+        expand_operator.visible = True
+        header.separator()
         settings_operator = header.operator(
             "wm.airetopo_toggle_panel_settings",
             text="",
@@ -219,6 +258,18 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             )
             box.prop(preferences, "gemini_api_key", text=t(context, "gemini_api_key"))
 
+        visibility = context.scene.airetopo_panel_visibility_settings
+        for panel_class, visibility_property in SECTION_PANEL_VISIBILITY:
+            content = draw_collapsible_box(
+                layout,
+                visibility,
+                visibility_property,
+                f"{panel_class.bl_order:02d} | {t(context, panel_class.bl_text_key)}",
+                panel_class.bl_icon,
+            )
+            if content is not None:
+                draw_section_panel_content(panel_class, context, content, visibility_property)
+
 
 class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
     bl_label = "03 |"
@@ -233,6 +284,9 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         settings = context.scene.polygroups_model_preparation_settings
 
@@ -269,6 +323,9 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout
         settings = context.scene.polygroups_model_preparation_settings
 
@@ -305,6 +362,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         settings = context.scene.polygroups_model_preparation_settings
 
@@ -358,6 +418,9 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         installed, enabled, available = quad_remesher_status(context)
 
@@ -418,6 +481,9 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout
         seam_settings = context.scene.polygroups_seam_preparation_settings
 
@@ -630,6 +696,9 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         settings = context.scene.polygroups_generator_settings
         column = layout.column(align=True)
@@ -687,6 +756,9 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         settings = context.scene.polygroups_baking_settings
 
@@ -760,6 +832,9 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         installed, enabled, available = uvpackmaster_status(context)
 
@@ -810,6 +885,9 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout
         openai_settings = context.scene.airetopo_ai_generation_settings
 
@@ -1018,6 +1096,9 @@ class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         settings = context.scene.polygroups_resculpting_settings
 
@@ -1059,6 +1140,9 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
     draw_header = draw_section_header_icon
 
     def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
         layout = self.layout.box()
         settings = context.scene.polygroups_generator_settings
         seam_settings = context.scene.polygroups_seam_finalization_settings
@@ -1116,8 +1200,7 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         )
 
 
-CLASSES = (
-    VIEW3D_PT_polygroups_generator,
+SECTION_PANEL_CLASSES = (
     VIEW3D_PT_polygroups_import,
     VIEW3D_PT_polygroups_batch_import,
     VIEW3D_PT_polygroups_model_preparation,
@@ -1130,6 +1213,27 @@ CLASSES = (
     VIEW3D_PT_polygroups_baking,
     VIEW3D_PT_airetopo_ai_generation,
 )
+
+CLASSES = (
+    VIEW3D_PT_polygroups_generator,
+)
+
+SECTION_PANEL_VISIBILITY = (
+    (VIEW3D_PT_polygroups_import, "show_import_section"),
+    (VIEW3D_PT_polygroups_batch_import, "show_batch_import_section"),
+    (VIEW3D_PT_polygroups_model_preparation, "show_model_preparation_section"),
+    (VIEW3D_PT_polygroups_seam_preparation, "show_seam_preparation_section"),
+    (VIEW3D_PT_polygroups_tools, "show_polygroups_section"),
+    (VIEW3D_PT_polygroups_remesh, "show_remesh_section"),
+    (VIEW3D_PT_polygroups_resculpting, "show_resculpting_section"),
+    (VIEW3D_PT_polygroups_seam_finalization, "show_seam_finalization_section"),
+    (VIEW3D_PT_polygroups_uv_preparation, "show_uv_preparation_section"),
+    (VIEW3D_PT_polygroups_baking, "show_baking_section"),
+    (VIEW3D_PT_airetopo_ai_generation, "show_ai_generation_section"),
+)
+
+for section_class, visibility_property in SECTION_PANEL_VISIBILITY:
+    section_class.visibility_property = visibility_property
 
 
 def register():
