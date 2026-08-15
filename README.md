@@ -27,6 +27,10 @@ The interface can be switched between English and Russian in the add-on preferen
   - Generate material-based PolyGroups from seam-bounded mesh islands.
   - Convert sculpt Face Sets to materials.
   - Clear PolyGroups materials.
+- `AI Generation`
+  - Generate OpenAI image references from a prompt through `gpt-image-1` or `gpt-image-1-mini`.
+  - Show the generated result in Blender's Image Editor and save it next to the `.blend` file.
+  - Configure the API key in add-on preferences or through the `OPENAI_API_KEY` environment variable.
 
 ## Installation
 

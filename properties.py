@@ -363,6 +363,72 @@ class POLYGROUPS_PG_resculpting_settings(bpy.types.PropertyGroup):
     )
 
 
+class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
+    prompt: bpy.props.StringProperty(
+        name="Prompt",
+        description="Prompt for OpenAI image generation",
+        default="",
+        options={"TEXTEDIT_UPDATE"},
+    )
+    model: bpy.props.EnumProperty(
+        name="Model",
+        description="OpenAI image generation model",
+        items=(
+            ("gpt-image-1", "gpt-image-1", "High quality image generation model"),
+            ("gpt-image-1-mini", "gpt-image-1-mini", "Faster and lower cost image generation model"),
+        ),
+        default="gpt-image-1",
+    )
+    size: bpy.props.EnumProperty(
+        name="Size",
+        description="Generated image size",
+        items=(
+            ("1024x1024", "1024 x 1024", "Square image"),
+            ("1024x1536", "1024 x 1536", "Portrait image"),
+            ("1536x1024", "1536 x 1024", "Landscape image"),
+        ),
+        default="1024x1024",
+    )
+    quality: bpy.props.EnumProperty(
+        name="Quality",
+        description="Generated image quality",
+        items=(
+            ("auto", "Auto", "Let the API choose the quality"),
+            ("low", "Low", "Lower quality and faster generation"),
+            ("medium", "Medium", "Balanced quality"),
+            ("high", "High", "Higher quality"),
+        ),
+        default="auto",
+    )
+    output_format: bpy.props.EnumProperty(
+        name="Output Format",
+        description="Generated image file format",
+        items=(
+            ("png", "PNG", "Save generated images as PNG"),
+            ("jpeg", "JPEG", "Save generated images as JPEG"),
+            ("webp", "WebP", "Save generated images as WebP"),
+        ),
+        default="png",
+    )
+    is_generating: bpy.props.BoolProperty(
+        name="Generating",
+        default=False,
+    )
+    last_status: bpy.props.StringProperty(
+        name="Status",
+        default="",
+    )
+    last_image_name: bpy.props.StringProperty(
+        name="Last Image",
+        default="",
+    )
+    last_image_path: bpy.props.StringProperty(
+        name="Last Image Path",
+        default="",
+        subtype="FILE_PATH",
+    )
+
+
 CLASSES = (
     POLYGROUPS_PG_model_preparation_settings,
     POLYGROUPS_PG_knife_seam_settings,
@@ -373,6 +439,7 @@ CLASSES = (
     POLYGROUPS_PG_seam_finalization_settings,
     POLYGROUPS_PG_baking_settings,
     POLYGROUPS_PG_resculpting_settings,
+    AIRETOPO_PG_ai_generation_settings,
 )
 
 
@@ -407,9 +474,13 @@ def register():
     bpy.types.Scene.polygroups_resculpting_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_resculpting_settings,
     )
+    bpy.types.Scene.airetopo_ai_generation_settings = bpy.props.PointerProperty(
+        type=AIRETOPO_PG_ai_generation_settings,
+    )
 
 
 def unregister():
+    del bpy.types.Scene.airetopo_ai_generation_settings
     del bpy.types.Scene.polygroups_resculpting_settings
     del bpy.types.Scene.polygroups_baking_settings
     del bpy.types.Scene.polygroups_seam_finalization_settings

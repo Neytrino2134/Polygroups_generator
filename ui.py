@@ -1,3 +1,5 @@
+import os
+
 import bpy
 
 from .localization import get_preferences
@@ -128,6 +130,13 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             box = layout.box()
             box.prop(preferences, "interface_language", text=t(context, "language"))
             box.label(text=t(context, "main_description"))
+            box.separator()
+            box.prop(
+                preferences,
+                "use_env_openai_api_key",
+                text=t(context, "use_env_openai_api_key"),
+            )
+            box.prop(preferences, "openai_api_key", text=t(context, "openai_api_key"))
 
 
 class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
@@ -606,6 +615,66 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         )
 
 
+class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
+    bl_label = "10 |"
+    bl_text_key = "section_ai_generation"
+    bl_icon = "IMAGE_DATA"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 10
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        layout = self.layout.box()
+        settings = context.scene.airetopo_ai_generation_settings
+        preferences = get_preferences(context)
+
+        has_env_key = bool(os.environ.get("OPENAI_API_KEY", ""))
+        has_saved_key = bool(preferences and preferences.openai_api_key)
+        uses_env_key = bool(preferences and preferences.use_env_openai_api_key)
+        has_api_key = (has_env_key or has_saved_key) if uses_env_key else has_saved_key
+        if not has_api_key:
+            layout.label(text=t(context, "ai_key_missing"), icon="ERROR")
+
+        column = layout.column(align=True)
+        column.prop(settings, "prompt", text=t(context, "ai_prompt"))
+        column.prop(settings, "model", text=t(context, "ai_model"))
+        column.prop(settings, "size", text=t(context, "ai_size"))
+        column.prop(settings, "quality", text=t(context, "ai_quality"))
+        column.prop(settings, "output_format", text=t(context, "ai_output_format"))
+
+        column.separator()
+        generate_row = column.row(align=True)
+        generate_row.enabled = not settings.is_generating
+        generate_row.operator(
+            "object.airetopo_generate_image",
+            text=t(context, "generate_image"),
+            icon="IMAGE_DATA",
+        )
+
+        result_row = column.row(align=True)
+        result_row.enabled = bool(settings.last_image_name or settings.last_image_path)
+        result_row.operator(
+            "object.airetopo_open_generated_image",
+            text=t(context, "open_image_editor"),
+            icon="IMAGE",
+        )
+        result_row.operator(
+            "object.airetopo_save_generated_image",
+            text=t(context, "save_image"),
+            icon="FILE_FOLDER",
+        )
+
+        column.separator()
+        status = t(context, "ai_generating") if settings.is_generating else settings.last_status
+        column.label(text=t(context, "ai_status", value=status or t(context, "ai_no_status")))
+        if settings.last_image_name:
+            column.label(text=t(context, "ai_last_image", value=settings.last_image_name), icon="IMAGE")
+
+
 class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
     bl_label = "07 |"
     bl_text_key = "section_resculpting"
@@ -728,6 +797,7 @@ CLASSES = (
     VIEW3D_PT_polygroups_resculpting,
     VIEW3D_PT_polygroups_seam_finalization,
     VIEW3D_PT_polygroups_baking,
+    VIEW3D_PT_airetopo_ai_generation,
 )
 
 

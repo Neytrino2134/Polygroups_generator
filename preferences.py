@@ -28,10 +28,24 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         description="Show language and add-on description in the main panel",
         default=False,
     )
+    use_env_openai_api_key: bpy.props.BoolProperty(
+        name="Use OPENAI_API_KEY",
+        description="Prefer the OPENAI_API_KEY environment variable when it is available",
+        default=True,
+    )
+    openai_api_key: bpy.props.StringProperty(
+        name="OpenAI API Key",
+        description="Fallback OpenAI API key used when OPENAI_API_KEY is disabled or empty",
+        default="",
+        subtype="PASSWORD",
+    )
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "interface_language", text=t(context, "language"))
+        layout.separator()
+        layout.prop(self, "use_env_openai_api_key", text=t(context, "use_env_openai_api_key"))
+        layout.prop(self, "openai_api_key", text=t(context, "openai_api_key"))
 
 
 class AIRETOPO_OT_toggle_panel_settings(bpy.types.Operator):
