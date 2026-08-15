@@ -15,6 +15,12 @@ BAKE_SOURCE_BASE_COLOR_IMAGE_PROP = "polygroups_bake_source_base_color_image"
 BAKE_SOURCE_NORMAL_IMAGE_PROP = "polygroups_bake_source_normal_image"
 BAKE_MERGED_BASE_COLOR_IMAGE_PROP = "polygroups_bake_merged_base_color_image"
 BAKE_MERGED_NORMAL_IMAGE_PROP = "polygroups_bake_merged_normal_image"
+BAKE_MERGED_MATERIAL_PROP = "polygroups_bake_merged_material"
+BAKE_PACK_TYPE_PROP = "polygroups_bake_pack_type"
+BAKE_PACK_NAME_PROP = "polygroups_bake_pack_name"
+BAKE_PACK_OBJECTS_PROP = "polygroups_bake_pack_objects"
+BAKE_PACK_TYPE_MERGED = "MERGED"
+BAKE_TEMP_IMAGE_PREFIX = "Bake_Temp_"
 
 
 def _safe_path_name(name):
@@ -109,6 +115,11 @@ def _bake_data_name(settings, target, suffix):
     return f"{prefix}_{object_name}_{suffix}"
 
 
+def _bake_pack_data_name(settings, pack_name, suffix):
+    prefix = _safe_path_name(settings.image_prefix)
+    return f"{prefix}_{_safe_path_name(pack_name)}_{suffix}"
+
+
 def _image_matches_resolution(image, resolution):
     return image is not None and image.size[0] == resolution and image.size[1] == resolution
 
@@ -168,6 +179,7 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
         target.data.materials[0] = material
     else:
         target.data.materials.append(material)
+    target.active_material_index = 0
     for polygon in target.data.polygons:
         polygon.material_index = 0
 
@@ -259,6 +271,17 @@ def _find_bake_image(target, node_name):
     return None
 
 
+def _find_material_bake_image(material, node_name):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return None
+
+    node = material.node_tree.nodes.get(node_name)
+    if node is not None and getattr(node, "image", None) is not None:
+        return node.image
+
+    return None
+
+
 def _find_object_bake_image(target, node_name, prop_name):
     image_name = target.get(prop_name, "")
     if image_name:
@@ -269,8 +292,56 @@ def _find_object_bake_image(target, node_name, prop_name):
     return _find_bake_image(target, node_name)
 
 
+def _target_bake_material(target):
+    material_name = target.get(BAKE_TARGET_MATERIAL_PROP, "")
+    if material_name:
+        material = bpy.data.materials.get(material_name)
+        if material is not None:
+            return material
+
+    return None
+
+
 def _is_merged_image(image):
-    return image is not None and "_Merged_" in image.name
+    return (
+        image is not None
+        and (
+            image.get(BAKE_PACK_TYPE_PROP) == BAKE_PACK_TYPE_MERGED
+            or "_Merged_" in image.name
+            or "_Merged" in image.name
+        )
+    )
+
+
+def _is_merged_material(material):
+    return (
+        material is not None
+        and material.get(BAKE_PACK_TYPE_PROP) == BAKE_PACK_TYPE_MERGED
+    )
+
+
+def _find_current_bake_image(target, node_name, prop_name):
+    image = _image_from_object_prop(target, prop_name)
+    if image is not None and not _is_merged_image(image):
+        return image
+
+    material = _target_bake_material(target)
+    image = _find_material_bake_image(material, node_name)
+    if image is not None and not _is_merged_image(image):
+        target[prop_name] = image.name
+        return image
+
+    for material_slot in target.material_slots:
+        material = material_slot.material
+        if _is_merged_material(material):
+            continue
+
+        image = _find_material_bake_image(material, node_name)
+        if image is not None and not _is_merged_image(image):
+            target[prop_name] = image.name
+            return image
+
+    return None
 
 
 def _image_from_object_prop(target, prop_name):
@@ -522,6 +593,109 @@ def _count_unreadable_pack_images(packs, resolution):
     return count
 
 
+def _merged_pack_name(objects):
+    names = []
+    for obj in sorted(objects, key=lambda item: item.name.lower()):
+        safe_name = _safe_path_name(obj.name)
+        if safe_name not in names:
+            names.append(safe_name)
+
+    if len(names) <= 3:
+        base_name = " + ".join(names)
+    else:
+        base_name = f"{names[0]} + {names[1]} + {len(names) - 2} more"
+
+    return f"{base_name} Merged"
+
+
+def _ensure_merged_material(pack_name, base_image, normal_image, objects):
+    material_name = f"Merged Material - {_safe_path_name(pack_name)}"
+    material = bpy.data.materials.get(material_name)
+    if material is None:
+        material = bpy.data.materials.new(material_name)
+
+    material.use_nodes = True
+    material[BAKE_PACK_TYPE_PROP] = BAKE_PACK_TYPE_MERGED
+    material[BAKE_PACK_NAME_PROP] = pack_name
+    material[BAKE_PACK_OBJECTS_PROP] = ";".join(obj.name for obj in objects)
+
+    tree = material.node_tree
+    nodes = tree.nodes
+    bsdf = _principled_bsdf(material)
+    if bsdf is None:
+        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+
+    base_node = nodes.get(BAKE_BASE_COLOR_NODE)
+    if base_node is None:
+        base_node = nodes.new("ShaderNodeTexImage")
+        base_node.name = BAKE_BASE_COLOR_NODE
+        base_node.label = "Merged Base Color"
+        base_node.location = (-560, 100)
+    base_node.image = base_image
+
+    normal_node = nodes.get(BAKE_NORMAL_NODE)
+    if normal_node is None:
+        normal_node = nodes.new("ShaderNodeTexImage")
+        normal_node.name = BAKE_NORMAL_NODE
+        normal_node.label = "Merged Normal"
+        normal_node.location = (-560, -120)
+    normal_node.image = normal_image
+
+    if bsdf is not None:
+        base_input = bsdf.inputs.get("Base Color")
+        if base_input is not None and not any(link.from_node == base_node for link in base_input.links):
+            tree.links.new(base_node.outputs["Color"], base_input)
+
+        normal_input = bsdf.inputs.get("Normal")
+        if normal_input is not None:
+            normal_map = nodes.get("PolyGroups Bake Normal Map")
+            if normal_map is None:
+                normal_map = nodes.new("ShaderNodeNormalMap")
+                normal_map.name = "PolyGroups Bake Normal Map"
+                normal_map.label = "Merged Normal Map"
+                normal_map.location = (-260, -120)
+
+            color_input = normal_map.inputs.get("Color")
+            normal_output = normal_map.outputs.get("Normal")
+            if color_input is not None and not any(link.from_node == normal_node for link in color_input.links):
+                tree.links.new(normal_node.outputs["Color"], color_input)
+            if normal_output is not None and not any(link.from_node == normal_map for link in normal_input.links):
+                tree.links.new(normal_output, normal_input)
+
+    return material
+
+
+def _assign_material_to_object(obj, material):
+    material_index = None
+    for index, slot_material in enumerate(obj.data.materials):
+        if slot_material == material:
+            material_index = index
+            break
+
+    if material_index is None:
+        obj.data.materials.append(material)
+        material_index = len(obj.data.materials) - 1
+
+    obj.active_material_index = material_index
+    for polygon in obj.data.polygons:
+        polygon.material_index = material_index
+
+    obj[BAKE_MERGED_MATERIAL_PROP] = material.name
+
+
+def _tag_merged_image(image, pack_name):
+    image[BAKE_PACK_TYPE_PROP] = BAKE_PACK_TYPE_MERGED
+    image[BAKE_PACK_NAME_PROP] = pack_name
+
+
+def _bake_temp_images():
+    return [
+        image
+        for image in bpy.data.images
+        if image.name.startswith(BAKE_TEMP_IMAGE_PREFIX)
+    ]
+
+
 def _write_pixels(image, pixels):
     if len(pixels) != len(image.pixels):
         raise ValueError(
@@ -660,25 +834,42 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             self.report({"ERROR"}, "Save the blend file first")
             return {"CANCELLED"}
 
-        base_image = _find_bake_image(target, BAKE_BASE_COLOR_NODE)
-        normal_image = _find_bake_image(target, BAKE_NORMAL_NODE)
+        active_material = target.active_material
+        is_merged = _is_merged_material(active_material)
+        if is_merged:
+            pack_name = active_material.get(BAKE_PACK_NAME_PROP, f"{target.name} Merged")
+            output_name = _safe_path_name(pack_name)
+            base_image = _find_material_bake_image(active_material, BAKE_BASE_COLOR_NODE)
+            normal_image = _find_material_bake_image(active_material, BAKE_NORMAL_NODE)
+        else:
+            output_name = _safe_path_name(target.name)
+            base_image = _find_current_bake_image(
+                target,
+                BAKE_BASE_COLOR_NODE,
+                BAKE_BASE_COLOR_IMAGE_PROP,
+            )
+            normal_image = _find_current_bake_image(
+                target,
+                BAKE_NORMAL_NODE,
+                BAKE_NORMAL_IMAGE_PROP,
+            )
+
         if base_image is None and normal_image is None:
             self.report({"WARNING"}, "No bake images found on the active mesh")
             return {"CANCELLED"}
 
         blend_dir = os.path.dirname(bpy.data.filepath)
-        object_name = _safe_path_name(target.name)
-        output_dir = os.path.join(blend_dir, "Bakes", object_name)
+        output_dir = os.path.join(blend_dir, "Bakes", output_name)
         os.makedirs(output_dir, exist_ok=True)
 
         saved_paths = []
         if base_image is not None:
-            filepath = os.path.join(output_dir, f"{object_name}_Bake_BaseColor.png")
+            filepath = os.path.join(output_dir, f"{output_name}_Bake_BaseColor.png")
             _save_image_as_png(base_image, filepath)
             saved_paths.append(filepath)
 
         if normal_image is not None:
-            filepath = os.path.join(output_dir, f"{object_name}_Bake_Normal.png")
+            filepath = os.path.join(output_dir, f"{output_name}_Bake_Normal.png")
             _save_image_as_png(normal_image, filepath)
             saved_paths.append(filepath)
 
@@ -714,42 +905,80 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
         base_pixels = _merge_base_color_pixels(packs, resolution)
         normal_pixels = _merge_normal_pixels(packs, resolution)
 
+        pack_objects = [pack["object"] for pack in packs]
+        pack_name = _merged_pack_name(pack_objects)
+
         base_image = _ensure_output_image(
-            _bake_data_name(settings, target, "Merged_BaseColor"),
+            _bake_pack_data_name(settings, pack_name, "Merged_BaseColor"),
             resolution,
             "sRGB",
             (0.0, 0.0, 0.0, 0.0),
         )
         normal_image = _ensure_output_image(
-            _bake_data_name(settings, target, "Merged_Normal"),
+            _bake_pack_data_name(settings, pack_name, "Merged_Normal"),
             resolution,
             "Non-Color",
             (0.5, 0.5, 1.0, 1.0),
         )
         _write_pixels(base_image, base_pixels)
         _write_pixels(normal_image, normal_pixels)
+        _tag_merged_image(base_image, pack_name)
+        _tag_merged_image(normal_image, pack_name)
 
-        target[BAKE_MERGED_BASE_COLOR_IMAGE_PROP] = base_image.name
-        target[BAKE_MERGED_NORMAL_IMAGE_PROP] = normal_image.name
-        material, base_node, normal_node = _ensure_bake_material(
-            target,
-            settings,
-            base_image=base_image,
-            normal_image=normal_image,
-            update_source_images=False,
-        )
-        base_node.image = base_image
-        normal_node.image = normal_image
+        material = _ensure_merged_material(pack_name, base_image, normal_image, pack_objects)
+        for obj in pack_objects:
+            obj[BAKE_MERGED_BASE_COLOR_IMAGE_PROP] = base_image.name
+            obj[BAKE_MERGED_NORMAL_IMAGE_PROP] = normal_image.name
+            _assign_material_to_object(obj, material)
         target.active_material = material
 
         skipped = len(objects) - len(packs)
-        message = f"Merged {len(packs)} texture pack(s)"
+        message = f"Merged {len(packs)} texture pack(s) into {pack_name}"
         if skipped:
             message += f", skipped {skipped} object(s)"
         unreadable_images = _count_unreadable_pack_images(packs, resolution)
         if unreadable_images:
             message += f", ignored {unreadable_images} unreadable image(s)"
         self.report({"INFO"}, message)
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_clear_bake_temp_images(bpy.types.Operator):
+    bl_idname = "object.polygroups_clear_bake_temp_images"
+    bl_label = "Clear All Bake Images"
+    bl_description = "Delete all Bake_Temp images from the current blend file"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(_bake_temp_images())
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(
+            self,
+            width=440,
+            confirm_text="Clear All Bake Images",
+        )
+
+    def draw(self, context):
+        images = _bake_temp_images()
+        layout = self.layout
+        layout.label(text="This will delete temporary bake images from the blend file.", icon="ERROR")
+        layout.label(text=f"Images found: {len(images)}")
+        layout.label(text="Only images starting with Bake_Temp_ will be removed.")
+
+    def execute(self, context):
+        images = _bake_temp_images()
+        if not images:
+            self.report({"INFO"}, "No Bake_Temp images found")
+            return {"CANCELLED"}
+
+        removed_count = 0
+        for image in images:
+            bpy.data.images.remove(image)
+            removed_count += 1
+
+        self.report({"INFO"}, f"Removed {removed_count} Bake_Temp image(s)")
         return {"FINISHED"}
 
 

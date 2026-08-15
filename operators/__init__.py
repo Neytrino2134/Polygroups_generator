@@ -9,6 +9,7 @@ from .ai_generation import OBJECT_OT_airetopo_refresh_prompt_library
 from .ai_generation import OBJECT_OT_airetopo_save_generated_image
 from .ai_generation import OBJECT_OT_airetopo_select_material_image
 from .baking import OBJECT_OT_polygroups_bake_selected_to_active
+from .baking import OBJECT_OT_polygroups_clear_bake_temp_images
 from .baking import OBJECT_OT_polygroups_merge_bake_textures
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
 from .baking import OBJECT_OT_polygroups_prepare_highpoly_bake_materials
@@ -17,6 +18,7 @@ from .baking import OBJECT_OT_polygroups_save_bake_textures
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
+from .check_material_textures import OBJECT_OT_polygroups_check_material_textures
 from .clear_materials import OBJECT_OT_clear_polygroups_materials
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .generate_polygroups import OBJECT_OT_generate_polygroups
@@ -69,12 +71,14 @@ CLASSES = (
     OBJECT_OT_polygroups_scan_import_folder,
     OBJECT_OT_polygroups_batch_import,
     OBJECT_OT_polygroups_rename_objects,
+    OBJECT_OT_polygroups_check_material_textures,
     OBJECT_OT_polygroups_prepare_highpoly_bake_materials,
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_prepare_and_bake,
     OBJECT_OT_polygroups_save_bake_textures,
     OBJECT_OT_polygroups_merge_bake_textures,
+    OBJECT_OT_polygroups_clear_bake_temp_images,
     OBJECT_OT_polygroups_add_multires,
     OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly,
     OBJECT_OT_polygroups_setup_resculpting,
