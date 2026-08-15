@@ -14,6 +14,8 @@ CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_PATH_DATA_PROP = "polygroups_object_seam_cutter_path_data"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
+BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
+BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
 
 
 def _view3d_under_mouse(context, event):
@@ -361,6 +363,13 @@ def _cutter_planes_world(cutter):
 
 
 def _path_cutter_planes_world(cutter):
+    return [
+        (segment["plane_co"], segment["plane_no"])
+        for segment in _path_cutter_segments_world(cutter)
+    ]
+
+
+def _path_cutter_segments_world(cutter):
     points = _path_points_world(cutter)
     normals = _path_normals_world(cutter, len(points))
     tilts = _path_tilts(cutter, len(points))
@@ -391,7 +400,14 @@ def _path_cutter_planes_world(cutter):
         if plane_no.length < 0.000001:
             continue
         plane_no.normalize()
-        planes.append(((start + end) * 0.5, plane_no))
+        planes.append(
+            {
+                "start": start,
+                "end": end,
+                "plane_co": (start + end) * 0.5,
+                "plane_no": plane_no,
+            },
+        )
 
     return planes
 
@@ -453,7 +469,200 @@ def _world_plane_to_local(target, plane_co, plane_no):
     return local_co, local_no
 
 
-def _apply_cutters_to_mesh(target, cutters):
+def _path_boolean_material():
+    material = bpy.data.materials.new(BOOLEAN_PATH_TEMP_MATERIAL_NAME)
+    material.diffuse_color = (1.0, 0.08, 0.02, 1.0)
+    material.use_nodes = False
+    return material
+
+
+def _path_placeholder_material():
+    material = bpy.data.materials.new(BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME)
+    material.diffuse_color = (0.5, 0.5, 0.5, 1.0)
+    material.use_nodes = False
+    return material
+
+
+def _ensure_material_slot(obj, material):
+    for index, slot_material in enumerate(obj.data.materials):
+        if slot_material == material or (slot_material and slot_material.name == material.name):
+            return index
+
+    obj.data.materials.append(material)
+    return len(obj.data.materials) - 1
+
+
+def _prepare_target_path_boolean_materials(target, temp_material):
+    placeholder_material = None
+    placeholder_index = None
+    if not target.data.materials:
+        placeholder_material = _path_placeholder_material()
+        target.data.materials.append(placeholder_material)
+        placeholder_index = 0
+        for polygon in target.data.polygons:
+            polygon.material_index = 0
+
+    target.data.materials.append(temp_material)
+    return len(target.data.materials) - 1, placeholder_index, placeholder_material
+
+
+def _duplicate_path_cutter_as_mesh(context, cutter, material):
+    work = cutter.copy()
+    work.data = cutter.data.copy()
+    work.name = "Seam_Cutter_Path_Boolean"
+    work[CUTTER_PROP] = False
+
+    target_collection = cutter.users_collection[0] if cutter.users_collection else context.scene.collection
+    target_collection.objects.link(work)
+
+    bpy.ops.object.select_all(action="DESELECT")
+    work.select_set(True)
+    context.view_layer.objects.active = work
+
+    if work.type != "MESH":
+        source_data = work.data
+        bpy.ops.object.convert(target="MESH")
+        work = context.view_layer.objects.active
+        if source_data and source_data.users == 0 and bpy.data.curves.get(source_data.name) == source_data:
+            bpy.data.curves.remove(source_data)
+
+    if work is None or work.type != "MESH" or not work.data.polygons:
+        if work is not None:
+            bpy.data.objects.remove(work, do_unlink=True)
+        return None
+
+    material_index = _ensure_material_slot(work, material)
+    for polygon in work.data.polygons:
+        polygon.material_index = material_index
+        polygon.select = True
+    work.data.update()
+    return work
+
+
+def _apply_boolean_modifier(context, target, cutter_mesh):
+    modifier = target.modifiers.new("Cutter Path Boolean Seam", "BOOLEAN")
+    modifier.operation = "UNION"
+    modifier.solver = "FLOAT"
+    modifier.object = cutter_mesh
+
+    bpy.ops.object.select_all(action="DESELECT")
+    target.select_set(True)
+    context.view_layer.objects.active = target
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+
+
+def _mark_boolean_path_boundaries_and_remove_faces(target, temp_material_index, original_face_count):
+    import bmesh
+
+    mesh = target.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.faces.ensure_lookup_table()
+
+    temp_faces = [
+        face
+        for face in bm.faces
+        if face.material_index == temp_material_index
+    ]
+    if not temp_faces and original_face_count < len(bm.faces):
+        temp_faces = [
+            face
+            for index, face in enumerate(bm.faces)
+            if index >= original_face_count
+        ]
+
+    if not temp_faces:
+        bm.free()
+        return 0
+
+    initial_seam_count = sum(1 for edge in bm.edges if edge.seam)
+    temp_face_set = set(temp_faces)
+    temp_edges = {edge for face in temp_faces for edge in face.edges}
+    boundary_edges = set()
+    for face in temp_faces:
+        for edge in face.edges:
+            has_regular_neighbor = any(neighbor not in temp_face_set for neighbor in edge.link_faces)
+            if not has_regular_neighbor:
+                continue
+
+            boundary_edges.add(edge)
+            edge.seam = True
+
+    bmesh.ops.delete(bm, geom=temp_faces, context="FACES_ONLY")
+    loose_temp_edges = [
+        edge
+        for edge in temp_edges
+        if edge.is_valid and edge not in boundary_edges and not edge.link_faces
+    ]
+    if loose_temp_edges:
+        bmesh.ops.delete(bm, geom=loose_temp_edges, context="EDGES")
+    loose_verts = [vert for vert in bm.verts if vert.is_valid and not vert.link_edges]
+    if loose_verts:
+        bmesh.ops.delete(bm, geom=loose_verts, context="VERTS")
+
+    final_seam_count = sum(1 for edge in bm.edges if edge.is_valid and edge.seam)
+    bm.normal_update()
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return max(0, final_seam_count - initial_seam_count)
+
+
+def _remove_material_slot_by_index(obj, material_index):
+    if material_index < 0 or material_index >= len(obj.data.materials):
+        return
+
+    try:
+        obj.data.materials.pop(index=material_index)
+    except Exception:
+        pass
+
+
+def _remove_material_if_unused(material):
+    if material is not None and bpy.data.materials.get(material.name) == material and material.users == 0:
+        bpy.data.materials.remove(material)
+
+
+def _apply_path_cutter_boolean_to_mesh(context, target, cutter):
+    material = _path_boolean_material()
+    temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
+        target,
+        material,
+    )
+    original_face_count = len(target.data.polygons)
+    work = _duplicate_path_cutter_as_mesh(context, cutter, material)
+    if work is None:
+        _remove_material_slot_by_index(target, temp_material_index)
+        if placeholder_index is not None:
+            _remove_material_slot_by_index(target, placeholder_index)
+        _remove_material_if_unused(material)
+        _remove_material_if_unused(placeholder_material)
+        return 0
+
+    try:
+        _apply_boolean_modifier(context, target, work)
+        return _mark_boolean_path_boundaries_and_remove_faces(
+            target,
+            temp_material_index,
+            original_face_count,
+        )
+    finally:
+        if work.name in bpy.data.objects:
+            work_data = work.data
+            bpy.data.objects.remove(work, do_unlink=True)
+            if work_data and work_data.users == 0:
+                if hasattr(bpy.data, "meshes") and bpy.data.meshes.get(work_data.name) == work_data:
+                    bpy.data.meshes.remove(work_data)
+                elif hasattr(bpy.data, "curves") and bpy.data.curves.get(work_data.name) == work_data:
+                    bpy.data.curves.remove(work_data)
+        _remove_material_slot_by_index(target, temp_material_index)
+        if placeholder_index is not None:
+            _remove_material_slot_by_index(target, placeholder_index)
+        _remove_material_if_unused(material)
+        _remove_material_if_unused(placeholder_material)
+
+
+def _apply_plane_cutters_to_mesh(target, cutters):
     import bmesh
 
     mesh = target.data
@@ -487,6 +696,20 @@ def _apply_cutters_to_mesh(target, cutters):
     bm.to_mesh(mesh)
     bm.free()
     mesh.update()
+    return marked_edges
+
+
+def _apply_cutters_to_mesh(context, target, cutters):
+    plane_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) != "PATH"]
+    path_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "PATH"]
+
+    marked_edges = 0
+    if plane_cutters:
+        marked_edges += _apply_plane_cutters_to_mesh(target, plane_cutters)
+
+    for cutter in path_cutters:
+        marked_edges += _apply_path_cutter_boolean_to_mesh(context, target, cutter)
+
     return marked_edges
 
 
@@ -1213,7 +1436,7 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             self.report({"WARNING"}, "No cutter planes found")
             return {"CANCELLED"}
 
-        marked_edges = _apply_cutters_to_mesh(target, cutters)
+        marked_edges = _apply_cutters_to_mesh(context, target, cutters)
         settings.last_cutter_count = len(cutters)
         settings.last_marked_edge_count = marked_edges
 
