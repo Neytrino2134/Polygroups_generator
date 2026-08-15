@@ -5,6 +5,7 @@ import bpy
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
+CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 
 _PROMPT_COLLECTION_ITEMS = []
@@ -27,6 +28,19 @@ def _sync_cutter_solidify_thickness(self, context):
 
         modifier.thickness = self.cutter_solidify_thickness
         modifier.offset = 0.0
+
+
+def _sync_selected_cutter_path_settings(self, context):
+    if context is None:
+        return
+
+    for obj in context.selected_objects:
+        if obj.type != "CURVE" or not obj.get(CUTTER_PROP) or obj.get(CUTTER_TYPE_PROP) != "PATH":
+            continue
+
+        obj.data.resolution_u = self.cutter_path_render_u
+        obj.data.render_resolution_u = self.cutter_path_render_u
+        obj.data.extrude = self.cutter_path_extrude
 
 
 def _prompt_collection_items(self, context):
@@ -237,6 +251,32 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         min=3,
         max=96,
         soft_max=32,
+    )
+    cutter_path_render_u: bpy.props.IntProperty(
+        name="Path Render U",
+        description="Render U resolution for newly created cutter path curves",
+        default=20,
+        min=1,
+        max=128,
+        soft_max=64,
+        update=_sync_selected_cutter_path_settings,
+    )
+    cutter_path_extrude: bpy.props.FloatProperty(
+        name="Path Extrude",
+        description="Visual curve extrude for cutter paths; seam calculation uses the path centerline",
+        default=0.015,
+        min=0.0,
+        soft_max=0.05,
+        precision=4,
+        update=_sync_selected_cutter_path_settings,
+    )
+    cutter_path_tilt_step_degrees: bpy.props.FloatProperty(
+        name="Path Tilt Step",
+        description="Tilt angle step applied to selected cutter path curves",
+        default=15.0,
+        soft_min=-90.0,
+        soft_max=90.0,
+        precision=1,
     )
     hide_cutters_after_apply: bpy.props.BoolProperty(
         name="Hide Cutters After Apply",

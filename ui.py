@@ -493,6 +493,9 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
+        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
+        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
+        layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
         layout.prop(
             settings,
             "hide_cutters_after_apply",
@@ -527,6 +530,33 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             text=t(context, "draw_cutter_arc"),
             icon="CURVE_BEZCURVE",
         )
+        tool_operator = layout.operator(
+            "wm.tool_set_by_id",
+            text=t(context, "select_draw_cutter_path"),
+            icon="CURVE_PATH",
+        )
+        tool_operator.name = "polygroups_generator.draw_cutter_path_tool"
+        layout.operator(
+            "object.polygroups_draw_cutter_path",
+            text=t(context, "draw_cutter_path"),
+            icon="CURVE_PATH",
+        )
+        tilt_row = layout.row(align=True)
+        tilt_operator = tilt_row.operator(
+            "object.polygroups_tilt_cutter_path",
+            text=t(context, "tilt_minus"),
+        )
+        tilt_operator.mode = "DECREASE"
+        tilt_operator = tilt_row.operator(
+            "object.polygroups_tilt_cutter_path",
+            text=t(context, "tilt_plus"),
+        )
+        tilt_operator.mode = "INCREASE"
+        tilt_operator = tilt_row.operator(
+            "object.polygroups_tilt_cutter_path",
+            text=t(context, "tilt_reset"),
+        )
+        tilt_operator.mode = "RESET"
         layout.operator(
             "object.polygroups_apply_cutter_seams",
             text=t(context, "apply_cutter_seams"),

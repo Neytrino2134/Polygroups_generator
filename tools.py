@@ -6,6 +6,7 @@ from .localization import t
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
 DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
+DRAW_CUTTER_PATH_TOOL_ID = "polygroups_generator.draw_cutter_path_tool"
 VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
 
 
@@ -60,6 +61,11 @@ def _move_draw_cutter_tool_after_cursor():
     arc_tool = _remove_tool_from_items(tools, DRAW_CUTTER_ARC_TOOL_ID)
     if arc_tool is not None:
         tools.insert(tools.index(tool) + 1, arc_tool)
+
+    path_tool = _remove_tool_from_items(tools, DRAW_CUTTER_PATH_TOOL_ID)
+    if path_tool is not None:
+        insert_after = arc_tool if arc_tool is not None else tool
+        tools.insert(tools.index(insert_after) + 1, path_tool)
 
 
 class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
@@ -125,6 +131,38 @@ class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
+
+
+class VIEW3D_WST_polygroups_draw_cutter_path(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_idname = DRAW_CUTTER_PATH_TOOL_ID
+    bl_label = "Draw Cutter Path"
+    bl_description = "Draw object-mode cutter paths snapped to mesh faces"
+    bl_icon = "ops.curve.draw"
+    bl_cursor = "CROSSHAIR"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        (
+            "object.polygroups_draw_cutter_path",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        del tool
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        layout.operator(
+            "object.polygroups_apply_cutter_seams",
+            text=t(context, "apply_cutter_seams"),
+            icon="MOD_BOOLEAN",
+        )
+        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
+        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
+        layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
 
 
 class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
@@ -204,6 +242,12 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_draw_cutter_path,
+        after={DRAW_CUTTER_ARC_TOOL_ID},
+        separator=False,
+        group=False,
+    )
     _move_draw_cutter_tool_after_cursor()
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_knife_seam,
@@ -222,5 +266,6 @@ def register():
 def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_arc)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)

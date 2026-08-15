@@ -1,14 +1,18 @@
+import json
 import bpy
 from math import atan2
 from math import cos
+from math import radians
 from math import sin
 from math import tau
+from mathutils import Matrix
 from mathutils import Vector
 
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
+CUTTER_PATH_DATA_PROP = "polygroups_object_seam_cutter_path_data"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 
 
@@ -37,6 +41,34 @@ def _target_bounds(target):
     center = sum(corners, Vector()) / len(corners)
     diagonal = max((corner - center).length for corner in corners) * 2.0
     return center, max(diagonal, 1.0)
+
+
+def _surface_hit_from_region_pos(region, rv3d, region_pos, target):
+    from bpy_extras import view3d_utils
+
+    ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, region_pos)
+    ray_direction = view3d_utils.region_2d_to_vector_3d(region, rv3d, region_pos)
+    if ray_direction.length < 0.000001:
+        return None
+    ray_direction.normalize()
+
+    matrix_inv = target.matrix_world.inverted()
+    local_origin = matrix_inv @ ray_origin
+    local_direction = matrix_inv.to_3x3() @ ray_direction
+    if local_direction.length < 0.000001:
+        return None
+    local_direction.normalize()
+
+    hit, location, normal, face_index = target.ray_cast(local_origin, local_direction)
+    if not hit:
+        return None
+
+    world_location = target.matrix_world @ location
+    world_normal = target.matrix_world.to_3x3().inverted().transposed() @ normal
+    if world_normal.length < 0.000001:
+        return None
+    world_normal.normalize()
+    return world_location, world_normal, face_index
 
 
 def _collection():
@@ -255,11 +287,43 @@ def _create_cutter_arc(name, center_points, depth_axis, size, alpha, thickness):
     return obj
 
 
+def _create_cutter_path(name, path_points, render_u, extrude, alpha):
+    curve = bpy.data.curves.new(name, "CURVE")
+    curve.dimensions = "3D"
+    curve.resolution_u = render_u
+    curve.render_resolution_u = render_u
+    curve.extrude = extrude
+
+    spline = curve.splines.new("POLY")
+    spline.points.add(len(path_points) - 1)
+    for point, item in zip(spline.points, path_points):
+        location = item["location"]
+        point.co = (location.x, location.y, location.z, 1.0)
+
+    obj = bpy.data.objects.new(name, curve)
+    obj.show_in_front = True
+    obj.display_type = "TEXTURED"
+    obj[CUTTER_PROP] = True
+    obj[CUTTER_TYPE_PROP] = "PATH"
+    obj[CUTTER_PATH_DATA_PROP] = json.dumps(
+        [
+            {
+                "co": list(item["location"]),
+                "normal": list(item["normal"]),
+            }
+            for item in path_points
+        ],
+    )
+    obj.data.materials.append(_material(alpha))
+    _collection().objects.link(obj)
+    return obj
+
+
 def _selected_cutters(context, target):
     cutters = [
         obj
         for obj in context.selected_objects
-        if obj != target and obj.type == "MESH" and obj.get(CUTTER_PROP)
+        if obj != target and obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
     ]
     if cutters:
         return cutters
@@ -268,10 +332,17 @@ def _selected_cutters(context, target):
     if collection is None:
         return []
 
-    return [obj for obj in collection.objects if obj.type == "MESH" and obj.get(CUTTER_PROP)]
+    return [
+        obj
+        for obj in collection.objects
+        if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+    ]
 
 
 def _cutter_planes_world(cutter):
+    if cutter.get(CUTTER_TYPE_PROP) == "PATH":
+        return _path_cutter_planes_world(cutter)
+
     if cutter.type != "MESH" or not cutter.data.polygons:
         return []
 
@@ -287,6 +358,89 @@ def _cutter_planes_world(cutter):
         normal.normalize()
         planes.append((world_center, normal))
     return planes
+
+
+def _path_cutter_planes_world(cutter):
+    points = _path_points_world(cutter)
+    normals = _path_normals_world(cutter, len(points))
+    tilts = _path_tilts(cutter, len(points))
+    if len(points) < 2:
+        return []
+
+    planes = []
+    for index in range(len(points) - 1):
+        start = points[index]
+        end = points[index + 1]
+        tangent = end - start
+        if tangent.length < 0.000001:
+            continue
+        tangent.normalize()
+
+        normal = normals[index] + normals[index + 1]
+        if normal.length < 0.000001:
+            normal = normals[index]
+        if normal.length < 0.000001:
+            continue
+        normal.normalize()
+
+        tilt = (tilts[index] + tilts[index + 1]) * 0.5
+        if abs(tilt) > 0.000001:
+            normal.rotate(Matrix.Rotation(tilt, 3, tangent))
+
+        plane_no = tangent.cross(normal)
+        if plane_no.length < 0.000001:
+            continue
+        plane_no.normalize()
+        planes.append(((start + end) * 0.5, plane_no))
+
+    return planes
+
+
+def _path_points_world(cutter):
+    if cutter.type == "CURVE" and cutter.data.splines:
+        spline = cutter.data.splines[0]
+        return [
+            cutter.matrix_world @ Vector((point.co.x, point.co.y, point.co.z))
+            for point in spline.points
+        ]
+
+    return [
+        Vector(item["co"])
+        for item in _path_data(cutter)
+    ]
+
+
+def _path_normals_world(cutter, point_count):
+    matrix = cutter.matrix_world.to_3x3().inverted().transposed()
+    normals = []
+    for item in _path_data(cutter):
+        normal = matrix @ Vector(item.get("normal", (0.0, 0.0, 1.0)))
+        if normal.length > 0.000001:
+            normal.normalize()
+        normals.append(normal)
+
+    while len(normals) < point_count:
+        normals.append(Vector((0.0, 0.0, 1.0)))
+    return normals[:point_count]
+
+
+def _path_tilts(cutter, point_count):
+    tilts = []
+    if cutter.type == "CURVE" and cutter.data.splines:
+        for point in cutter.data.splines[0].points:
+            tilts.append(getattr(point, "tilt", 0.0))
+
+    while len(tilts) < point_count:
+        tilts.append(0.0)
+    return tilts[:point_count]
+
+
+def _path_data(cutter):
+    try:
+        data = json.loads(cutter.get(CUTTER_PATH_DATA_PROP, "[]"))
+    except Exception:
+        data = []
+    return data if isinstance(data, list) else []
 
 
 def _world_plane_to_local(target, plane_co, plane_no):
@@ -462,6 +616,65 @@ def _draw_cutter_arc_overlay(operator):
         position = Vector(point)
         blf.position(font_id, position.x + 10.0, position.y + 10.0, 0)
         blf.draw(font_id, labels[index])
+
+
+def _draw_cutter_path_overlay(operator):
+    if not operator._points:
+        return
+
+    try:
+        import blf
+        import gpu
+        from gpu_extras.batch import batch_for_shader
+    except Exception:
+        return
+
+    color = (0.15, 1.0, 0.55, 1.0)
+    label_color = (1.0, 1.0, 1.0, 1.0)
+    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+
+    preview_points = list(operator._points)
+    if operator._mouse_pos is not None:
+        preview_points.append(operator._mouse_pos)
+
+    line_points = []
+    if len(preview_points) > 1:
+        for start, end in zip(preview_points, preview_points[1:]):
+            line_points.extend([start, end])
+
+    cross_size = 6.0
+    for point in preview_points:
+        position = Vector(point)
+        line_points.extend(
+            [
+                (position.x - cross_size, position.y),
+                (position.x + cross_size, position.y),
+                (position.x, position.y - cross_size),
+                (position.x, position.y + cross_size),
+            ]
+        )
+
+    if line_points:
+        batch = batch_for_shader(shader, "LINES", {"pos": line_points})
+        shader.bind()
+        shader.uniform_float("color", color)
+        batch.draw(shader)
+
+    font_id = 0
+    try:
+        blf.size(font_id, 13)
+    except TypeError:
+        blf.size(font_id, 13, 72)
+
+    blf.color(font_id, *label_color)
+    for index, point in enumerate(preview_points):
+        if index >= 26:
+            label = str(index + 1)
+        else:
+            label = chr(ord("A") + index)
+        position = Vector(point)
+        blf.position(font_id, position.x + 9.0, position.y + 9.0, 0)
+        blf.draw(font_id, label)
 
 
 class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
@@ -765,6 +978,222 @@ class OBJECT_OT_polygroups_draw_cutter_arc(bpy.types.Operator):
         self._tag_redraw()
 
 
+class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
+    bl_idname = "object.polygroups_draw_cutter_path"
+    bl_label = "Draw Cutter Path"
+    bl_description = "Draw an object-mode cutter path snapped to the active mesh surface"
+    bl_options = {"REGISTER", "UNDO"}
+
+    use_event_as_start: bpy.props.BoolProperty(
+        name="Use Event As Start",
+        description="Use the invoking mouse event as the first path point",
+        default=False,
+        options={"HIDDEN"},
+    )
+
+    _target_name = ""
+    _start_area = None
+    _start_region = None
+    _start_rv3d = None
+    _points = None
+    _surface_points = None
+    _mouse_pos = None
+    _draw_handle = None
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+
+    def invoke(self, context, event):
+        self._target_name = context.active_object.name
+        self._start_area = None
+        self._start_region = None
+        self._start_rv3d = None
+        self._points = []
+        self._surface_points = []
+        self._mouse_pos = None
+        self._draw_handle = None
+
+        if self.use_event_as_start:
+            if not self._add_point_from_event(context, event):
+                return {"CANCELLED"}
+            self._add_draw_handler()
+            context.workspace.status_text_set(
+                "Object Seam Path Cutter: click more points, Enter/Space to confirm",
+            )
+        else:
+            context.workspace.status_text_set("Object Seam Path Cutter: click first surface point")
+
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+            self._finish(context)
+            return {"CANCELLED"}
+
+        if event.type in {"RET", "NUMPAD_ENTER", "SPACE"} and event.value == "PRESS":
+            if len(self._surface_points) < 2:
+                self.report({"WARNING"}, "Cutter path needs at least two points")
+                return {"RUNNING_MODAL"}
+            return self._create_path(context)
+
+        if event.type == "BACK_SPACE" and event.value == "PRESS":
+            if self._points:
+                self._points.pop()
+                self._surface_points.pop()
+                self._tag_redraw()
+            return {"RUNNING_MODAL"}
+
+        if event.type == "MOUSEMOVE":
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if self._points and area == self._start_area and region == self._start_region:
+                del rv3d
+                self._mouse_pos = region_pos
+                self._tag_redraw()
+            return {"RUNNING_MODAL"}
+
+        if event.type != "LEFTMOUSE" or event.value != "PRESS":
+            return {"RUNNING_MODAL"}
+
+        if not self._add_point_from_event(context, event):
+            return {"RUNNING_MODAL"}
+
+        if self._draw_handle is None:
+            self._add_draw_handler()
+        context.workspace.status_text_set(
+            "Object Seam Path Cutter: click more points, Enter/Space to confirm",
+        )
+        return {"RUNNING_MODAL"}
+
+    def _add_point_from_event(self, context, event):
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            return False
+
+        area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+        if region is None:
+            return False
+
+        if not self._points:
+            self._start_area = area
+            self._start_region = region
+            self._start_rv3d = rv3d
+        elif area != self._start_area or region != self._start_region:
+            self.report({"WARNING"}, "Use the same viewport for all path points")
+            return False
+
+        hit = _surface_hit_from_region_pos(region, rv3d, region_pos, target)
+        if hit is None:
+            self.report({"WARNING"}, "No surface under cursor")
+            return False
+
+        if self._surface_points:
+            previous = self._surface_points[-1]["location"]
+            if (hit[0] - previous).length < 0.000001:
+                return False
+
+        self._points.append(region_pos)
+        self._surface_points.append(
+            {
+                "location": hit[0],
+                "normal": hit[1],
+            },
+        )
+        self._mouse_pos = region_pos
+        self._tag_redraw()
+        return True
+
+    def _create_path(self, context):
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            self._finish(context)
+            return {"CANCELLED"}
+
+        cutter = _create_cutter_path(
+            "Seam_Cutter_Path",
+            self._surface_points,
+            settings.cutter_path_render_u,
+            settings.cutter_path_extrude,
+            settings.cutter_alpha,
+        )
+        bpy.ops.object.select_all(action="DESELECT")
+        cutter.select_set(True)
+        target.select_set(True)
+        context.view_layer.objects.active = target
+        self._finish(context)
+        return {"FINISHED"}
+
+    def _add_draw_handler(self):
+        if self._draw_handle is not None:
+            return
+
+        self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_cutter_path_overlay,
+            (self,),
+            "WINDOW",
+            "POST_PIXEL",
+        )
+        self._tag_redraw()
+
+    def _tag_redraw(self):
+        if self._start_area is not None:
+            self._start_area.tag_redraw()
+
+    def _finish(self, context):
+        if self._draw_handle is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self._draw_handle, "WINDOW")
+            self._draw_handle = None
+        context.workspace.status_text_set(None)
+        self._tag_redraw()
+
+
+class OBJECT_OT_polygroups_tilt_cutter_path(bpy.types.Operator):
+    bl_idname = "object.polygroups_tilt_cutter_path"
+    bl_label = "Tilt Cutter Path"
+    bl_description = "Apply tilt to selected cutter path curves"
+    bl_options = {"REGISTER", "UNDO"}
+
+    mode: bpy.props.EnumProperty(
+        items=(
+            ("DECREASE", "Decrease", "Decrease tilt"),
+            ("INCREASE", "Increase", "Increase tilt"),
+            ("RESET", "Reset", "Reset tilt"),
+        ),
+        default="INCREASE",
+    )
+
+    def execute(self, context):
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        delta = radians(settings.cutter_path_tilt_step_degrees)
+        if self.mode == "DECREASE":
+            delta = -delta
+
+        changed = 0
+        for obj in context.selected_objects:
+            if obj.type != "CURVE" or not obj.get(CUTTER_PROP) or obj.get(CUTTER_TYPE_PROP) != "PATH":
+                continue
+
+            for spline in obj.data.splines:
+                for point in spline.points:
+                    if not hasattr(point, "tilt"):
+                        continue
+                    if self.mode == "RESET":
+                        point.tilt = 0.0
+                    else:
+                        point.tilt += delta
+                    changed += 1
+
+        if not changed:
+            self.report({"WARNING"}, "No selected cutter path curves")
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, f"Updated tilt on {changed} path point(s)")
+        return {"FINISHED"}
+
+
 class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
     bl_idname = "object.polygroups_apply_cutter_seams"
     bl_label = "Apply Cutter Seams To Active"
@@ -817,7 +1246,7 @@ class OBJECT_OT_polygroups_select_cutter_planes(bpy.types.Operator):
 
         selected = 0
         for obj in collection.objects:
-            if obj.type == "MESH" and obj.get(CUTTER_PROP):
+            if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP):
                 obj.hide_set(False)
                 obj.hide_viewport = False
                 obj.select_set(True)
@@ -841,7 +1270,11 @@ class OBJECT_OT_polygroups_clear_cutter_planes(bpy.types.Operator):
         if collection is None:
             return {"CANCELLED"}
 
-        cutters = [obj for obj in collection.objects if obj.type == "MESH" and obj.get(CUTTER_PROP)]
+        cutters = [
+            obj
+            for obj in collection.objects
+            if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+        ]
         for cutter in cutters:
             bpy.data.objects.remove(cutter, do_unlink=True)
         return {"FINISHED"}
