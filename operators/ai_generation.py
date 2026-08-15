@@ -7,6 +7,7 @@ import time
 import bpy
 
 from ..services.openai_images import OpenAIImageError
+from ..services.openai_images import edit_image_bytes as edit_openai_image_bytes
 from ..services.openai_images import generate_image_bytes
 from ..services.gemini_images import GeminiImageError
 from ..services.gemini_images import generate_image_bytes as generate_gemini_image_bytes
@@ -25,6 +26,112 @@ def _extension_for_format(output_format):
     if output_format == "jpeg":
         return "jpg"
     return output_format
+
+
+def _image_to_png_bytes(image):
+    if image is None:
+        return None, None
+
+    filepath = os.path.join(
+        tempfile.gettempdir(),
+        f"airetopo_input_{re.sub(r'[^A-Za-z0-9_.-]+', '_', image.name)}.png",
+    )
+    original_filepath = image.filepath_raw
+    original_format = image.file_format
+
+    try:
+        image.filepath_raw = filepath
+        image.file_format = "PNG"
+        image.save()
+
+        with open(filepath, "rb") as image_file:
+            return image_file.read(), "image/png"
+    finally:
+        image.filepath_raw = original_filepath
+        image.file_format = original_format
+
+
+def _find_linked_image_from_socket(socket, visited=None):
+    if socket is None:
+        return None
+
+    if visited is None:
+        visited = set()
+
+    for link in socket.links:
+        node = link.from_node
+        if node in visited:
+            continue
+        visited.add(node)
+
+        if node.bl_idname == "ShaderNodeTexImage" and node.image is not None:
+            return node.image
+
+        for input_socket in node.inputs:
+            image = _find_linked_image_from_socket(input_socket, visited)
+            if image is not None:
+                return image
+
+    return None
+
+
+def _principled_bsdf(material):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return None
+
+    for node in material.node_tree.nodes:
+        if node.bl_idname == "ShaderNodeBsdfPrincipled":
+            return node
+
+    return material.node_tree.nodes.get("Principled BSDF")
+
+
+def _material_slots_active_first(obj):
+    slots = list(obj.material_slots)
+    active_material = obj.active_material
+    if active_material is None:
+        return slots
+
+    return sorted(
+        slots,
+        key=lambda slot: 0 if slot.material == active_material else 1,
+    )
+
+
+def _image_node_name_matches(node, image_kind):
+    label = f"{node.name} {node.label}".lower()
+    if image_kind == "NORMAL":
+        return "normal" in label or "nrm" in label
+
+    return any(token in label for token in ("base", "color", "albedo", "diffuse"))
+
+
+def _find_object_material_image(obj, image_kind):
+    if obj is None or obj.type != "MESH":
+        return None
+
+    fallback_image = None
+    for slot in _material_slots_active_first(obj):
+        material = slot.material
+        if material is None or not material.use_nodes or material.node_tree is None:
+            continue
+
+        bsdf = _principled_bsdf(material)
+        if bsdf is not None:
+            input_name = "Normal" if image_kind == "NORMAL" else "Base Color"
+            image = _find_linked_image_from_socket(bsdf.inputs.get(input_name))
+            if image is not None:
+                return image
+
+        for node in material.node_tree.nodes:
+            if node.bl_idname != "ShaderNodeTexImage" or node.image is None:
+                continue
+            if _image_node_name_matches(node, image_kind):
+                return node.image
+            if fallback_image is None and image_kind == "BASE_COLOR":
+                fallback_image = node.image
+
+    return fallback_image
 
 
 def _get_preferences(context):
@@ -134,16 +241,38 @@ def _ensure_result_timer():
         bpy.app.timers.register(_apply_pending_results, first_interval=0.25)
 
 
-def _openai_generation_worker(scene_name, api_key, prompt, model, size, quality, output_format):
+def _openai_generation_worker(
+    scene_name,
+    api_key,
+    prompt,
+    model,
+    size,
+    quality,
+    output_format,
+    input_image_bytes,
+    input_image_mime_type,
+):
     try:
-        image_bytes = generate_image_bytes(
-            api_key=api_key,
-            prompt=prompt,
-            model=model,
-            size=size,
-            quality=quality,
-            output_format=output_format,
-        )
+        if input_image_bytes:
+            image_bytes = edit_openai_image_bytes(
+                api_key=api_key,
+                prompt=prompt,
+                model=model,
+                size=size,
+                quality=quality,
+                output_format=output_format,
+                image_bytes=input_image_bytes,
+                image_mime_type=input_image_mime_type,
+            )
+        else:
+            image_bytes = generate_image_bytes(
+                api_key=api_key,
+                prompt=prompt,
+                model=model,
+                size=size,
+                quality=quality,
+                output_format=output_format,
+            )
         extension = _extension_for_format(output_format)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         image_name = f"AI_Generated_{timestamp}.{extension}"
@@ -182,7 +311,16 @@ def _openai_generation_worker(scene_name, api_key, prompt, model, size, quality,
         )
 
 
-def _google_generation_worker(scene_name, api_key, prompt, model, aspect_ratio, image_size):
+def _google_generation_worker(
+    scene_name,
+    api_key,
+    prompt,
+    model,
+    aspect_ratio,
+    image_size,
+    input_image_bytes,
+    input_image_mime_type,
+):
     try:
         image_bytes = generate_gemini_image_bytes(
             api_key=api_key,
@@ -190,6 +328,8 @@ def _google_generation_worker(scene_name, api_key, prompt, model, aspect_ratio, 
             model=model,
             aspect_ratio=aspect_ratio,
             image_size=image_size,
+            input_image_bytes=input_image_bytes,
+            input_image_mime_type=input_image_mime_type,
         )
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         image_name = f"Google_Generated_{timestamp}.png"
@@ -251,6 +391,19 @@ class OBJECT_OT_airetopo_generate_openai_image(bpy.types.Operator):
             self.report({"ERROR"}, settings.last_status)
             return {"CANCELLED"}
 
+        input_image = bpy.data.images.get(settings.input_image_name)
+        if settings.input_image_name and input_image is None:
+            settings.last_status = "Input image was not found"
+            self.report({"ERROR"}, settings.last_status)
+            return {"CANCELLED"}
+
+        try:
+            input_image_bytes, input_image_mime_type = _image_to_png_bytes(input_image)
+        except Exception as error:
+            settings.last_status = f"Could not prepare input image: {error}"
+            self.report({"ERROR"}, settings.last_status)
+            return {"CANCELLED"}
+
         settings.is_generating = True
         settings.last_status = "Generating image..."
         thread = threading.Thread(
@@ -263,6 +416,8 @@ class OBJECT_OT_airetopo_generate_openai_image(bpy.types.Operator):
                 settings.size,
                 settings.quality,
                 settings.output_format,
+                input_image_bytes,
+                input_image_mime_type,
             ),
             daemon=True,
         )
@@ -296,6 +451,19 @@ class OBJECT_OT_airetopo_generate_google_image(bpy.types.Operator):
             self.report({"ERROR"}, settings.last_status)
             return {"CANCELLED"}
 
+        input_image = bpy.data.images.get(settings.input_image_name)
+        if settings.input_image_name and input_image is None:
+            settings.last_status = "Input image was not found"
+            self.report({"ERROR"}, settings.last_status)
+            return {"CANCELLED"}
+
+        try:
+            input_image_bytes, input_image_mime_type = _image_to_png_bytes(input_image)
+        except Exception as error:
+            settings.last_status = f"Could not prepare input image: {error}"
+            self.report({"ERROR"}, settings.last_status)
+            return {"CANCELLED"}
+
         settings.is_generating = True
         settings.last_status = "Generating image..."
         thread = threading.Thread(
@@ -307,6 +475,8 @@ class OBJECT_OT_airetopo_generate_google_image(bpy.types.Operator):
                 settings.model,
                 settings.aspect_ratio,
                 settings.image_size,
+                input_image_bytes,
+                input_image_mime_type,
             ),
             daemon=True,
         )
@@ -314,6 +484,75 @@ class OBJECT_OT_airetopo_generate_google_image(bpy.types.Operator):
         _ensure_result_timer()
 
         self.report({"INFO"}, "Image generation started")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_airetopo_select_material_image(bpy.types.Operator):
+    bl_idname = "object.airetopo_select_material_image"
+    bl_label = "Select Material Image"
+    bl_description = "Select a Base Color or Normal image from the active object's materials"
+    bl_options = {"REGISTER"}
+
+    provider: bpy.props.EnumProperty(
+        items=(
+            ("OPENAI", "OpenAI", "OpenAI Image input"),
+            ("GOOGLE", "Google", "Google Image input"),
+        ),
+        default="OPENAI",
+    )
+    image_kind: bpy.props.EnumProperty(
+        items=(
+            ("BASE_COLOR", "Base Color", "Select the Base Color image"),
+            ("NORMAL", "Normal", "Select the Normal Map image"),
+        ),
+        default="BASE_COLOR",
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.active_object.type == "MESH"
+
+    def execute(self, context):
+        settings = _settings_for_provider(context.scene, self.provider)
+        image = _find_object_material_image(context.active_object, self.image_kind)
+        if image is None:
+            self.report({"WARNING"}, "Material image was not found")
+            return {"CANCELLED"}
+
+        settings.input_image_name = image.name
+        self.report({"INFO"}, f"Selected input image: {image.name}")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_airetopo_preview_input_image(bpy.types.Operator):
+    bl_idname = "object.airetopo_preview_input_image"
+    bl_label = "Preview Input Image"
+    bl_description = "Show the selected input image in an existing Image Editor area"
+    bl_options = {"REGISTER"}
+
+    provider: bpy.props.EnumProperty(
+        items=(
+            ("OPENAI", "OpenAI", "OpenAI Image input"),
+            ("GOOGLE", "Google", "Google Image input"),
+        ),
+        default="OPENAI",
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return hasattr(context.scene, "airetopo_ai_generation_settings")
+
+    def execute(self, context):
+        settings = _settings_for_provider(context.scene, self.provider)
+        image = bpy.data.images.get(settings.input_image_name)
+        if image is None:
+            self.report({"WARNING"}, "Input image was not found")
+            return {"CANCELLED"}
+
+        if not _open_image_in_editor(image):
+            self.report({"WARNING"}, "Open an Image Editor area to display the image")
+            return {"CANCELLED"}
+
         return {"FINISHED"}
 
 

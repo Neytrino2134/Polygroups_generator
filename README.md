@@ -33,6 +33,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - OpenAI supports `gpt-image-1` and `gpt-image-1-mini`.
   - Google supports Gemini image models such as `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, and `gemini-3-pro-image`.
   - Show generated results in Blender's Image Editor and save them next to the `.blend` file.
+  - Send an existing Blender image, active object's Base Color texture, or Normal Map texture as image context for prompt-based editing.
   - Configure API keys in add-on preferences or through `OPENAI_API_KEY` and `GEMINI_API_KEY` environment variables.
 
 ## Installation

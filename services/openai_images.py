@@ -1,10 +1,12 @@
 import base64
 import json
+import uuid
 import urllib.error
 import urllib.request
 
 
 OPENAI_IMAGE_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
+OPENAI_IMAGE_EDITS_URL = "https://api.openai.com/v1/images/edits"
 
 
 class OpenAIImageError(Exception):
@@ -61,6 +63,103 @@ def generate_image_bytes(
         raise OpenAIImageError("OpenAI response did not contain b64_json image data")
 
     return base64.b64decode(b64_image)
+
+
+def edit_image_bytes(
+    api_key,
+    prompt,
+    model,
+    size,
+    quality,
+    output_format,
+    image_bytes,
+    image_mime_type,
+    timeout=180,
+):
+    if not api_key:
+        raise OpenAIImageError("OpenAI API key is missing")
+    if not image_bytes:
+        raise OpenAIImageError("Input image data is missing")
+
+    fields = {
+        "model": model,
+        "prompt": prompt,
+        "size": size,
+        "quality": quality,
+        "output_format": output_format,
+        "n": "1",
+    }
+    body, content_type = _multipart_body(
+        fields=fields,
+        files={
+            "image": (
+                "input_image.png",
+                image_bytes,
+                image_mime_type or "image/png",
+            ),
+        },
+    )
+    request = urllib.request.Request(
+        OPENAI_IMAGE_EDITS_URL,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": content_type,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_data = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        error_data = error.read().decode("utf-8", errors="replace")
+        raise OpenAIImageError(_extract_error_message(error_data)) from error
+    except urllib.error.URLError as error:
+        raise OpenAIImageError(str(error.reason)) from error
+
+    result = json.loads(response_data)
+    images = result.get("data") or []
+    if not images:
+        raise OpenAIImageError("OpenAI response did not contain edited image data")
+
+    b64_image = images[0].get("b64_json")
+    if not b64_image:
+        raise OpenAIImageError("OpenAI response did not contain b64_json image data")
+
+    return base64.b64decode(b64_image)
+
+
+def _multipart_body(fields, files):
+    boundary = f"----airetopo{uuid.uuid4().hex}"
+    chunks = []
+
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                str(value).encode("utf-8"),
+                b"\r\n",
+            ],
+        )
+
+    for name, (filename, data, mime_type) in files.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                (
+                    f'Content-Disposition: form-data; name="{name}"; '
+                    f'filename="{filename}"\r\n'
+                ).encode("utf-8"),
+                f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"),
+                data,
+                b"\r\n",
+            ],
+        )
+
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
 def _extract_error_message(error_data):

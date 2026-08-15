@@ -2,7 +2,9 @@ from .apply_weld import OBJECT_OT_polygroups_apply_weld
 from .ai_generation import OBJECT_OT_airetopo_generate_google_image
 from .ai_generation import OBJECT_OT_airetopo_generate_openai_image
 from .ai_generation import OBJECT_OT_airetopo_open_generated_image
+from .ai_generation import OBJECT_OT_airetopo_preview_input_image
 from .ai_generation import OBJECT_OT_airetopo_save_generated_image
+from .ai_generation import OBJECT_OT_airetopo_select_material_image
 from .baking import OBJECT_OT_polygroups_bake_selected_to_active
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
 from .baking import OBJECT_OT_polygroups_prepare_highpoly_bake_materials
@@ -49,6 +51,8 @@ CLASSES = (
     OBJECT_OT_polygroups_select_import_folder,
     OBJECT_OT_airetopo_generate_openai_image,
     OBJECT_OT_airetopo_generate_google_image,
+    OBJECT_OT_airetopo_select_material_image,
+    OBJECT_OT_airetopo_preview_input_image,
     OBJECT_OT_airetopo_open_generated_image,
     OBJECT_OT_airetopo_save_generated_image,
     OBJECT_OT_polygroups_scan_import_folder,

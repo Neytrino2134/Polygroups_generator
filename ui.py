@@ -114,6 +114,40 @@ def draw_material_mode_buttons(layout, context, settings):
     checker_operator.value = "CHECKER_TEXTURE"
 
 
+def draw_ai_input_image_controls(layout, context, settings, provider):
+    layout.prop_search(
+        settings,
+        "input_image_name",
+        bpy.data,
+        "images",
+        text=t(context, "ai_input_image"),
+    )
+
+    image_row = layout.row(align=True)
+    base_operator = image_row.operator(
+        "object.airetopo_select_material_image",
+        text=t(context, "select_base_color_image"),
+        icon="MATERIAL",
+    )
+    base_operator.provider = provider
+    base_operator.image_kind = "BASE_COLOR"
+
+    normal_operator = image_row.operator(
+        "object.airetopo_select_material_image",
+        text=t(context, "select_normal_map_image"),
+        icon="NORMALS_FACE",
+    )
+    normal_operator.provider = provider
+    normal_operator.image_kind = "NORMAL"
+
+    preview_operator = image_row.operator(
+        "object.airetopo_preview_input_image",
+        text=t(context, "preview_input_image"),
+        icon="IMAGE",
+    )
+    preview_operator.provider = provider
+
+
 class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     bl_label = f"AI Retopo Toolkit v{addon_version_string()}"
     bl_space_type = "VIEW_3D"
@@ -677,6 +711,8 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
             layout.label(text=t(context, "ai_key_missing"), icon="ERROR")
 
         column = layout.column(align=True)
+        draw_ai_input_image_controls(column, context, settings, "OPENAI")
+        column.separator()
         column.prop(settings, "prompt", text=t(context, "ai_prompt"))
         column.prop(settings, "model", text=t(context, "ai_model"))
         column.prop(settings, "size", text=t(context, "ai_size"))
@@ -724,6 +760,8 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
             layout.label(text=t(context, "google_key_missing"), icon="ERROR")
 
         column = layout.column(align=True)
+        draw_ai_input_image_controls(column, context, settings, "GOOGLE")
+        column.separator()
         column.prop(settings, "prompt", text=t(context, "ai_prompt"))
         column.prop(settings, "model", text=t(context, "ai_model"))
         column.prop(settings, "aspect_ratio", text=t(context, "ai_aspect_ratio"))

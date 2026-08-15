@@ -418,6 +418,11 @@ class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
         ),
         default="png",
     )
+    input_image_name: bpy.props.StringProperty(
+        name="Input Image",
+        description="Optional Blender image to send with the prompt as editing context",
+        default="",
+    )
     is_generating: bpy.props.BoolProperty(
         name="Generating",
         default=False,
@@ -491,6 +496,11 @@ class AIRETOPO_PG_google_image_settings(bpy.types.PropertyGroup):
             ("webp", "WebP", "Save generated images as WebP"),
         ),
         default="png",
+    )
+    input_image_name: bpy.props.StringProperty(
+        name="Input Image",
+        description="Optional Blender image to send with the prompt as editing context",
+        default="",
     )
     is_generating: bpy.props.BoolProperty(
         name="Generating",

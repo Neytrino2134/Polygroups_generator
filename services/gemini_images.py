@@ -17,14 +17,27 @@ def generate_image_bytes(
     model,
     aspect_ratio,
     image_size,
+    input_image_bytes=None,
+    input_image_mime_type="image/png",
     timeout=180,
 ):
     if not api_key:
         raise GeminiImageError("Google Gemini API key is missing")
 
+    request_input = prompt
+    if input_image_bytes:
+        request_input = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image",
+                "mime_type": input_image_mime_type or "image/png",
+                "data": base64.b64encode(input_image_bytes).decode("utf-8"),
+            },
+        ]
+
     payload = {
         "model": model,
-        "input": prompt,
+        "input": request_input,
         "response_format": {
             "type": "image",
             "aspect_ratio": aspect_ratio,
