@@ -1,4 +1,5 @@
 import json
+import heapq
 import bpy
 from math import atan2
 from math import cos
@@ -362,6 +363,164 @@ def _cutter_planes_world(cutter):
     return planes
 
 
+def _arc_surface_path_points_world(target, cutter):
+    if cutter.type != "MESH" or len(cutter.data.vertices) < 4:
+        return []
+
+    matrix_inv = target.matrix_world.inverted()
+    normal_matrix = target.matrix_world.to_3x3().inverted().transposed()
+    path_points = []
+    for index in range(0, len(cutter.data.vertices) - 1, 2):
+        start = cutter.matrix_world @ cutter.data.vertices[index].co
+        end = cutter.matrix_world @ cutter.data.vertices[index + 1].co
+        direction = end - start
+        distance = direction.length
+        if distance < 0.000001:
+            continue
+        direction.normalize()
+
+        local_origin = matrix_inv @ start
+        local_direction = matrix_inv.to_3x3() @ direction
+        if local_direction.length < 0.000001:
+            continue
+        local_direction.normalize()
+
+        hit, location, normal, face_index = target.ray_cast(
+            local_origin,
+            local_direction,
+            distance=distance,
+        )
+        if not hit:
+            local_origin = matrix_inv @ end
+            local_direction = matrix_inv.to_3x3() @ -direction
+            if local_direction.length < 0.000001:
+                continue
+            local_direction.normalize()
+            hit, location, normal, face_index = target.ray_cast(
+                local_origin,
+                local_direction,
+                distance=distance,
+            )
+        if not hit:
+            continue
+
+        world_location = target.matrix_world @ location
+        world_normal = normal_matrix @ normal
+        if world_normal.length < 0.000001:
+            world_normal = direction
+        world_normal.normalize()
+
+        if path_points and (world_location - path_points[-1]["location"]).length < 0.000001:
+            continue
+        path_points.append(
+            {
+                "location": world_location,
+                "normal": world_normal,
+            },
+        )
+
+    return path_points
+
+
+def _arc_path_vertex_indices(target, path_points):
+    if len(path_points) < 2:
+        return []
+
+    from mathutils import kdtree
+
+    mesh = target.data
+    kd = kdtree.KDTree(len(mesh.vertices))
+    for vertex in mesh.vertices:
+        kd.insert(vertex.co, vertex.index)
+    kd.balance()
+
+    matrix_inv = target.matrix_world.inverted()
+    vertex_indices = []
+    for item in path_points:
+        location = matrix_inv @ item["location"]
+        _, index, _ = kd.find(location)
+        if vertex_indices and vertex_indices[-1] == index:
+            continue
+        vertex_indices.append(index)
+
+    return vertex_indices
+
+
+def _mesh_adjacency(mesh):
+    adjacency = [[] for _ in mesh.vertices]
+    for edge in mesh.edges:
+        start, end = edge.vertices
+        start_co = mesh.vertices[start].co
+        end_co = mesh.vertices[end].co
+        length = max((end_co - start_co).length, 0.000001)
+        adjacency[start].append((end, edge.index, length))
+        adjacency[end].append((start, edge.index, length))
+    return adjacency
+
+
+def _shortest_edge_path(mesh, adjacency, start_index, end_index):
+    if start_index == end_index:
+        return []
+
+    target_co = mesh.vertices[end_index].co
+    queue = [(0.0, start_index)]
+    cost_so_far = {start_index: 0.0}
+    came_from = {}
+
+    while queue:
+        _, current = heapq.heappop(queue)
+        if current == end_index:
+            break
+
+        current_cost = cost_so_far[current]
+        for neighbor, edge_index, edge_length in adjacency[current]:
+            new_cost = current_cost + edge_length
+            if new_cost >= cost_so_far.get(neighbor, float("inf")):
+                continue
+
+            cost_so_far[neighbor] = new_cost
+            heuristic = (mesh.vertices[neighbor].co - target_co).length
+            heapq.heappush(queue, (new_cost + heuristic, neighbor))
+            came_from[neighbor] = (current, edge_index)
+
+    if end_index not in came_from:
+        return []
+
+    edge_indices = []
+    current = end_index
+    while current != start_index:
+        previous, edge_index = came_from[current]
+        edge_indices.append(edge_index)
+        current = previous
+    edge_indices.reverse()
+    return edge_indices
+
+
+def _apply_arc_cutters_to_mesh(target, cutters):
+    mesh = target.data
+    if not mesh.vertices or not mesh.edges:
+        return 0
+
+    adjacency = _mesh_adjacency(mesh)
+    marked_edges = 0
+
+    for cutter in cutters:
+        path_points = _arc_surface_path_points_world(target, cutter)
+        vertex_indices = _arc_path_vertex_indices(target, path_points)
+        if len(vertex_indices) < 2:
+            continue
+
+        for start_index, end_index in zip(vertex_indices, vertex_indices[1:]):
+            for edge_index in _shortest_edge_path(mesh, adjacency, start_index, end_index):
+                edge = mesh.edges[edge_index]
+                if not edge.use_seam:
+                    marked_edges += 1
+                edge.use_seam = True
+
+    mesh.update()
+    return marked_edges
+
+
 def _path_cutter_planes_world(cutter):
     return [
         (segment["plane_co"], segment["plane_no"])
@@ -506,11 +665,17 @@ def _prepare_target_path_boolean_materials(target, temp_material):
     return len(target.data.materials) - 1, placeholder_index, placeholder_material
 
 
-def _duplicate_path_cutter_as_mesh(context, cutter, material):
+def _duplicate_boolean_cutter_as_mesh(context, cutter, material):
     work = cutter.copy()
     work.data = cutter.data.copy()
-    work.name = "Seam_Cutter_Path_Boolean"
+    work.name = f"{cutter.name}_Boolean"
     work[CUTTER_PROP] = False
+    work.hide_viewport = False
+    work.hide_render = False
+    work.hide_set(False)
+    for modifier in list(work.modifiers):
+        if modifier.name == CUTTER_SOLIDIFY_MODIFIER_NAME:
+            work.modifiers.remove(modifier)
 
     target_collection = cutter.users_collection[0] if cutter.users_collection else context.scene.collection
     target_collection.objects.link(work)
@@ -623,14 +788,14 @@ def _remove_material_if_unused(material):
         bpy.data.materials.remove(material)
 
 
-def _apply_path_cutter_boolean_to_mesh(context, target, cutter):
+def _apply_boolean_cutter_to_mesh(context, target, cutter):
     material = _path_boolean_material()
     temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
         target,
         material,
     )
     original_face_count = len(target.data.polygons)
-    work = _duplicate_path_cutter_as_mesh(context, cutter, material)
+    work = _duplicate_boolean_cutter_as_mesh(context, cutter, material)
     if work is None:
         _remove_material_slot_by_index(target, temp_material_index)
         if placeholder_index is not None:
@@ -700,15 +865,22 @@ def _apply_plane_cutters_to_mesh(target, cutters):
 
 
 def _apply_cutters_to_mesh(context, target, cutters):
-    plane_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) != "PATH"]
-    path_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "PATH"]
+    plane_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "PLANE"]
+    arc_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "ARC"]
+    boolean_cutters = [
+        cutter
+        for cutter in cutters
+        if cutter.get(CUTTER_TYPE_PROP) == "PATH"
+    ]
 
     marked_edges = 0
     if plane_cutters:
         marked_edges += _apply_plane_cutters_to_mesh(target, plane_cutters)
+    if arc_cutters:
+        marked_edges += _apply_arc_cutters_to_mesh(target, arc_cutters)
 
-    for cutter in path_cutters:
-        marked_edges += _apply_path_cutter_boolean_to_mesh(context, target, cutter)
+    for cutter in boolean_cutters:
+        marked_edges += _apply_boolean_cutter_to_mesh(context, target, cutter)
 
     return marked_edges
 
@@ -1222,6 +1394,46 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
     _surface_points = None
     _mouse_pos = None
     _draw_handle = None
+    _view_navigation_active = False
+
+    def _is_view_navigation_event(self, event):
+        if event.type == "MOUSEMOVE" and self._view_navigation_active:
+            return True
+
+        if event.type in {"MIDDLEMOUSE", "LEFTMOUSE"} and event.value == "RELEASE":
+            self._view_navigation_active = False
+            if event.type == "MIDDLEMOUSE":
+                return True
+
+        if event.type == "MIDDLEMOUSE" and event.value == "PRESS":
+            self._view_navigation_active = True
+            return True
+
+        if event.type == "LEFTMOUSE" and event.alt:
+            if event.value == "PRESS":
+                self._view_navigation_active = True
+            return True
+
+        if event.type in {
+            "WHEELUPMOUSE",
+            "WHEELDOWNMOUSE",
+            "WHEELINMOUSE",
+            "WHEELOUTMOUSE",
+            "TRACKPADPAN",
+            "TRACKPADZOOM",
+            "NDOF_MOTION",
+            "NDOF_BUTTON_MENU",
+            "NDOF_BUTTON_FIT",
+            "NDOF_BUTTON_TOP",
+            "NDOF_BUTTON_BOTTOM",
+            "NDOF_BUTTON_LEFT",
+            "NDOF_BUTTON_RIGHT",
+            "NDOF_BUTTON_FRONT",
+            "NDOF_BUTTON_BACK",
+        }:
+            return True
+
+        return False
 
     @classmethod
     def poll(cls, context):
@@ -1237,21 +1449,25 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
         self._surface_points = []
         self._mouse_pos = None
         self._draw_handle = None
+        self._view_navigation_active = False
 
         if self.use_event_as_start:
             if not self._add_point_from_event(context, event):
                 return {"CANCELLED"}
             self._add_draw_handler()
             context.workspace.status_text_set(
-                "Object Seam Path Cutter: click more points, Enter/Space to confirm",
+                "Object Seam Path Cutter: Ctrl+Click points, navigate view normally, Enter/Space to confirm",
             )
         else:
-            context.workspace.status_text_set("Object Seam Path Cutter: click first surface point")
+            context.workspace.status_text_set("Object Seam Path Cutter: Ctrl+Click first surface point")
 
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
+        if self._is_view_navigation_event(event):
+            return {"PASS_THROUGH"}
+
         if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
             self._finish(context)
             return {"CANCELLED"}
@@ -1278,7 +1494,10 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
             return {"RUNNING_MODAL"}
 
         if event.type != "LEFTMOUSE" or event.value != "PRESS":
-            return {"RUNNING_MODAL"}
+            return {"PASS_THROUGH"}
+
+        if not event.ctrl:
+            return {"PASS_THROUGH"}
 
         if not self._add_point_from_event(context, event):
             return {"RUNNING_MODAL"}
@@ -1286,7 +1505,7 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
         if self._draw_handle is None:
             self._add_draw_handler()
         context.workspace.status_text_set(
-            "Object Seam Path Cutter: click more points, Enter/Space to confirm",
+            "Object Seam Path Cutter: Ctrl+Click points, navigate view normally, Enter/Space to confirm",
         )
         return {"RUNNING_MODAL"}
 
