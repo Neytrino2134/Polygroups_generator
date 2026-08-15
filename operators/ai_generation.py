@@ -11,6 +11,7 @@ from ..services.openai_images import edit_image_bytes as edit_openai_image_bytes
 from ..services.openai_images import generate_image_bytes
 from ..services.gemini_images import GeminiImageError
 from ..services.gemini_images import generate_image_bytes as generate_gemini_image_bytes
+from ..services import prompt_library
 
 
 _RESULT_LOCK = threading.Lock()
@@ -145,6 +146,15 @@ def _settings_for_provider(scene, provider):
     if provider == "GOOGLE":
         return scene.airetopo_google_image_settings
     return scene.airetopo_ai_generation_settings
+
+
+def _provider_settings(scene, provider):
+    if provider == "BOTH":
+        return (
+            scene.airetopo_ai_generation_settings,
+            scene.airetopo_google_image_settings,
+        )
+    return (_settings_for_provider(scene, provider),)
 
 
 def _get_api_key(context, provider):
@@ -484,6 +494,93 @@ class OBJECT_OT_airetopo_generate_google_image(bpy.types.Operator):
         _ensure_result_timer()
 
         self.report({"INFO"}, "Image generation started")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_airetopo_refresh_prompt_library(bpy.types.Operator):
+    bl_idname = "object.airetopo_refresh_prompt_library"
+    bl_label = "Refresh Prompt Library"
+    bl_description = "Rescan the user prompt library folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        settings = context.scene.airetopo_ai_generation_settings
+        try:
+            root = prompt_library.ensure_prompt_library()
+            count = prompt_library.prompt_count()
+        except Exception as error:
+            settings.prompt_library_status = str(error)
+            self.report({"ERROR"}, settings.prompt_library_status)
+            return {"CANCELLED"}
+
+        settings.prompt_library_status = f"{count} prompt(s) found: {root}"
+        self.report({"INFO"}, settings.prompt_library_status)
+        return {"FINISHED"}
+
+
+class OBJECT_OT_airetopo_open_prompt_library_folder(bpy.types.Operator):
+    bl_idname = "object.airetopo_open_prompt_library_folder"
+    bl_label = "Open Prompt Folder"
+    bl_description = "Open the user prompt library folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        settings = context.scene.airetopo_ai_generation_settings
+        try:
+            prompt_library.open_prompt_library_folder()
+            settings.prompt_library_status = "Prompt library folder opened"
+        except Exception as error:
+            settings.prompt_library_status = str(error)
+            self.report({"ERROR"}, settings.prompt_library_status)
+            return {"CANCELLED"}
+
+        self.report({"INFO"}, settings.prompt_library_status)
+        return {"FINISHED"}
+
+
+class OBJECT_OT_airetopo_load_library_prompt(bpy.types.Operator):
+    bl_idname = "object.airetopo_load_library_prompt"
+    bl_label = "Load Library Prompt"
+    bl_description = "Load the selected library prompt into an AI prompt field"
+    bl_options = {"REGISTER", "UNDO"}
+
+    provider: bpy.props.EnumProperty(
+        items=(
+            ("OPENAI", "OpenAI", "Load prompt into OpenAI Image"),
+            ("GOOGLE", "Google", "Load prompt into Google Image"),
+            ("BOTH", "Both", "Load prompt into both image providers"),
+        ),
+        default="OPENAI",
+    )
+    mode: bpy.props.EnumProperty(
+        items=(
+            ("REPLACE", "Replace", "Replace the current prompt"),
+            ("APPEND", "Append", "Append to the current prompt"),
+        ),
+        default="REPLACE",
+    )
+
+    def execute(self, context):
+        library_settings = context.scene.airetopo_ai_generation_settings
+        try:
+            prompt_text = prompt_library.read_prompt(
+                library_settings.prompt_library_collection,
+                library_settings.prompt_library_prompt,
+            )
+        except Exception as error:
+            library_settings.prompt_library_status = str(error)
+            self.report({"ERROR"}, library_settings.prompt_library_status)
+            return {"CANCELLED"}
+
+        for settings in _provider_settings(context.scene, self.provider):
+            if self.mode == "APPEND" and settings.prompt.strip():
+                settings.prompt = f"{settings.prompt.rstrip()}\n\n{prompt_text}"
+            else:
+                settings.prompt = prompt_text
+
+        target = "OpenAI and Google" if self.provider == "BOTH" else self.provider.title()
+        library_settings.prompt_library_status = f"Loaded prompt to {target}"
+        self.report({"INFO"}, library_settings.prompt_library_status)
         return {"FINISHED"}
 
 

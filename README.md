@@ -29,6 +29,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - Convert sculpt Face Sets to materials.
   - Clear PolyGroups materials.
 - `AI Generation`
+  - Use a shared user prompt library with folder-based collections and `.txt` prompt files.
   - Generate image references from collapsible OpenAI Image and Google Image groups.
   - OpenAI supports `gpt-image-1` and `gpt-image-1-mini`.
   - Google supports Gemini image models such as `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, and `gemini-3-pro-image`.

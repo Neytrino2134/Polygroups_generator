@@ -680,6 +680,16 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
         layout = self.layout
         openai_settings = context.scene.airetopo_ai_generation_settings
 
+        prompt_library_content = draw_collapsible_box(
+            layout,
+            openai_settings,
+            "show_prompt_library_settings",
+            t(context, "prompt_library"),
+            "TEXT",
+        )
+        if prompt_library_content is not None:
+            self.draw_prompt_library(context, prompt_library_content)
+
         openai_content = draw_collapsible_box(
             layout,
             openai_settings,
@@ -699,6 +709,69 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
         )
         if google_content is not None:
             self.draw_google_image(context, google_content)
+
+    def draw_prompt_library(self, context, layout):
+        settings = context.scene.airetopo_ai_generation_settings
+        column = layout.column(align=True)
+        column.prop(settings, "prompt_library_collection", text=t(context, "prompt_collection"))
+        column.prop(settings, "prompt_library_prompt", text=t(context, "prompt_file"))
+
+        load_row = column.row(align=True)
+        openai_operator = load_row.operator(
+            "object.airetopo_load_library_prompt",
+            text=t(context, "load_to_openai"),
+            icon="IMPORT",
+        )
+        openai_operator.provider = "OPENAI"
+        openai_operator.mode = "REPLACE"
+
+        google_operator = load_row.operator(
+            "object.airetopo_load_library_prompt",
+            text=t(context, "load_to_google"),
+            icon="IMPORT",
+        )
+        google_operator.provider = "GOOGLE"
+        google_operator.mode = "REPLACE"
+
+        both_operator = load_row.operator(
+            "object.airetopo_load_library_prompt",
+            text=t(context, "load_to_both"),
+            icon="IMPORT",
+        )
+        both_operator.provider = "BOTH"
+        both_operator.mode = "REPLACE"
+
+        append_row = column.row(align=True)
+        append_openai_operator = append_row.operator(
+            "object.airetopo_load_library_prompt",
+            text=t(context, "append_to_openai"),
+            icon="ADD",
+        )
+        append_openai_operator.provider = "OPENAI"
+        append_openai_operator.mode = "APPEND"
+
+        append_google_operator = append_row.operator(
+            "object.airetopo_load_library_prompt",
+            text=t(context, "append_to_google"),
+            icon="ADD",
+        )
+        append_google_operator.provider = "GOOGLE"
+        append_google_operator.mode = "APPEND"
+
+        utility_row = column.row(align=True)
+        utility_row.operator(
+            "object.airetopo_refresh_prompt_library",
+            text=t(context, "refresh_prompt_library"),
+            icon="FILE_REFRESH",
+        )
+        utility_row.operator(
+            "object.airetopo_open_prompt_library_folder",
+            text=t(context, "open_prompt_folder"),
+            icon="FILE_FOLDER",
+        )
+
+        if settings.prompt_library_status:
+            column.label(text=settings.prompt_library_status, icon="INFO")
 
     def draw_openai_image(self, context, layout):
         settings = context.scene.airetopo_ai_generation_settings

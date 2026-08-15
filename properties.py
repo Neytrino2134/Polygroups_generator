@@ -1,9 +1,14 @@
+import os
+
 import bpy
 
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
+
+_PROMPT_COLLECTION_ITEMS = []
+_PROMPT_FILE_ITEMS = []
 
 
 def _sync_cutter_solidify_thickness(self, context):
@@ -22,6 +27,39 @@ def _sync_cutter_solidify_thickness(self, context):
 
         modifier.thickness = self.cutter_solidify_thickness
         modifier.offset = 0.0
+
+
+def _prompt_collection_items(self, context):
+    del context
+    from .services import prompt_library
+
+    global _PROMPT_COLLECTION_ITEMS
+    names = prompt_library.collection_names()
+    if not names:
+        names = ["General"]
+
+    _PROMPT_COLLECTION_ITEMS = [
+        (name, name, f"{name} prompt collection")
+        for name in names
+    ]
+    return _PROMPT_COLLECTION_ITEMS
+
+
+def _prompt_file_items(self, context):
+    del context
+    from .services import prompt_library
+
+    global _PROMPT_FILE_ITEMS
+    names = prompt_library.prompt_names(self.prompt_library_collection)
+    if not names:
+        _PROMPT_FILE_ITEMS = [("__NONE__", "No prompts", "No prompt files found")]
+        return _PROMPT_FILE_ITEMS
+
+    _PROMPT_FILE_ITEMS = [
+        (name, os.path.splitext(name)[0].replace("_", " ").title(), name)
+        for name in names
+    ]
+    return _PROMPT_FILE_ITEMS
 
 
 class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
@@ -364,6 +402,24 @@ class POLYGROUPS_PG_resculpting_settings(bpy.types.PropertyGroup):
 
 
 class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
+    show_prompt_library_settings: bpy.props.BoolProperty(
+        name="Prompt Library",
+        default=True,
+    )
+    prompt_library_collection: bpy.props.EnumProperty(
+        name="Collection",
+        description="Prompt library collection",
+        items=_prompt_collection_items,
+    )
+    prompt_library_prompt: bpy.props.EnumProperty(
+        name="Prompt",
+        description="Prompt text file from the selected collection",
+        items=_prompt_file_items,
+    )
+    prompt_library_status: bpy.props.StringProperty(
+        name="Prompt Library Status",
+        default="",
+    )
     show_openai_image_settings: bpy.props.BoolProperty(
         name="OpenAI Image",
         default=True,
