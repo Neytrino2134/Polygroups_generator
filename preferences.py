@@ -4,6 +4,8 @@ import time
 
 import bpy
 
+from .hotkeys import CUTTER_TOOL_ITEMS
+from .hotkeys import PIE_COMMAND_ITEMS
 from .localization import LANGUAGE_ITEMS
 from .localization import t
 
@@ -15,6 +17,36 @@ def _update_interface_language(self, context):
         ui.update_panel_labels(context)
     except Exception:
         pass
+
+
+def _update_hotkeys(self, context):
+    try:
+        from . import hotkeys
+
+        hotkeys.refresh_keymaps(context)
+    except Exception:
+        pass
+
+
+NUMBER_KEY_ITEMS = (
+    ("ZERO", "0", "0 key"),
+    ("ONE", "1", "1 key"),
+    ("TWO", "2", "2 key"),
+    ("THREE", "3", "3 key"),
+    ("FOUR", "4", "4 key"),
+    ("FIVE", "5", "5 key"),
+    ("SIX", "6", "6 key"),
+    ("SEVEN", "7", "7 key"),
+    ("EIGHT", "8", "8 key"),
+    ("NINE", "9", "9 key"),
+)
+
+KEY_ITEMS = tuple(
+    [(letter, letter, f"{letter} key") for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+    + list(NUMBER_KEY_ITEMS)
+    + [(f"NUMPAD_{number}", f"Numpad {number}", f"Numpad {number} key") for number in range(10)]
+    + [(f"F{number}", f"F{number}", f"F{number} key") for number in range(1, 13)]
+)
 
 
 def _addon_root():
@@ -160,6 +192,108 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         name="Update Available",
         default=False,
     )
+    cutter_tweak_tool: bpy.props.EnumProperty(
+        name="Cutter Tweak Tool",
+        description="Workspace tool selected by the Cutter Tweak hotkey",
+        items=CUTTER_TOOL_ITEMS,
+        default="polygroups_generator.draw_cutter_plane_tool",
+    )
+    enable_cutter_tweak_hotkey: bpy.props.BoolProperty(
+        name="Enable Cutter Tweak Hotkey",
+        description="Enable a shortcut for selecting the configured Cutter Tweak tool",
+        default=True,
+        update=_update_hotkeys,
+    )
+    cutter_tweak_key: bpy.props.EnumProperty(
+        name="Key",
+        description="Key used to select Cutter Tweak",
+        items=KEY_ITEMS,
+        default="D",
+        update=_update_hotkeys,
+    )
+    cutter_tweak_ctrl: bpy.props.BoolProperty(
+        name="Ctrl",
+        default=False,
+        update=_update_hotkeys,
+    )
+    cutter_tweak_shift: bpy.props.BoolProperty(
+        name="Shift",
+        default=False,
+        update=_update_hotkeys,
+    )
+    cutter_tweak_alt: bpy.props.BoolProperty(
+        name="Alt",
+        default=False,
+        update=_update_hotkeys,
+    )
+    enable_pie_menu_hotkey: bpy.props.BoolProperty(
+        name="Enable Pie Menu Hotkey",
+        description="Enable a shortcut for the AI Retopo pie menu",
+        default=True,
+        update=_update_hotkeys,
+    )
+    pie_menu_key: bpy.props.EnumProperty(
+        name="Key",
+        description="Key used to open the AI Retopo pie menu",
+        items=KEY_ITEMS,
+        default="C",
+        update=_update_hotkeys,
+    )
+    pie_menu_ctrl: bpy.props.BoolProperty(
+        name="Ctrl",
+        default=False,
+        update=_update_hotkeys,
+    )
+    pie_menu_shift: bpy.props.BoolProperty(
+        name="Shift",
+        default=True,
+        update=_update_hotkeys,
+    )
+    pie_menu_alt: bpy.props.BoolProperty(
+        name="Alt",
+        default=False,
+        update=_update_hotkeys,
+    )
+    pie_slot_1: bpy.props.EnumProperty(
+        name="Slot 1",
+        items=PIE_COMMAND_ITEMS,
+        default="IMPORT_FILES",
+    )
+    pie_slot_2: bpy.props.EnumProperty(
+        name="Slot 2",
+        items=PIE_COMMAND_ITEMS,
+        default="APPLY_CUTTER_SEAMS",
+    )
+    pie_slot_3: bpy.props.EnumProperty(
+        name="Slot 3",
+        items=PIE_COMMAND_ITEMS,
+        default="GENERATE_POLYGROUPS",
+    )
+    pie_slot_4: bpy.props.EnumProperty(
+        name="Slot 4",
+        items=PIE_COMMAND_ITEMS,
+        default="CUTTER_TWEAK",
+    )
+    pie_slot_5: bpy.props.EnumProperty(
+        name="Slot 5",
+        items=PIE_COMMAND_ITEMS,
+        default="UV_PACK",
+    )
+    pie_slot_6: bpy.props.EnumProperty(
+        name="Slot 6",
+        items=PIE_COMMAND_ITEMS,
+        default="REMESH",
+    )
+    pie_slot_7: bpy.props.EnumProperty(
+        name="Slot 7",
+        items=PIE_COMMAND_ITEMS,
+        default="CHECK_MATERIALS",
+    )
+    pie_slot_8: bpy.props.EnumProperty(
+        name="Slot 8",
+        items=PIE_COMMAND_ITEMS,
+        default="PREPARE_BAKE",
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -170,6 +304,43 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         layout.separator()
         layout.prop(self, "use_env_gemini_api_key", text=t(context, "use_env_gemini_api_key"))
         layout.prop(self, "gemini_api_key", text=t(context, "gemini_api_key"))
+        layout.separator()
+        layout.label(text=t(context, "hotkeys"), icon="KEYINGSET")
+        layout.prop(self, "cutter_tweak_tool", text=t(context, "cutter_tweak_tool"))
+        cutter_box = layout.box()
+        cutter_box.prop(
+            self,
+            "enable_cutter_tweak_hotkey",
+            text=t(context, "enable_cutter_tweak_hotkey"),
+        )
+        cutter_row = cutter_box.row(align=True)
+        cutter_row.enabled = self.enable_cutter_tweak_hotkey
+        cutter_row.prop(self, "cutter_tweak_key", text=t(context, "hotkey_key"))
+        cutter_row.prop(self, "cutter_tweak_ctrl", text="Ctrl")
+        cutter_row.prop(self, "cutter_tweak_shift", text="Shift")
+        cutter_row.prop(self, "cutter_tweak_alt", text="Alt")
+
+        pie_box = layout.box()
+        pie_box.prop(
+            self,
+            "enable_pie_menu_hotkey",
+            text=t(context, "enable_pie_menu_hotkey"),
+        )
+        pie_row = pie_box.row(align=True)
+        pie_row.enabled = self.enable_pie_menu_hotkey
+        pie_row.prop(self, "pie_menu_key", text=t(context, "hotkey_key"))
+        pie_row.prop(self, "pie_menu_ctrl", text="Ctrl")
+        pie_row.prop(self, "pie_menu_shift", text="Shift")
+        pie_row.prop(self, "pie_menu_alt", text="Alt")
+        pie_box.label(text=t(context, "pie_menu_slots"))
+        slot_column = pie_box.column(align=True)
+        for index in range(1, 9):
+            slot_column.prop(
+                self,
+                f"pie_slot_{index}",
+                text=t(context, "pie_slot", index=index),
+            )
+
         layout.separator()
         layout.label(text=t(context, "updates"), icon="FILE_REFRESH")
         update_row = layout.row(align=True)

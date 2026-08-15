@@ -137,7 +137,7 @@ class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
     bl_idname = DRAW_CUTTER_TOOL_ID
     bl_label = "Cutter Tweak: Plane"
     bl_description = "Select normally; hold Ctrl and click to draw object-mode cutter planes"
-    bl_icon = "ops.mesh.bisect"
+    bl_icon = "ops.mesh.primitive_grid_add_gizmo"
     bl_cursor = "DEFAULT"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
@@ -160,7 +160,7 @@ class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
     bl_idname = DRAW_CUTTER_ARC_TOOL_ID
     bl_label = "Cutter Tweak: Arc"
     bl_description = "Select normally; hold Ctrl and click to draw object-mode cutter arcs"
-    bl_icon = "ops.mesh.bisect"
+    bl_icon = "ops.gpencil.primitive_arc"
     bl_cursor = "DEFAULT"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
@@ -183,7 +183,7 @@ class VIEW3D_WST_polygroups_draw_cutter_path(WorkSpaceTool):
     bl_idname = DRAW_CUTTER_PATH_TOOL_ID
     bl_label = "Cutter Tweak: Path"
     bl_description = "Select normally; hold Ctrl and click to draw object-mode cutter paths"
-    bl_icon = "ops.mesh.bisect"
+    bl_icon = "ops.curve.draw"
     bl_cursor = "DEFAULT"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None

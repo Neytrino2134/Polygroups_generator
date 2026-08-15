@@ -1,7 +1,7 @@
 bl_info = {
     "name": "AI Retopo Toolkit",
     "author": "OpenAI",
-    "version": (0, 2, 9),
+    "version": (0, 2, 10),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > AI Retopo",
     "description": "Semi-automatic retopology toolkit for generated AI meshes",
@@ -10,6 +10,8 @@ bl_info = {
 
 from .preferences import register as register_preferences
 from .preferences import unregister as unregister_preferences
+from .hotkeys import register as register_hotkeys
+from .hotkeys import unregister as unregister_hotkeys
 from .operators import register as register_operators
 from .operators import unregister as unregister_operators
 from .properties import register as register_properties
@@ -26,9 +28,11 @@ def register():
     register_operators()
     register_tools()
     register_ui()
+    register_hotkeys()
 
 
 def unregister():
+    unregister_hotkeys()
     unregister_ui()
     unregister_tools()
     unregister_operators()
