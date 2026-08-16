@@ -72,6 +72,7 @@ def uvpackmaster_status(context):
 def draw_collapsible_box(layout, settings, property_name, label, icon):
     box = layout.box()
     header = box.row(align=True)
+    header.alignment = "LEFT"
     is_open = getattr(settings, property_name)
     header.prop(
         settings,
@@ -80,7 +81,15 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
         icon="TRIA_DOWN" if is_open else "TRIA_RIGHT",
         emboss=False,
     )
-    header.label(text=label, icon=icon)
+    title = header.row(align=True)
+    title.alignment = "LEFT"
+    title.prop(
+        settings,
+        property_name,
+        text=label,
+        icon=icon,
+        emboss=False,
+    )
 
     if not is_open:
         return None
@@ -836,6 +845,14 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             return
 
         layout = self.layout.box()
+
+        layout.operator(
+            "object.polygroups_unwrap_angle_based",
+            text=t(context, "unwrap_angle_based"),
+            icon="UV",
+        )
+        layout.separator()
+
         installed, enabled, available = uvpackmaster_status(context)
 
         if not installed:
@@ -849,17 +866,18 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             return
 
         main_props = context.scene.uvpm4_props.default_main_props
+        if hasattr(main_props, "heuristic_max_wait_time") and main_props.heuristic_max_wait_time <= 0:
+            main_props.heuristic_max_wait_time = 3
+
         layout.label(text=t(context, "uvpackmaster_available"), icon="CHECKMARK")
 
         pack_row = layout.row(align=True)
         pack_row.scale_y = 1.3
-        pack_operator = pack_row.operator(
-            "uvpackmaster4.pack",
+        pack_row.operator(
+            "object.polygroups_uvpackmaster_pack",
             text=t(context, "uvpackmaster_pack"),
             icon="UV",
         )
-        pack_operator.mode_id = "__active__"
-        pack_operator.pack_op_type = "0"
 
         layout.separator()
         layout.prop(main_props, "rotation_enable", text=t(context, "uvpackmaster_rotation_enable"))
@@ -870,6 +888,7 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
         rotation_row.prop(main_props, "rotation_step", text=t(context, "uvpackmaster_rotation_step"))
 
         layout.prop(main_props, "heuristic_enable", text=t(context, "uvpackmaster_heuristic_search"))
+        layout.prop(main_props, "heuristic_max_wait_time", text=t(context, "uvpackmaster_max_wait_time"))
 
 
 class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):

@@ -57,6 +57,7 @@ from .smooth_face_selection import MESH_OT_polygroups_smooth_face_selection
 from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
 from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
+from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
 CLASSES = (
     OBJECT_OT_polygroups_apply_weld,
@@ -100,6 +101,7 @@ CLASSES = (
     OBJECT_OT_polygroups_unwrap_angle_based,
     OBJECT_OT_polygroups_smart_uv_project,
     OBJECT_OT_polygroups_average_islands_scale,
+    OBJECT_OT_polygroups_uvpackmaster_pack,
     OBJECT_OT_face_sets_to_materials,
     OBJECT_OT_clear_polygroups_materials,
     MESH_OT_polygroups_mark_boundary_and_longitudinal_seam,
