@@ -12,6 +12,30 @@ def _selected_faces(bm):
     return {face for face in bm.faces if face.select}
 
 
+def _face_components(faces):
+    remaining = set(faces)
+    components = []
+
+    while remaining:
+        start_face = remaining.pop()
+        stack = [start_face]
+        component = {start_face}
+
+        while stack:
+            face = stack.pop()
+            for edge in face.edges:
+                for linked_face in edge.link_faces:
+                    if linked_face not in remaining:
+                        continue
+                    remaining.remove(linked_face)
+                    component.add(linked_face)
+                    stack.append(linked_face)
+
+        components.append(component)
+
+    return components
+
+
 def _selection_boundary_edges(bm, selected_faces):
     boundary_edges = set()
     for edge in bm.edges:
@@ -128,21 +152,37 @@ def _nearest_graph_vertex(graph, position):
     return nearest_vert
 
 
-def _active_selection_position(bm):
+def _active_selection_position(bm, selected_faces=None):
+    component_verts = None
+    if selected_faces is not None:
+        component_verts = set()
+        for face in selected_faces:
+            component_verts.update(face.verts)
+
     active = bm.select_history.active
-    if isinstance(active, bmesh.types.BMVert):
+    if isinstance(active, bmesh.types.BMVert) and (component_verts is None or active in component_verts):
         return active.co.copy()
-    if isinstance(active, bmesh.types.BMEdge):
+    if isinstance(active, bmesh.types.BMEdge) and (
+        selected_faces is None or any(face in selected_faces for face in active.link_faces)
+    ):
         return sum((vert.co for vert in active.verts), Vector()) / 2.0
-    if isinstance(active, bmesh.types.BMFace):
+    if isinstance(active, bmesh.types.BMFace) and (selected_faces is None or active in selected_faces):
         return active.calc_center_median()
 
-    selected_edges = [edge for edge in bm.edges if edge.select]
+    selected_edges = [
+        edge
+        for edge in bm.edges
+        if edge.select and (selected_faces is None or any(face in selected_faces for face in edge.link_faces))
+    ]
     if selected_edges:
         edge = selected_edges[0]
         return sum((vert.co for vert in edge.verts), Vector()) / 2.0
 
-    selected_verts = [vert for vert in bm.verts if vert.select]
+    selected_verts = [
+        vert
+        for vert in bm.verts
+        if vert.select and (component_verts is None or vert in component_verts)
+    ]
     if selected_verts:
         return selected_verts[0].co.copy()
 
@@ -168,6 +208,10 @@ def _guided_path_edges(graph, loop_a, loop_b, guide_position):
 def _shortest_boundary_path_edges(graph, loop_a, loop_b):
     sources = [vert for vert in loop_a if vert in graph]
     targets = [vert for vert in loop_b if vert in graph]
+    return _shortest_path_edges(graph, sources, targets)
+
+
+def _shortest_path_edges(graph, sources, targets):
     if not sources or not targets:
         return []
 
@@ -197,15 +241,15 @@ def _current_view_direction_world(context):
     return None
 
 
-def _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
+def _backside_weighted_graph(graph, context, obj):
     view_direction = _current_view_direction_world(context)
     if view_direction is None or obj is None:
-        return []
+        return None
 
     matrix_world = obj.matrix_world
     world_positions = {vert: matrix_world @ vert.co for vert in graph}
     if not world_positions:
-        return []
+        return None
 
     center = sum(world_positions.values(), Vector()) / len(world_positions)
     depths = {
@@ -216,7 +260,7 @@ def _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
     max_depth = max(depths.values())
     depth_range = max_depth - min_depth
     if depth_range <= 0.000001:
-        return []
+        return None
 
     weighted_graph = {}
     for vert, links in graph.items():
@@ -227,7 +271,58 @@ def _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
             weight = base_weight * (1.0 + front_penalty * 20.0)
             weighted_graph.setdefault(vert, []).append((neighbor, weight, edge))
 
+    return weighted_graph
+
+
+def _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
+    weighted_graph = _backside_weighted_graph(graph, context, obj)
+    if weighted_graph is None:
+        return []
+
     return _shortest_boundary_path_edges(weighted_graph, loop_a, loop_b)
+
+
+def _guided_cone_path_edges(graph, apex, boundary_loop, guide_position):
+    guide_vert = _nearest_graph_vertex(graph, guide_position)
+    if guide_vert is None:
+        return []
+
+    distances, previous, _ = _dijkstra(graph, [guide_vert])
+    if apex not in distances:
+        return []
+
+    boundary_verts = [vert for vert in boundary_loop if vert in distances]
+    if not boundary_verts:
+        return []
+
+    target = min(boundary_verts, key=lambda vert: distances[vert])
+    return _edges_from_previous(previous, apex) + _edges_from_previous(previous, target)
+
+
+def _cone_longitudinal_path_edges(graph, boundary_loop, context, obj, guide_position, prefer_backside):
+    distances, previous_from_boundary, _ = _dijkstra(graph, boundary_loop)
+    apex_candidates = [
+        vert
+        for vert in graph
+        if vert not in boundary_loop and vert in distances
+    ]
+    if not apex_candidates:
+        return []
+
+    apex = max(apex_candidates, key=lambda vert: distances[vert])
+    seam_edges = []
+    if prefer_backside:
+        weighted_graph = _backside_weighted_graph(graph, context, obj)
+        if weighted_graph is not None:
+            seam_edges = _shortest_path_edges(weighted_graph, [apex], boundary_loop)
+
+    if not seam_edges and guide_position is not None:
+        seam_edges = _guided_cone_path_edges(graph, apex, boundary_loop, guide_position)
+
+    if not seam_edges:
+        seam_edges = _edges_from_previous(previous_from_boundary, apex)
+
+    return seam_edges
 
 
 def _mark_boundary_edges(boundary_edges):
@@ -239,37 +334,45 @@ def _mark_boundary_edges(boundary_edges):
     return marked_count
 
 
-def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=False):
-    selected_faces = _selected_faces(bm)
-    if not selected_faces:
-        return None, "Select cylinder side faces first"
-
+def _longitudinal_seam_edges_for_faces(bm, selected_faces, context=None, obj=None, prefer_backside=False):
     boundary_edges = _selection_boundary_edges(bm, selected_faces)
     components = _edge_components(boundary_edges)
-    if len(components) < 2:
-        return None, "Selection needs at least two boundary loops"
-
     components.sort(key=lambda item: len(item[0]), reverse=True)
-    loop_a = components[0][1]
-    loop_b = components[1][1]
 
     graph, _edge_lookup = _path_graph(selected_faces, boundary_edges)
     if not graph:
         return None, "No side-surface edge path found"
 
-    guide_position = _active_selection_position(bm)
+    guide_position = _active_selection_position(bm, selected_faces)
     seam_edges = []
-    if prefer_backside:
-        seam_edges = _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj)
+    if len(components) >= 2:
+        loop_a = components[0][1]
+        loop_b = components[1][1]
+        if prefer_backside:
+            seam_edges = _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj)
 
-    if not seam_edges and guide_position is not None:
-        seam_edges = _guided_path_edges(graph, loop_a, loop_b, guide_position)
+        if not seam_edges and guide_position is not None:
+            seam_edges = _guided_path_edges(graph, loop_a, loop_b, guide_position)
+
+        if not seam_edges:
+            seam_edges = _shortest_boundary_path_edges(graph, loop_a, loop_b)
+
+    elif len(components) == 1:
+        boundary_loop = components[0][1]
+        seam_edges = _cone_longitudinal_path_edges(
+            graph,
+            boundary_loop,
+            context,
+            obj,
+            guide_position,
+            prefer_backside,
+        )
+
+    else:
+        return None, "Selection needs boundary edges or a cone-like side selection"
 
     if not seam_edges:
-        seam_edges = _shortest_boundary_path_edges(graph, loop_a, loop_b)
-
-    if not seam_edges:
-        return None, "Could not find a path between boundary loops"
+        return None, "Could not find a longitudinal path"
 
     marked_count = 0
     for edge in set(seam_edges):
@@ -281,10 +384,45 @@ def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=Fa
     return (marked_count, boundary_edges), None
 
 
+def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=False):
+    selected_faces = _selected_faces(bm)
+    if not selected_faces:
+        return None, "Select cylinder or cone side faces first"
+
+    total_marked_count = 0
+    all_boundary_edges = set()
+    processed_count = 0
+    failed_count = 0
+    last_warning = ""
+
+    for face_component in _face_components(selected_faces):
+        result, warning = _longitudinal_seam_edges_for_faces(
+            bm,
+            face_component,
+            context=context,
+            obj=obj,
+            prefer_backside=prefer_backside,
+        )
+        if warning:
+            failed_count += 1
+            last_warning = warning
+            continue
+
+        marked_count, boundary_edges = result
+        total_marked_count += marked_count
+        all_boundary_edges.update(boundary_edges)
+        processed_count += 1
+
+    if processed_count == 0:
+        return None, last_warning or "Could not find a longitudinal path"
+
+    return (total_marked_count, all_boundary_edges, processed_count, failed_count), None
+
+
 class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
     bl_idname = "mesh.polygroups_mark_longitudinal_seam"
     bl_label = "Create Longitudinal Seam"
-    bl_description = "Create one lengthwise seam between two boundary loops of the selected side faces"
+    bl_description = "Create one lengthwise seam on selected cylinder or cone side faces"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -317,14 +455,18 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
             auto_unwrapped = unwrap_selected_angle_based(context)
 
         suffix = " and unwrapped selected faces" if auto_unwrapped else ""
-        self.report({"INFO"}, f"Marked {result[0]} longitudinal seam edge(s){suffix}")
+        failed_suffix = f"; skipped {result[3]} shape(s)" if result[3] else ""
+        self.report(
+            {"INFO"},
+            f"Marked {result[0]} longitudinal seam edge(s) on {result[2]} shape(s){failed_suffix}{suffix}",
+        )
         return {"FINISHED"}
 
 
 class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator):
     bl_idname = "mesh.polygroups_mark_boundary_and_longitudinal_seam"
     bl_label = "Boundary + Longitudinal Seam"
-    bl_description = "Mark selected face boundary seams, then create one lengthwise seam"
+    bl_description = "Mark selected face boundary seams, then create one lengthwise cylinder or cone seam"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -351,7 +493,7 @@ class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator)
             self.report({"WARNING"}, warning)
             return {"CANCELLED"}
 
-        longitudinal_count, boundary_edges = result
+        longitudinal_count, boundary_edges, processed_count, failed_count = result
         boundary_count = _mark_boundary_edges(boundary_edges)
 
         bmesh.update_edit_mesh(mesh)
@@ -360,8 +502,9 @@ class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator)
             auto_unwrapped = unwrap_selected_angle_based(context)
 
         suffix = " and unwrapped selected faces" if auto_unwrapped else ""
+        failed_suffix = f"; skipped {failed_count} shape(s)" if failed_count else ""
         self.report(
             {"INFO"},
-            f"Marked {boundary_count} boundary seam edge(s) and {longitudinal_count} longitudinal seam edge(s){suffix}",
+            f"Marked {boundary_count} boundary seam edge(s) and {longitudinal_count} longitudinal seam edge(s) on {processed_count} shape(s){failed_suffix}{suffix}",
         )
         return {"FINISHED"}
