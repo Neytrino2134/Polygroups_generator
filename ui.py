@@ -141,7 +141,11 @@ def draw_section_panel_content(panel_class, context, layout, visibility_property
         if callable(value):
             setattr(panel, name, value.__get__(panel, panel_class))
 
-    panel_class.draw(panel, context)
+    try:
+        panel_class.draw(panel, context)
+    except Exception as error:
+        print(f"AI Retopo Toolkit: failed to draw {panel_class.__name__}: {error}")
+        layout.label(text="Section draw error. Check console.", icon="ERROR")
 
 
 def draw_material_mode_buttons(layout, context, settings):
@@ -180,6 +184,18 @@ def draw_material_mode_buttons(layout, context, settings):
     )
     checker_operator.data_path = "scene.polygroups_generator_settings.material_mode"
     checker_operator.value = "CHECKER_TEXTURE"
+
+
+def draw_optional_prop(layout, data, property_name, text="", **kwargs):
+    if data is None or not hasattr(data, property_name):
+        return False
+
+    try:
+        layout.prop(data, property_name, text=text, **kwargs)
+    except Exception:
+        return False
+
+    return True
 
 
 def draw_ai_input_image_controls(layout, context, settings, provider):
@@ -866,9 +882,6 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             return
 
         main_props = context.scene.uvpm4_props.default_main_props
-        if hasattr(main_props, "heuristic_max_wait_time") and main_props.heuristic_max_wait_time <= 0:
-            main_props.heuristic_max_wait_time = 3
-
         layout.label(text=t(context, "uvpackmaster_available"), icon="CHECKMARK")
 
         pack_row = layout.row(align=True)
@@ -880,15 +893,40 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
         )
 
         layout.separator()
-        layout.prop(main_props, "rotation_enable", text=t(context, "uvpackmaster_rotation_enable"))
-        layout.prop(main_props, "margin", text=t(context, "uvpackmaster_margin"))
+        draw_optional_prop(
+            layout,
+            main_props,
+            "rotation_enable",
+            text=t(context, "uvpackmaster_rotation_enable"),
+        )
+        draw_optional_prop(
+            layout,
+            main_props,
+            "margin",
+            text=t(context, "uvpackmaster_margin"),
+        )
 
         rotation_row = layout.row(align=True)
-        rotation_row.enabled = main_props.rotation_enable
-        rotation_row.prop(main_props, "rotation_step", text=t(context, "uvpackmaster_rotation_step"))
+        rotation_row.enabled = bool(getattr(main_props, "rotation_enable", True))
+        draw_optional_prop(
+            rotation_row,
+            main_props,
+            "rotation_step",
+            text=t(context, "uvpackmaster_rotation_step"),
+        )
 
-        layout.prop(main_props, "heuristic_enable", text=t(context, "uvpackmaster_heuristic_search"))
-        layout.prop(main_props, "heuristic_max_wait_time", text=t(context, "uvpackmaster_max_wait_time"))
+        draw_optional_prop(
+            layout,
+            main_props,
+            "heuristic_enable",
+            text=t(context, "uvpackmaster_heuristic_search"),
+        )
+        draw_optional_prop(
+            layout,
+            main_props,
+            "heuristic_max_wait_time",
+            text=t(context, "uvpackmaster_max_wait_time"),
+        )
 
 
 class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
@@ -1167,6 +1205,11 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         seam_settings = context.scene.polygroups_seam_finalization_settings
         column = layout.column(align=True)
         column.prop(seam_settings, "auto_unwrap_after_seam", text=t(context, "auto_unwrap"))
+        column.prop(
+            seam_settings,
+            "prefer_backside_longitudinal_seam",
+            text=t(context, "prefer_backside_longitudinal_seam"),
+        )
         column.separator()
         column.operator(
             "mesh.polygroups_mark_selected_edges_seam",

@@ -177,6 +177,59 @@ def _shortest_boundary_path_edges(graph, loop_a, loop_b):
     return _edges_from_previous(previous, target)
 
 
+def _current_view_direction_world(context):
+    space = getattr(context, "space_data", None)
+    region_3d = getattr(space, "region_3d", None)
+    if region_3d is not None:
+        return (region_3d.view_rotation @ Vector((0.0, 0.0, -1.0))).normalized()
+
+    screen = getattr(context, "screen", None)
+    if screen is None:
+        return None
+
+    for area in screen.areas:
+        if area.type != "VIEW_3D":
+            continue
+        for space in area.spaces:
+            if space.type == "VIEW_3D" and space.region_3d is not None:
+                return (space.region_3d.view_rotation @ Vector((0.0, 0.0, -1.0))).normalized()
+
+    return None
+
+
+def _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
+    view_direction = _current_view_direction_world(context)
+    if view_direction is None or obj is None:
+        return []
+
+    matrix_world = obj.matrix_world
+    world_positions = {vert: matrix_world @ vert.co for vert in graph}
+    if not world_positions:
+        return []
+
+    center = sum(world_positions.values(), Vector()) / len(world_positions)
+    depths = {
+        vert: (position - center).dot(view_direction)
+        for vert, position in world_positions.items()
+    }
+    min_depth = min(depths.values())
+    max_depth = max(depths.values())
+    depth_range = max_depth - min_depth
+    if depth_range <= 0.000001:
+        return []
+
+    weighted_graph = {}
+    for vert, links in graph.items():
+        for neighbor, base_weight, edge in links:
+            edge_depth = (depths[vert] + depths[neighbor]) * 0.5
+            backside_factor = (edge_depth - min_depth) / depth_range
+            front_penalty = (1.0 - backside_factor) ** 2
+            weight = base_weight * (1.0 + front_penalty * 20.0)
+            weighted_graph.setdefault(vert, []).append((neighbor, weight, edge))
+
+    return _shortest_boundary_path_edges(weighted_graph, loop_a, loop_b)
+
+
 def _mark_boundary_edges(boundary_edges):
     marked_count = 0
     for edge in boundary_edges:
@@ -186,7 +239,7 @@ def _mark_boundary_edges(boundary_edges):
     return marked_count
 
 
-def _mark_longitudinal_seam_edges(bm):
+def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=False):
     selected_faces = _selected_faces(bm)
     if not selected_faces:
         return None, "Select cylinder side faces first"
@@ -206,7 +259,10 @@ def _mark_longitudinal_seam_edges(bm):
 
     guide_position = _active_selection_position(bm)
     seam_edges = []
-    if guide_position is not None:
+    if prefer_backside:
+        seam_edges = _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj)
+
+    if not seam_edges and guide_position is not None:
         seam_edges = _guided_path_edges(graph, loop_a, loop_b, guide_position)
 
     if not seam_edges:
@@ -244,7 +300,13 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
         bm.edges.ensure_lookup_table()
         bm.verts.ensure_lookup_table()
 
-        result, warning = _mark_longitudinal_seam_edges(bm)
+        settings = context.scene.polygroups_seam_finalization_settings
+        result, warning = _mark_longitudinal_seam_edges(
+            bm,
+            context=context,
+            obj=obj,
+            prefer_backside=settings.prefer_backside_longitudinal_seam,
+        )
         if warning:
             self.report({"WARNING"}, warning)
             return {"CANCELLED"}
@@ -278,7 +340,13 @@ class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator)
         bm.edges.ensure_lookup_table()
         bm.verts.ensure_lookup_table()
 
-        result, warning = _mark_longitudinal_seam_edges(bm)
+        settings = context.scene.polygroups_seam_finalization_settings
+        result, warning = _mark_longitudinal_seam_edges(
+            bm,
+            context=context,
+            obj=obj,
+            prefer_backside=settings.prefer_backside_longitudinal_seam,
+        )
         if warning:
             self.report({"WARNING"}, warning)
             return {"CANCELLED"}

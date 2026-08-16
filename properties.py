@@ -368,6 +368,11 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         description="Run Angle Based unwrap on selected faces after final seam operators",
         default=False,
     )
+    prefer_backside_longitudinal_seam: bpy.props.BoolProperty(
+        name="Prefer Backside Longitudinal Seam",
+        description="Try to place longitudinal seams on the backside relative to the current 3D view",
+        default=False,
+    )
 
 
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
