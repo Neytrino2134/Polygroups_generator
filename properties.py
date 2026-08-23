@@ -125,6 +125,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Apply Weld to imported mesh objects after each file import",
         default=True,
     )
+    batch_include_subfolders: bpy.props.BoolProperty(
+        name="Include Subfolders",
+        description="Scan and import supported mesh files from nested folders",
+        default=False,
+    )
     batch_is_running: bpy.props.BoolProperty(
         name="Running",
         default=False,
@@ -174,6 +179,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     show_uv_preparation_section: bpy.props.BoolProperty(default=True)
     show_baking_section: bpy.props.BoolProperty(default=True)
     show_ai_generation_section: bpy.props.BoolProperty(default=True)
+    show_mesh_finalization_section: bpy.props.BoolProperty(default=True)
 
 
 class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
@@ -371,6 +377,14 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
     prefer_backside_longitudinal_seam: bpy.props.BoolProperty(
         name="Prefer Backside Longitudinal Seam",
         description="Try to place longitudinal seams on the backside relative to the current 3D view",
+        default=False,
+    )
+
+
+class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
+    smart_decimate_duplicate_and_apply: bpy.props.BoolProperty(
+        name="Duplicate And Apply Decimate",
+        description="Duplicate the active object, add Smart Decimate to the duplicate, and apply it",
         default=False,
     )
 
@@ -645,6 +659,7 @@ CLASSES = (
     POLYGROUPS_PG_object_seam_cutter_settings,
     POLYGROUPS_PG_polygroups_settings,
     POLYGROUPS_PG_seam_finalization_settings,
+    POLYGROUPS_PG_mesh_finalization_settings,
     POLYGROUPS_PG_baking_settings,
     POLYGROUPS_PG_resculpting_settings,
     AIRETOPO_PG_ai_generation_settings,
@@ -680,6 +695,9 @@ def register():
     bpy.types.Scene.polygroups_seam_finalization_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_seam_finalization_settings,
     )
+    bpy.types.Scene.polygroups_mesh_finalization_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_mesh_finalization_settings,
+    )
     bpy.types.Scene.polygroups_baking_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_baking_settings,
     )
@@ -700,6 +718,7 @@ def unregister():
     del bpy.types.Scene.airetopo_ai_generation_settings
     del bpy.types.Scene.polygroups_resculpting_settings
     del bpy.types.Scene.polygroups_baking_settings
+    del bpy.types.Scene.polygroups_mesh_finalization_settings
     del bpy.types.Scene.polygroups_seam_finalization_settings
     del bpy.types.Scene.polygroups_generator_settings
     del bpy.types.Scene.polygroups_object_seam_cutter_settings

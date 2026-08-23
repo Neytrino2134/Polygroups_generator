@@ -402,6 +402,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         layout.prop(settings, "batch_import_format", text=t(context, "format"))
         layout.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
         layout.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
+        layout.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
 
         progress_column = layout.column(align=True)
         progress_column.enabled = False
@@ -1262,6 +1263,41 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         )
 
 
+class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
+    bl_label = "12 |"
+    bl_text_key = "section_mesh_finalization"
+    bl_icon = "MOD_DECIM"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 12
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
+        layout = self.layout.box()
+        settings = context.scene.polygroups_mesh_finalization_settings
+        column = layout.column(align=True)
+        column.prop(
+            settings,
+            "smart_decimate_duplicate_and_apply",
+            text=t(context, "duplicate_and_apply_decimate"),
+        )
+        smart_decimate_operator = column.operator(
+            "object.polygroups_smart_decimate",
+            text=t(context, "smart_decimate"),
+            icon="MOD_DECIM",
+        )
+        smart_decimate_operator.ratio = 0.4
+        smart_decimate_operator.duplicate_and_apply = (
+            settings.smart_decimate_duplicate_and_apply
+        )
+
+
 SECTION_PANEL_CLASSES = (
     VIEW3D_PT_polygroups_import,
     VIEW3D_PT_polygroups_batch_import,
@@ -1274,6 +1310,7 @@ SECTION_PANEL_CLASSES = (
     VIEW3D_PT_polygroups_uv_preparation,
     VIEW3D_PT_polygroups_baking,
     VIEW3D_PT_airetopo_ai_generation,
+    VIEW3D_PT_polygroups_mesh_finalization,
 )
 
 CLASSES = (
@@ -1292,6 +1329,7 @@ SECTION_PANEL_VISIBILITY = (
     (VIEW3D_PT_polygroups_uv_preparation, "show_uv_preparation_section"),
     (VIEW3D_PT_polygroups_baking, "show_baking_section"),
     (VIEW3D_PT_airetopo_ai_generation, "show_ai_generation_section"),
+    (VIEW3D_PT_polygroups_mesh_finalization, "show_mesh_finalization_section"),
 )
 
 for section_class, visibility_property in SECTION_PANEL_VISIBILITY:

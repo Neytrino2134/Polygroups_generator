@@ -13,6 +13,7 @@ SECTION_VISIBILITY_PROPERTIES = (
     "show_uv_preparation_section",
     "show_baking_section",
     "show_ai_generation_section",
+    "show_mesh_finalization_section",
 )
 
 

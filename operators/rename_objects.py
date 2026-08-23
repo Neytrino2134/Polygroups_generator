@@ -11,6 +11,42 @@ def collection_is_in_tree(parent_collection, target_collection):
     return False
 
 
+def layer_collection_paths(layer_collection, target_collection, path=None):
+    if path is None:
+        path = ()
+
+    current_path = path + (layer_collection,)
+    if layer_collection.collection == target_collection:
+        yield current_path
+
+    for child_layer_collection in layer_collection.children:
+        yield from layer_collection_paths(
+            child_layer_collection,
+            target_collection,
+            current_path,
+        )
+
+
+def ensure_collection_visible_in_view_layer(context, collection):
+    if collection is None:
+        return False
+
+    collection.hide_viewport = False
+    context.view_layer.update()
+
+    paths = list(layer_collection_paths(context.view_layer.layer_collection, collection))
+    if not paths:
+        return False
+
+    for path in paths:
+        for layer_collection in path[1:]:
+            layer_collection.exclude = False
+            layer_collection.hide_viewport = False
+
+    context.view_layer.update()
+    return True
+
+
 def get_or_create_generated_collection(context, collection_name):
     generated_collection = bpy.data.collections.get(collection_name)
     if generated_collection is None:
@@ -19,6 +55,7 @@ def get_or_create_generated_collection(context, collection_name):
     if not collection_is_in_tree(context.scene.collection, generated_collection):
         context.scene.collection.children.link(generated_collection)
 
+    ensure_collection_visible_in_view_layer(context, generated_collection)
     return generated_collection
 
 

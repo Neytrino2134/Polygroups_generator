@@ -51,23 +51,34 @@ def find_import_operator(extension):
     return None
 
 
-def collect_import_files(directory, import_format):
+def collect_import_files(directory, import_format, include_subfolders=False):
     if import_format == "AUTO":
         extensions = AUTO_EXTENSIONS
     else:
         extensions = FORMAT_EXTENSIONS[import_format]
 
     files = []
-    for filename in os.listdir(directory):
-        filepath = os.path.join(directory, filename)
+    if include_subfolders:
+        filepaths = (
+            os.path.join(root, filename)
+            for root, _subdirectories, filenames in os.walk(directory)
+            for filename in filenames
+        )
+    else:
+        filepaths = (
+            os.path.join(directory, filename)
+            for filename in os.listdir(directory)
+        )
+
+    for filepath in filepaths:
         if not os.path.isfile(filepath):
             continue
 
-        extension = os.path.splitext(filename)[1].lower()
+        extension = os.path.splitext(filepath)[1].lower()
         if extension in extensions:
             files.append(filepath)
 
-    files.sort(key=lambda path: os.path.basename(path).lower())
+    files.sort(key=lambda path: os.path.relpath(path, directory).lower())
     return files
 
 
@@ -147,7 +158,11 @@ class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
             self.report({"WARNING"}, "Select a valid import folder")
             return {"CANCELLED"}
 
-        files = collect_import_files(directory, settings.batch_import_format)
+        files = collect_import_files(
+            directory,
+            settings.batch_import_format,
+            include_subfolders=settings.batch_include_subfolders,
+        )
         settings.batch_total_count = len(files)
         settings.batch_imported_count = 0
         settings.batch_imported_object_count = 0
@@ -217,7 +232,11 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
             if not directory or not os.path.isdir(directory):
                 self.report({"WARNING"}, "Select a valid import folder")
                 return {"CANCELLED"}
-            self._files = collect_import_files(directory, settings.batch_import_format)
+            self._files = collect_import_files(
+                directory,
+                settings.batch_import_format,
+                include_subfolders=settings.batch_include_subfolders,
+            )
             self._auto_rename_objects = settings.batch_auto_rename_objects
             self._apply_weld = settings.batch_apply_weld
 
@@ -264,7 +283,10 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
             return {"FINISHED"}
 
         filepath = self._files.pop(0)
-        self._import_one_file(context, filepath)
+        try:
+            self._import_one_file(context, filepath)
+        except Exception as error:
+            self.report({"WARNING"}, f"{os.path.basename(filepath)}: {error}")
         self._update_progress(context)
 
         return {"RUNNING_MODAL"}

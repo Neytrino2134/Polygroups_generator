@@ -15,6 +15,12 @@ def apply_weld_to_objects(context, objects, weld_distance, report=None):
 
     applied_count = 0
     for obj in mesh_objects:
+        context.view_layer.update()
+        if obj.name not in context.view_layer.objects:
+            if report:
+                report({"WARNING"}, f"{obj.name}: object is not in the current View Layer")
+            continue
+
         modifier = obj.modifiers.get(OBJECT_OT_polygroups_apply_weld.modifier_name)
         if modifier is None or modifier.type != "WELD":
             modifier = obj.modifiers.new(
