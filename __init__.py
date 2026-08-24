@@ -1,6 +1,6 @@
 bl_info = {
     "name": "AI Retopo Toolkit",
-    "author": "OpenAI",
+    "author": "Meowmaster",
     "version": (0, 2, 16),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > AI Retopo",

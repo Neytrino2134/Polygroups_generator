@@ -257,6 +257,14 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         )
         expand_operator.visible = True
         header.separator()
+        visibility = context.scene.airetopo_panel_visibility_settings
+        header.prop(
+            visibility,
+            "single_section_mode",
+            text=t(context, "single_section_mode"),
+            toggle=True,
+        )
+        header.separator()
         settings_operator = header.operator(
             "wm.airetopo_toggle_panel_settings",
             text="",
@@ -269,6 +277,42 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             box = layout.box()
             box.prop(preferences, "interface_language", text=t(context, "language"))
             box.label(text=t(context, "main_description"))
+            box.separator()
+            box.label(text=t(context, "updates"), icon="FILE_REFRESH")
+            update_row = box.row(align=True)
+            update_row.operator(
+                "wm.airetopo_check_updates",
+                text=t(context, "check_updates"),
+                icon="VIEWZOOM",
+            )
+            update_row.operator(
+                "wm.airetopo_update_addon",
+                text=t(context, "update_addon"),
+                icon="IMPORT",
+            )
+            box.label(text=t(context, "update_status", value=preferences.update_status))
+            if (
+                preferences.update_branch
+                or preferences.update_current_commit
+                or preferences.update_remote_commit
+            ):
+                box.label(
+                    text=t(
+                        context,
+                        "update_commits",
+                        branch=preferences.update_branch or "-",
+                        current=preferences.update_current_commit or "-",
+                        remote=preferences.update_remote_commit or "-",
+                    ),
+                )
+            if preferences.update_last_checked:
+                box.label(
+                    text=t(
+                        context,
+                        "update_last_checked",
+                        value=preferences.update_last_checked,
+                    ),
+                )
             box.separator()
             box.prop(
                 preferences,
@@ -284,7 +328,6 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             )
             box.prop(preferences, "gemini_api_key", text=t(context, "gemini_api_key"))
 
-        visibility = context.scene.airetopo_panel_visibility_settings
         for panel_class, visibility_property in SECTION_PANEL_VISIBILITY:
             content = draw_collapsible_box(
                 layout,

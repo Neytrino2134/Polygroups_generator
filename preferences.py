@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import time
 
 import bpy
@@ -8,6 +9,11 @@ from .hotkeys import CUTTER_TOOL_ITEMS
 from .hotkeys import PIE_COMMAND_ITEMS
 from .localization import LANGUAGE_ITEMS
 from .localization import t
+
+
+ADDON_AUTHOR = "Meowmaster"
+ADDON_CONTACT_EMAIL = "meowmasterart@gmail.com"
+ADDON_GITHUB_URL = "https://github.com/Neytrino2134"
 
 
 def _update_interface_language(self, context):
@@ -125,6 +131,13 @@ def _repo_state(preferences):
 
 def _working_tree_clean():
     return _run_git(["status", "--porcelain"]) == ""
+
+
+def _addon_info():
+    addon_module = sys.modules.get(__package__)
+    bl_info = getattr(addon_module, "bl_info", {})
+    version = ".".join(str(item) for item in bl_info.get("version", (0, 0, 0)))
+    return bl_info.get("name", "AI Retopo Toolkit"), version
 
 
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
@@ -297,17 +310,50 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "interface_language", text=t(context, "language"))
-        layout.separator()
-        layout.prop(self, "use_env_openai_api_key", text=t(context, "use_env_openai_api_key"))
-        layout.prop(self, "openai_api_key", text=t(context, "openai_api_key"))
-        layout.separator()
-        layout.prop(self, "use_env_gemini_api_key", text=t(context, "use_env_gemini_api_key"))
-        layout.prop(self, "gemini_api_key", text=t(context, "gemini_api_key"))
-        layout.separator()
+        self.draw_info(context, layout.box())
+        self.draw_updates(context, layout.box())
+        self.draw_language(context, layout.box())
+        self.draw_api(context, layout.box())
+        self.draw_hotkeys(context, layout.box())
+        self.draw_pie_menu(context, layout.box())
+
+    def draw_info(self, context, layout):
+        addon_name, version = _addon_info()
+        layout.label(text=t(context, "preferences_info"), icon="INFO")
+        column = layout.column(align=True)
+        column.label(text=t(context, "addon_name", value=addon_name))
+        column.label(text=t(context, "addon_version", value=version))
+        column.label(text=t(context, "addon_author", value=ADDON_AUTHOR))
+        column.label(text=t(context, "addon_contact", value=ADDON_CONTACT_EMAIL))
+        github_row = column.row(align=True)
+        github_row.label(text=t(context, "addon_github", value=ADDON_GITHUB_URL))
+        github_operator = github_row.operator(
+            "wm.url_open",
+            text=t(context, "open_link"),
+            icon="WORLD",
+        )
+        github_operator.url = ADDON_GITHUB_URL
+
+    def draw_language(self, context, layout):
+        layout.label(text=t(context, "preferences_language"), icon="WORLD")
+        column = layout.column(align=True)
+        column.prop(self, "interface_language", text=t(context, "language"))
+        column.prop(self, "show_panel_settings", text=t(context, "show_panel_settings"))
+
+    def draw_api(self, context, layout):
+        layout.label(text=t(context, "preferences_api"), icon="KEYINGSET")
+        column = layout.column(align=True)
+        column.prop(self, "use_env_openai_api_key", text=t(context, "use_env_openai_api_key"))
+        column.prop(self, "openai_api_key", text=t(context, "openai_api_key"))
+        column.separator()
+        column.prop(self, "use_env_gemini_api_key", text=t(context, "use_env_gemini_api_key"))
+        column.prop(self, "gemini_api_key", text=t(context, "gemini_api_key"))
+
+    def draw_hotkeys(self, context, layout):
         layout.label(text=t(context, "hotkeys"), icon="KEYINGSET")
-        layout.prop(self, "cutter_tweak_tool", text=t(context, "cutter_tweak_tool"))
-        cutter_box = layout.box()
+        column = layout.column(align=True)
+        column.prop(self, "cutter_tweak_tool", text=t(context, "cutter_tweak_tool"))
+        cutter_box = column.box()
         cutter_box.prop(
             self,
             "enable_cutter_tweak_hotkey",
@@ -320,20 +366,23 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         cutter_row.prop(self, "cutter_tweak_shift", text="Shift")
         cutter_row.prop(self, "cutter_tweak_alt", text="Alt")
 
-        pie_box = layout.box()
-        pie_box.prop(
+        pie_hotkey_box = column.box()
+        pie_hotkey_box.prop(
             self,
             "enable_pie_menu_hotkey",
             text=t(context, "enable_pie_menu_hotkey"),
         )
-        pie_row = pie_box.row(align=True)
+        pie_row = pie_hotkey_box.row(align=True)
         pie_row.enabled = self.enable_pie_menu_hotkey
         pie_row.prop(self, "pie_menu_key", text=t(context, "hotkey_key"))
         pie_row.prop(self, "pie_menu_ctrl", text="Ctrl")
         pie_row.prop(self, "pie_menu_shift", text="Shift")
         pie_row.prop(self, "pie_menu_alt", text="Alt")
-        pie_box.label(text=t(context, "pie_menu_slots"))
-        slot_column = pie_box.column(align=True)
+
+    def draw_pie_menu(self, context, layout):
+        layout.label(text=t(context, "preferences_pie_menu"), icon="MENU_PANEL")
+        layout.label(text=t(context, "pie_menu_slots"))
+        slot_column = layout.column(align=True)
         for index in range(1, 9):
             slot_column.prop(
                 self,
@@ -341,7 +390,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
                 text=t(context, "pie_slot", index=index),
             )
 
-        layout.separator()
+    def draw_updates(self, context, layout):
         layout.label(text=t(context, "updates"), icon="FILE_REFRESH")
         update_row = layout.row(align=True)
         update_row.operator(
