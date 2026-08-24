@@ -663,6 +663,21 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
         layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+        layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
+        layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
+        layout.prop(settings, "continue_draw_strokes", text=t(context, "continue_draw_strokes"))
+        layout.prop(settings, "cutter_draw_join_distance", text=t(context, "draw_join_distance"))
+        layout.prop(settings, "auto_convert_draw_strokes", text=t(context, "auto_convert_draw_strokes"))
+        layout.prop(
+            settings,
+            "auto_convert_draw_strokes_on_apply",
+            text=t(context, "auto_convert_draw_strokes_on_apply"),
+        )
+        layout.prop(
+            settings,
+            "delete_draw_strokes_after_convert",
+            text=t(context, "delete_draw_strokes_after_convert"),
+        )
         layout.prop(
             settings,
             "hide_cutters_after_apply",
@@ -706,6 +721,27 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.operator(
             "object.polygroups_draw_cutter_path",
             text=t(context, "draw_cutter_path"),
+            icon="CURVE_PATH",
+        )
+        tool_operator = layout.operator(
+            "wm.tool_set_by_id",
+            text=t(context, "select_draw_cutter_draw"),
+            icon="GREASEPENCIL",
+        )
+        tool_operator.name = "polygroups_generator.draw_cutter_draw_tool"
+        layout.operator(
+            "object.polygroups_draw_cutter_draw",
+            text=t(context, "draw_cutter_draw"),
+            icon="GREASEPENCIL",
+        )
+        layout.operator(
+            "object.polygroups_join_draw_strokes",
+            text=t(context, "join_draw_strokes"),
+            icon="AUTOMERGE_ON",
+        )
+        layout.operator(
+            "object.polygroups_convert_draw_strokes_to_cutter_paths",
+            text=t(context, "convert_draw_strokes_to_cutter_paths"),
             icon="CURVE_PATH",
         )
         tilt_row = layout.row(align=True)

@@ -7,11 +7,13 @@ from .localization import t
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
 DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
 DRAW_CUTTER_PATH_TOOL_ID = "polygroups_generator.draw_cutter_path_tool"
+DRAW_CUTTER_DRAW_TOOL_ID = "polygroups_generator.draw_cutter_draw_tool"
 VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
 CUTTER_TOOL_ORDER = (
     DRAW_CUTTER_TOOL_ID,
     DRAW_CUTTER_ARC_TOOL_ID,
     DRAW_CUTTER_PATH_TOOL_ID,
+    DRAW_CUTTER_DRAW_TOOL_ID,
 )
 
 
@@ -80,6 +82,8 @@ def _active_cutter_label_key(tool_id):
         return "draw_cutter_arc"
     if tool_id == DRAW_CUTTER_PATH_TOOL_ID:
         return "draw_cutter_path"
+    if tool_id == DRAW_CUTTER_DRAW_TOOL_ID:
+        return "draw_cutter_draw"
     return "draw_cutter_plane"
 
 
@@ -107,6 +111,26 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
         layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+    if cutter_type == "DRAW":
+        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
+        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
+        layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
+        layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
+        layout.prop(settings, "continue_draw_strokes", text=t(context, "continue_draw_strokes"))
+        layout.prop(settings, "cutter_draw_join_distance", text=t(context, "draw_join_distance"))
+        layout.prop(settings, "auto_convert_draw_strokes", text=t(context, "auto_convert_draw_strokes"))
+        layout.prop(settings, "auto_convert_draw_strokes_on_apply", text=t(context, "auto_convert_draw_strokes_on_apply"))
+        layout.prop(settings, "delete_draw_strokes_after_convert", text=t(context, "delete_draw_strokes_after_convert"))
+        layout.operator(
+            "object.polygroups_join_draw_strokes",
+            text=t(context, "join_draw_strokes"),
+            icon="AUTOMERGE_ON",
+        )
+        layout.operator(
+            "object.polygroups_convert_draw_strokes_to_cutter_paths",
+            text=t(context, "convert_draw_strokes_to_cutter_paths"),
+            icon="CURVE_PATH",
+        )
     layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
     if cutter_type in {"PLANE", "ARC"}:
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
@@ -121,6 +145,7 @@ class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
             (DRAW_CUTTER_TOOL_ID, "draw_cutter_plane", "MESH_PLANE"),
             (DRAW_CUTTER_ARC_TOOL_ID, "draw_cutter_arc", "CURVE_BEZCURVE"),
             (DRAW_CUTTER_PATH_TOOL_ID, "draw_cutter_path", "CURVE_PATH"),
+            (DRAW_CUTTER_DRAW_TOOL_ID, "draw_cutter_draw", "GREASEPENCIL"),
         )
         for tool_id, text_key, icon in items:
             operator = layout.operator(
@@ -198,6 +223,29 @@ class VIEW3D_WST_polygroups_draw_cutter_path(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         _draw_cutter_tool_settings(context, layout, tool, "PATH")
+
+
+class VIEW3D_WST_polygroups_draw_cutter_draw(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_idname = DRAW_CUTTER_DRAW_TOOL_ID
+    bl_label = "Cutter Tweak: Draw"
+    bl_description = "Select normally; hold Ctrl and drag to draw object-mode cutter strokes on the mesh surface"
+    bl_icon = "ops.curve.draw"
+    bl_cursor = "DEFAULT"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        (
+            "object.polygroups_draw_cutter_draw",
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        _draw_cutter_tool_settings(context, layout, tool, "DRAW")
 
 
 class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
@@ -284,6 +332,12 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_draw_cutter_draw,
+        after={DRAW_CUTTER_PATH_TOOL_ID},
+        separator=False,
+        group=False,
+    )
     _move_draw_cutter_tool_after_cursor()
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_knife_seam,
@@ -302,6 +356,7 @@ def register():
 def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_draw)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_arc)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)

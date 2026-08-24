@@ -363,6 +363,50 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         soft_max=90.0,
         precision=1,
     )
+    cutter_draw_min_point_distance: bpy.props.FloatProperty(
+        name="Draw Point Distance",
+        description="Minimum surface distance between points while drawing cutter strokes",
+        default=0.01,
+        min=0.0,
+        soft_max=0.2,
+        precision=4,
+    )
+    cutter_draw_simplify_distance: bpy.props.FloatProperty(
+        name="Draw Simplify",
+        description="Optional distance-based simplification applied when converting draw strokes to cutter paths",
+        default=0.0,
+        min=0.0,
+        soft_max=0.2,
+        precision=4,
+    )
+    continue_draw_strokes: bpy.props.BoolProperty(
+        name="Continue Draw Strokes",
+        description="Append new draw strokes to nearby existing draw strokes instead of creating separate objects",
+        default=True,
+    )
+    cutter_draw_join_distance: bpy.props.FloatProperty(
+        name="Draw Join Distance",
+        description="Maximum distance used when continuing or joining cutter draw strokes",
+        default=0.05,
+        min=0.0,
+        soft_max=0.5,
+        precision=4,
+    )
+    auto_convert_draw_strokes: bpy.props.BoolProperty(
+        name="Auto Convert Draw Strokes",
+        description="Create a cutter path immediately after finishing a draw stroke",
+        default=False,
+    )
+    delete_draw_strokes_after_convert: bpy.props.BoolProperty(
+        name="Delete Draw Strokes After Convert",
+        description="Delete source draw stroke objects after converting them to cutter paths",
+        default=True,
+    )
+    auto_convert_draw_strokes_on_apply: bpy.props.BoolProperty(
+        name="Auto Convert Draw On Apply",
+        description="Convert cutter draw strokes to cutter paths before applying cutter seams",
+        default=True,
+    )
     hide_cutters_after_apply: bpy.props.BoolProperty(
         name="Hide Cutters After Apply",
         description="Hide cutter plane objects after applying seams",

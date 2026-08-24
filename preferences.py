@@ -1,7 +1,13 @@
 import os
+import re
 import subprocess
 import sys
+import tempfile
 import time
+import zipfile
+from urllib.error import URLError
+from urllib.request import urlopen
+import shutil
 
 import bpy
 
@@ -14,6 +20,13 @@ from .localization import t
 ADDON_AUTHOR = "Meowmaster"
 ADDON_CONTACT_EMAIL = "meowmasterart@gmail.com"
 ADDON_GITHUB_URL = "https://github.com/Neytrino2134"
+ADDON_REPOSITORY_URL = "https://github.com/Neytrino2134/Polygroups_generator"
+ADDON_RAW_INIT_URL = (
+    "https://raw.githubusercontent.com/Neytrino2134/Polygroups_generator/master/__init__.py"
+)
+ADDON_ZIP_URL = (
+    "https://github.com/Neytrino2134/Polygroups_generator/archive/refs/heads/master.zip"
+)
 
 
 def _update_interface_language(self, context):
@@ -131,6 +144,117 @@ def _repo_state(preferences):
 
 def _working_tree_clean():
     return _run_git(["status", "--porcelain"]) == ""
+
+
+def _version_tuple_from_text(text):
+    match = re.search(r'"version"\s*:\s*\(([^)]*)\)', text)
+    if match is None:
+        return None
+
+    parts = []
+    for item in match.group(1).split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            parts.append(int(item))
+        except ValueError:
+            return None
+
+    return tuple(parts)
+
+
+def _current_version_tuple():
+    addon_module = sys.modules.get(__package__)
+    return tuple(getattr(addon_module, "bl_info", {}).get("version", (0, 0, 0)))
+
+
+def _version_string(version):
+    return ".".join(str(item) for item in version)
+
+
+def _download_text(url, timeout=30):
+    try:
+        with urlopen(url, timeout=timeout) as response:
+            return response.read().decode("utf-8")
+    except URLError as error:
+        raise RuntimeError(f"Network error: {error}") from error
+
+
+def _download_file(url, filepath, timeout=120):
+    try:
+        with urlopen(url, timeout=timeout) as response:
+            with open(filepath, "wb") as output_file:
+                shutil.copyfileobj(response, output_file)
+    except URLError as error:
+        raise RuntimeError(f"Network error: {error}") from error
+
+
+def _zip_root_directory(zip_file):
+    roots = {
+        item.filename.split("/", 1)[0]
+        for item in zip_file.infolist()
+        if item.filename and "/" in item.filename
+    }
+    if not roots:
+        raise RuntimeError("Downloaded update archive has no root folder")
+    return sorted(roots)[0]
+
+
+def _copy_update_tree(source_dir, target_dir):
+    skip_names = {".git", "__pycache__"}
+    for name in os.listdir(source_dir):
+        if name in skip_names:
+            continue
+
+        source_path = os.path.join(source_dir, name)
+        target_path = os.path.join(target_dir, name)
+        if os.path.isdir(source_path):
+            shutil.copytree(
+                source_path,
+                target_path,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
+        else:
+            shutil.copy2(source_path, target_path)
+
+
+def _zip_repo_state(preferences):
+    remote_text = _download_text(ADDON_RAW_INIT_URL)
+    remote_version = _version_tuple_from_text(remote_text)
+    if remote_version is None:
+        raise RuntimeError("Could not read remote add-on version")
+
+    current_version = _current_version_tuple()
+    preferences.update_branch = "master"
+    preferences.update_upstream = "GitHub ZIP"
+    preferences.update_current_commit = _version_string(current_version)
+    preferences.update_remote_commit = _version_string(remote_version)
+    preferences.update_last_checked = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    if remote_version > current_version:
+        return "UPDATE_AVAILABLE", "Update available"
+    if remote_version == current_version:
+        return "UP_TO_DATE", "Add-on is up to date"
+    return "LOCAL_AHEAD", "Installed version is newer than GitHub master"
+
+
+def _update_from_zip():
+    with tempfile.TemporaryDirectory(prefix="airetopo_update_") as temp_dir:
+        archive_path = os.path.join(temp_dir, "update.zip")
+        _download_file(ADDON_ZIP_URL, archive_path)
+
+        extract_dir = os.path.join(temp_dir, "extract")
+        with zipfile.ZipFile(archive_path, "r") as zip_file:
+            root_name = _zip_root_directory(zip_file)
+            zip_file.extractall(extract_dir)
+
+        source_dir = os.path.join(extract_dir, root_name)
+        if not os.path.isfile(os.path.join(source_dir, "__init__.py")):
+            raise RuntimeError("Downloaded archive does not look like the add-on")
+
+        _copy_update_tree(source_dir, _addon_root())
 
 
 def _addon_info():
@@ -444,7 +568,10 @@ class AIRETOPO_OT_check_updates(bpy.types.Operator):
     def execute(self, context):
         preferences = context.preferences.addons[__package__].preferences
         try:
-            state, message = _repo_state(preferences)
+            try:
+                state, message = _repo_state(preferences)
+            except RuntimeError:
+                state, message = _zip_repo_state(preferences)
         except RuntimeError as error:
             preferences.update_available = False
             preferences.update_status = str(error)
@@ -468,12 +595,18 @@ class AIRETOPO_OT_update_addon(bpy.types.Operator):
         preferences = context.preferences.addons[__package__].preferences
 
         try:
-            if not _working_tree_clean():
-                preferences.update_status = "Local changes detected. Commit or stash them first."
-                self.report({"ERROR"}, preferences.update_status)
-                return {"CANCELLED"}
+            use_git_update = True
+            try:
+                if not _working_tree_clean():
+                    preferences.update_status = "Local changes detected. Commit or stash them first."
+                    self.report({"ERROR"}, preferences.update_status)
+                    return {"CANCELLED"}
 
-            state, message = _repo_state(preferences)
+                state, message = _repo_state(preferences)
+            except RuntimeError:
+                use_git_update = False
+                state, message = _zip_repo_state(preferences)
+
             if state == "UP_TO_DATE":
                 preferences.update_available = False
                 preferences.update_status = message
@@ -486,8 +619,11 @@ class AIRETOPO_OT_update_addon(bpy.types.Operator):
                 self.report({"ERROR"}, message)
                 return {"CANCELLED"}
 
-            _run_git(["merge", "--ff-only", preferences.update_upstream])
-            state, message = _repo_state(preferences)
+            if use_git_update:
+                _run_git(["merge", "--ff-only", preferences.update_upstream])
+                state, message = _repo_state(preferences)
+            else:
+                _update_from_zip()
         except RuntimeError as error:
             preferences.update_available = False
             preferences.update_status = str(error)

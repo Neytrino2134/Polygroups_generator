@@ -44,9 +44,12 @@ from .mesh_checks import OBJECT_OT_polygroups_triangulate_ngons
 from .mesh_export import OBJECT_OT_polygroups_export_selected_meshes
 from .object_seam_cutter import OBJECT_OT_polygroups_apply_cutter_seams
 from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
+from .object_seam_cutter import OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_arc
+from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_draw
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_path
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
+from .object_seam_cutter import OBJECT_OT_polygroups_join_draw_strokes
 from .object_seam_cutter import OBJECT_OT_polygroups_select_cutter_planes
 from .object_seam_cutter import OBJECT_OT_polygroups_split_object_by_cutters
 from .object_seam_cutter import OBJECT_OT_polygroups_tilt_cutter_path
@@ -145,6 +148,9 @@ CLASSES = (
     OBJECT_OT_polygroups_draw_cutter_plane,
     OBJECT_OT_polygroups_draw_cutter_arc,
     OBJECT_OT_polygroups_draw_cutter_path,
+    OBJECT_OT_polygroups_draw_cutter_draw,
+    OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths,
+    OBJECT_OT_polygroups_join_draw_strokes,
     OBJECT_OT_polygroups_tilt_cutter_path,
     OBJECT_OT_polygroups_apply_cutter_seams,
     OBJECT_OT_polygroups_split_object_by_cutters,

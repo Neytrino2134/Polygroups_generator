@@ -13,6 +13,7 @@ CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_PATH_DATA_PROP = "polygroups_object_seam_cutter_path_data"
+CUTTER_DRAW_DATA_PROP = "polygroups_object_seam_cutter_draw_data"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
@@ -339,6 +340,228 @@ def _create_cutter_path(name, path_points, render_u, extrude, alpha):
     obj.data.materials.append(_material(alpha))
     _collection().objects.link(obj)
     return obj
+
+
+def _create_cutter_draw_stroke(name, path_points, render_u, alpha):
+    curve = bpy.data.curves.new(name, "CURVE")
+    curve.dimensions = "3D"
+    curve.resolution_u = render_u
+    curve.render_resolution_u = render_u
+    curve.bevel_depth = 0.002
+    curve.bevel_resolution = 1
+
+    spline = curve.splines.new("POLY")
+    spline.points.add(len(path_points) - 1)
+    for point, item in zip(spline.points, path_points):
+        location = item["location"]
+        point.co = (location.x, location.y, location.z, 1.0)
+
+    obj = bpy.data.objects.new(name, curve)
+    obj.show_in_front = True
+    obj.display_type = "TEXTURED"
+    obj[CUTTER_PROP] = True
+    obj[CUTTER_TYPE_PROP] = "DRAW_STROKE"
+    obj[CUTTER_DRAW_DATA_PROP] = json.dumps(
+        [
+            {
+                "co": list(item["location"]),
+                "normal": list(item["normal"]),
+            }
+            for item in path_points
+        ],
+    )
+    obj.data.materials.append(_material(alpha))
+    _collection().objects.link(obj)
+    return obj
+
+
+def _write_draw_stroke_points(stroke, path_points):
+    if stroke.type != "CURVE":
+        return
+
+    stroke.data.splines.clear()
+    spline = stroke.data.splines.new("POLY")
+    spline.points.add(len(path_points) - 1)
+    for point, item in zip(spline.points, path_points):
+        location = item["location"]
+        point.co = (location.x, location.y, location.z, 1.0)
+
+    stroke[CUTTER_DRAW_DATA_PROP] = json.dumps(
+        [
+            {
+                "co": list(item["location"]),
+                "normal": list(item["normal"]),
+            }
+            for item in path_points
+        ],
+    )
+
+
+def _draw_stroke_data(cutter):
+    try:
+        data = json.loads(cutter.get(CUTTER_DRAW_DATA_PROP, "[]"))
+    except Exception:
+        data = []
+    return data if isinstance(data, list) else []
+
+
+def _draw_stroke_path_points(cutter):
+    data = _draw_stroke_data(cutter)
+    if data:
+        return [
+            {
+                "location": Vector(item.get("co", (0.0, 0.0, 0.0))),
+                "normal": Vector(item.get("normal", (0.0, 0.0, 1.0))),
+            }
+            for item in data
+        ]
+
+    if cutter.type != "CURVE" or not cutter.data.splines:
+        return []
+
+    return [
+        {
+            "location": cutter.matrix_world @ Vector((point.co.x, point.co.y, point.co.z)),
+            "normal": Vector((0.0, 0.0, 1.0)),
+        }
+        for point in cutter.data.splines[0].points
+    ]
+
+
+def _simplify_path_points(path_points, distance):
+    if len(path_points) < 3 or distance <= 0.0:
+        return path_points
+
+    simplified = [path_points[0]]
+    for item in path_points[1:-1]:
+        if (item["location"] - simplified[-1]["location"]).length >= distance:
+            simplified.append(item)
+
+    if simplified[-1] is not path_points[-1]:
+        simplified.append(path_points[-1])
+    return simplified
+
+
+def _convert_draw_stroke_to_cutter_path(context, stroke):
+    settings = context.scene.polygroups_object_seam_cutter_settings
+    path_points = _simplify_path_points(
+        _draw_stroke_path_points(stroke),
+        settings.cutter_draw_simplify_distance,
+    )
+    if len(path_points) < 2:
+        return None
+
+    cutter = _create_cutter_path(
+        "Seam_Cutter_Path",
+        path_points,
+        settings.cutter_path_render_u,
+        settings.cutter_path_extrude,
+        settings.cutter_alpha,
+    )
+    if settings.delete_draw_strokes_after_convert and stroke.name in bpy.data.objects:
+        bpy.data.objects.remove(stroke, do_unlink=True)
+    return cutter
+
+
+def _draw_strokes_from_cutters(cutters):
+    return [
+        cutter
+        for cutter in cutters
+        if cutter.type == "CURVE" and cutter.get(CUTTER_TYPE_PROP) == "DRAW_STROKE"
+    ]
+
+
+def _draw_strokes_in_collection(exclude=None):
+    exclude = set(exclude or [])
+    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+    if collection is None:
+        return []
+
+    return [
+        obj
+        for obj in collection.objects
+        if obj not in exclude
+        and obj.type == "CURVE"
+        and obj.get(CUTTER_PROP)
+        and obj.get(CUTTER_TYPE_PROP) == "DRAW_STROKE"
+    ]
+
+
+def _join_draw_stroke_points(base_points, next_points):
+    candidates = (
+        ((base_points[-1]["location"] - next_points[0]["location"]).length, base_points, next_points),
+        ((base_points[0]["location"] - next_points[-1]["location"]).length, next_points, base_points),
+        ((base_points[0]["location"] - next_points[0]["location"]).length, list(reversed(next_points)), base_points),
+        ((base_points[-1]["location"] - next_points[-1]["location"]).length, base_points, list(reversed(next_points))),
+    )
+    distance, left, right = min(candidates, key=lambda item: item[0])
+    if left[-1]["location"] == right[0]["location"]:
+        return distance, left + right[1:]
+    return distance, left + right
+
+
+def _find_draw_stroke_to_continue(path_points, max_distance, exclude=None):
+    if not path_points or max_distance <= 0.0:
+        return None, None
+
+    best_stroke = None
+    best_points = None
+    best_distance = None
+    for stroke in _draw_strokes_in_collection(exclude=exclude):
+        stroke_points = _draw_stroke_path_points(stroke)
+        if len(stroke_points) < 2:
+            continue
+        distance, joined_points = _join_draw_stroke_points(stroke_points, path_points)
+        if distance > max_distance:
+            continue
+        if best_distance is None or distance < best_distance:
+            best_stroke = stroke
+            best_points = joined_points
+            best_distance = distance
+
+    return best_stroke, best_points
+
+
+def _join_draw_strokes(strokes, max_distance):
+    remaining = [
+        (stroke, _draw_stroke_path_points(stroke))
+        for stroke in strokes
+        if stroke.name in bpy.data.objects
+    ]
+    remaining = [
+        (stroke, points)
+        for stroke, points in remaining
+        if len(points) >= 2
+    ]
+    if len(remaining) < 2:
+        return None, 0
+
+    base, base_points = remaining.pop(0)
+    joined_count = 0
+    while remaining:
+        best_index = None
+        best_distance = None
+        best_points = None
+        for index, (_, points) in enumerate(remaining):
+            distance, candidate_points = _join_draw_stroke_points(base_points, points)
+            if max_distance > 0.0 and distance > max_distance:
+                continue
+            if best_distance is None or distance < best_distance:
+                best_index = index
+                best_distance = distance
+                best_points = candidate_points
+
+        if best_index is None:
+            break
+
+        stroke, _ = remaining.pop(best_index)
+        base_points = best_points
+        bpy.data.objects.remove(stroke, do_unlink=True)
+        joined_count += 1
+
+    if joined_count:
+        _write_draw_stroke_points(base, base_points)
+    return base, joined_count
 
 
 def _selected_cutters(context, target):
@@ -942,6 +1165,22 @@ def _apply_plane_cutters_to_mesh(target, cutters):
 
 
 def _apply_cutters_to_mesh(context, target, cutters):
+    settings = context.scene.polygroups_object_seam_cutter_settings
+    if settings.auto_convert_draw_strokes_on_apply:
+        original_cutters = cutters
+        converted_cutters = []
+        for stroke in _draw_strokes_from_cutters(cutters):
+            cutter = _convert_draw_stroke_to_cutter_path(context, stroke)
+            if cutter is not None:
+                converted_cutters.append(cutter)
+        cutters = [
+            cutter
+            for cutter in cutters
+            if cutter.get(CUTTER_TYPE_PROP) != "DRAW_STROKE"
+        ] + converted_cutters
+        if isinstance(original_cutters, list):
+            original_cutters[:] = cutters
+
     plane_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "PLANE"]
     arc_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "ARC"]
     boolean_cutters = [
@@ -1696,6 +1935,297 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
             self._draw_handle = None
         context.workspace.status_text_set(None)
         self._tag_redraw()
+
+
+class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
+    bl_idname = "object.polygroups_draw_cutter_draw"
+    bl_label = "Draw Cutter Stroke"
+    bl_description = "Draw a freehand cutter stroke snapped to the active mesh surface"
+    bl_options = {"REGISTER", "UNDO"}
+
+    use_event_as_start: bpy.props.BoolProperty(
+        name="Use Event As Start",
+        description="Use the invoking mouse event as the first stroke point",
+        default=False,
+        options={"HIDDEN"},
+    )
+
+    _target_name = ""
+    _start_area = None
+    _start_region = None
+    _points = None
+    _surface_points = None
+    _mouse_pos = None
+    _draw_handle = None
+    _view_navigation_active = False
+    _is_drawing = False
+
+    def _is_view_navigation_event(self, event):
+        if event.type == "MOUSEMOVE" and self._view_navigation_active:
+            return True
+
+        if event.type in {"MIDDLEMOUSE", "LEFTMOUSE"} and event.value == "RELEASE":
+            self._view_navigation_active = False
+            if event.type == "MIDDLEMOUSE":
+                return True
+
+        if event.type == "MIDDLEMOUSE" and event.value == "PRESS":
+            self._view_navigation_active = True
+            return True
+
+        if event.type == "LEFTMOUSE" and event.alt:
+            if event.value == "PRESS":
+                self._view_navigation_active = True
+            return True
+
+        if event.type in {
+            "WHEELUPMOUSE",
+            "WHEELDOWNMOUSE",
+            "WHEELINMOUSE",
+            "WHEELOUTMOUSE",
+            "TRACKPADPAN",
+            "TRACKPADZOOM",
+            "NDOF_MOTION",
+            "NDOF_BUTTON_MENU",
+            "NDOF_BUTTON_FIT",
+            "NDOF_BUTTON_TOP",
+            "NDOF_BUTTON_BOTTOM",
+            "NDOF_BUTTON_LEFT",
+            "NDOF_BUTTON_RIGHT",
+            "NDOF_BUTTON_FRONT",
+            "NDOF_BUTTON_BACK",
+        }:
+            return True
+
+        return False
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+
+    def invoke(self, context, event):
+        self._target_name = context.active_object.name
+        self._start_area = None
+        self._start_region = None
+        self._points = []
+        self._surface_points = []
+        self._mouse_pos = None
+        self._draw_handle = None
+        self._view_navigation_active = False
+        self._is_drawing = False
+
+        if self.use_event_as_start:
+            self._is_drawing = True
+            if not self._add_point_from_event(context, event, force=True):
+                return {"CANCELLED"}
+            self._add_draw_handler()
+        context.workspace.status_text_set(
+            "Object Seam Draw Cutter: hold Ctrl and drag on surface, release to finish",
+        )
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if not self._is_drawing and self._is_view_navigation_event(event):
+            return {"PASS_THROUGH"}
+
+        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+            self._finish(context)
+            return {"CANCELLED"}
+
+        if event.type == "LEFTMOUSE" and event.value == "PRESS" and event.ctrl:
+            self._is_drawing = True
+            self._add_point_from_event(context, event, force=True)
+            if self._draw_handle is None:
+                self._add_draw_handler()
+            return {"RUNNING_MODAL"}
+
+        if event.type == "MOUSEMOVE":
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if self._points and area == self._start_area and region == self._start_region:
+                del rv3d
+                self._mouse_pos = region_pos
+                self._tag_redraw()
+            if self._is_drawing and event.ctrl:
+                self._add_point_from_event(context, event)
+            return {"RUNNING_MODAL"}
+
+        if event.type == "LEFTMOUSE" and event.value == "RELEASE" and self._is_drawing:
+            self._add_point_from_event(context, event)
+            if len(self._surface_points) < 2:
+                self.report({"WARNING"}, "Cutter draw stroke needs at least two points")
+                self._finish(context)
+                return {"CANCELLED"}
+            return self._create_draw_result(context)
+
+        return {"PASS_THROUGH"}
+
+    def _add_point_from_event(self, context, event, force=False):
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            return False
+
+        area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+        if region is None:
+            return False
+
+        if not self._points:
+            self._start_area = area
+            self._start_region = region
+        elif area != self._start_area or region != self._start_region:
+            return False
+
+        hit = _surface_hit_from_region_pos(region, rv3d, region_pos, target)
+        if hit is None:
+            return False
+
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        if self._surface_points and not force:
+            previous = self._surface_points[-1]["location"]
+            if (hit[0] - previous).length < settings.cutter_draw_min_point_distance:
+                return False
+
+        self._points.append(region_pos)
+        self._surface_points.append(
+            {
+                "location": hit[0],
+                "normal": hit[1],
+            },
+        )
+        self._mouse_pos = region_pos
+        self._tag_redraw()
+        return True
+
+    def _create_draw_result(self, context):
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            self._finish(context)
+            return {"CANCELLED"}
+
+        if settings.auto_convert_draw_strokes:
+            cutter = _create_cutter_path(
+                "Seam_Cutter_Path",
+                _simplify_path_points(
+                    self._surface_points,
+                    settings.cutter_draw_simplify_distance,
+                ),
+                settings.cutter_path_render_u,
+                settings.cutter_path_extrude,
+                settings.cutter_alpha,
+            )
+        else:
+            cutter = None
+            if settings.continue_draw_strokes:
+                cutter, joined_points = _find_draw_stroke_to_continue(
+                    self._surface_points,
+                    settings.cutter_draw_join_distance,
+                )
+                if cutter is not None:
+                    _write_draw_stroke_points(cutter, joined_points)
+
+            if cutter is None:
+                cutter = _create_cutter_draw_stroke(
+                    "Seam_Cutter_Draw",
+                    self._surface_points,
+                    settings.cutter_path_render_u,
+                    settings.cutter_alpha,
+                )
+
+        bpy.ops.object.select_all(action="DESELECT")
+        cutter.select_set(True)
+        target.select_set(True)
+        context.view_layer.objects.active = target
+        self._finish(context)
+        return {"FINISHED"}
+
+    def _add_draw_handler(self):
+        if self._draw_handle is not None:
+            return
+
+        self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_cutter_path_overlay,
+            (self,),
+            "WINDOW",
+            "POST_PIXEL",
+        )
+        self._tag_redraw()
+
+    def _tag_redraw(self):
+        if self._start_area is not None:
+            self._start_area.tag_redraw()
+
+    def _finish(self, context):
+        if self._draw_handle is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self._draw_handle, "WINDOW")
+            self._draw_handle = None
+        context.workspace.status_text_set(None)
+        self._tag_redraw()
+
+
+class OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths(bpy.types.Operator):
+    bl_idname = "object.polygroups_convert_draw_strokes_to_cutter_paths"
+    bl_label = "Convert Draw Strokes To Cutter Paths"
+    bl_description = "Convert freehand cutter draw strokes to cutter path curves"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        selected = [
+            obj
+            for obj in context.selected_objects
+            if obj.type == "CURVE" and obj.get(CUTTER_PROP) and obj.get(CUTTER_TYPE_PROP) == "DRAW_STROKE"
+        ]
+        strokes = selected or _draw_strokes_from_cutters(_selected_cutters(context, context.active_object))
+        if not strokes:
+            self.report({"WARNING"}, "No cutter draw strokes found")
+            return {"CANCELLED"}
+
+        converted = []
+        for stroke in strokes:
+            cutter = _convert_draw_stroke_to_cutter_path(context, stroke)
+            if cutter is not None:
+                converted.append(cutter)
+
+        if not converted:
+            self.report({"WARNING"}, "No cutter draw strokes could be converted")
+            return {"CANCELLED"}
+
+        bpy.ops.object.select_all(action="DESELECT")
+        for cutter in converted:
+            cutter.select_set(True)
+        context.view_layer.objects.active = converted[-1]
+        self.report({"INFO"}, f"Converted {len(converted)} draw stroke(s) to cutter path(s)")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_join_draw_strokes(bpy.types.Operator):
+    bl_idname = "object.polygroups_join_draw_strokes"
+    bl_label = "Join Selected Draw Strokes"
+    bl_description = "Join selected cutter draw strokes into one continuous draw stroke"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        strokes = [
+            obj
+            for obj in context.selected_objects
+            if obj.type == "CURVE" and obj.get(CUTTER_PROP) and obj.get(CUTTER_TYPE_PROP) == "DRAW_STROKE"
+        ]
+        if len(strokes) < 2:
+            self.report({"WARNING"}, "Select at least two cutter draw strokes")
+            return {"CANCELLED"}
+
+        stroke, joined_count = _join_draw_strokes(strokes, settings.cutter_draw_join_distance)
+        if stroke is None or not joined_count:
+            self.report({"WARNING"}, "No draw strokes were close enough to join")
+            return {"CANCELLED"}
+
+        bpy.ops.object.select_all(action="DESELECT")
+        stroke.select_set(True)
+        context.view_layer.objects.active = stroke
+        self.report({"INFO"}, f"Joined {joined_count + 1} draw stroke(s)")
+        return {"FINISHED"}
 
 
 class OBJECT_OT_polygroups_tilt_cutter_path(bpy.types.Operator):
