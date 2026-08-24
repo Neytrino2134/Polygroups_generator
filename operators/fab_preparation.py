@@ -4,17 +4,33 @@ import shutil
 
 import bpy
 
+from ..localization import t
+
+
+SOURCE_TEXTURE_GROUP_LABEL = "Source Texture Group"
+SOURCE_TEXTURE_GROUP_PREFIX = "PolyGroups Source Textures"
+NORMAL_MAP_NODE_LABEL = "FAB Normal Map"
 
 FAB_VARIANTS = (
-    ("LOW", "LOW", "Prepare selected mesh as LOW"),
-    ("MID", "MID", "Prepare selected mesh as MID"),
     ("HIGH", "HIGH", "Prepare selected mesh as HIGH"),
+    ("MID", "MID", "Prepare selected mesh as MID"),
+    ("LOW", "LOW", "Prepare selected mesh as LOW"),
 )
 
 VARIANT_ORDER = {
     "HIGH": 0,
     "MID": 1,
     "LOW": 2,
+}
+
+BSDF_TEXTURE_INPUTS = {
+    "Base Color",
+    "Metallic",
+    "Roughness",
+    "Alpha",
+    "Normal",
+    "Emission Color",
+    "Emission Strength",
 }
 
 TEXTURE_SUFFIX_PATTERNS = (
@@ -76,6 +92,16 @@ def _ensure_asset_collection(context, asset_name):
     return collection
 
 
+def _apply_collection_color_tag(collection, settings):
+    color_tag = getattr(settings, "fab_collection_color_tag", "NONE")
+    if color_tag == "NONE":
+        return
+    try:
+        collection.color_tag = color_tag
+    except Exception:
+        pass
+
+
 def _move_object_to_collection(obj, collection):
     if obj.name not in collection.objects:
         collection.objects.link(obj)
@@ -120,9 +146,182 @@ def _texture_suffix(image, node):
     return "Map"
 
 
+def _principled_bsdf(material):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return None
+
+    for node in material.node_tree.nodes:
+        if node.bl_idname == "ShaderNodeBsdfPrincipled":
+            return node
+
+    return material.node_tree.nodes.get("Principled BSDF")
+
+
+def _source_texture_group_nodes(material):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return []
+
+    group_nodes = []
+    for node in material.node_tree.nodes:
+        if node.bl_idname != "ShaderNodeGroup" or node.node_tree is None:
+            continue
+        if (
+            node.label == SOURCE_TEXTURE_GROUP_LABEL
+            or node.name.startswith(SOURCE_TEXTURE_GROUP_LABEL)
+            or node.node_tree.name.startswith(SOURCE_TEXTURE_GROUP_PREFIX)
+        ):
+            group_nodes.append(node)
+
+    return group_nodes
+
+
+def _group_output_node(node_tree):
+    for node in node_tree.nodes:
+        if node.bl_idname == "NodeGroupOutput" and getattr(node, "is_active_output", True):
+            return node
+
+    for node in node_tree.nodes:
+        if node.bl_idname == "NodeGroupOutput":
+            return node
+
+    return None
+
+
+def _linked_source_socket(input_socket):
+    if input_socket is None or not input_socket.is_linked:
+        return None
+    return input_socket.links[0].from_socket
+
+
+def _trace_image_texture_node(socket, visited=None):
+    if socket is None:
+        return None
+
+    visited = visited or set()
+    node = socket.node
+    if node in visited:
+        return None
+    visited.add(node)
+
+    if node.bl_idname == "ShaderNodeTexImage" and getattr(node, "image", None) is not None:
+        return node
+
+    for input_socket in node.inputs:
+        image_node = _trace_image_texture_node(_linked_source_socket(input_socket), visited)
+        if image_node is not None:
+            return image_node
+
+    return None
+
+
+def _copy_image_node_settings(source_node, target_node):
+    target_node.image = source_node.image
+    target_node.extension = source_node.extension
+    target_node.interpolation = source_node.interpolation
+    target_node.projection = source_node.projection
+    target_node.label = source_node.label or source_node.name
+    target_node.name = source_node.name
+
+
+def _clear_input_links(tree, input_socket):
+    if input_socket is None:
+        return
+    for link in list(input_socket.links):
+        tree.links.remove(link)
+
+
+def _link_once(tree, from_socket, to_socket):
+    if from_socket is None or to_socket is None:
+        return False
+
+    for link in tree.links:
+        if link.from_socket == from_socket and link.to_socket == to_socket:
+            return False
+
+    tree.links.new(from_socket, to_socket)
+    return True
+
+
+def _ensure_normal_map_node(material):
+    nodes = material.node_tree.nodes
+    node = nodes.get(NORMAL_MAP_NODE_LABEL)
+    if node is None or node.bl_idname != "ShaderNodeNormalMap":
+        node = nodes.new("ShaderNodeNormalMap")
+        node.name = NORMAL_MAP_NODE_LABEL
+        node.label = NORMAL_MAP_NODE_LABEL
+        node.location = (-260, -360)
+    return node
+
+
+def _connect_texture_to_bsdf(material, texture_node, input_name):
+    bsdf = _principled_bsdf(material)
+    if bsdf is None:
+        return False
+
+    tree = material.node_tree
+    input_socket = bsdf.inputs.get(input_name)
+    if input_socket is None:
+        return False
+
+    if input_name == "Normal":
+        normal_map = _ensure_normal_map_node(material)
+        color_input = normal_map.inputs.get("Color")
+        normal_output = normal_map.outputs.get("Normal")
+        _clear_input_links(tree, color_input)
+        _clear_input_links(tree, input_socket)
+        linked_color = _link_once(tree, texture_node.outputs.get("Color"), color_input)
+        linked_normal = _link_once(tree, normal_output, input_socket)
+        return linked_color or linked_normal
+
+    output_socket = texture_node.outputs.get("Alpha") if input_name == "Alpha" else None
+    output_socket = output_socket or texture_node.outputs.get("Color") or texture_node.outputs.get("Alpha")
+    _clear_input_links(tree, input_socket)
+    return _link_once(tree, output_socket, input_socket)
+
+
+def _ungroup_source_texture_nodes(material):
+    if material is None or not material.use_nodes or material.node_tree is None:
+        return 0
+
+    nodes = material.node_tree.nodes
+    ungrouped_count = 0
+    for group_node in list(_source_texture_group_nodes(material)):
+        group_output = _group_output_node(group_node.node_tree)
+        if group_output is None:
+            continue
+
+        group_ungrouped = 0
+        for output_socket in group_node.outputs:
+            input_name = output_socket.name
+            if input_name not in BSDF_TEXTURE_INPUTS:
+                continue
+
+            group_input = group_output.inputs.get(input_name)
+            image_node = _trace_image_texture_node(_linked_source_socket(group_input))
+            if image_node is None:
+                continue
+
+            texture_node = nodes.new("ShaderNodeTexImage")
+            texture_node.location = (
+                group_node.location.x - 280,
+                group_node.location.y - 90 * ungrouped_count,
+            )
+            _copy_image_node_settings(image_node, texture_node)
+            if _connect_texture_to_bsdf(material, texture_node, input_name):
+                ungrouped_count += 1
+                group_ungrouped += 1
+
+        if group_ungrouped:
+            nodes.remove(group_node)
+
+    return ungrouped_count
+
+
 def _iter_image_texture_nodes(material):
     if material is None or not material.use_nodes or material.node_tree is None:
         return
+
+    _ungroup_source_texture_nodes(material)
 
     for node in material.node_tree.nodes:
         if node.bl_idname == "ShaderNodeTexImage" and getattr(node, "image", None) is not None:
@@ -151,6 +350,7 @@ def _copy_and_rename_material_textures(material, settings, asset_name, asset_ind
     suffix_counts = {}
     copied_count = 0
     renamed_count = 0
+    ungrouped_count = _ungroup_source_texture_nodes(material)
 
     if settings.fab_copy_textures and output_dir is None and report:
         report({"WARNING"}, "Save the blend file before copying FAB textures")
@@ -186,7 +386,7 @@ def _copy_and_rename_material_textures(material, settings, asset_name, asset_ind
             if report:
                 report({"WARNING"}, f"{image.name}: {error}")
 
-    return renamed_count, copied_count
+    return renamed_count, copied_count, ungrouped_count
 
 
 def _ensure_fab_material(obj, material_name):
@@ -226,7 +426,7 @@ def prepare_object_for_fab(context, obj, variant, settings, report=None):
     obj.name = object_name
     obj.data.name = object_name
     material = _ensure_fab_material(obj, material_name)
-    renamed_textures, copied_textures = _copy_and_rename_material_textures(
+    renamed_textures, copied_textures, ungrouped_textures = _copy_and_rename_material_textures(
         material,
         settings,
         asset_name,
@@ -240,6 +440,7 @@ def prepare_object_for_fab(context, obj, variant, settings, report=None):
             {"INFO"},
             (
                 f"Prepared {obj.name}: material {material.name}, "
+                f"ungrouped {ungrouped_textures} texture node(s), "
                 f"renamed {renamed_textures} texture(s), copied {copied_textures}"
             ),
         )
@@ -249,6 +450,9 @@ def prepare_object_for_fab(context, obj, variant, settings, report=None):
 
 def classify_fab_variant(obj):
     name = obj.name.lower()
+    sm_match = re.match(r"^sm_.+_(high|mid|low)$", name)
+    if sm_match is not None:
+        return sm_match.group(1).upper()
     if "smartdecimated" in name:
         return "LOW"
     if name.startswith("retopo_"):
@@ -296,11 +500,25 @@ class OBJECT_OT_polygroups_auto_prepare_fab_selection(bpy.types.Operator):
     def poll(cls, context):
         return any(obj.type == "MESH" for obj in context.selected_objects)
 
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(
+            self,
+            width=420,
+            confirm_text=t(context, "continue"),
+        )
+
+    def draw(self, context):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        layout = self.layout
+        layout.label(text=t(context, "fab_rename_set_warning"), icon="ERROR")
+        layout.prop(settings, "fab_asset_name", text=t(context, "fab_asset_name"))
+
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
         mesh_objects = [obj for obj in context.selected_objects if obj.type == "MESH"]
         asset_name = _safe_asset_token(settings.fab_asset_name)
         asset_collection = _ensure_asset_collection(context, asset_name)
+        _apply_collection_color_tag(asset_collection, settings)
         prepared_count = 0
         skipped_count = 0
 

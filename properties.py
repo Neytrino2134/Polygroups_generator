@@ -503,6 +503,22 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         description="Copy external material textures to a Textures folder next to the blend file",
         default=True,
     )
+    fab_collection_color_tag: bpy.props.EnumProperty(
+        name="Collection Color Tag",
+        description="Color tag assigned to the final FAB collection",
+        items=(
+            ("NONE", "None", "Do not assign a collection color tag"),
+            ("COLOR_01", "Color 1", "Assign collection color tag 1"),
+            ("COLOR_02", "Color 2", "Assign collection color tag 2"),
+            ("COLOR_03", "Color 3", "Assign collection color tag 3"),
+            ("COLOR_04", "Color 4", "Assign collection color tag 4"),
+            ("COLOR_05", "Color 5", "Assign collection color tag 5"),
+            ("COLOR_06", "Color 6", "Assign collection color tag 6"),
+            ("COLOR_07", "Color 7", "Assign collection color tag 7"),
+            ("COLOR_08", "Color 8", "Assign collection color tag 8"),
+        ),
+        default="COLOR_04",
+    )
     mesh_export_format: bpy.props.EnumProperty(
         name="Export Format",
         description="File format used by Export Selected Meshes",

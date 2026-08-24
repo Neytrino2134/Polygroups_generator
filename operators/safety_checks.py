@@ -273,6 +273,12 @@ class OBJECT_OT_polygroups_checked_generate_polygroups(bpy.types.Operator):
         layout.label(text="Selected object does not look prepared.", icon="ERROR")
         layout.label(text="Make sure Rename Objects and Apply Weld were done.")
         layout.label(text="Confirm to prepare it and generate PolyGroups.")
+        layout.separator()
+        layout.operator(
+            "object.polygroups_skip_generate_polygroups",
+            text="Skip - Just Generate",
+            icon="FACESEL",
+        )
 
     def execute(self, context):
         active_object = context.active_object
@@ -312,6 +318,25 @@ class OBJECT_OT_polygroups_checked_generate_polygroups(bpy.types.Operator):
         return self.run_generate_polygroups(context)
 
     def run_generate_polygroups(self, context):
+        try:
+            return bpy.ops.object.generate_polygroups()
+        except Exception as error:
+            self.report({"ERROR"}, f"Generate PolyGroups failed: {error}")
+            return {"CANCELLED"}
+
+
+class OBJECT_OT_polygroups_skip_generate_polygroups(bpy.types.Operator):
+    bl_idname = "object.polygroups_skip_generate_polygroups"
+    bl_label = "Skip - Just Generate"
+    bl_description = "Skip preparation checks and generate PolyGroups on the active mesh"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH"
+
+    def execute(self, context):
         try:
             return bpy.ops.object.generate_polygroups()
         except Exception as error:

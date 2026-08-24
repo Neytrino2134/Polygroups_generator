@@ -10,6 +10,8 @@ bl_info = {
 
 from .preferences import register as register_preferences
 from .preferences import unregister as unregister_preferences
+from .core.remesh_defaults import register_remesh_defaults_timer
+from .core.remesh_defaults import unregister_remesh_defaults_timer
 from .hotkeys import register as register_hotkeys
 from .hotkeys import unregister as unregister_hotkeys
 from .operators import register as register_operators
@@ -29,9 +31,11 @@ def register():
     register_tools()
     register_ui()
     register_hotkeys()
+    register_remesh_defaults_timer()
 
 
 def unregister():
+    unregister_remesh_defaults_timer()
     unregister_hotkeys()
     unregister_ui()
     unregister_tools()

@@ -65,6 +65,7 @@ from .safety_checks import OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_mat
 from .safety_checks import OBJECT_OT_polygroups_make_lowpoly_active
 from .safety_checks import OBJECT_OT_polygroups_rename_and_apply_weld
 from .safety_checks import OBJECT_OT_polygroups_skip_prepare_and_bake
+from .safety_checks import OBJECT_OT_polygroups_skip_generate_polygroups
 from .safety_checks import OBJECT_OT_polygroups_skip_quad_remesh
 from .smooth_face_selection import MESH_OT_polygroups_smooth_face_selection
 from .smart_decimate import OBJECT_OT_polygroups_smart_decimate
@@ -106,6 +107,7 @@ CLASSES = (
     OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_checked_prepare_and_bake,
     OBJECT_OT_polygroups_skip_quad_remesh,
+    OBJECT_OT_polygroups_skip_generate_polygroups,
     OBJECT_OT_polygroups_skip_prepare_and_bake,
     OBJECT_OT_polygroups_make_lowpoly_active,
     OBJECT_OT_polygroups_set_quad_count_preset,

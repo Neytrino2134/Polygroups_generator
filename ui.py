@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import bpy
 
-from .core.remesh_defaults import apply_quad_remesher_defaults_once
 from .localization import get_preferences
 from .localization import t
 
@@ -504,7 +503,6 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
             layout.label(text=t(context, "quad_enable_hint"))
             return
 
-        apply_quad_remesher_defaults_once(context.scene)
         qremesher = context.scene.qremesher
 
         layout.label(text=t(context, "quad_available"), icon="CHECKMARK")
@@ -1581,23 +1579,28 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             text=t(context, "auto_increment_index"),
         )
         column.prop(settings, "fab_copy_textures", text=t(context, "copy_textures"))
+        column.prop(
+            settings,
+            "fab_collection_color_tag",
+            text=t(context, "fab_collection_color_tag"),
+        )
 
         variant_row = column.row(align=True)
-        low_operator = variant_row.operator(
-            "object.polygroups_prepare_fab_variant",
-            text="LOW",
-        )
-        low_operator.variant = "LOW"
-        mid_operator = variant_row.operator(
-            "object.polygroups_prepare_fab_variant",
-            text="MID",
-        )
-        mid_operator.variant = "MID"
         high_operator = variant_row.operator(
             "object.polygroups_prepare_fab_variant",
             text="HIGH",
         )
         high_operator.variant = "HIGH"
+        mid_operator = variant_row.operator(
+            "object.polygroups_prepare_fab_variant",
+            text="MID",
+        )
+        mid_operator.variant = "MID"
+        low_operator = variant_row.operator(
+            "object.polygroups_prepare_fab_variant",
+            text="LOW",
+        )
+        low_operator.variant = "LOW"
 
         column.operator(
             "object.polygroups_auto_prepare_fab_selection",
