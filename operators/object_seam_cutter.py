@@ -342,6 +342,28 @@ def _create_cutter_path(name, path_points, render_u, extrude, alpha):
     return obj
 
 
+def _write_cutter_path_points(cutter, path_points):
+    if cutter.type != "CURVE":
+        return
+
+    cutter.data.splines.clear()
+    spline = cutter.data.splines.new("POLY")
+    spline.points.add(len(path_points) - 1)
+    for point, item in zip(spline.points, path_points):
+        location = item["location"]
+        point.co = (location.x, location.y, location.z, 1.0)
+
+    cutter[CUTTER_PATH_DATA_PROP] = json.dumps(
+        [
+            {
+                "co": list(item["location"]),
+                "normal": list(item["normal"]),
+            }
+            for item in path_points
+        ],
+    )
+
+
 def _create_cutter_draw_stroke(name, path_points, render_u, alpha):
     curve = bpy.data.curves.new(name, "CURVE")
     curve.dimensions = "3D"
@@ -564,6 +586,90 @@ def _join_draw_strokes(strokes, max_distance):
     return base, joined_count
 
 
+def _path_cutters_in_collection(exclude=None):
+    exclude = set(exclude or [])
+    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+    if collection is None:
+        return []
+
+    return [
+        obj
+        for obj in collection.objects
+        if obj not in exclude
+        and obj.type == "CURVE"
+        and obj.get(CUTTER_PROP)
+        and obj.get(CUTTER_TYPE_PROP) == "PATH"
+    ]
+
+
+def _join_path_points(base_points, next_points):
+    return _join_draw_stroke_points(base_points, next_points)
+
+
+def _find_path_to_continue(path_points, max_distance, exclude=None):
+    if not path_points or max_distance <= 0.0:
+        return None, None
+
+    best_path = None
+    best_points = None
+    best_distance = None
+    for path in _path_cutters_in_collection(exclude=exclude):
+        existing_points = _path_cutter_path_points(path)
+        if len(existing_points) < 2:
+            continue
+        distance, joined_points = _join_path_points(existing_points, path_points)
+        if distance > max_distance:
+            continue
+        if best_distance is None or distance < best_distance:
+            best_path = path
+            best_points = joined_points
+            best_distance = distance
+
+    return best_path, best_points
+
+
+def _join_path_cutters(paths, max_distance):
+    remaining = [
+        (path, _path_cutter_path_points(path))
+        for path in paths
+        if path.name in bpy.data.objects
+    ]
+    remaining = [
+        (path, points)
+        for path, points in remaining
+        if len(points) >= 2
+    ]
+    if len(remaining) < 2:
+        return None, 0
+
+    base, base_points = remaining.pop(0)
+    joined_count = 0
+    while remaining:
+        best_index = None
+        best_distance = None
+        best_points = None
+        for index, (_, points) in enumerate(remaining):
+            distance, candidate_points = _join_path_points(base_points, points)
+            if max_distance > 0.0 and distance > max_distance:
+                continue
+            if best_distance is None or distance < best_distance:
+                best_index = index
+                best_distance = distance
+                best_points = candidate_points
+
+        if best_index is None:
+            break
+
+        path, _ = remaining.pop(best_index)
+        base_points = best_points
+        bpy.data.objects.remove(path, do_unlink=True)
+        joined_count += 1
+
+    if joined_count:
+        _write_cutter_path_points(base, base_points)
+    return base, joined_count
+
+
 def _selected_cutters(context, target):
     cutters = [
         obj
@@ -700,6 +806,29 @@ def _path_data(cutter):
     except Exception:
         data = []
     return data if isinstance(data, list) else []
+
+
+def _path_cutter_path_points(cutter):
+    data = _path_data(cutter)
+    if data:
+        return [
+            {
+                "location": Vector(item.get("co", (0.0, 0.0, 0.0))),
+                "normal": Vector(item.get("normal", (0.0, 0.0, 1.0))),
+            }
+            for item in data
+        ]
+
+    if cutter.type != "CURVE" or not cutter.data.splines:
+        return []
+
+    return [
+        {
+            "location": cutter.matrix_world @ Vector((point.co.x, point.co.y, point.co.z)),
+            "normal": Vector((0.0, 0.0, 1.0)),
+        }
+        for point in cutter.data.splines[0].points
+    ]
 
 
 def _world_plane_to_local(target, plane_co, plane_no):
@@ -1350,12 +1479,13 @@ def _draw_cutter_arc_overlay(operator):
 
 
 def _draw_cutter_path_overlay(operator):
-    if not operator._points:
+    if not getattr(operator, "_surface_points", None) and not getattr(operator, "_points", None):
         return
 
     try:
         import blf
         import gpu
+        from bpy_extras import view3d_utils
         from gpu_extras.batch import batch_for_shader
     except Exception:
         return
@@ -1364,9 +1494,26 @@ def _draw_cutter_path_overlay(operator):
     label_color = (1.0, 1.0, 1.0, 1.0)
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
 
-    preview_points = list(operator._points)
-    if operator._mouse_pos is not None:
-        preview_points.append(operator._mouse_pos)
+    preview_points = []
+    region = getattr(operator, "_start_region", None)
+    rv3d = getattr(operator, "_start_rv3d", None)
+    surface_points = getattr(operator, "_surface_points", None) or []
+    mouse_surface_point = getattr(operator, "_mouse_surface_point", None)
+    if region is not None and rv3d is not None and surface_points:
+        world_points = [item["location"] for item in surface_points]
+        if mouse_surface_point is not None:
+            world_points.append(mouse_surface_point["location"])
+        for location in world_points:
+            point = view3d_utils.location_3d_to_region_2d(region, rv3d, location)
+            if point is not None:
+                preview_points.append(point)
+    else:
+        preview_points = list(operator._points)
+        if operator._mouse_pos is not None:
+            preview_points.append(operator._mouse_pos)
+
+    if not preview_points:
+        return
 
     line_points = []
     if len(preview_points) > 1:
@@ -1738,6 +1885,7 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
     _points = None
     _surface_points = None
     _mouse_pos = None
+    _mouse_surface_point = None
     _draw_handle = None
     _view_navigation_active = False
 
@@ -1793,6 +1941,7 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
         self._points = []
         self._surface_points = []
         self._mouse_pos = None
+        self._mouse_surface_point = None
         self._draw_handle = None
         self._view_navigation_active = False
 
@@ -1824,7 +1973,7 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
             return self._create_path(context)
 
         if event.type == "BACK_SPACE" and event.value == "PRESS":
-            if self._points:
+            if self._surface_points:
                 self._points.pop()
                 self._surface_points.pop()
                 self._tag_redraw()
@@ -1832,9 +1981,9 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
 
         if event.type == "MOUSEMOVE":
             area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
-            if self._points and area == self._start_area and region == self._start_region:
-                del rv3d
+            if self._surface_points and area == self._start_area and region == self._start_region:
                 self._mouse_pos = region_pos
+                self._mouse_surface_point = self._surface_point_from_region(context, region, rv3d, region_pos)
                 self._tag_redraw()
             return {"RUNNING_MODAL"}
 
@@ -1889,8 +2038,27 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
             },
         )
         self._mouse_pos = region_pos
+        self._mouse_surface_point = None
         self._tag_redraw()
         return True
+
+    def _surface_point_from_region(self, context, region, rv3d, region_pos):
+        del context
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            return None
+
+        hit = _surface_hit_from_region_pos(region, rv3d, region_pos, target)
+        if hit is None:
+            return None
+
+        if self._surface_points and (hit[0] - self._surface_points[-1]["location"]).length < 0.000001:
+            return None
+
+        return {
+            "location": hit[0],
+            "normal": hit[1],
+        }
 
     def _create_path(self, context):
         settings = context.scene.polygroups_object_seam_cutter_settings
@@ -1899,13 +2067,23 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
             self._finish(context)
             return {"CANCELLED"}
 
-        cutter = _create_cutter_path(
-            "Seam_Cutter_Path",
-            self._surface_points,
-            settings.cutter_path_render_u,
-            settings.cutter_path_extrude,
-            settings.cutter_alpha,
-        )
+        cutter = None
+        if settings.continue_path_cutters:
+            cutter, joined_points = _find_path_to_continue(
+                self._surface_points,
+                settings.cutter_path_join_distance,
+            )
+            if cutter is not None:
+                _write_cutter_path_points(cutter, joined_points)
+
+        if cutter is None:
+            cutter = _create_cutter_path(
+                "Seam_Cutter_Path",
+                self._surface_points,
+                settings.cutter_path_render_u,
+                settings.cutter_path_extrude,
+                settings.cutter_alpha,
+            )
         bpy.ops.object.select_all(action="DESELECT")
         cutter.select_set(True)
         target.select_set(True)
@@ -1934,6 +2112,7 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
             bpy.types.SpaceView3D.draw_handler_remove(self._draw_handle, "WINDOW")
             self._draw_handle = None
         context.workspace.status_text_set(None)
+        self._mouse_surface_point = None
         self._tag_redraw()
 
 
@@ -2225,6 +2404,35 @@ class OBJECT_OT_polygroups_join_draw_strokes(bpy.types.Operator):
         stroke.select_set(True)
         context.view_layer.objects.active = stroke
         self.report({"INFO"}, f"Joined {joined_count + 1} draw stroke(s)")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_join_cutter_paths(bpy.types.Operator):
+    bl_idname = "object.polygroups_join_cutter_paths"
+    bl_label = "Join Selected Cutter Paths"
+    bl_description = "Join selected cutter path curves into one continuous cutter path"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        paths = [
+            obj
+            for obj in context.selected_objects
+            if obj.type == "CURVE" and obj.get(CUTTER_PROP) and obj.get(CUTTER_TYPE_PROP) == "PATH"
+        ]
+        if len(paths) < 2:
+            self.report({"WARNING"}, "Select at least two cutter paths")
+            return {"CANCELLED"}
+
+        path, joined_count = _join_path_cutters(paths, settings.cutter_path_join_distance)
+        if path is None or not joined_count:
+            self.report({"WARNING"}, "No cutter paths were close enough to join")
+            return {"CANCELLED"}
+
+        bpy.ops.object.select_all(action="DESELECT")
+        path.select_set(True)
+        context.view_layer.objects.active = path
+        self.report({"INFO"}, f"Joined {joined_count + 1} cutter path(s)")
         return {"FINISHED"}
 
 

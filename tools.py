@@ -111,6 +111,13 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
         layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+        layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
+        layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
+        layout.operator(
+            "object.polygroups_join_cutter_paths",
+            text=t(context, "join_cutter_paths"),
+            icon="AUTOMERGE_ON",
+        )
     if cutter_type == "DRAW":
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))

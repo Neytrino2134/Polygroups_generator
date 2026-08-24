@@ -663,6 +663,8 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
         layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+        layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
+        layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
         layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
         layout.prop(settings, "continue_draw_strokes", text=t(context, "continue_draw_strokes"))
@@ -722,6 +724,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             "object.polygroups_draw_cutter_path",
             text=t(context, "draw_cutter_path"),
             icon="CURVE_PATH",
+        )
+        layout.operator(
+            "object.polygroups_join_cutter_paths",
+            text=t(context, "join_cutter_paths"),
+            icon="AUTOMERGE_ON",
         )
         tool_operator = layout.operator(
             "wm.tool_set_by_id",

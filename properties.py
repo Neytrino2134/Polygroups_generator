@@ -363,6 +363,19 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         soft_max=90.0,
         precision=1,
     )
+    continue_path_cutters: bpy.props.BoolProperty(
+        name="Continue Path Cutters",
+        description="Append new cutter paths to nearby existing cutter paths instead of creating separate objects",
+        default=True,
+    )
+    cutter_path_join_distance: bpy.props.FloatProperty(
+        name="Path Join Distance",
+        description="Maximum distance used when continuing or joining cutter path curves",
+        default=0.05,
+        min=0.0,
+        soft_max=0.5,
+        precision=4,
+    )
     cutter_draw_min_point_distance: bpy.props.FloatProperty(
         name="Draw Point Distance",
         description="Minimum surface distance between points while drawing cutter strokes",
