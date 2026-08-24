@@ -382,11 +382,87 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
+    show_smart_decimate_settings: bpy.props.BoolProperty(
+        name="Decimate",
+        default=True,
+    )
+    show_mesh_check_settings: bpy.props.BoolProperty(
+        name="Check Mesh",
+        default=True,
+    )
+    show_all_mesh_fix_operators: bpy.props.BoolProperty(
+        name="Show All Fix Operators",
+        description="Show all mesh repair operators independently from detected issue categories",
+        default=False,
+    )
+    show_fab_rename_settings: bpy.props.BoolProperty(
+        name="FAB Rename",
+        default=True,
+    )
+    show_mesh_export_settings: bpy.props.BoolProperty(
+        name="Export",
+        default=True,
+    )
+    smart_decimate_ratio: bpy.props.FloatProperty(
+        name="Ratio",
+        description="Decimate ratio for non-seam areas",
+        default=0.4,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+    )
     smart_decimate_duplicate_and_apply: bpy.props.BoolProperty(
         name="Duplicate And Apply Decimate",
         description="Duplicate the active object, add Smart Decimate to the duplicate, and apply it",
         default=False,
     )
+    fab_asset_name: bpy.props.StringProperty(
+        name="Asset Name",
+        description="Base asset name used for FAB/Unreal object, material, and texture names",
+        default="Asset",
+        options={"TEXTEDIT_UPDATE"},
+    )
+    fab_asset_index: bpy.props.StringProperty(
+        name="Index",
+        description="Optional asset index inserted into FAB/Unreal names",
+        default="01",
+        options={"TEXTEDIT_UPDATE"},
+    )
+    fab_auto_increment_index: bpy.props.BoolProperty(
+        name="Auto Increment Index",
+        description="Increase the numeric index after a successful FAB rename operation",
+        default=True,
+    )
+    fab_copy_textures: bpy.props.BoolProperty(
+        name="Copy Textures",
+        description="Copy external material textures to a Textures folder next to the blend file",
+        default=True,
+    )
+    mesh_export_format: bpy.props.EnumProperty(
+        name="Export Format",
+        description="File format used by Export Selected Meshes",
+        items=(
+            ("FBX", "FBX", "Export one FBX file per selected mesh"),
+            ("GLB", "GLB", "Export one binary GLB file per selected mesh"),
+            ("GLTF", "GLTF", "Export one embedded GLTF file per selected mesh"),
+        ),
+        default="FBX",
+    )
+    mesh_check_status: bpy.props.StringProperty(
+        name="Mesh Check Status",
+        default="Not checked",
+    )
+    mesh_check_inconsistent_normals: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_inward_normals: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_ngons: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_nonmanifold_edges: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_boundary_edges: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_boundary_loops: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_loose_vertices: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_loose_edges: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_zero_area_faces: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_duplicate_vertices: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_thin_protrusions: bpy.props.IntProperty(default=0, min=0)
 
 
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
@@ -442,6 +518,11 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         name="Normal",
         description="Bake source normals to the active target",
         default=True,
+    )
+    auto_save_textures_after_bake: bpy.props.BoolProperty(
+        name="Auto Save Textures After Bake",
+        description="Run Save Textures automatically after Prepare And Bake finishes",
+        default=False,
     )
 
 

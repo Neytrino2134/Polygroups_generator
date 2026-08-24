@@ -36,6 +36,7 @@ class OBJECT_OT_generate_polygroups(bpy.types.Operator):
         groups = split_into_groups(bm, seam_edges=seam_edges)
 
         if not groups:
+            bpy.ops.object.mode_set(mode="OBJECT")
             self.report({"WARNING"}, "No face groups were generated")
             return {"CANCELLED"}
 
@@ -50,6 +51,7 @@ class OBJECT_OT_generate_polygroups(bpy.types.Operator):
 
         bpy.ops.object.mode_set(mode="OBJECT")
         assign_face_sets_from_materials(context, obj)
+        bpy.ops.object.mode_set(mode="OBJECT")
 
         self.report(
             {"INFO"},

@@ -1053,6 +1053,15 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
         if settings.bake_normal:
             _bake_to_node(context, target, normal_node, "NORMAL", settings)
 
+        if settings.auto_save_textures_after_bake:
+            try:
+                save_result = bpy.ops.object.polygroups_save_bake_textures()
+            except Exception as error:
+                self.report({"WARNING"}, f"Auto save textures failed: {error}")
+            else:
+                if "FINISHED" not in save_result:
+                    self.report({"WARNING"}, "Auto save textures was not completed")
+
         self.report(
             {"INFO"},
             f"Prepared {changed_count} material(s) and finished bake",

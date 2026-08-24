@@ -9,10 +9,14 @@ def assign_face_sets_from_materials(context, obj, randomize_colors=True):
     if obj.mode != "SCULPT":
         bpy.ops.object.mode_set(mode="SCULPT")
 
-    bpy.ops.sculpt.face_sets_init(mode="MATERIALS")
+    try:
+        bpy.ops.sculpt.face_sets_init(mode="MATERIALS")
 
-    if randomize_colors:
-        bpy.ops.sculpt.face_sets_randomize_colors()
+        if randomize_colors:
+            bpy.ops.sculpt.face_sets_randomize_colors()
+    finally:
+        if obj.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
 
 
 def get_face_set_layer(bm):

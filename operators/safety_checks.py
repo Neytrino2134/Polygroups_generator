@@ -2,20 +2,39 @@ import re
 
 import bpy
 
+from ..core.remesh_defaults import apply_quad_remesher_defaults_once
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import rename_and_move_objects
 
 
 HIGHPOLY_NAME_PATTERN = re.compile(r"^Highpoly_Generated\.\d{3,}$")
+FAB_HIGHPOLY_NAME_PATTERN = re.compile(r"^SM_.+_HIGH(?:\.\d+)?$")
+FAB_LOWPOLY_NAME_PATTERN = re.compile(r"^SM_.+_LOW(?:\.\d+)?$")
+FAB_MIDPOLY_NAME_PATTERN = re.compile(r"^SM_.+_MID(?:\.\d+)?$")
 LOWPOLY_PREFIXES = ("Retopo_", "Retopology")
 
 
 def is_generated_highpoly_name(name):
-    return bool(HIGHPOLY_NAME_PATTERN.match(name))
+    return bool(
+        HIGHPOLY_NAME_PATTERN.match(name)
+        or FAB_HIGHPOLY_NAME_PATTERN.match(name)
+    )
 
 
 def is_lowpoly_name(name):
-    return name.startswith(LOWPOLY_PREFIXES)
+    return bool(
+        name.startswith(LOWPOLY_PREFIXES)
+        or FAB_LOWPOLY_NAME_PATTERN.match(name)
+        or FAB_MIDPOLY_NAME_PATTERN.match(name)
+    )
+
+
+def lowpoly_name_priority(name):
+    if FAB_LOWPOLY_NAME_PATTERN.match(name):
+        return 0
+    if FAB_MIDPOLY_NAME_PATTERN.match(name):
+        return 1
+    return 2
 
 
 def is_quad_remesh_ready_name(name):
@@ -34,6 +53,8 @@ def find_selected_lowpoly(context):
     ]
     if not lowpoly_objects:
         return None
+
+    lowpoly_objects.sort(key=lambda obj: lowpoly_name_priority(obj.name))
     return lowpoly_objects[0]
 
 
@@ -103,7 +124,7 @@ class OBJECT_OT_polygroups_checked_quad_remesh(bpy.types.Operator):
     bl_idname = "object.polygroups_checked_quad_remesh"
     bl_label = "Remesh It"
     bl_description = "Check the selected highpoly name before running Quad Remesher"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"UNDO"}
 
     @classmethod
     def poll(cls, context):
@@ -174,6 +195,7 @@ class OBJECT_OT_polygroups_checked_quad_remesh(bpy.types.Operator):
         return self.run_quad_remesher(context)
 
     def run_quad_remesher(self, context):
+        apply_quad_remesher_defaults_once(context.scene)
         try:
             return bpy.ops.qremesher.remesh()
         except Exception as error:
@@ -185,7 +207,27 @@ class OBJECT_OT_polygroups_skip_quad_remesh(bpy.types.Operator):
     bl_idname = "object.polygroups_skip_quad_remesh"
     bl_label = "Skip - Just Remesh"
     bl_description = "Skip preparation checks and run Quad Remesher on the active mesh"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH"
+
+    def execute(self, context):
+        apply_quad_remesher_defaults_once(context.scene)
+        try:
+            return bpy.ops.qremesher.remesh()
+        except Exception as error:
+            self.report({"ERROR"}, f"Quad Remesher failed: {error}")
+            return {"CANCELLED"}
+
+
+class OBJECT_OT_polygroups_skip_prepare_and_bake(bpy.types.Operator):
+    bl_idname = "object.polygroups_skip_prepare_and_bake"
+    bl_label = "Skip - Just Bake"
+    bl_description = "Skip lowpoly naming checks and run selected-to-active bake"
+    bl_options = {"UNDO"}
 
     @classmethod
     def poll(cls, context):
@@ -194,9 +236,9 @@ class OBJECT_OT_polygroups_skip_quad_remesh(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            return bpy.ops.qremesher.remesh()
+            return bpy.ops.object.polygroups_bake_selected_to_active()
         except Exception as error:
-            self.report({"ERROR"}, f"Quad Remesher failed: {error}")
+            self.report({"ERROR"}, f"Bake failed: {error}")
             return {"CANCELLED"}
 
 
@@ -204,7 +246,7 @@ class OBJECT_OT_polygroups_checked_generate_polygroups(bpy.types.Operator):
     bl_idname = "object.polygroups_checked_generate_polygroups"
     bl_label = "Generate PolyGroups"
     bl_description = "Check highpoly preparation before generating PolyGroups"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"UNDO"}
 
     @classmethod
     def poll(cls, context):
@@ -281,7 +323,7 @@ class OBJECT_OT_polygroups_make_lowpoly_active(bpy.types.Operator):
     bl_idname = "object.polygroups_make_lowpoly_active"
     bl_label = "Make Lowpoly Active"
     bl_description = "Make the selected Retopo or Retopology mesh active"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"UNDO"}
 
     @classmethod
     def poll(cls, context):
@@ -305,6 +347,7 @@ class OBJECT_OT_polygroups_make_lowpoly_active(bpy.types.Operator):
 class PolygroupsBakeLowpolyCheckMixin:
     bake_action = ""
     confirm_label = "Make Lowpoly Active + Continue"
+    skip_operator_id = ""
 
     @classmethod
     def poll(cls, context):
@@ -329,8 +372,15 @@ class PolygroupsBakeLowpolyCheckMixin:
     def draw(self, context):
         layout = self.layout
         layout.label(text="Active object does not look like a lowpoly target.", icon="ERROR")
-        layout.label(text="Make sure the active mesh is named Retopo_... or Retopology...")
+        layout.label(text="Make sure the active mesh is named Retopo_..., Retopology..., SM_*_LOW, or SM_*_MID.")
         layout.label(text="Confirm to make the selected lowpoly active and continue.")
+        if self.skip_operator_id:
+            layout.separator()
+            layout.operator(
+                self.skip_operator_id,
+                text="Skip - Just Bake",
+                icon="RENDER_STILL",
+            )
 
     def execute(self, context):
         active_object = context.active_object
@@ -345,7 +395,7 @@ class PolygroupsBakeLowpolyCheckMixin:
         if lowpoly is None:
             self.report(
                 {"ERROR"},
-                "Select a mesh named Retopo_... or Retopology... with the highpoly source",
+                "Select a mesh named Retopo_..., Retopology..., SM_*_LOW, or SM_*_MID with the highpoly source",
             )
             return {"CANCELLED"}
 
@@ -360,7 +410,7 @@ class OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material(
     bl_idname = "object.polygroups_checked_prepare_lowpoly_bake_material"
     bl_label = "Prepare Lowpoly Bake Material"
     bl_description = "Check that a Retopo or Retopology mesh is active before preparing bake material"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"UNDO"}
 
     bake_action = "PREPARE_LOWPOLY"
     confirm_label = "Make Lowpoly Active + Prepare"
@@ -373,7 +423,8 @@ class OBJECT_OT_polygroups_checked_prepare_and_bake(
     bl_idname = "object.polygroups_checked_prepare_and_bake"
     bl_label = "Prepare And Bake"
     bl_description = "Check that a Retopo or Retopology mesh is active before preparing and baking"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"UNDO"}
 
     bake_action = "PREPARE_AND_BAKE"
     confirm_label = "Make Lowpoly Active + Bake"
+    skip_operator_id = "object.polygroups_skip_prepare_and_bake"

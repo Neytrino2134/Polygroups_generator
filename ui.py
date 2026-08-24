@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import bpy
 
+from .core.remesh_defaults import apply_quad_remesher_defaults_once
 from .localization import get_preferences
 from .localization import t
 
@@ -460,6 +461,7 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
             layout.label(text=t(context, "quad_enable_hint"))
             return
 
+        apply_quad_remesher_defaults_once(context.scene)
         qremesher = context.scene.qremesher
 
         layout.label(text=t(context, "quad_available"), icon="CHECKMARK")
@@ -799,6 +801,11 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         pass_row = column.row(align=True)
         pass_row.prop(settings, "bake_base_color", text=t(context, "base_color"))
         pass_row.prop(settings, "bake_normal", text=t(context, "normal"))
+        column.prop(
+            settings,
+            "auto_save_textures_after_bake",
+            text=t(context, "auto_save_textures_after_bake"),
+        )
 
         column.separator()
         column.operator(
@@ -1279,7 +1286,50 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         if not section_content_visible(self, context):
             return
 
-        layout = self.layout.box()
+        layout = self.layout
+        settings = context.scene.polygroups_mesh_finalization_settings
+
+        decimate_content = draw_collapsible_box(
+            layout,
+            settings,
+            "show_smart_decimate_settings",
+            t(context, "decimate"),
+            "MOD_DECIM",
+        )
+        if decimate_content is not None:
+            self.draw_decimate(context, decimate_content)
+
+        check_content = draw_collapsible_box(
+            layout,
+            settings,
+            "show_mesh_check_settings",
+            t(context, "check_mesh"),
+            "VIEWZOOM",
+        )
+        if check_content is not None:
+            self.draw_mesh_check(context, check_content)
+
+        fab_content = draw_collapsible_box(
+            layout,
+            settings,
+            "show_fab_rename_settings",
+            t(context, "fab_rename"),
+            "OUTLINER_OB_MESH",
+        )
+        if fab_content is not None:
+            self.draw_fab_rename(context, fab_content)
+
+        export_content = draw_collapsible_box(
+            layout,
+            settings,
+            "show_mesh_export_settings",
+            t(context, "mesh_export"),
+            "EXPORT",
+        )
+        if export_content is not None:
+            self.draw_mesh_export(context, export_content)
+
+    def draw_decimate(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
         column = layout.column(align=True)
         column.prop(
@@ -1287,14 +1337,243 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             "smart_decimate_duplicate_and_apply",
             text=t(context, "duplicate_and_apply_decimate"),
         )
-        smart_decimate_operator = column.operator(
+        row = column.row(align=True)
+        smart_decimate_operator = row.operator(
             "object.polygroups_smart_decimate",
             text=t(context, "smart_decimate"),
             icon="MOD_DECIM",
         )
-        smart_decimate_operator.ratio = 0.4
+        row.prop(
+            settings,
+            "smart_decimate_ratio",
+            text=t(context, "ratio"),
+        )
+        smart_decimate_operator.ratio = settings.smart_decimate_ratio
         smart_decimate_operator.duplicate_and_apply = (
             settings.smart_decimate_duplicate_and_apply
+        )
+
+    def draw_mesh_check(self, context, layout):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        column = layout.column(align=True)
+
+        action_row = column.row(align=True)
+        action_row.operator(
+            "object.polygroups_check_mesh",
+            text=t(context, "check_mesh"),
+            icon="VIEWZOOM",
+        )
+        action_row.operator(
+            "object.polygroups_create_mesh_backup",
+            text=t(context, "create_bkp"),
+            icon="DUPLICATE",
+        )
+
+        has_results = settings.mesh_check_status != "Not checked"
+        has_any_issue = any(
+            (
+                settings.mesh_check_inconsistent_normals,
+                settings.mesh_check_inward_normals,
+                settings.mesh_check_ngons,
+                settings.mesh_check_nonmanifold_edges,
+                settings.mesh_check_boundary_loops,
+                settings.mesh_check_loose_vertices,
+                settings.mesh_check_loose_edges,
+                settings.mesh_check_zero_area_faces,
+                settings.mesh_check_duplicate_vertices,
+                settings.mesh_check_thin_protrusions,
+            )
+        )
+        if not has_results:
+            status_icon = "INFO"
+        elif has_any_issue:
+            status_icon = "ERROR"
+        else:
+            status_icon = "CHECKMARK"
+        column.label(text=t(context, "mesh_check_status", value=settings.mesh_check_status), icon=status_icon)
+
+        def draw_issue_row(text_key, value, operator_id=None, operator_text_key=None, icon="ERROR"):
+            if not value:
+                return
+            row = column.row(align=True)
+            row.label(text=t(context, text_key, value=value), icon=icon)
+            if operator_id:
+                row.operator(
+                    operator_id,
+                    text=t(context, operator_text_key),
+                )
+
+        def draw_protrusion_buttons(row):
+            row.operator(
+                "object.polygroups_select_thin_protrusions",
+                text=t(context, "select_thin_protrusions"),
+            )
+            row.operator(
+                "object.polygroups_delete_thin_protrusions",
+                text=t(context, "delete_thin_protrusions"),
+            )
+
+        if has_results and has_any_issue:
+            normal_total = (
+                settings.mesh_check_inconsistent_normals
+                + settings.mesh_check_inward_normals
+            )
+            draw_issue_row(
+                "mesh_check_normal_issues",
+                normal_total,
+                "object.polygroups_fix_mesh_normals",
+                "fix_normals",
+            )
+            draw_issue_row(
+                "mesh_check_ngons",
+                settings.mesh_check_ngons,
+                "object.polygroups_triangulate_ngons",
+                "triangulate_ngons",
+            )
+
+            if settings.mesh_check_nonmanifold_edges:
+                row = column.row(align=True)
+                row.label(
+                    text=t(
+                        context,
+                        "mesh_check_nonmanifold_edges",
+                        value=settings.mesh_check_nonmanifold_edges,
+                    ),
+                    icon="ERROR",
+                )
+                row.operator(
+                    "object.polygroups_clean_mesh",
+                    text=t(context, "clean_mesh"),
+                )
+                draw_protrusion_buttons(row)
+
+            draw_issue_row(
+                "mesh_check_boundary_loops",
+                settings.mesh_check_boundary_loops,
+                "object.polygroups_fill_nonmanifold",
+                "fill_nonmanifold",
+            )
+
+            loose_total = settings.mesh_check_loose_vertices + settings.mesh_check_loose_edges
+            draw_issue_row(
+                "mesh_check_loose_geometry",
+                loose_total,
+                "object.polygroups_delete_loose_geometry",
+                "delete_loose",
+            )
+
+            cleanup_total = (
+                settings.mesh_check_zero_area_faces
+                + settings.mesh_check_duplicate_vertices
+            )
+            draw_issue_row(
+                "mesh_check_cleanup_issues",
+                cleanup_total,
+                "object.polygroups_clean_mesh",
+                "clean_mesh",
+            )
+
+            if settings.mesh_check_thin_protrusions:
+                row = column.row(align=True)
+                row.label(
+                    text=t(
+                        context,
+                        "mesh_check_thin_protrusions",
+                        value=settings.mesh_check_thin_protrusions,
+                    ),
+                    icon="ERROR",
+                )
+                draw_protrusion_buttons(row)
+
+        column.separator()
+        column.prop(
+            settings,
+            "show_all_mesh_fix_operators",
+            text=t(context, "show_all_fix_operators"),
+            toggle=True,
+            icon="HIDE_OFF" if settings.show_all_mesh_fix_operators else "HIDE_ON",
+        )
+        if settings.show_all_mesh_fix_operators:
+            all_box = column.box()
+            all_column = all_box.column(align=True)
+
+            row = all_column.row(align=True)
+            row.operator(
+                "object.polygroups_fix_mesh_normals",
+                text=t(context, "fix_normals"),
+            )
+            row.operator(
+                "object.polygroups_triangulate_ngons",
+                text=t(context, "triangulate_ngons"),
+            )
+
+            row = all_column.row(align=True)
+            row.operator(
+                "object.polygroups_fill_nonmanifold",
+                text=t(context, "fill_nonmanifold"),
+            )
+            row.operator(
+                "object.polygroups_delete_loose_geometry",
+                text=t(context, "delete_loose"),
+            )
+
+            row = all_column.row(align=True)
+            draw_protrusion_buttons(row)
+            row.operator(
+                "object.polygroups_clean_mesh",
+                text=t(context, "clean_mesh"),
+                icon="BRUSH_DATA",
+            )
+
+    def draw_fab_rename(self, context, layout):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        column = layout.column(align=True)
+        column.prop(settings, "fab_asset_name", text=t(context, "fab_asset_name"))
+
+        index_row = column.row(align=True)
+        index_row.prop(settings, "fab_asset_index", text=t(context, "fab_asset_index"))
+        index_row.prop(
+            settings,
+            "fab_auto_increment_index",
+            text=t(context, "auto_increment_index"),
+        )
+        column.prop(settings, "fab_copy_textures", text=t(context, "copy_textures"))
+
+        variant_row = column.row(align=True)
+        low_operator = variant_row.operator(
+            "object.polygroups_prepare_fab_variant",
+            text="LOW",
+        )
+        low_operator.variant = "LOW"
+        mid_operator = variant_row.operator(
+            "object.polygroups_prepare_fab_variant",
+            text="MID",
+        )
+        mid_operator.variant = "MID"
+        high_operator = variant_row.operator(
+            "object.polygroups_prepare_fab_variant",
+            text="HIGH",
+        )
+        high_operator.variant = "HIGH"
+
+        column.operator(
+            "object.polygroups_auto_prepare_fab_selection",
+            text=t(context, "auto_prepare_fab_selection"),
+            icon="CHECKMARK",
+        )
+
+    def draw_mesh_export(self, context, layout):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        column = layout.column(align=True)
+        column.prop(
+            settings,
+            "mesh_export_format",
+            text=t(context, "mesh_export_format"),
+        )
+        column.operator(
+            "object.polygroups_export_selected_meshes",
+            text=t(context, "export_selected_meshes"),
+            icon="EXPORT",
         )
 
 
