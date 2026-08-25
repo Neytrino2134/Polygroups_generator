@@ -651,6 +651,14 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         max=16384,
         soft_max=4096,
     )
+    resolution_scale: bpy.props.IntProperty(
+        name="Resolution Scale",
+        description="Render resolution percentage scale",
+        default=100,
+        min=1,
+        max=400,
+        subtype="PERCENTAGE",
+    )
     output_directory: bpy.props.StringProperty(
         name="Output Folder",
         description="Base folder for render output",

@@ -267,6 +267,7 @@ def _snapshot_visibility():
             "use_freestyle": bpy.context.scene.render.use_freestyle,
             "line_thickness_mode": bpy.context.scene.render.line_thickness_mode,
             "line_thickness": bpy.context.scene.render.line_thickness,
+            "resolution_percentage": bpy.context.scene.render.resolution_percentage,
             "filepath": bpy.context.scene.render.filepath,
             "use_overwrite": bpy.context.scene.render.use_overwrite,
             "file_format": bpy.context.scene.render.image_settings.file_format,
@@ -301,6 +302,8 @@ def _restore_visibility(snapshot):
         bpy.context.scene.render.line_thickness_mode = render_settings["line_thickness_mode"]
     if "line_thickness" in render_settings:
         bpy.context.scene.render.line_thickness = render_settings["line_thickness"]
+    if "resolution_percentage" in render_settings:
+        bpy.context.scene.render.resolution_percentage = render_settings["resolution_percentage"]
     if "filepath" in render_settings:
         bpy.context.scene.render.filepath = render_settings["filepath"]
     if "use_overwrite" in render_settings:
@@ -890,6 +893,7 @@ def _configure_render(scene, settings, job, filepath=None, file_format="PNG", fr
     _apply_render_engine(scene, settings, freestyle)
     scene.render.resolution_x = settings.resolution_x
     scene.render.resolution_y = settings.resolution_y
+    scene.render.resolution_percentage = settings.resolution_scale
     scene.render.use_file_extension = True
     scene.render.image_settings.file_format = file_format
     if file_format == "PNG" and (settings.transparent_background or freestyle):

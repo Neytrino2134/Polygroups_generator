@@ -1720,6 +1720,7 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
         resolution_row = column.row(align=True)
         resolution_row.prop(settings, "resolution_x", text=t(context, "render_resolution_x"))
         resolution_row.prop(settings, "resolution_y", text=t(context, "render_resolution_y"))
+        column.prop(settings, "resolution_scale", text=t(context, "render_resolution_scale"))
         column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
 
         options_row = column.row(align=True)
