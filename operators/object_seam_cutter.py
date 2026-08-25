@@ -5,6 +5,7 @@ from math import cos
 from math import radians
 from math import sin
 from math import tau
+from mathutils import kdtree
 from mathutils import Matrix
 from mathutils import Vector
 
@@ -349,7 +350,7 @@ def _create_cutter_arc(name, center_points, depth_axis, size, alpha, thickness):
     obj.data.materials.append(_material(alpha))
     modifier = _add_solidify_modifier(obj, thickness)
     if hasattr(modifier, "use_rim"):
-        modifier.use_rim = False
+        modifier.use_rim = True
     _tool_collection("ARC").objects.link(obj)
     return obj
 
@@ -1072,10 +1073,17 @@ def _duplicate_boolean_cutter_as_mesh(
     return work
 
 
-def _apply_boolean_modifier(context, target, cutter_mesh):
+def _apply_boolean_modifier(context, target, cutter_mesh, solver="FLOAT"):
     modifier = target.modifiers.new("Cutter Path Boolean Seam", "BOOLEAN")
     modifier.operation = "UNION"
-    modifier.solver = "FLOAT"
+    try:
+        modifier.solver = solver
+    except TypeError:
+        modifier.solver = "FLOAT"
+    if solver == "EXACT" and hasattr(modifier, "use_self"):
+        modifier.use_self = True
+    if solver == "EXACT" and hasattr(modifier, "use_hole_tolerant"):
+        modifier.use_hole_tolerant = True
     modifier.object = cutter_mesh
 
     bpy.ops.object.select_all(action="DESELECT")
@@ -1084,7 +1092,7 @@ def _apply_boolean_modifier(context, target, cutter_mesh):
     bpy.ops.object.modifier_apply(modifier=modifier.name)
 
 
-def _mark_boolean_path_boundaries_and_remove_faces(target, temp_material_index, original_face_count):
+def _mark_boolean_path_boundaries_and_remove_faces_bmesh(target, temp_material_index, original_face_count):
     import bmesh
 
     mesh = target.data
@@ -1224,12 +1232,81 @@ def _remove_material_if_unused(material):
         bpy.data.materials.remove(material)
 
 
+def _material_slot_index(obj, material):
+    for index, slot_material in enumerate(obj.data.materials):
+        if slot_material == material or (slot_material and slot_material.name == material.name):
+            return index
+    return -1
+
+
+def _select_faces_by_material_index(obj, material_index):
+    selected = 0
+    for edge in obj.data.edges:
+        edge.select = False
+    for polygon in obj.data.polygons:
+        is_selected = polygon.material_index == material_index
+        polygon.select = is_selected
+        if is_selected:
+            selected += 1
+    obj.data.update()
+    return selected
+
+
+def _selected_edge_snapshots(mesh):
+    snapshots = []
+    for edge in mesh.edges:
+        if not edge.select:
+            continue
+        start = mesh.vertices[edge.vertices[0]].co.copy()
+        end = mesh.vertices[edge.vertices[1]].co.copy()
+        snapshots.append(
+            {
+                "midpoint": (start + end) * 0.5,
+                "length": (end - start).length,
+            },
+        )
+    return snapshots
+
+
+def _mark_edges_matching_snapshots(mesh, edge_snapshots, threshold):
+    if not edge_snapshots:
+        return 0
+
+    tree = kdtree.KDTree(len(edge_snapshots))
+    for index, item in enumerate(edge_snapshots):
+        tree.insert(item["midpoint"], index)
+    tree.balance()
+
+    marked = 0
+    length_threshold = max(threshold * 10.0, 0.000001)
+    for edge in mesh.edges:
+        start = mesh.vertices[edge.vertices[0]].co
+        end = mesh.vertices[edge.vertices[1]].co
+        midpoint = (start + end) * 0.5
+        nearest = tree.find(midpoint)
+        if nearest is None:
+            continue
+
+        _co, index, distance = nearest
+        if distance > threshold:
+            continue
+        if abs((end - start).length - edge_snapshots[index]["length"]) > length_threshold:
+            continue
+
+        edge.use_seam = True
+        edge.select = True
+        marked += 1
+    mesh.update()
+    return marked
+
+
 def _apply_boolean_cutter_to_mesh(
     context,
     target,
     cutter,
     boolean_solidify_thickness=None,
     extension_distance=0.0,
+    boolean_solver="FLOAT",
 ):
     material = _path_boolean_material()
     temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
@@ -1253,8 +1330,8 @@ def _apply_boolean_cutter_to_mesh(
         return 0
 
     try:
-        _apply_boolean_modifier(context, target, work)
-        return _mark_boolean_path_boundaries_and_remove_faces(
+        _apply_boolean_modifier(context, target, work, boolean_solver)
+        return _mark_boolean_path_boundaries_and_remove_faces_bmesh(
             target,
             temp_material_index,
             original_face_count,
@@ -1275,10 +1352,94 @@ def _apply_boolean_cutter_to_mesh(
         _remove_material_if_unused(placeholder_material)
 
 
-def _arc_boolean_thickness(context):
-    model_settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
-    weld_distance = getattr(model_settings, "weld_distance", 0.0001)
-    return max(min(weld_distance * 0.01, 0.000001), 0.0000001)
+def _apply_knife_intersect_arc_to_mesh(context, target, cutter, extension_distance=0.0):
+    material = _path_boolean_material()
+    temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
+        target,
+        material,
+    )
+    work = _duplicate_boolean_cutter_as_mesh(
+        context,
+        cutter,
+        material,
+        extension_distance=extension_distance,
+    )
+    if work is None:
+        _remove_material_slot_by_index(target, temp_material_index)
+        if placeholder_index is not None:
+            _remove_material_slot_by_index(target, placeholder_index)
+        _remove_material_if_unused(material)
+        _remove_material_if_unused(placeholder_material)
+        return 0
+
+    work_name = work.name
+    work_data = work.data
+    try:
+        if context.object and context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        bpy.ops.object.select_all(action="DESELECT")
+        target.select_set(True)
+        work.select_set(True)
+        context.view_layer.objects.active = target
+        bpy.ops.object.join()
+
+        temp_material_index = _material_slot_index(target, material)
+        if temp_material_index < 0:
+            return 0
+
+        target.active_material_index = temp_material_index
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="FACE")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.intersect(
+            mode="SELECT",
+            separate_mode="CUT",
+            threshold=0.000001,
+            solver="FLOAT",
+        )
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+        temp_face_count = _select_faces_by_material_index(target, temp_material_index)
+        if not temp_face_count:
+            return 0
+
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="FACE")
+        bpy.ops.mesh.region_to_loop()
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+        edge_snapshots = _selected_edge_snapshots(target.data)
+
+        _select_faces_by_material_index(target, temp_material_index)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="FACE")
+        bpy.ops.mesh.delete(type="FACE")
+        bpy.ops.object.mode_set(mode="OBJECT")
+        _clear_mesh_component_selection(target.data)
+        _center, target_diagonal = _target_bounds(target)
+        marked_edges = _mark_edges_matching_snapshots(
+            target.data,
+            edge_snapshots,
+            max(target_diagonal * 0.000001, 0.000001),
+        )
+        target.data.update()
+
+        return marked_edges
+    finally:
+        if context.object and context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        if bpy.data.objects.get(work_name) is not None:
+            bpy.data.objects.remove(bpy.data.objects[work_name], do_unlink=True)
+            if work_data and work_data.users == 0 and bpy.data.meshes.get(work_data.name) == work_data:
+                bpy.data.meshes.remove(work_data)
+        temp_material_index = _material_slot_index(target, material)
+        if temp_material_index >= 0:
+            _remove_material_slot_by_index(target, temp_material_index)
+        if placeholder_index is not None:
+            _remove_material_slot_by_index(target, placeholder_index)
+        _remove_material_if_unused(material)
+        _remove_material_if_unused(placeholder_material)
 
 
 def _arc_heal_distance(context):
@@ -1361,15 +1522,13 @@ def _count_open_boundary_edges(target):
 
 def _apply_arc_cutters_to_mesh(context, target, cutters):
     marked_edges = 0
-    boolean_thickness = _arc_boolean_thickness(context)
     _center, target_diagonal = _target_bounds(target)
     extension_distance = target_diagonal * 2.0
     for cutter in cutters:
-        marked_edges += _apply_boolean_cutter_to_mesh(
+        marked_edges += _apply_knife_intersect_arc_to_mesh(
             context,
             target,
             cutter,
-            boolean_solidify_thickness=boolean_thickness,
             extension_distance=extension_distance,
         )
     return marked_edges
