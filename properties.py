@@ -386,7 +386,7 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     )
     cutter_draw_simplify_distance: bpy.props.FloatProperty(
         name="Draw Simplify",
-        description="Optional distance-based simplification applied when converting draw strokes to cutter paths",
+        description="Optional distance-based simplification applied to cutter paths created with the draw tool",
         default=0.0,
         min=0.0,
         soft_max=0.2,

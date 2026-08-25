@@ -89,18 +89,17 @@ def _active_cutter_label_key(tool_id):
 
 def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     settings = context.scene.polygroups_object_seam_cutter_settings
-    layout.operator(
-        "object.polygroups_apply_cutter_seams",
-        text=t(context, "apply_cutter_seams"),
-        icon="MOD_BOOLEAN",
-    )
-
     row = layout.row(align=True)
-    row.label(text=t(context, "ctrl_draw_hint"))
     row.menu(
         "VIEW3D_MT_polygroups_cutter_tool_type",
         text=t(context, _active_cutter_label_key(tool.idname)),
         icon="TOOL_SETTINGS",
+    )
+    row.label(text=t(context, "ctrl_draw_hint"))
+    row.operator(
+        "object.polygroups_apply_cutter_seams",
+        text=t(context, "apply_cutter_seams"),
+        icon="MOD_BOOLEAN",
     )
 
     if cutter_type in {"PLANE", "ARC"}:
@@ -123,20 +122,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
         layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
-        layout.prop(settings, "continue_draw_strokes", text=t(context, "continue_draw_strokes"))
-        layout.prop(settings, "cutter_draw_join_distance", text=t(context, "draw_join_distance"))
-        layout.prop(settings, "auto_convert_draw_strokes", text=t(context, "auto_convert_draw_strokes"))
-        layout.prop(settings, "auto_convert_draw_strokes_on_apply", text=t(context, "auto_convert_draw_strokes_on_apply"))
-        layout.prop(settings, "delete_draw_strokes_after_convert", text=t(context, "delete_draw_strokes_after_convert"))
+        layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
+        layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.operator(
-            "object.polygroups_join_draw_strokes",
-            text=t(context, "join_draw_strokes"),
+            "object.polygroups_join_cutter_paths",
+            text=t(context, "join_cutter_paths"),
             icon="AUTOMERGE_ON",
-        )
-        layout.operator(
-            "object.polygroups_convert_draw_strokes_to_cutter_paths",
-            text=t(context, "convert_draw_strokes_to_cutter_paths"),
-            icon="CURVE_PATH",
         )
     layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
     if cutter_type in {"PLANE", "ARC"}:

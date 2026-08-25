@@ -10,6 +10,12 @@ from mathutils import Vector
 
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
+CUTTER_COLLECTION_BY_TOOL = {
+    "PLANE": "Seam Cutters Plane",
+    "ARC": "Seam Cutters Arc",
+    "PATH": "Seam Cutters Path",
+    "DRAW": "Seam Cutters Draw",
+}
 CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_PATH_DATA_PROP = "polygroups_object_seam_cutter_path_data"
@@ -100,6 +106,42 @@ def _collection():
         collection = bpy.data.collections.new(CUTTER_COLLECTION_NAME)
         bpy.context.scene.collection.children.link(collection)
     return collection
+
+
+def _tool_collection(cutter_type):
+    parent = _collection()
+    collection_name = CUTTER_COLLECTION_BY_TOOL.get(cutter_type, CUTTER_COLLECTION_NAME)
+    if collection_name == CUTTER_COLLECTION_NAME:
+        return parent
+
+    collection = parent.children.get(collection_name)
+    if collection is None:
+        collection = bpy.data.collections.get(collection_name)
+        if collection is None:
+            collection = bpy.data.collections.new(collection_name)
+        if parent.children.get(collection.name) is None:
+            parent.children.link(collection)
+    return collection
+
+
+def _collection_objects_recursive(collection, seen=None):
+    seen = seen or set()
+    objects = []
+    for obj in collection.objects:
+        if obj.name in seen:
+            continue
+        seen.add(obj.name)
+        objects.append(obj)
+    for child in collection.children:
+        objects.extend(_collection_objects_recursive(child, seen))
+    return objects
+
+
+def _cutter_collection_objects():
+    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
+    if collection is None:
+        return []
+    return _collection_objects_recursive(collection)
 
 
 def _material(alpha):
@@ -274,7 +316,7 @@ def _create_cutter_plane(name, center, axis_a, axis_b, size, alpha, thickness):
     obj[CUTTER_TYPE_PROP] = "PLANE"
     obj.data.materials.append(_material(alpha))
     _add_solidify_modifier(obj, thickness)
-    _collection().objects.link(obj)
+    _tool_collection("PLANE").objects.link(obj)
     return obj
 
 
@@ -306,11 +348,11 @@ def _create_cutter_arc(name, center_points, depth_axis, size, alpha, thickness):
     modifier = _add_solidify_modifier(obj, thickness)
     if hasattr(modifier, "use_rim"):
         modifier.use_rim = False
-    _collection().objects.link(obj)
+    _tool_collection("ARC").objects.link(obj)
     return obj
 
 
-def _create_cutter_path(name, path_points, render_u, extrude, alpha):
+def _create_cutter_path(name, path_points, render_u, extrude, alpha, collection_type="PATH"):
     curve = bpy.data.curves.new(name, "CURVE")
     curve.dimensions = "3D"
     curve.resolution_u = render_u
@@ -338,7 +380,7 @@ def _create_cutter_path(name, path_points, render_u, extrude, alpha):
         ],
     )
     obj.data.materials.append(_material(alpha))
-    _collection().objects.link(obj)
+    _tool_collection(collection_type).objects.link(obj)
     return obj
 
 
@@ -393,7 +435,7 @@ def _create_cutter_draw_stroke(name, path_points, render_u, alpha):
         ],
     )
     obj.data.materials.append(_material(alpha))
-    _collection().objects.link(obj)
+    _tool_collection("DRAW").objects.link(obj)
     return obj
 
 
@@ -495,13 +537,9 @@ def _draw_strokes_from_cutters(cutters):
 
 def _draw_strokes_in_collection(exclude=None):
     exclude = set(exclude or [])
-    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
-    if collection is None:
-        return []
-
     return [
         obj
-        for obj in collection.objects
+        for obj in _cutter_collection_objects()
         if obj not in exclude
         and obj.type == "CURVE"
         and obj.get(CUTTER_PROP)
@@ -588,13 +626,9 @@ def _join_draw_strokes(strokes, max_distance):
 
 def _path_cutters_in_collection(exclude=None):
     exclude = set(exclude or [])
-    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
-    if collection is None:
-        return []
-
     return [
         obj
-        for obj in collection.objects
+        for obj in _cutter_collection_objects()
         if obj not in exclude
         and obj.type == "CURVE"
         and obj.get(CUTTER_PROP)
@@ -679,15 +713,53 @@ def _selected_cutters(context, target):
     if cutters:
         return cutters
 
-    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
-    if collection is None:
-        return []
-
     return [
         obj
-        for obj in collection.objects
+        for obj in _cutter_collection_objects()
         if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
     ]
+
+
+def _is_cutter_name(obj):
+    return "Seam_Cutter" in obj.name
+
+
+def _is_target_mesh_candidate(obj):
+    return (
+        obj is not None
+        and obj.type == "MESH"
+        and not obj.get(CUTTER_PROP)
+        and not _is_cutter_name(obj)
+    )
+
+
+def _prefer_highpoly_generated(objects):
+    for obj in objects:
+        if "Highpoly_Generated" in obj.name:
+            return obj
+    return objects[0] if objects else None
+
+
+def _find_cutter_target(context):
+    active = context.active_object
+    if _is_target_mesh_candidate(active):
+        return active
+
+    selected = [
+        obj
+        for obj in context.selected_objects
+        if _is_target_mesh_candidate(obj)
+    ]
+    target = _prefer_highpoly_generated(selected)
+    if target is not None:
+        return target
+
+    scene_candidates = [
+        obj
+        for obj in context.scene.objects
+        if _is_target_mesh_candidate(obj) and "Highpoly_Generated" in obj.name
+    ]
+    return _prefer_highpoly_generated(scene_candidates)
 
 
 def _cutter_planes_world(cutter):
@@ -1671,7 +1743,7 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
             return {"RUNNING_MODAL"}
 
         cutter = _create_cutter_plane(
-            "Seam_Cutter",
+            "Seam_Cutter_Plane",
             plane[0],
             plane[1],
             plane[2],
@@ -2118,8 +2190,8 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
 
 class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
     bl_idname = "object.polygroups_draw_cutter_draw"
-    bl_label = "Draw Cutter Stroke"
-    bl_description = "Draw a freehand cutter stroke snapped to the active mesh surface"
+    bl_label = "Draw Cutter Path"
+    bl_description = "Draw a freehand cutter path snapped to the active mesh surface"
     bl_options = {"REGISTER", "UNDO"}
 
     use_event_as_start: bpy.props.BoolProperty(
@@ -2283,34 +2355,29 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
             self._finish(context)
             return {"CANCELLED"}
 
-        if settings.auto_convert_draw_strokes:
+        path_points = _simplify_path_points(
+            self._surface_points,
+            settings.cutter_draw_simplify_distance,
+        )
+
+        cutter = None
+        if settings.continue_path_cutters:
+            cutter, joined_points = _find_path_to_continue(
+                path_points,
+                settings.cutter_path_join_distance,
+            )
+            if cutter is not None:
+                _write_cutter_path_points(cutter, joined_points)
+
+        if cutter is None:
             cutter = _create_cutter_path(
                 "Seam_Cutter_Path",
-                _simplify_path_points(
-                    self._surface_points,
-                    settings.cutter_draw_simplify_distance,
-                ),
+                path_points,
                 settings.cutter_path_render_u,
                 settings.cutter_path_extrude,
                 settings.cutter_alpha,
+                "DRAW",
             )
-        else:
-            cutter = None
-            if settings.continue_draw_strokes:
-                cutter, joined_points = _find_draw_stroke_to_continue(
-                    self._surface_points,
-                    settings.cutter_draw_join_distance,
-                )
-                if cutter is not None:
-                    _write_draw_stroke_points(cutter, joined_points)
-
-            if cutter is None:
-                cutter = _create_cutter_draw_stroke(
-                    "Seam_Cutter_Draw",
-                    self._surface_points,
-                    settings.cutter_path_render_u,
-                    settings.cutter_alpha,
-                )
 
         bpy.ops.object.select_all(action="DESELECT")
         cutter.select_set(True)
@@ -2488,11 +2555,14 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+        return context.mode == "OBJECT" and _find_cutter_target(context) is not None
 
     def execute(self, context):
-        target = context.active_object
+        target = _find_cutter_target(context)
+        if target is None:
+            self.report({"WARNING"}, "No active mesh target found")
+            return {"CANCELLED"}
+        context.view_layer.objects.active = target
         settings = context.scene.polygroups_object_seam_cutter_settings
         cutters = _selected_cutters(context, target)
         if not cutters:
@@ -2583,22 +2653,20 @@ class OBJECT_OT_polygroups_select_cutter_planes(bpy.types.Operator):
 
     def execute(self, context):
         bpy.ops.object.select_all(action="DESELECT")
-        collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
-        if collection is None:
+        cutters = [
+            obj
+            for obj in _cutter_collection_objects()
+            if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+        ]
+        if not cutters:
             return {"CANCELLED"}
 
-        selected = 0
-        for obj in collection.objects:
-            if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP):
-                obj.hide_set(False)
-                obj.hide_viewport = False
-                obj.select_set(True)
-                selected += 1
+        for obj in cutters:
+            obj.hide_set(False)
+            obj.hide_viewport = False
+            obj.select_set(True)
 
-        if selected:
-            context.view_layer.objects.active = next(
-                obj for obj in collection.objects if obj.select_get()
-            )
+        context.view_layer.objects.active = cutters[-1]
         return {"FINISHED"}
 
 
@@ -2609,15 +2677,14 @@ class OBJECT_OT_polygroups_clear_cutter_planes(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
-        if collection is None:
-            return {"CANCELLED"}
-
         cutters = [
             obj
-            for obj in collection.objects
+            for obj in _cutter_collection_objects()
             if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
         ]
+        if not cutters:
+            return {"CANCELLED"}
+
         for cutter in cutters:
             bpy.data.objects.remove(cutter, do_unlink=True)
         return {"FINISHED"}
