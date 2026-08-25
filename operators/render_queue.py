@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from math import radians
 
 import bpy
 
@@ -8,6 +9,8 @@ import bpy
 ASSET_COLLECTION_SUFFIX = "_Collection"
 ASSET_RENDER_SUFFIXES = ("LOW", "MID")
 BLENDER_NUMERIC_SUFFIX_RE = re.compile(r"\.\d{3}$")
+MULTIVIEW_PROP = "polygroups_render_multiview"
+MULTIVIEW_COLLECTION_SUFFIX = "_Multi_View"
 
 
 def _collection_objects_recursive(collection, seen=None):
@@ -117,6 +120,12 @@ def _sync_progress(settings):
     settings.remaining_count = max(settings.total_count - settings.rendered_count, 0)
 
 
+def _scene_collection_matches(collection, settings):
+    prefix = _base_name(settings.scene_collection_prefix.strip() or "Scene").upper()
+    name = _base_name(collection.name).upper()
+    return name == prefix or name.startswith(f"{prefix}_") or name.startswith(f"{prefix}.")
+
+
 def _apply_render_engine(scene, settings):
     if settings.render_engine == "CYCLES":
         scene.render.engine = "CYCLES"
@@ -136,6 +145,9 @@ def _apply_render_engine(scene, settings):
 
 def _snapshot_visibility():
     return {
+        "render": {
+            "film_transparent": bpy.context.scene.render.film_transparent,
+        },
         "collections": {
             collection.name: (collection.hide_render, collection.hide_viewport)
             for collection in bpy.data.collections
@@ -152,6 +164,10 @@ def _snapshot_visibility():
 
 
 def _restore_visibility(snapshot):
+    render_settings = snapshot.get("render", {})
+    if "film_transparent" in render_settings:
+        bpy.context.scene.render.film_transparent = render_settings["film_transparent"]
+
     for name, values in snapshot.get("collections", {}).items():
         collection = bpy.data.collections.get(name)
         if collection is None:
@@ -193,6 +209,113 @@ def _set_asset_collection_enabled(collection, enabled):
         layer_collection.hide_viewport = not enabled
 
 
+def _set_collection_enabled(collection, enabled):
+    collection.hide_render = not enabled
+    collection.hide_viewport = not enabled
+
+    for layer_collection in _layer_collections_recursive(bpy.context.view_layer.layer_collection):
+        if layer_collection.collection != collection:
+            continue
+        layer_collection.exclude = not enabled
+        layer_collection.hide_viewport = not enabled
+
+
+def _prepare_transparent_background(settings):
+    if not settings.transparent_background:
+        return
+
+    bpy.context.scene.render.film_transparent = True
+    for collection in bpy.data.collections:
+        if _scene_collection_matches(collection, settings):
+            _set_collection_enabled(collection, False)
+
+
+def _multiview_collection(parent_collection, asset_name):
+    collection_name = f"{_clean_name(asset_name)}{MULTIVIEW_COLLECTION_SUFFIX}"
+    collection = parent_collection.children.get(collection_name)
+    if collection is None:
+        collection = bpy.data.collections.get(collection_name)
+        if collection is None:
+            collection = bpy.data.collections.new(collection_name)
+        if parent_collection.children.get(collection.name) is None:
+            parent_collection.children.link(collection)
+    return collection
+
+
+def _create_multiview_duplicate(source, collection, name, x_offset, z_rotation_degrees):
+    duplicate = source.copy()
+    duplicate.name = name
+    duplicate.data = source.data
+    duplicate.animation_data_clear()
+    duplicate.location.x += x_offset
+    duplicate.rotation_euler.rotate_axis("Z", radians(z_rotation_degrees))
+    duplicate.hide_render = False
+    duplicate.hide_viewport = False
+    duplicate[MULTIVIEW_PROP] = True
+    collection.objects.link(duplicate)
+    return duplicate
+
+
+def _create_multiview_setup(job):
+    source = bpy.data.objects.get(job.get("object", ""))
+    parent_collection = bpy.data.collections.get(job.get("collection", ""))
+    if source is None or parent_collection is None:
+        return []
+
+    settings = bpy.context.scene.polygroups_render_settings
+    asset_name = job.get("asset_name", "") or _asset_name_from_collection(parent_collection)
+    collection = _multiview_collection(parent_collection, asset_name)
+    offset = settings.multiview_offset
+    base_name = _clean_name(_base_name(source.name))
+    duplicates = [
+        _create_multiview_duplicate(
+            source,
+            collection,
+            f"{base_name}_MV_Back",
+            -offset,
+            180.0,
+        ),
+        _create_multiview_duplicate(
+            source,
+            collection,
+            f"{base_name}_MV_Side",
+            offset,
+            90.0,
+        ),
+    ]
+
+    _set_collection_enabled(collection, True)
+    return duplicates
+
+
+def _remove_multiview_objects(objects):
+    for obj in objects:
+        if obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def _clear_multiview_setups():
+    removed_objects = 0
+    for obj in list(bpy.data.objects):
+        if not obj.get(MULTIVIEW_PROP):
+            continue
+        bpy.data.objects.remove(obj, do_unlink=True)
+        removed_objects += 1
+
+    removed_collections = 0
+    for collection in list(bpy.data.collections):
+        if (
+            not _base_name(collection.name).endswith(MULTIVIEW_COLLECTION_SUFFIX)
+            or collection.objects
+            or collection.children
+        ):
+            continue
+        bpy.data.collections.remove(collection)
+        removed_collections += 1
+
+    return removed_objects, removed_collections
+
+
 def _prepare_scene_for_job(job):
     queue_collections = [
         collection
@@ -213,10 +336,13 @@ def _prepare_scene_for_job(job):
         obj.hide_render = not is_current
         obj.hide_viewport = not is_current
 
+    _prepare_transparent_background(bpy.context.scene.polygroups_render_settings)
     return True
 
 
-def _finish_render_job(job):
+def _finish_render_job(job, multiview_objects=None):
+    _remove_multiview_objects(multiview_objects or [])
+    _clear_multiview_setups()
     collection = bpy.data.collections.get(job.get("collection", ""))
     if collection is not None:
         _set_asset_collection_enabled(collection, False)
@@ -328,8 +454,11 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         settings.last_output_path = job.get("output_path", "")
         settings.status = f"Rendering {settings.current_object}"
         _configure_render(context.scene, settings, job)
-        bpy.ops.render.render(write_still=True)
-        _finish_render_job(job)
+        multiview_objects = _create_multiview_setup(job) if settings.multiview_render else []
+        try:
+            bpy.ops.render.render(write_still=True)
+        finally:
+            _finish_render_job(job, multiview_objects)
 
         settings.queue_index += 1
         _sync_progress(settings)
@@ -364,6 +493,22 @@ class OBJECT_OT_polygroups_stop_render_queue(bpy.types.Operator):
         settings = context.scene.polygroups_render_settings
         settings.stop_requested = True
         settings.status = "Stop requested"
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_clear_multiview_render(bpy.types.Operator):
+    bl_idname = "object.polygroups_clear_multiview_render"
+    bl_label = "Clear Multi View"
+    bl_description = "Remove temporary multi view render duplicates and empty multi view collections"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        del context
+        removed_objects, removed_collections = _clear_multiview_setups()
+        self.report(
+            {"INFO"},
+            f"Cleared {removed_objects} multi view object(s) and {removed_collections} collection(s)",
+        )
         return {"FINISHED"}
 
 

@@ -58,6 +58,7 @@ from .panel_visibility import OBJECT_OT_airetopo_set_all_section_visibility
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
 from .remesh_presets import OBJECT_OT_polygroups_set_quad_count_preset
+from .render_queue import OBJECT_OT_polygroups_clear_multiview_render
 from .render_queue import OBJECT_OT_polygroups_continue_render_queue
 from .render_queue import OBJECT_OT_polygroups_scan_render_queue
 from .render_queue import OBJECT_OT_polygroups_start_render_queue
@@ -122,6 +123,7 @@ CLASSES = (
     OBJECT_OT_polygroups_scan_render_queue,
     OBJECT_OT_polygroups_start_render_queue,
     OBJECT_OT_polygroups_stop_render_queue,
+    OBJECT_OT_polygroups_clear_multiview_render,
     OBJECT_OT_polygroups_continue_render_queue,
     OBJECT_OT_generate_polygroups,
     OBJECT_OT_polygroups_apply_checker_material,

@@ -665,6 +665,30 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         description="Overwrite existing render files instead of making Blender ask",
         default=True,
     )
+    transparent_background: bpy.props.BoolProperty(
+        name="Transparent Background",
+        description="Render with transparent film and hide scene/background collections during each job",
+        default=False,
+    )
+    scene_collection_prefix: bpy.props.StringProperty(
+        name="Scene Collection Prefix",
+        description="Scene/background collection prefix hidden during transparent renders",
+        default="Scene",
+    )
+    multiview_render: bpy.props.BoolProperty(
+        name="Multi View",
+        description="Render temporary front, back, and side views of each asset together",
+        default=False,
+    )
+    multiview_offset: bpy.props.FloatProperty(
+        name="Multi View Offset",
+        description="World-space X offset used for temporary multi view duplicates",
+        default=0.7,
+        min=0.0,
+        soft_max=5.0,
+        precision=3,
+        unit="LENGTH",
+    )
     queue_data: bpy.props.StringProperty(
         name="Render Queue Data",
         default="[]",

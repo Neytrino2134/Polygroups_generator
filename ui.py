@@ -1725,8 +1725,25 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
         options_row = column.row(align=True)
         options_row.prop(settings, "render_low", text=t(context, "render_low"))
         options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
+        column.prop(settings, "transparent_background", text=t(context, "render_transparent_background"))
+        scene_row = column.row(align=True)
+        scene_row.enabled = settings.transparent_background
+        scene_row.prop(settings, "scene_collection_prefix", text=t(context, "render_scene_collection_prefix"))
         column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
         column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
+
+        column.separator()
+        column.prop(settings, "multiview_render", text=t(context, "render_multiview"))
+        multiview_row = column.row(align=True)
+        multiview_row.enabled = settings.multiview_render
+        multiview_row.prop(settings, "multiview_offset", text=t(context, "render_multiview_offset"))
+        clear_row = column.row(align=True)
+        clear_row.enabled = not settings.is_running
+        clear_row.operator(
+            "object.polygroups_clear_multiview_render",
+            text=t(context, "render_clear_multiview"),
+            icon="TRASH",
+        )
 
         column.separator()
         column.label(text=t(context, "render_status", value=settings.status))
