@@ -44,6 +44,21 @@ def _clean_name(name):
     return bpy.path.clean_name(name)
 
 
+def _render_output_base_directory(settings):
+    directory = (settings.output_directory or "Renders").strip() or "Renders"
+    if directory.startswith("//"):
+        return bpy.path.abspath(directory)
+    if os.path.isabs(directory):
+        return bpy.path.abspath(directory)
+    return os.path.join(bpy.path.abspath("//"), directory)
+
+
+def _normalize_render_output_setting(settings):
+    directory = (settings.output_directory or "").strip()
+    if directory.startswith("//"):
+        settings.output_directory = bpy.path.abspath(directory)
+
+
 def _freestyle_pass_path(output_path):
     root, _ = os.path.splitext(output_path)
     return f"{root}_freestyle_pass.png"
@@ -82,7 +97,7 @@ def _find_asset_objects(collection, asset_name, settings):
 
 
 def _scan_render_queue(settings):
-    base_directory = bpy.path.abspath(settings.output_directory or "//Renders")
+    base_directory = _render_output_base_directory(settings)
     queue = []
     collection_names = set()
 
@@ -933,6 +948,7 @@ class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
 
     def execute(self, context):
         settings = context.scene.polygroups_render_settings
+        _normalize_render_output_setting(settings)
         queue, collection_count = _scan_render_queue(settings)
         settings.queue_index = 0
         settings.current_collection = ""
@@ -963,6 +979,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
     def invoke(self, context, event):
         del event
         settings = context.scene.polygroups_render_settings
+        _normalize_render_output_setting(settings)
         if not self.continue_from_current:
             queue, collection_count = _scan_render_queue(settings)
             settings.queue_index = 0

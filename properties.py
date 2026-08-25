@@ -58,6 +58,13 @@ def _panel_visibility_update(property_name):
     return update
 
 
+def _normalize_render_output_directory(self, context):
+    del context
+    value = (self.output_directory or "").strip()
+    if value.startswith("//"):
+        self["output_directory"] = bpy.path.abspath(value)
+
+
 def _single_section_mode_update(self, context):
     del context
     if _PANEL_VISIBILITY_UPDATE_LOCK or not self.single_section_mode:
@@ -647,8 +654,9 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     output_directory: bpy.props.StringProperty(
         name="Output Folder",
         description="Base folder for render output",
-        default="//Renders",
+        default="Renders",
         subtype="DIR_PATH",
+        update=_normalize_render_output_directory,
     )
     render_low: bpy.props.BoolProperty(
         name="Render LOW",
