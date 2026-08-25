@@ -1666,6 +1666,87 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         )
 
 
+class VIEW3D_PT_polygroups_render(bpy.types.Panel):
+    bl_label = "13 |"
+    bl_text_key = "section_render"
+    bl_icon = "RENDER_STILL"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 13
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
+        layout = self.layout.box()
+        settings = context.scene.polygroups_render_settings
+        column = layout.column(align=True)
+
+        row = column.row(align=True)
+        row.enabled = not settings.is_running
+        row.operator(
+            "object.polygroups_scan_render_queue",
+            text=t(context, "render_scan_queue"),
+            icon="VIEWZOOM",
+        )
+        row.operator(
+            "object.polygroups_start_render_queue",
+            text=t(context, "render_start"),
+            icon="RENDER_STILL",
+        )
+
+        row = column.row(align=True)
+        row.operator(
+            "object.polygroups_continue_render_queue",
+            text=t(context, "render_continue"),
+            icon="PLAY",
+        )
+        row.enabled = not settings.is_running and settings.total_count > 0
+        stop_row = column.row(align=True)
+        stop_row.enabled = settings.is_running
+        stop_row.operator(
+            "object.polygroups_stop_render_queue",
+            text=t(context, "render_stop"),
+            icon="CANCEL",
+        )
+
+        column.separator()
+        column.prop(settings, "render_engine", text=t(context, "render_engine"))
+        column.prop(settings, "max_samples", text=t(context, "render_max_samples"))
+        resolution_row = column.row(align=True)
+        resolution_row.prop(settings, "resolution_x", text=t(context, "render_resolution_x"))
+        resolution_row.prop(settings, "resolution_y", text=t(context, "render_resolution_y"))
+        column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
+
+        options_row = column.row(align=True)
+        options_row.prop(settings, "render_low", text=t(context, "render_low"))
+        options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
+        column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
+        column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
+
+        column.separator()
+        column.label(text=t(context, "render_status", value=settings.status))
+        column.label(text=t(context, "render_collections", value=settings.collection_count))
+        column.label(text=t(context, "render_queued", value=settings.total_count))
+        column.label(text=t(context, "render_rendered", value=settings.rendered_count))
+        column.label(text=t(context, "render_remaining", value=settings.remaining_count))
+        if settings.current_collection or settings.current_object:
+            column.label(
+                text=t(
+                    context,
+                    "render_current",
+                    collection=settings.current_collection or "-",
+                    object=settings.current_object or "-",
+                ),
+            )
+        if settings.last_output_path:
+            column.label(text=t(context, "render_last_output", value=settings.last_output_path), icon="FILE_IMAGE")
+
+
 SECTION_PANEL_CLASSES = (
     VIEW3D_PT_polygroups_import,
     VIEW3D_PT_polygroups_batch_import,
@@ -1679,6 +1760,7 @@ SECTION_PANEL_CLASSES = (
     VIEW3D_PT_polygroups_baking,
     VIEW3D_PT_airetopo_ai_generation,
     VIEW3D_PT_polygroups_mesh_finalization,
+    VIEW3D_PT_polygroups_render,
 )
 
 CLASSES = (
@@ -1698,6 +1780,7 @@ SECTION_PANEL_VISIBILITY = (
     (VIEW3D_PT_polygroups_baking, "show_baking_section"),
     (VIEW3D_PT_airetopo_ai_generation, "show_ai_generation_section"),
     (VIEW3D_PT_polygroups_mesh_finalization, "show_mesh_finalization_section"),
+    (VIEW3D_PT_polygroups_render, "show_render_section"),
 )
 
 for section_class, visibility_property in SECTION_PANEL_VISIBILITY:

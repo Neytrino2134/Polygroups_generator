@@ -25,6 +25,7 @@ SECTION_VISIBILITY_PROPERTIES = (
     "show_baking_section",
     "show_ai_generation_section",
     "show_mesh_finalization_section",
+    "show_render_section",
 )
 
 
@@ -245,6 +246,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     show_baking_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_baking_section"))
     show_ai_generation_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_ai_generation_section"))
     show_mesh_finalization_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_mesh_finalization_section"))
+    show_render_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_render_section"))
 
 
 class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
@@ -603,6 +605,89 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     mesh_check_thin_protrusions: bpy.props.IntProperty(default=0, min=0)
 
 
+class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
+    render_engine: bpy.props.EnumProperty(
+        name="Render Engine",
+        description="Render engine used for batch asset previews",
+        items=(
+            ("CYCLES", "Cycles", "Render with Cycles"),
+            ("EEVEE", "Eevee", "Render with Eevee"),
+        ),
+        default="CYCLES",
+    )
+    max_samples: bpy.props.IntProperty(
+        name="Max Samples",
+        description="Maximum render samples for the selected engine",
+        default=64,
+        min=1,
+        max=4096,
+        soft_max=512,
+    )
+    resolution_x: bpy.props.IntProperty(
+        name="Resolution X",
+        description="Render resolution width",
+        default=1024,
+        min=16,
+        max=16384,
+        soft_max=4096,
+    )
+    resolution_y: bpy.props.IntProperty(
+        name="Resolution Y",
+        description="Render resolution height",
+        default=1024,
+        min=16,
+        max=16384,
+        soft_max=4096,
+    )
+    output_directory: bpy.props.StringProperty(
+        name="Output Folder",
+        description="Base folder for render output",
+        default="//Renders",
+        subtype="DIR_PATH",
+    )
+    render_low: bpy.props.BoolProperty(
+        name="Render LOW",
+        description="Include *_LOW objects in the render queue",
+        default=True,
+    )
+    render_mid: bpy.props.BoolProperty(
+        name="Render MID",
+        description="Include *_MID objects in the render queue",
+        default=True,
+    )
+    skip_existing: bpy.props.BoolProperty(
+        name="Skip Existing",
+        description="Skip render files that already exist",
+        default=True,
+    )
+    overwrite_existing: bpy.props.BoolProperty(
+        name="Overwrite Existing",
+        description="Overwrite existing render files instead of making Blender ask",
+        default=True,
+    )
+    queue_data: bpy.props.StringProperty(
+        name="Render Queue Data",
+        default="[]",
+        options={"HIDDEN"},
+    )
+    queue_index: bpy.props.IntProperty(
+        name="Queue Index",
+        default=0,
+        min=0,
+        options={"HIDDEN"},
+    )
+    total_count: bpy.props.IntProperty(name="Queued", default=0, min=0)
+    rendered_count: bpy.props.IntProperty(name="Rendered", default=0, min=0)
+    remaining_count: bpy.props.IntProperty(name="Remaining", default=0, min=0)
+    collection_count: bpy.props.IntProperty(name="Collections", default=0, min=0)
+    current_collection: bpy.props.StringProperty(name="Current Collection", default="")
+    current_object: bpy.props.StringProperty(name="Current Object", default="")
+    last_output_path: bpy.props.StringProperty(name="Last Output", default="", subtype="FILE_PATH")
+    status: bpy.props.StringProperty(name="Status", default="Not scanned")
+    is_running: bpy.props.BoolProperty(name="Running", default=False)
+    stop_requested: bpy.props.BoolProperty(name="Stop Requested", default=False, options={"HIDDEN"})
+
+
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     bake_resolution: bpy.props.IntProperty(
         name="Bake Resolution",
@@ -879,6 +964,7 @@ CLASSES = (
     POLYGROUPS_PG_polygroups_settings,
     POLYGROUPS_PG_seam_finalization_settings,
     POLYGROUPS_PG_mesh_finalization_settings,
+    POLYGROUPS_PG_render_settings,
     POLYGROUPS_PG_baking_settings,
     POLYGROUPS_PG_resculpting_settings,
     AIRETOPO_PG_ai_generation_settings,
@@ -917,6 +1003,9 @@ def register():
     bpy.types.Scene.polygroups_mesh_finalization_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_mesh_finalization_settings,
     )
+    bpy.types.Scene.polygroups_render_settings = bpy.props.PointerProperty(
+        type=POLYGROUPS_PG_render_settings,
+    )
     bpy.types.Scene.polygroups_baking_settings = bpy.props.PointerProperty(
         type=POLYGROUPS_PG_baking_settings,
     )
@@ -937,6 +1026,7 @@ def unregister():
     del bpy.types.Scene.airetopo_ai_generation_settings
     del bpy.types.Scene.polygroups_resculpting_settings
     del bpy.types.Scene.polygroups_baking_settings
+    del bpy.types.Scene.polygroups_render_settings
     del bpy.types.Scene.polygroups_mesh_finalization_settings
     del bpy.types.Scene.polygroups_seam_finalization_settings
     del bpy.types.Scene.polygroups_generator_settings

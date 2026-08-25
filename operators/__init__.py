@@ -58,6 +58,10 @@ from .panel_visibility import OBJECT_OT_airetopo_set_all_section_visibility
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
 from .remesh_presets import OBJECT_OT_polygroups_set_quad_count_preset
+from .render_queue import OBJECT_OT_polygroups_continue_render_queue
+from .render_queue import OBJECT_OT_polygroups_scan_render_queue
+from .render_queue import OBJECT_OT_polygroups_start_render_queue
+from .render_queue import OBJECT_OT_polygroups_stop_render_queue
 from .resculpting import OBJECT_OT_polygroups_add_multires
 from .resculpting import OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly
 from .resculpting import OBJECT_OT_polygroups_setup_resculpting
@@ -115,6 +119,10 @@ CLASSES = (
     OBJECT_OT_polygroups_skip_prepare_and_bake,
     OBJECT_OT_polygroups_make_lowpoly_active,
     OBJECT_OT_polygroups_set_quad_count_preset,
+    OBJECT_OT_polygroups_scan_render_queue,
+    OBJECT_OT_polygroups_start_render_queue,
+    OBJECT_OT_polygroups_stop_render_queue,
+    OBJECT_OT_polygroups_continue_render_queue,
     OBJECT_OT_generate_polygroups,
     OBJECT_OT_polygroups_apply_checker_material,
     OBJECT_OT_polygroups_apply_material_mode,
