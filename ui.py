@@ -1746,6 +1746,26 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
         )
 
         column.separator()
+        column.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
+        freestyle_column = column.column(align=True)
+        freestyle_column.enabled = settings.freestyle_edges
+        freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
+        freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
+        freestyle_column.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+        freestyle_row = column.row(align=True)
+        freestyle_row.enabled = not settings.is_running
+        freestyle_row.operator(
+            "object.polygroups_mark_freestyle_edges",
+            text=t(context, "render_mark_freestyle"),
+            icon="EDGESEL",
+        )
+        freestyle_row.operator(
+            "object.polygroups_clear_freestyle_edges",
+            text=t(context, "render_clear_freestyle"),
+            icon="TRASH",
+        )
+
+        column.separator()
         column.label(text=t(context, "render_status", value=settings.status))
         column.label(text=t(context, "render_collections", value=settings.collection_count))
         column.label(text=t(context, "render_queued", value=settings.total_count))

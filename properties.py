@@ -694,6 +694,33 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         precision=3,
         unit="LENGTH",
     )
+    freestyle_edges: bpy.props.BoolProperty(
+        name="Freestyle Edges",
+        description="Render Freestyle edge marks for LOW/MID asset objects",
+        default=False,
+    )
+    freestyle_as_render_pass: bpy.props.BoolProperty(
+        name="As Render Pass",
+        description="Save Freestyle edges as a separate pass image instead of compositing them into the asset render",
+        default=True,
+    )
+    freestyle_line_thickness: bpy.props.FloatProperty(
+        name="Line Thickness",
+        description="Absolute Freestyle line thickness in pixels",
+        default=0.1,
+        min=0.01,
+        soft_max=5.0,
+        precision=3,
+    )
+    freestyle_line_color: bpy.props.FloatVectorProperty(
+        name="Line Color",
+        description="Freestyle line color",
+        default=(1.0, 1.0, 1.0, 1.0),
+        min=0.0,
+        max=1.0,
+        size=4,
+        subtype="COLOR",
+    )
     queue_data: bpy.props.StringProperty(
         name="Render Queue Data",
         default="[]",
