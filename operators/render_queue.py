@@ -5,6 +5,8 @@ from math import radians
 
 import bpy
 
+from ..sound import play_operation_done_sound
+
 
 ASSET_COLLECTION_SUFFIX = "_Collection"
 ASSET_RENDER_SUFFIXES = ("LOW", "MID")
@@ -1027,6 +1029,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         queue = _load_queue(settings)
         if settings.queue_index >= len(queue):
             self._finish(context, "Render queue complete")
+            play_operation_done_sound(context)
             return {"FINISHED"}
 
         job = queue[settings.queue_index]

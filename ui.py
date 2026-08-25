@@ -658,6 +658,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
 
         layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
+        layout.prop(settings, "cutter_apply_method", text=t(context, "cutter_apply_method"))
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
@@ -694,7 +695,6 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             "delete_cutters_after_apply",
             text=t(context, "delete_cutters_after_apply"),
         )
-
         layout.separator()
         tool_operator = layout.operator(
             "wm.tool_set_by_id",

@@ -100,6 +100,8 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         text=t(context, _active_cutter_label_key(tool.idname)),
         icon="TOOL_SETTINGS",
     )
+    if cutter_type in {"ARC", "PATH", "DRAW"}:
+        row.prop(settings, "cutter_apply_method", text=t(context, "cutter_apply_method"))
     row.label(text=t(context, "ctrl_draw_hint"))
 
     if cutter_type in {"PLANE", "ARC"}:

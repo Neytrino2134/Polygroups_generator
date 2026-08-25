@@ -9,6 +9,8 @@ from mathutils import kdtree
 from mathutils import Matrix
 from mathutils import Vector
 
+from ..sound import play_operation_done_sound
+
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_COLLECTION_BY_TOOL = {
@@ -1352,7 +1354,7 @@ def _apply_boolean_cutter_to_mesh(
         _remove_material_if_unused(placeholder_material)
 
 
-def _apply_knife_intersect_arc_to_mesh(context, target, cutter, extension_distance=0.0):
+def _apply_knife_intersect_cutter_to_mesh(context, target, cutter, extension_distance=0.0):
     material = _path_boolean_material()
     temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
         target,
@@ -1448,6 +1450,11 @@ def _arc_heal_distance(context):
     return weld_distance
 
 
+def _cutter_apply_method(context):
+    settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
+    return getattr(settings, "cutter_apply_method", "BOOLEAN")
+
+
 def _merge_selected_cut_vertices(target, merge_distance):
     import bmesh
 
@@ -1523,14 +1530,23 @@ def _count_open_boundary_edges(target):
 def _apply_arc_cutters_to_mesh(context, target, cutters):
     marked_edges = 0
     _center, target_diagonal = _target_bounds(target)
-    extension_distance = target_diagonal * 2.0
+    knife_extension_distance = target_diagonal * 2.0
+    apply_method = _cutter_apply_method(context)
     for cutter in cutters:
-        marked_edges += _apply_knife_intersect_arc_to_mesh(
-            context,
-            target,
-            cutter,
-            extension_distance=extension_distance,
-        )
+        if apply_method == "BOOLEAN":
+            marked_edges += _apply_boolean_cutter_to_mesh(
+                context,
+                target,
+                cutter,
+                extension_distance=0.0,
+            )
+        else:
+            marked_edges += _apply_knife_intersect_cutter_to_mesh(
+                context,
+                target,
+                cutter,
+                extension_distance=knife_extension_distance,
+            )
     return marked_edges
 
 
@@ -1603,8 +1619,12 @@ def _apply_cutters_to_mesh(context, target, cutters):
     if arc_cutters:
         marked_edges += _apply_arc_cutters_to_mesh(context, target, arc_cutters)
 
+    apply_method = _cutter_apply_method(context)
     for cutter in boolean_cutters:
-        marked_edges += _apply_boolean_cutter_to_mesh(context, target, cutter)
+        if apply_method == "KNIFE":
+            marked_edges += _apply_knife_intersect_cutter_to_mesh(context, target, cutter)
+        else:
+            marked_edges += _apply_boolean_cutter_to_mesh(context, target, cutter)
 
     return marked_edges
 
@@ -2825,6 +2845,7 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             {"INFO"},
             f"Applied {len(cutters)} cutter object(s), marked {marked_edges} seam edge(s)",
         )
+        play_operation_done_sound(context)
         return {"FINISHED"}
 
 

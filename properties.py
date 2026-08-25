@@ -346,6 +346,15 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         max=96,
         soft_max=32,
     )
+    cutter_apply_method: bpy.props.EnumProperty(
+        name="Apply Method",
+        description="Method used to apply arc, path, and draw cutter seams",
+        items=(
+            ("BOOLEAN", "Boolean - faster", "Use the faster boolean union workflow before deleting cutter faces"),
+            ("KNIFE", "Knife Intersect - cleaner", "Use Intersect Knife for cleaner cuts before deleting cutter faces"),
+        ),
+        default="BOOLEAN",
+    )
     cutter_path_render_u: bpy.props.IntProperty(
         name="Path Render U",
         description="Render U resolution for newly created cutter path curves",

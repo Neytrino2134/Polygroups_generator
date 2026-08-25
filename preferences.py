@@ -279,6 +279,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         description="Show language and add-on description in the main panel",
         default=False,
     )
+    play_sound_after_operations: bpy.props.BoolProperty(
+        name="Play Sound After Operations",
+        description="Play the bundled notification sound after long operations finish",
+        default=True,
+    )
     use_env_openai_api_key: bpy.props.BoolProperty(
         name="Use OPENAI_API_KEY",
         description="Prefer the OPENAI_API_KEY environment variable when it is available",
@@ -437,6 +442,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         self.draw_info(context, layout.box())
         self.draw_updates(context, layout.box())
         self.draw_language(context, layout.box())
+        self.draw_operations(context, layout.box())
         self.draw_api(context, layout.box())
         self.draw_hotkeys(context, layout.box())
         self.draw_pie_menu(context, layout.box())
@@ -463,6 +469,15 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         column = layout.column(align=True)
         column.prop(self, "interface_language", text=t(context, "language"))
         column.prop(self, "show_panel_settings", text=t(context, "show_panel_settings"))
+
+    def draw_operations(self, context, layout):
+        layout.label(text=t(context, "preferences_operations"), icon="SOUND")
+        column = layout.column(align=True)
+        column.prop(
+            self,
+            "play_sound_after_operations",
+            text=t(context, "play_sound_after_operations"),
+        )
 
     def draw_api(self, context, layout):
         layout.label(text=t(context, "preferences_api"), icon="KEYINGSET")
