@@ -104,6 +104,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
 
     if cutter_type in {"PLANE", "ARC"}:
         layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
+        layout.prop(settings, "fill_split_cutters", text=t(context, "fill_cutter"))
+        layout.operator(
+            "object.polygroups_split_object_by_cutters",
+            text=t(context, "split_object"),
+            icon="MOD_EXPLODE",
+        )
     if cutter_type == "ARC":
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
     if cutter_type == "PATH":

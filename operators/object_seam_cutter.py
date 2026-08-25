@@ -1161,6 +1161,44 @@ def _split_selected_edges(context, target, separate_objects):
     return [target]
 
 
+def _fill_split_cut_boundaries(objects):
+    import bmesh
+
+    filled_faces = 0
+    for obj in objects:
+        if obj.type != "MESH":
+            continue
+
+        mesh = obj.data
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        cut_boundary_edges = [
+            edge
+            for edge in bm.edges
+            if edge.is_boundary and (edge.seam or edge.select)
+        ]
+        if not cut_boundary_edges:
+            bm.free()
+            continue
+
+        result = bmesh.ops.holes_fill(
+            bm,
+            edges=cut_boundary_edges,
+            sides=0,
+        )
+        filled_faces += sum(
+            1
+            for item in result.get("geom", ())
+            if isinstance(item, bmesh.types.BMFace)
+        )
+        bm.normal_update()
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.update()
+
+    return filled_faces
+
+
 def _remove_material_slot_by_index(obj, material_index):
     if material_index < 0 or material_index >= len(obj.data.materials):
         return
@@ -2628,6 +2666,7 @@ class OBJECT_OT_polygroups_split_object_by_cutters(bpy.types.Operator):
             return {"CANCELLED"}
 
         parts = _split_selected_edges(context, target, separate_objects=True)
+        filled_faces = _fill_split_cut_boundaries(parts) if settings.fill_split_cutters else 0
         settings.last_cutter_count = len(cutters)
         settings.last_marked_edge_count = marked_edges
 
@@ -2640,7 +2679,7 @@ class OBJECT_OT_polygroups_split_object_by_cutters(bpy.types.Operator):
 
         self.report(
             {"INFO"},
-            f"Split object with {len(cutters)} cutter object(s), created {len(parts)} part(s)",
+            f"Split object with {len(cutters)} cutter object(s), created {len(parts)} part(s), filled {filled_faces} face(s)",
         )
         return {"FINISHED"}
 

@@ -427,6 +427,11 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         description="Hide cutter plane objects after applying seams",
         default=True,
     )
+    fill_split_cutters: bpy.props.BoolProperty(
+        name="Fill Cutter",
+        description="Fill cut boundary openings after splitting an object with plane or arc cutters",
+        default=False,
+    )
     delete_cutters_after_apply: bpy.props.BoolProperty(
         name="Delete Cutters After Apply",
         description="Delete cutter plane objects after applying seams",
