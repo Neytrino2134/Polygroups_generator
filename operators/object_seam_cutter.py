@@ -23,6 +23,8 @@ CUTTER_DRAW_DATA_PROP = "polygroups_object_seam_cutter_draw_data"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
+DEFAULT_CUTTER_PATH_TILT = radians(90.0)
+CUTTER_PATH_TILT_STEP = radians(15.0)
 
 
 def _view3d_under_mouse(context, event):
@@ -364,6 +366,8 @@ def _create_cutter_path(name, path_points, render_u, extrude, alpha, collection_
     for point, item in zip(spline.points, path_points):
         location = item["location"]
         point.co = (location.x, location.y, location.z, 1.0)
+        if hasattr(point, "tilt"):
+            point.tilt = DEFAULT_CUTTER_PATH_TILT
 
     obj = bpy.data.objects.new(name, curve)
     obj.show_in_front = True
@@ -394,6 +398,8 @@ def _write_cutter_path_points(cutter, path_points):
     for point, item in zip(spline.points, path_points):
         location = item["location"]
         point.co = (location.x, location.y, location.z, 1.0)
+        if hasattr(point, "tilt"):
+            point.tilt = DEFAULT_CUTTER_PATH_TILT
 
     cutter[CUTTER_PATH_DATA_PROP] = json.dumps(
         [
@@ -419,6 +425,8 @@ def _create_cutter_draw_stroke(name, path_points, render_u, alpha):
     for point, item in zip(spline.points, path_points):
         location = item["location"]
         point.co = (location.x, location.y, location.z, 1.0)
+        if hasattr(point, "tilt"):
+            point.tilt = DEFAULT_CUTTER_PATH_TILT
 
     obj = bpy.data.objects.new(name, curve)
     obj.show_in_front = True
@@ -449,6 +457,8 @@ def _write_draw_stroke_points(stroke, path_points):
     for point, item in zip(spline.points, path_points):
         location = item["location"]
         point.co = (location.x, location.y, location.z, 1.0)
+        if hasattr(point, "tilt"):
+            point.tilt = DEFAULT_CUTTER_PATH_TILT
 
     stroke[CUTTER_DRAW_DATA_PROP] = json.dumps(
         [
@@ -865,10 +875,10 @@ def _path_tilts(cutter, point_count):
     tilts = []
     if cutter.type == "CURVE" and cutter.data.splines:
         for point in cutter.data.splines[0].points:
-            tilts.append(getattr(point, "tilt", 0.0))
+            tilts.append(getattr(point, "tilt", DEFAULT_CUTTER_PATH_TILT))
 
     while len(tilts) < point_count:
-        tilts.append(0.0)
+        tilts.append(DEFAULT_CUTTER_PATH_TILT)
     return tilts[:point_count]
 
 
@@ -2557,30 +2567,49 @@ class OBJECT_OT_polygroups_tilt_cutter_path(bpy.types.Operator):
     )
 
     def execute(self, context):
-        settings = context.scene.polygroups_object_seam_cutter_settings
-        delta = radians(settings.cutter_path_tilt_step_degrees)
+        if context.mode != "OBJECT":
+            try:
+                bpy.ops.object.mode_set(mode="OBJECT")
+            except Exception:
+                pass
+
+        delta = CUTTER_PATH_TILT_STEP
         if self.mode == "DECREASE":
             delta = -delta
 
         changed = 0
+        changed_objects = []
         for obj in context.selected_objects:
-            if obj.type != "CURVE" or not obj.get(CUTTER_PROP) or obj.get(CUTTER_TYPE_PROP) != "PATH":
+            if (
+                obj.type != "CURVE"
+                or not obj.get(CUTTER_PROP)
+                or obj.get(CUTTER_TYPE_PROP) not in {"PATH", "DRAW_STROKE"}
+            ):
                 continue
 
+            object_changed = False
             for spline in obj.data.splines:
                 for point in spline.points:
                     if not hasattr(point, "tilt"):
                         continue
                     if self.mode == "RESET":
-                        point.tilt = 0.0
+                        point.tilt = DEFAULT_CUTTER_PATH_TILT
                     else:
                         point.tilt += delta
                     changed += 1
+                    object_changed = True
+            if object_changed:
+                changed_objects.append(obj)
 
         if not changed:
             self.report({"WARNING"}, "No selected cutter path curves")
             return {"CANCELLED"}
 
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in changed_objects:
+            obj.select_set(True)
+        context.view_layer.objects.active = changed_objects[0]
+        bpy.ops.object.mode_set(mode="OBJECT")
         self.report({"INFO"}, f"Updated tilt on {changed} path point(s)")
         return {"FINISHED"}
 

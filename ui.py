@@ -662,7 +662,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
-        layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+        tilt_row = layout.row(align=True)
+        tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
+        tilt_operator.mode = "DECREASE"
+        tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_plus"))
+        tilt_operator.mode = "INCREASE"
         layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
         layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
@@ -762,11 +766,6 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             text=t(context, "tilt_plus"),
         )
         tilt_operator.mode = "INCREASE"
-        tilt_operator = tilt_row.operator(
-            "object.polygroups_tilt_cutter_path",
-            text=t(context, "tilt_reset"),
-        )
-        tilt_operator.mode = "RESET"
         layout.operator(
             "object.polygroups_apply_cutter_seams",
             text=t(context, "apply_cutter_seams"),

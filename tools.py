@@ -90,17 +90,17 @@ def _active_cutter_label_key(tool_id):
 def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     settings = context.scene.polygroups_object_seam_cutter_settings
     row = layout.row(align=True)
+    row.operator(
+        "object.polygroups_apply_cutter_seams",
+        text=t(context, "apply_cutter_seams"),
+        icon="MOD_BOOLEAN",
+    )
     row.menu(
         "VIEW3D_MT_polygroups_cutter_tool_type",
         text=t(context, _active_cutter_label_key(tool.idname)),
         icon="TOOL_SETTINGS",
     )
     row.label(text=t(context, "ctrl_draw_hint"))
-    row.operator(
-        "object.polygroups_apply_cutter_seams",
-        text=t(context, "apply_cutter_seams"),
-        icon="MOD_BOOLEAN",
-    )
 
     if cutter_type in {"PLANE", "ARC"}:
         layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
@@ -115,7 +115,11 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     if cutter_type == "PATH":
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
-        layout.prop(settings, "cutter_path_tilt_step_degrees", text=t(context, "path_tilt_step"))
+        tilt_row = layout.row(align=True)
+        tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
+        tilt_operator.mode = "DECREASE"
+        tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_plus"))
+        tilt_operator.mode = "INCREASE"
         layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
         layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.operator(
@@ -126,6 +130,11 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     if cutter_type == "DRAW":
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
+        tilt_row = layout.row(align=True)
+        tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
+        tilt_operator.mode = "DECREASE"
+        tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_plus"))
+        tilt_operator.mode = "INCREASE"
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
         layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
         layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))

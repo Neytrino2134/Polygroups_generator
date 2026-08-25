@@ -364,14 +364,6 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         precision=4,
         update=_sync_selected_cutter_path_settings,
     )
-    cutter_path_tilt_step_degrees: bpy.props.FloatProperty(
-        name="Path Tilt Step",
-        description="Tilt angle step applied to selected cutter path curves",
-        default=15.0,
-        soft_min=-90.0,
-        soft_max=90.0,
-        precision=1,
-    )
     continue_path_cutters: bpy.props.BoolProperty(
         name="Continue Path Cutters",
         description="Append new cutter paths to nearby existing cutter paths instead of creating separate objects",
