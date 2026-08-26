@@ -1322,9 +1322,15 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         column.prop(seam_settings, "auto_unwrap_after_seam", text=t(context, "auto_unwrap"))
         column.prop(
             seam_settings,
+            "auto_average_islands_scale_after_unwrap",
+            text=t(context, "auto_average_islands_scale"),
+        )
+        column.prop(
+            seam_settings,
             "prefer_backside_longitudinal_seam",
             text=t(context, "prefer_backside_longitudinal_seam"),
         )
+        column.prop(seam_settings, "double_longitudinal_seam", text=t(context, "double_longitudinal_seam"))
         column.separator()
         column.operator(
             "mesh.polygroups_mark_selected_edges_seam",

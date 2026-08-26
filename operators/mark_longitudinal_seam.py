@@ -241,7 +241,7 @@ def _current_view_direction_world(context):
     return None
 
 
-def _backside_weighted_graph(graph, context, obj):
+def _view_side_weighted_graph(graph, context, obj, prefer_backside=True):
     view_direction = _current_view_direction_world(context)
     if view_direction is None or obj is None:
         return None
@@ -267,11 +267,19 @@ def _backside_weighted_graph(graph, context, obj):
         for neighbor, base_weight, edge in links:
             edge_depth = (depths[vert] + depths[neighbor]) * 0.5
             backside_factor = (edge_depth - min_depth) / depth_range
-            front_penalty = (1.0 - backside_factor) ** 2
-            weight = base_weight * (1.0 + front_penalty * 20.0)
+            wrong_side_factor = (1.0 - backside_factor) if prefer_backside else backside_factor
+            weight = base_weight * (1.0 + (wrong_side_factor**2) * 20.0)
             weighted_graph.setdefault(vert, []).append((neighbor, weight, edge))
 
     return weighted_graph
+
+
+def _backside_weighted_graph(graph, context, obj):
+    return _view_side_weighted_graph(graph, context, obj, prefer_backside=True)
+
+
+def _frontside_weighted_graph(graph, context, obj):
+    return _view_side_weighted_graph(graph, context, obj, prefer_backside=False)
 
 
 def _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
@@ -280,6 +288,83 @@ def _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
         return []
 
     return _shortest_boundary_path_edges(weighted_graph, loop_a, loop_b)
+
+
+def _frontside_boundary_path_edges(graph, loop_a, loop_b, context, obj):
+    weighted_graph = _frontside_weighted_graph(graph, context, obj)
+    if weighted_graph is None:
+        return []
+
+    return _shortest_boundary_path_edges(weighted_graph, loop_a, loop_b)
+
+
+def _selection_center(selected_faces):
+    verts = {vert for face in selected_faces for vert in face.verts}
+    if not verts:
+        return None
+    return sum((vert.co for vert in verts), Vector()) / len(verts)
+
+
+def _opposite_guide_position(selected_faces, guide_position):
+    center = _selection_center(selected_faces)
+    if center is None or guide_position is None:
+        return None
+    return center + (center - guide_position)
+
+
+def _avoid_primary_weighted_graph(graph, primary_edges):
+    primary_verts = {vert for edge in primary_edges for vert in edge.verts}
+    if not primary_verts:
+        return None
+
+    weighted_graph = {}
+    for vert, links in graph.items():
+        for neighbor, base_weight, edge in links:
+            penalty = 50.0 if vert in primary_verts or neighbor in primary_verts else 0.0
+            weighted_graph.setdefault(vert, []).append((neighbor, base_weight * (1.0 + penalty), edge))
+
+    return weighted_graph
+
+
+def _distinct_secondary_edges(primary_edges, secondary_edges):
+    primary_set = set(primary_edges)
+    secondary_set = set(secondary_edges)
+    if not secondary_set or not (secondary_set - primary_set):
+        return []
+    return list(secondary_set)
+
+
+def _opposite_boundary_path_edges(
+    graph,
+    loop_a,
+    loop_b,
+    selected_faces,
+    primary_edges,
+    context,
+    obj,
+    guide_position,
+    prefer_backside,
+):
+    seam_edges = []
+    if prefer_backside:
+        seam_edges = _frontside_boundary_path_edges(graph, loop_a, loop_b, context, obj)
+
+    if not seam_edges:
+        opposite_guide = _opposite_guide_position(selected_faces, guide_position)
+        if opposite_guide is not None:
+            seam_edges = _guided_path_edges(graph, loop_a, loop_b, opposite_guide)
+
+    if not seam_edges:
+        weighted_graph = _frontside_weighted_graph(graph, context, obj)
+        if weighted_graph is not None:
+            seam_edges = _shortest_boundary_path_edges(weighted_graph, loop_a, loop_b)
+
+    if not seam_edges:
+        weighted_graph = _avoid_primary_weighted_graph(graph, primary_edges)
+        if weighted_graph is not None:
+            seam_edges = _shortest_boundary_path_edges(weighted_graph, loop_a, loop_b)
+
+    return _distinct_secondary_edges(primary_edges, seam_edges)
 
 
 def _guided_cone_path_edges(graph, apex, boundary_loop, guide_position):
@@ -325,6 +410,45 @@ def _cone_longitudinal_path_edges(graph, boundary_loop, context, obj, guide_posi
     return seam_edges
 
 
+def _opposite_cone_longitudinal_path_edges(
+    graph,
+    boundary_loop,
+    selected_faces,
+    primary_edges,
+    context,
+    obj,
+    guide_position,
+    prefer_backside,
+):
+    distances, _previous_from_boundary, _ = _dijkstra(graph, boundary_loop)
+    apex_candidates = [
+        vert
+        for vert in graph
+        if vert not in boundary_loop and vert in distances
+    ]
+    if not apex_candidates:
+        return []
+
+    apex = max(apex_candidates, key=lambda vert: distances[vert])
+    seam_edges = []
+    if prefer_backside:
+        weighted_graph = _frontside_weighted_graph(graph, context, obj)
+        if weighted_graph is not None:
+            seam_edges = _shortest_path_edges(weighted_graph, [apex], boundary_loop)
+
+    if not seam_edges:
+        opposite_guide = _opposite_guide_position(selected_faces, guide_position)
+        if opposite_guide is not None:
+            seam_edges = _guided_cone_path_edges(graph, apex, boundary_loop, opposite_guide)
+
+    if not seam_edges:
+        weighted_graph = _avoid_primary_weighted_graph(graph, primary_edges)
+        if weighted_graph is not None:
+            seam_edges = _shortest_path_edges(weighted_graph, [apex], boundary_loop)
+
+    return _distinct_secondary_edges(primary_edges, seam_edges)
+
+
 def _mark_boundary_edges(boundary_edges):
     marked_count = 0
     for edge in boundary_edges:
@@ -334,7 +458,14 @@ def _mark_boundary_edges(boundary_edges):
     return marked_count
 
 
-def _longitudinal_seam_edges_for_faces(bm, selected_faces, context=None, obj=None, prefer_backside=False):
+def _longitudinal_seam_edges_for_faces(
+    bm,
+    selected_faces,
+    context=None,
+    obj=None,
+    prefer_backside=False,
+    double_seam=False,
+):
     boundary_edges = _selection_boundary_edges(bm, selected_faces)
     components = _edge_components(boundary_edges)
     components.sort(key=lambda item: len(item[0]), reverse=True)
@@ -357,6 +488,19 @@ def _longitudinal_seam_edges_for_faces(bm, selected_faces, context=None, obj=Non
         if not seam_edges:
             seam_edges = _shortest_boundary_path_edges(graph, loop_a, loop_b)
 
+        if double_seam:
+            seam_edges += _opposite_boundary_path_edges(
+                graph,
+                loop_a,
+                loop_b,
+                selected_faces,
+                seam_edges,
+                context,
+                obj,
+                guide_position,
+                prefer_backside,
+            )
+
     elif len(components) == 1:
         boundary_loop = components[0][1]
         seam_edges = _cone_longitudinal_path_edges(
@@ -367,6 +511,17 @@ def _longitudinal_seam_edges_for_faces(bm, selected_faces, context=None, obj=Non
             guide_position,
             prefer_backside,
         )
+        if double_seam:
+            seam_edges += _opposite_cone_longitudinal_path_edges(
+                graph,
+                boundary_loop,
+                selected_faces,
+                seam_edges,
+                context,
+                obj,
+                guide_position,
+                prefer_backside,
+            )
 
     else:
         return None, "Selection needs boundary edges or a cone-like side selection"
@@ -384,7 +539,7 @@ def _longitudinal_seam_edges_for_faces(bm, selected_faces, context=None, obj=Non
     return (marked_count, boundary_edges), None
 
 
-def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=False):
+def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=False, double_seam=False):
     selected_faces = _selected_faces(bm)
     if not selected_faces:
         return None, "Select cylinder or cone side faces first"
@@ -402,6 +557,7 @@ def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=Fa
             context=context,
             obj=obj,
             prefer_backside=prefer_backside,
+            double_seam=double_seam,
         )
         if warning:
             failed_count += 1
@@ -444,6 +600,7 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
             context=context,
             obj=obj,
             prefer_backside=settings.prefer_backside_longitudinal_seam,
+            double_seam=settings.double_longitudinal_seam,
         )
         if warning:
             self.report({"WARNING"}, warning)
@@ -451,8 +608,11 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
 
         bmesh.update_edit_mesh(mesh)
         auto_unwrapped = False
-        if context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam:
-            auto_unwrapped = unwrap_selected_angle_based(context)
+        if settings.auto_unwrap_after_seam:
+            auto_unwrapped = unwrap_selected_angle_based(
+                context,
+                average_islands=settings.auto_average_islands_scale_after_unwrap,
+            )
 
         suffix = " and unwrapped selected faces" if auto_unwrapped else ""
         failed_suffix = f"; skipped {result[3]} shape(s)" if result[3] else ""
@@ -488,6 +648,7 @@ class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator)
             context=context,
             obj=obj,
             prefer_backside=settings.prefer_backside_longitudinal_seam,
+            double_seam=settings.double_longitudinal_seam,
         )
         if warning:
             self.report({"WARNING"}, warning)
@@ -498,8 +659,11 @@ class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator)
 
         bmesh.update_edit_mesh(mesh)
         auto_unwrapped = False
-        if context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam:
-            auto_unwrapped = unwrap_selected_angle_based(context)
+        if settings.auto_unwrap_after_seam:
+            auto_unwrapped = unwrap_selected_angle_based(
+                context,
+                average_islands=settings.auto_average_islands_scale_after_unwrap,
+            )
 
         suffix = " and unwrapped selected faces" if auto_unwrapped else ""
         failed_suffix = f"; skipped {failed_count} shape(s)" if failed_count else ""

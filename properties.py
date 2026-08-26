@@ -536,9 +536,19 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         description="Run Angle Based unwrap on selected faces after final seam operators",
         default=False,
     )
+    auto_average_islands_scale_after_unwrap: bpy.props.BoolProperty(
+        name="Auto Average Islands Scale",
+        description="Average UV island scale after automatic seam unwrap and restore the edit selection",
+        default=False,
+    )
     prefer_backside_longitudinal_seam: bpy.props.BoolProperty(
         name="Prefer Backside Longitudinal Seam",
         description="Try to place longitudinal seams on the backside relative to the current 3D view",
+        default=False,
+    )
+    double_longitudinal_seam: bpy.props.BoolProperty(
+        name="Double Seam",
+        description="Create a second longitudinal seam on the opposite side of the selected cylinder or cone",
         default=False,
     )
 
