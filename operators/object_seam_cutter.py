@@ -16,6 +16,7 @@ CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_COLLECTION_BY_TOOL = {
     "PLANE": "Seam Cutters Plane",
     "ARC": "Seam Cutters Arc",
+    "LOCAL_RING": "Seam Cutters Local Ring",
     "PATH": "Seam Cutters Path",
     "DRAW": "Seam Cutters Draw",
 }
@@ -102,6 +103,29 @@ def _surface_hit_from_region_pos(region, rv3d, region_pos, target):
     if world_normal.length < 0.000001:
         return None
     world_normal.normalize()
+    return world_location, world_normal, face_index
+
+
+def _target_ray_cast_world(target, origin, direction):
+    if direction.length < 0.000001:
+        return None
+    direction = direction.normalized()
+
+    matrix_inv = target.matrix_world.inverted()
+    local_origin = matrix_inv @ origin
+    local_direction = matrix_inv.to_3x3() @ direction
+    if local_direction.length < 0.000001:
+        return None
+    local_direction.normalize()
+
+    hit, location, normal, face_index = target.ray_cast(local_origin, local_direction)
+    if not hit:
+        return None
+
+    world_location = target.matrix_world @ location
+    world_normal = target.matrix_world.to_3x3().inverted().transposed() @ normal
+    if world_normal.length > 0.000001:
+        world_normal.normalize()
     return world_location, world_normal, face_index
 
 
@@ -291,6 +315,126 @@ def _screen_arc_surface(area, region, rv3d, start_pos, middle_pos, end_pos, targ
     return center_points, depth_axis, target_diagonal * size_multiplier
 
 
+def _surface_local_ring_surface(region, rv3d, start, end, target, radius_offset):
+    from bpy_extras import view3d_utils
+
+    target_center, _target_diagonal = _target_bounds(target)
+    start_hit = _surface_hit_from_region_pos(region, rv3d, start, target)
+    end_hit = _surface_hit_from_region_pos(region, rv3d, end, target)
+    if start_hit is not None and end_hit is not None:
+        start_world = start_hit[0]
+        end_world = end_hit[0]
+    else:
+        start_world = view3d_utils.region_2d_to_location_3d(region, rv3d, start, target_center)
+        end_world = view3d_utils.region_2d_to_location_3d(region, rv3d, end, target_center)
+
+    axis_a = end_world - start_world
+    radius = axis_a.length * 0.5 + radius_offset
+    if radius <= 0.000001:
+        return None
+    axis_a.normalize()
+
+    region_center = Vector((region.width * 0.5, region.height * 0.5))
+    view_axis = view3d_utils.region_2d_to_vector_3d(region, rv3d, region_center)
+    axis_b = view_axis - axis_a * view_axis.dot(axis_a)
+    if axis_b.length < 0.000001:
+        average_normal = Vector((0.0, 0.0, 0.0))
+        if start_hit is not None:
+            average_normal += start_hit[1]
+        if end_hit is not None:
+            average_normal += end_hit[1]
+        axis_b = average_normal - axis_a * average_normal.dot(axis_a)
+    if axis_b.length < 0.000001:
+        axis_b = axis_a.cross(Vector((0.0, 0.0, 1.0)))
+    if axis_b.length < 0.000001:
+        axis_b = axis_a.cross(Vector((0.0, 1.0, 0.0)))
+    if axis_b.length < 0.000001:
+        return None
+    axis_b.normalize()
+
+    center = (start_world + end_world) * 0.5
+    return center, axis_a, axis_b, radius
+
+
+def _volume_center_from_surface_hit(target, location, normal, epsilon):
+    if normal.length < 0.000001:
+        return None
+
+    for direction in (-normal, normal):
+        if direction.length < 0.000001:
+            continue
+        direction.normalize()
+        exit_hit = _target_ray_cast_world(target, location + direction * epsilon, direction)
+        if exit_hit is None:
+            continue
+        exit_location = exit_hit[0]
+        distance = (exit_location - location).length
+        if distance > epsilon * 2.0:
+            return (location + exit_location) * 0.5, distance * 0.5
+
+    return None
+
+
+def _volume_local_ring_surface(region, rv3d, start, end, target, radius_offset):
+    start_hit = _surface_hit_from_region_pos(region, rv3d, start, target)
+    end_hit = _surface_hit_from_region_pos(region, rv3d, end, target)
+    if start_hit is None or end_hit is None:
+        return None
+
+    start_world, start_normal, _start_face = start_hit
+    end_world, end_normal, _end_face = end_hit
+    axis_a = end_world - start_world
+    radius = axis_a.length * 0.5 + radius_offset
+    if radius <= 0.000001:
+        return None
+    axis_a.normalize()
+
+    _target_center, target_diagonal = _target_bounds(target)
+    epsilon = max(target_diagonal * 0.0001, 0.00001)
+    volume_samples = []
+    for location, normal in ((start_world, start_normal), (end_world, end_normal)):
+        sample = _volume_center_from_surface_hit(target, location, normal, epsilon)
+        if sample is not None:
+            volume_samples.append(sample)
+
+    center = (start_world + end_world) * 0.5
+    if volume_samples:
+        volume_center = sum((item[0] for item in volume_samples), Vector()) / len(volume_samples)
+        depth_hint = volume_center - center
+    else:
+        depth_hint = Vector((0.0, 0.0, 0.0))
+    if depth_hint.length < 0.000001:
+        average_normal = start_normal + end_normal
+        depth_hint = -average_normal if average_normal.length > 0.000001 else Vector((0.0, 0.0, 1.0))
+    axis_b = depth_hint - axis_a * depth_hint.dot(axis_a)
+    if axis_b.length < 0.000001:
+        axis_b = axis_a.cross(Vector((0.0, 0.0, 1.0)))
+    if axis_b.length < 0.000001:
+        axis_b = axis_a.cross(Vector((0.0, 1.0, 0.0)))
+    if axis_b.length < 0.000001:
+        return None
+    axis_b.normalize()
+
+    radius = max(radius, epsilon)
+    return center, axis_a, axis_b, radius
+
+
+def _screen_local_ring_surface(area, region, rv3d, start_pos, end_pos, target, radius_offset, fit_mode):
+    del area
+
+    start = Vector(start_pos)
+    end = Vector(end_pos)
+    if (end - start).length < 2.0:
+        return None
+
+    if fit_mode == "VOLUME":
+        surface = _volume_local_ring_surface(region, rv3d, start, end, target, radius_offset)
+        if surface is not None:
+            return surface
+
+    return _surface_local_ring_surface(region, rv3d, start, end, target, radius_offset)
+
+
 def _add_solidify_modifier(obj, thickness):
     modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
     if modifier is None:
@@ -315,7 +459,7 @@ def _create_cutter_plane(name, center, axis_a, axis_b, size, alpha, thickness):
 
     obj = bpy.data.objects.new(name, mesh)
     obj.location = center
-    obj.show_in_front = True
+    obj.show_in_front = False
     obj.display_type = "TEXTURED"
     obj[CUTTER_PROP] = True
     obj[CUTTER_TYPE_PROP] = "PLANE"
@@ -345,7 +489,7 @@ def _create_cutter_arc(name, center_points, depth_axis, size, alpha, thickness):
         polygon.use_smooth = True
 
     obj = bpy.data.objects.new(name, mesh)
-    obj.show_in_front = True
+    obj.show_in_front = False
     obj.display_type = "TEXTURED"
     obj[CUTTER_PROP] = True
     obj[CUTTER_TYPE_PROP] = "ARC"
@@ -354,6 +498,34 @@ def _create_cutter_arc(name, center_points, depth_axis, size, alpha, thickness):
     if hasattr(modifier, "use_rim"):
         modifier.use_rim = True
     _tool_collection("ARC").objects.link(obj)
+    return obj
+
+
+def _create_cutter_local_ring(name, center, axis_a, axis_b, radius, segments, alpha):
+    vertices = [(0.0, 0.0, 0.0)]
+    for index in range(segments):
+        angle = tau * (index / segments)
+        vertex = axis_a * (cos(angle) * radius) + axis_b * (sin(angle) * radius)
+        vertices.append(tuple(vertex))
+
+    faces = []
+    for index in range(segments):
+        start = index + 1
+        end = 1 if index == segments - 1 else index + 2
+        faces.append((0, start, end))
+
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+
+    obj = bpy.data.objects.new(name, mesh)
+    obj.location = center
+    obj.show_in_front = False
+    obj.display_type = "TEXTURED"
+    obj[CUTTER_PROP] = True
+    obj[CUTTER_TYPE_PROP] = "LOCAL_RING"
+    obj.data.materials.append(_material(alpha))
+    _tool_collection("LOCAL_RING").objects.link(obj)
     return obj
 
 
@@ -373,7 +545,7 @@ def _create_cutter_path(name, path_points, render_u, extrude, alpha, collection_
             point.tilt = DEFAULT_CUTTER_PATH_TILT
 
     obj = bpy.data.objects.new(name, curve)
-    obj.show_in_front = True
+    obj.show_in_front = False
     obj.display_type = "TEXTURED"
     obj[CUTTER_PROP] = True
     obj[CUTTER_TYPE_PROP] = "PATH"
@@ -432,7 +604,7 @@ def _create_cutter_draw_stroke(name, path_points, render_u, alpha):
             point.tilt = DEFAULT_CUTTER_PATH_TILT
 
     obj = bpy.data.objects.new(name, curve)
-    obj.show_in_front = True
+    obj.show_in_front = False
     obj.display_type = "TEXTURED"
     obj[CUTTER_PROP] = True
     obj[CUTTER_TYPE_PROP] = "DRAW_STROKE"
@@ -1147,7 +1319,34 @@ def _apply_boolean_modifier(context, target, cutter_mesh, solver="FLOAT"):
     bpy.ops.object.modifier_apply(modifier=modifier.name)
 
 
-def _mark_boolean_path_boundaries_and_remove_faces_bmesh(target, temp_material_index, original_face_count):
+def _bvh_from_cutter_mesh(target, cutter_mesh):
+    from mathutils.bvhtree import BVHTree
+
+    matrix = target.matrix_world.inverted() @ cutter_mesh.matrix_world
+    vertices = [matrix @ vertex.co for vertex in cutter_mesh.data.vertices]
+    faces = []
+    for polygon in cutter_mesh.data.polygons:
+        polygon_vertices = list(polygon.vertices)
+        if len(polygon_vertices) < 3:
+            continue
+        for index in range(1, len(polygon_vertices) - 1):
+            faces.append((polygon_vertices[0], polygon_vertices[index], polygon_vertices[index + 1]))
+    if not vertices or not faces:
+        return None
+    return BVHTree.FromPolygons(vertices, faces)
+
+
+def _point_near_cutter_bvh(point, cutter_bvh, threshold):
+    nearest = cutter_bvh.find_nearest(point, threshold)
+    return nearest is not None
+
+
+def _mark_boolean_path_boundaries_and_remove_faces_bmesh(
+    target,
+    temp_material_index,
+    original_face_count,
+    cutter_bvh=None,
+):
     import bmesh
 
     mesh = target.data
@@ -1155,17 +1354,37 @@ def _mark_boolean_path_boundaries_and_remove_faces_bmesh(target, temp_material_i
     bm.from_mesh(mesh)
     bm.faces.ensure_lookup_table()
 
-    temp_faces = [
+    material_faces = [
         face
         for face in bm.faces
         if face.material_index == temp_material_index
     ]
-    if not temp_faces and original_face_count < len(bm.faces):
-        temp_faces = [
+    if not material_faces and original_face_count < len(bm.faces):
+        material_faces = [
             face
             for index, face in enumerate(bm.faces)
             if index >= original_face_count
         ]
+
+    if cutter_bvh and material_faces:
+        _center, target_diagonal = _target_bounds(target)
+        temp_faces = []
+        for scale in (0.0001, 0.0005, 0.001):
+            threshold = max(target_diagonal * scale, 0.00001)
+            temp_faces = [
+                face
+                for face in material_faces
+                if _point_near_cutter_bvh(face.calc_center_median(), cutter_bvh, threshold)
+            ]
+            if temp_faces:
+                break
+        temp_face_set = set(temp_faces)
+        preserved_faces = [face for face in material_faces if face not in temp_face_set]
+        fallback_index = max(0, temp_material_index - 1)
+        for face in preserved_faces:
+            face.material_index = fallback_index
+    else:
+        temp_faces = material_faces
 
     if not temp_faces:
         bm.free()
@@ -1384,12 +1603,14 @@ def _apply_boolean_cutter_to_mesh(
         _remove_material_if_unused(placeholder_material)
         return 0
 
+    cutter_bvh = _bvh_from_cutter_mesh(target, work)
     try:
         _apply_boolean_modifier(context, target, work, boolean_solver)
         return _mark_boolean_path_boundaries_and_remove_faces_bmesh(
             target,
             temp_material_index,
             original_face_count,
+            cutter_bvh,
         )
     finally:
         if work.name in bpy.data.objects:
@@ -1663,7 +1884,7 @@ def _apply_cutters_to_mesh(context, target, cutters):
     boolean_cutters = [
         cutter
         for cutter in cutters
-        if cutter.get(CUTTER_TYPE_PROP) == "PATH"
+        if cutter.get(CUTTER_TYPE_PROP) in {"PATH", "LOCAL_RING"}
     ]
 
     marked_edges = 0
@@ -1907,6 +2128,50 @@ def _draw_cutter_path_overlay(operator):
         blf.draw(font_id, label)
 
 
+def _draw_cutter_local_ring_overlay(operator):
+    if operator._start_pos is None:
+        return
+
+    try:
+        import blf
+        import gpu
+        from gpu_extras.batch import batch_for_shader
+    except Exception:
+        return
+
+    start = Vector(operator._start_pos)
+    end = Vector(operator._mouse_pos or operator._start_pos)
+    guide_color = (1.0, 0.78, 0.18, 0.85)
+    label_color = (1.0, 1.0, 1.0, 1.0)
+    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+
+    guide_points = [(start.x, start.y), (end.x, end.y)]
+    cross_size = 6.0
+    for point in (start, end):
+        guide_points.extend(
+            [
+                (point.x - cross_size, point.y),
+                (point.x + cross_size, point.y),
+                (point.x, point.y - cross_size),
+                (point.x, point.y + cross_size),
+            ],
+        )
+    batch = batch_for_shader(shader, "LINES", {"pos": guide_points})
+    shader.bind()
+    shader.uniform_float("color", guide_color)
+    batch.draw(shader)
+
+    font_id = 0
+    try:
+        blf.size(font_id, 13)
+    except TypeError:
+        blf.size(font_id, 13, 72)
+    blf.color(font_id, *label_color)
+    for label, point in (("A", start), ("B", end)):
+        blf.position(font_id, point.x + 9.0, point.y + 9.0, 0)
+        blf.draw(font_id, label)
+
+
 class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
     bl_idname = "object.polygroups_draw_cutter_plane"
     bl_label = "Draw Cutter Plane"
@@ -2043,6 +2308,160 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
 
         self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
             _draw_cutter_overlay,
+            (self,),
+            "WINDOW",
+            "POST_PIXEL",
+        )
+        self._tag_redraw()
+
+    def _tag_redraw(self):
+        if self._start_area is not None:
+            self._start_area.tag_redraw()
+
+    def _finish(self, context):
+        if self._draw_handle is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self._draw_handle, "WINDOW")
+            self._draw_handle = None
+        context.workspace.status_text_set(None)
+        self._tag_redraw()
+
+
+class OBJECT_OT_polygroups_draw_cutter_local_ring(bpy.types.Operator):
+    bl_idname = "object.polygroups_draw_cutter_local_ring"
+    bl_label = "Draw Local Ring Cutter"
+    bl_description = "Draw a local circular cutter disk from two viewport clicks"
+    bl_options = {"REGISTER", "UNDO"}
+
+    use_event_as_start: bpy.props.BoolProperty(
+        name="Use Event As Start",
+        description="Use the invoking mouse event as the local ring start point",
+        default=False,
+        options={"HIDDEN"},
+    )
+
+    _target_name = ""
+    _start_area = None
+    _start_region = None
+    _start_rv3d = None
+    _start_pos = None
+    _mouse_pos = None
+    _draw_handle = None
+    _shift_locked = False
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and context.mode == "OBJECT"
+
+    def invoke(self, context, event):
+        self._target_name = context.active_object.name
+        self._start_area = None
+        self._start_region = None
+        self._start_rv3d = None
+        self._start_pos = None
+        self._mouse_pos = None
+        self._draw_handle = None
+        self._shift_locked = False
+
+        if self.use_event_as_start:
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if region is None:
+                return {"CANCELLED"}
+            self._start_area = area
+            self._start_region = region
+            self._start_rv3d = rv3d
+            self._start_pos = region_pos
+            self._mouse_pos = region_pos
+            self._add_draw_handler()
+            context.workspace.status_text_set("Local Ring Cutter: A placed, click B to set diameter")
+        else:
+            context.workspace.status_text_set("Local Ring Cutter: click A in the viewport")
+
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+            self._finish(context)
+            return {"CANCELLED"}
+
+        if event.type == "MOUSEMOVE":
+            area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+            if self._start_pos is not None and area == self._start_area and region == self._start_region:
+                del rv3d
+                self._shift_locked = event.shift
+                self._mouse_pos = _axis_locked_region_pos(
+                    self._start_pos,
+                    region_pos,
+                    self._shift_locked,
+                )
+                self._tag_redraw()
+            return {"RUNNING_MODAL"}
+
+        if event.type != "LEFTMOUSE" or event.value != "PRESS":
+            return {"RUNNING_MODAL"}
+
+        area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
+        if region is None:
+            return {"RUNNING_MODAL"}
+
+        if self._start_pos is None:
+            self._start_area = area
+            self._start_region = region
+            self._start_rv3d = rv3d
+            self._start_pos = region_pos
+            self._mouse_pos = region_pos
+            self._add_draw_handler()
+            context.workspace.status_text_set("Local Ring Cutter: A placed, click B to set diameter")
+            return {"RUNNING_MODAL"}
+
+        if area != self._start_area or region != self._start_region:
+            self.report({"WARNING"}, "Use the same viewport for both local ring points")
+            return {"RUNNING_MODAL"}
+
+        target = bpy.data.objects.get(self._target_name)
+        if target is None:
+            self._finish(context)
+            return {"CANCELLED"}
+
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        self._shift_locked = event.shift
+        end_pos = _axis_locked_region_pos(self._start_pos, region_pos, self._shift_locked)
+        surface = _screen_local_ring_surface(
+            self._start_area,
+            self._start_region,
+            self._start_rv3d,
+            self._start_pos,
+            end_pos,
+            target,
+            settings.cutter_local_ring_radius_offset,
+            settings.cutter_local_ring_fit_mode,
+        )
+        if surface is None:
+            self.report({"WARNING"}, "Local ring diameter is too short")
+            return {"RUNNING_MODAL"}
+
+        cutter = _create_cutter_local_ring(
+            "Seam_Cutter_Local_Ring",
+            surface[0],
+            surface[1],
+            surface[2],
+            surface[3],
+            settings.cutter_local_ring_segments,
+            settings.cutter_alpha,
+        )
+        cutter.select_set(True)
+        target.select_set(True)
+        context.view_layer.objects.active = target
+        self._finish(context)
+        return {"FINISHED"}
+
+    def _add_draw_handler(self):
+        if self._draw_handle is not None:
+            return
+
+        self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_cutter_local_ring_overlay,
             (self,),
             "WINDOW",
             "POST_PIXEL",

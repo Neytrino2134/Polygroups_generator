@@ -6,11 +6,13 @@ from .localization import t
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
 DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
+DRAW_CUTTER_LOCAL_RING_TOOL_ID = "polygroups_generator.draw_cutter_local_ring_tool"
 DRAW_CUTTER_PATH_TOOL_ID = "polygroups_generator.draw_cutter_path_tool"
 DRAW_CUTTER_DRAW_TOOL_ID = "polygroups_generator.draw_cutter_draw_tool"
 VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
 CUTTER_TOOL_ORDER = (
     DRAW_CUTTER_TOOL_ID,
+    DRAW_CUTTER_LOCAL_RING_TOOL_ID,
     DRAW_CUTTER_ARC_TOOL_ID,
     DRAW_CUTTER_PATH_TOOL_ID,
     DRAW_CUTTER_DRAW_TOOL_ID,
@@ -80,6 +82,8 @@ def _move_draw_cutter_tool_after_cursor():
 def _active_cutter_label_key(tool_id):
     if tool_id == DRAW_CUTTER_ARC_TOOL_ID:
         return "draw_cutter_arc"
+    if tool_id == DRAW_CUTTER_LOCAL_RING_TOOL_ID:
+        return "draw_cutter_local_ring"
     if tool_id == DRAW_CUTTER_PATH_TOOL_ID:
         return "draw_cutter_path"
     if tool_id == DRAW_CUTTER_DRAW_TOOL_ID:
@@ -100,7 +104,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         text=t(context, _active_cutter_label_key(tool.idname)),
         icon="TOOL_SETTINGS",
     )
-    if cutter_type in {"ARC", "PATH", "DRAW"}:
+    if cutter_type in {"ARC", "LOCAL_RING", "PATH", "DRAW"}:
         row.prop(settings, "cutter_apply_method", text=t(context, "cutter_apply_method"))
     row.label(text=t(context, "ctrl_draw_hint"))
 
@@ -114,6 +118,10 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         )
     if cutter_type == "ARC":
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
+    if cutter_type == "LOCAL_RING":
+        layout.prop(settings, "cutter_local_ring_fit_mode", text=t(context, "local_ring_fit_mode"))
+        layout.prop(settings, "cutter_local_ring_segments", text=t(context, "local_ring_segments"))
+        layout.prop(settings, "cutter_local_ring_radius_offset", text=t(context, "local_ring_radius_offset"))
     if cutter_type == "PATH":
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
@@ -168,6 +176,7 @@ class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
         layout = self.layout
         items = (
             (DRAW_CUTTER_TOOL_ID, "draw_cutter_plane", "MESH_PLANE"),
+            (DRAW_CUTTER_LOCAL_RING_TOOL_ID, "draw_cutter_local_ring", "MESH_CIRCLE"),
             (DRAW_CUTTER_ARC_TOOL_ID, "draw_cutter_arc", "CURVE_BEZCURVE"),
             (DRAW_CUTTER_PATH_TOOL_ID, "draw_cutter_path", "CURVE_PATH"),
             (DRAW_CUTTER_DRAW_TOOL_ID, "draw_cutter_draw", "GREASEPENCIL"),
@@ -225,6 +234,29 @@ class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         _draw_cutter_tool_settings(context, layout, tool, "ARC")
+
+
+class VIEW3D_WST_polygroups_draw_cutter_local_ring(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_idname = DRAW_CUTTER_LOCAL_RING_TOOL_ID
+    bl_label = "Cutter Tweak: Local Ring"
+    bl_description = "Select normally; hold Ctrl and click two points to draw a local ring cutter"
+    bl_icon = "ops.mesh.primitive_cylinder_add_gizmo"
+    bl_cursor = "DEFAULT"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        (
+            "object.polygroups_draw_cutter_local_ring",
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        _draw_cutter_tool_settings(context, layout, tool, "LOCAL_RING")
 
 
 class VIEW3D_WST_polygroups_draw_cutter_path(WorkSpaceTool):
@@ -346,8 +378,14 @@ def register():
         group=True,
     )
     bpy.utils.register_tool(
-        VIEW3D_WST_polygroups_draw_cutter_arc,
+        VIEW3D_WST_polygroups_draw_cutter_local_ring,
         after={DRAW_CUTTER_TOOL_ID},
+        separator=False,
+        group=False,
+    )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_draw_cutter_arc,
+        after={DRAW_CUTTER_LOCAL_RING_TOOL_ID},
         separator=False,
         group=False,
     )
@@ -383,6 +421,7 @@ def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_draw)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_path)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_local_ring)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_arc)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)
     bpy.utils.unregister_class(VIEW3D_MT_polygroups_cutter_tool_type)

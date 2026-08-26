@@ -52,6 +52,7 @@ from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
 from .object_seam_cutter import OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_arc
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_draw
+from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_local_ring
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_path
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
 from .object_seam_cutter import OBJECT_OT_polygroups_join_draw_strokes
@@ -174,6 +175,7 @@ CLASSES = (
     OBJECT_OT_polygroups_smart_decimate,
     OBJECT_OT_polygroups_draw_cutter_plane,
     OBJECT_OT_polygroups_draw_cutter_arc,
+    OBJECT_OT_polygroups_draw_cutter_local_ring,
     OBJECT_OT_polygroups_draw_cutter_path,
     OBJECT_OT_polygroups_draw_cutter_draw,
     OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths,

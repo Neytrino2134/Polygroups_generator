@@ -658,6 +658,9 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
 
         layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
+        layout.prop(settings, "cutter_local_ring_fit_mode", text=t(context, "local_ring_fit_mode"))
+        layout.prop(settings, "cutter_local_ring_segments", text=t(context, "local_ring_segments"))
+        layout.prop(settings, "cutter_local_ring_radius_offset", text=t(context, "local_ring_radius_offset"))
         layout.prop(settings, "cutter_apply_method", text=t(context, "cutter_apply_method"))
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
@@ -722,6 +725,17 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             "object.polygroups_draw_cutter_arc",
             text=t(context, "draw_cutter_arc"),
             icon="CURVE_BEZCURVE",
+        )
+        tool_operator = layout.operator(
+            "wm.tool_set_by_id",
+            text=t(context, "select_draw_cutter_local_ring"),
+            icon="MESH_CIRCLE",
+        )
+        tool_operator.name = "polygroups_generator.draw_cutter_local_ring_tool"
+        layout.operator(
+            "object.polygroups_draw_cutter_local_ring",
+            text=t(context, "draw_cutter_local_ring"),
+            icon="MESH_CIRCLE",
         )
         tool_operator = layout.operator(
             "wm.tool_set_by_id",

@@ -346,6 +346,31 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         max=96,
         soft_max=32,
     )
+    cutter_local_ring_segments: bpy.props.IntProperty(
+        name="Local Ring Segments",
+        description="Number of segments used for local ring cutter disks",
+        default=64,
+        min=8,
+        max=192,
+        soft_max=96,
+    )
+    cutter_local_ring_radius_offset: bpy.props.FloatProperty(
+        name="Ring Radius Offset",
+        description="Additional world-space radius added to local ring cutters",
+        default=0.0,
+        soft_min=-1.0,
+        soft_max=1.0,
+        precision=4,
+    )
+    cutter_local_ring_fit_mode: bpy.props.EnumProperty(
+        name="Ring Fit Mode",
+        description="How local ring cutters are oriented and centered",
+        items=(
+            ("VOLUME", "Snap To Volume", "Use surface hits to estimate the local volume center and orient the ring across the form"),
+            ("SURFACE", "Surface Diameter", "Use the two clicked points as a screen-facing surface diameter"),
+        ),
+        default="VOLUME",
+    )
     cutter_apply_method: bpy.props.EnumProperty(
         name="Apply Method",
         description="Method used to apply arc, path, and draw cutter seams",

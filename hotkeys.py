@@ -4,6 +4,7 @@ from .localization import get_preferences
 from .localization import t
 from .tools import DRAW_CUTTER_ARC_TOOL_ID
 from .tools import DRAW_CUTTER_DRAW_TOOL_ID
+from .tools import DRAW_CUTTER_LOCAL_RING_TOOL_ID
 from .tools import DRAW_CUTTER_PATH_TOOL_ID
 from .tools import DRAW_CUTTER_TOOL_ID
 from .tools import CUTTER_TOOL_ORDER
@@ -13,6 +14,7 @@ KEYMAP_ITEMS = []
 
 CUTTER_TOOL_ITEMS = (
     (DRAW_CUTTER_TOOL_ID, "Plane", "Start cycling from the cutter plane tool"),
+    (DRAW_CUTTER_LOCAL_RING_TOOL_ID, "Local Ring", "Start cycling from the local ring cutter tool"),
     (DRAW_CUTTER_ARC_TOOL_ID, "Arc", "Start cycling from the cutter arc tool"),
     (DRAW_CUTTER_PATH_TOOL_ID, "Path", "Start cycling from the cutter path tool"),
     (DRAW_CUTTER_DRAW_TOOL_ID, "Draw", "Start cycling from the freehand cutter draw tool"),
