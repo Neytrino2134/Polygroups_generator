@@ -47,6 +47,7 @@ from .mesh_export import OBJECT_OT_polygroups_add_blend_static_collection
 from .mesh_export import OBJECT_OT_polygroups_clear_blend_static_collections
 from .mesh_export import OBJECT_OT_polygroups_scan_blend_assets
 from .object_seam_cutter import OBJECT_OT_polygroups_apply_cutter_seams
+from .object_seam_cutter import OBJECT_OT_polygroups_bezier_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
 from .object_seam_cutter import OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_arc
@@ -57,7 +58,10 @@ from .object_seam_cutter import OBJECT_OT_polygroups_join_draw_strokes
 from .object_seam_cutter import OBJECT_OT_polygroups_join_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_select_cutter_planes
 from .object_seam_cutter import OBJECT_OT_polygroups_split_object_by_cutters
+from .object_seam_cutter import OBJECT_OT_polygroups_smooth_cutter_path_tilt
+from .object_seam_cutter import OBJECT_OT_polygroups_smooth_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_tilt_cutter_path
+from .object_seam_cutter import OBJECT_OT_polygroups_toggle_cyclic_cutter_paths
 from .panel_visibility import OBJECT_OT_airetopo_set_all_section_visibility
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
@@ -175,6 +179,10 @@ CLASSES = (
     OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths,
     OBJECT_OT_polygroups_join_draw_strokes,
     OBJECT_OT_polygroups_join_cutter_paths,
+    OBJECT_OT_polygroups_bezier_cutter_paths,
+    OBJECT_OT_polygroups_toggle_cyclic_cutter_paths,
+    OBJECT_OT_polygroups_smooth_cutter_paths,
+    OBJECT_OT_polygroups_smooth_cutter_path_tilt,
     OBJECT_OT_polygroups_tilt_cutter_path,
     OBJECT_OT_polygroups_apply_cutter_seams,
     OBJECT_OT_polygroups_split_object_by_cutters,

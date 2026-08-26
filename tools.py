@@ -122,6 +122,11 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         tilt_operator.mode = "DECREASE"
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_plus"))
         tilt_operator.mode = "INCREASE"
+        edit_row = layout.row(align=True)
+        edit_row.operator("object.polygroups_bezier_cutter_paths", text=t(context, "curve_bezier"))
+        edit_row.operator("object.polygroups_toggle_cyclic_cutter_paths", text=t(context, "curve_cyclic"))
+        edit_row.operator("object.polygroups_smooth_cutter_paths", text=t(context, "curve_smooth"))
+        edit_row.operator("object.polygroups_smooth_cutter_path_tilt", text=t(context, "curve_smooth_tilt"))
         layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
         layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.operator(
@@ -137,6 +142,11 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         tilt_operator.mode = "DECREASE"
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_plus"))
         tilt_operator.mode = "INCREASE"
+        edit_row = layout.row(align=True)
+        edit_row.operator("object.polygroups_bezier_cutter_paths", text=t(context, "curve_bezier"))
+        edit_row.operator("object.polygroups_toggle_cyclic_cutter_paths", text=t(context, "curve_cyclic"))
+        edit_row.operator("object.polygroups_smooth_cutter_paths", text=t(context, "curve_smooth"))
+        edit_row.operator("object.polygroups_smooth_cutter_path_tilt", text=t(context, "curve_smooth_tilt"))
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
         layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
         layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))

@@ -668,6 +668,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         tilt_operator.mode = "DECREASE"
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_plus"))
         tilt_operator.mode = "INCREASE"
+        curve_row = layout.row(align=True)
+        curve_row.operator("object.polygroups_bezier_cutter_paths", text=t(context, "curve_bezier"))
+        curve_row.operator("object.polygroups_toggle_cyclic_cutter_paths", text=t(context, "curve_cyclic"))
+        curve_row.operator("object.polygroups_smooth_cutter_paths", text=t(context, "curve_smooth"))
+        curve_row.operator("object.polygroups_smooth_cutter_path_tilt", text=t(context, "curve_smooth_tilt"))
         layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
         layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
@@ -766,6 +771,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             text=t(context, "tilt_plus"),
         )
         tilt_operator.mode = "INCREASE"
+        curve_row = layout.row(align=True)
+        curve_row.operator("object.polygroups_bezier_cutter_paths", text=t(context, "curve_bezier"))
+        curve_row.operator("object.polygroups_toggle_cyclic_cutter_paths", text=t(context, "curve_cyclic"))
+        curve_row.operator("object.polygroups_smooth_cutter_paths", text=t(context, "curve_smooth"))
+        curve_row.operator("object.polygroups_smooth_cutter_path_tilt", text=t(context, "curve_smooth_tilt"))
         layout.operator(
             "object.polygroups_apply_cutter_seams",
             text=t(context, "apply_cutter_seams"),

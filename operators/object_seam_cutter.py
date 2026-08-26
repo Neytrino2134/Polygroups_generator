@@ -498,10 +498,10 @@ def _draw_stroke_path_points(cutter):
 
     return [
         {
-            "location": cutter.matrix_world @ Vector((point.co.x, point.co.y, point.co.z)),
+            "location": cutter.matrix_world @ _curve_point_local_co(point),
             "normal": Vector((0.0, 0.0, 1.0)),
         }
-        for point in cutter.data.splines[0].points
+        for point in _curve_spline_points(cutter.data.splines[0])
     ]
 
 
@@ -733,6 +733,52 @@ def _selected_cutters(context, target):
     ]
 
 
+def _curve_spline_points(spline):
+    return spline.bezier_points if spline.type == "BEZIER" else spline.points
+
+
+def _curve_point_local_co(point):
+    return Vector((point.co.x, point.co.y, point.co.z))
+
+
+def _selected_cutter_path_curves(context):
+    return [
+        obj
+        for obj in context.selected_objects
+        if obj.type == "CURVE"
+        and obj.get(CUTTER_PROP)
+        and obj.get(CUTTER_TYPE_PROP) in {"PATH", "DRAW_STROKE"}
+    ]
+
+
+def _update_curve_path_data_from_splines(obj):
+    if obj.type != "CURVE" or not obj.data.splines:
+        return
+
+    data = []
+    for spline in obj.data.splines:
+        for point in _curve_spline_points(spline):
+            data.append(
+                {
+                    "co": list(obj.matrix_world @ _curve_point_local_co(point)),
+                    "normal": [0.0, 0.0, 1.0],
+                },
+            )
+    if data:
+        prop_name = CUTTER_DRAW_DATA_PROP if obj.get(CUTTER_TYPE_PROP) == "DRAW_STROKE" else CUTTER_PATH_DATA_PROP
+        obj[prop_name] = json.dumps(data)
+
+
+def _set_bezier_handle_auto(point):
+    for value in ("AUTO", "AUTOMATIC"):
+        try:
+            point.handle_left_type = value
+            point.handle_right_type = value
+            return
+        except TypeError:
+            continue
+
+
 def _is_cutter_name(obj):
     return "Seam_Cutter" in obj.name
 
@@ -850,8 +896,8 @@ def _path_points_world(cutter):
     if cutter.type == "CURVE" and cutter.data.splines:
         spline = cutter.data.splines[0]
         return [
-            cutter.matrix_world @ Vector((point.co.x, point.co.y, point.co.z))
-            for point in spline.points
+            cutter.matrix_world @ _curve_point_local_co(point)
+            for point in _curve_spline_points(spline)
         ]
 
     return [
@@ -877,7 +923,7 @@ def _path_normals_world(cutter, point_count):
 def _path_tilts(cutter, point_count):
     tilts = []
     if cutter.type == "CURVE" and cutter.data.splines:
-        for point in cutter.data.splines[0].points:
+        for point in _curve_spline_points(cutter.data.splines[0]):
             tilts.append(getattr(point, "tilt", DEFAULT_CUTTER_PATH_TILT))
 
     while len(tilts) < point_count:
@@ -909,10 +955,10 @@ def _path_cutter_path_points(cutter):
 
     return [
         {
-            "location": cutter.matrix_world @ Vector((point.co.x, point.co.y, point.co.z)),
+            "location": cutter.matrix_world @ _curve_point_local_co(point),
             "normal": Vector((0.0, 0.0, 1.0)),
         }
-        for point in cutter.data.splines[0].points
+        for point in _curve_spline_points(cutter.data.splines[0])
     ]
 
 
@@ -1041,6 +1087,13 @@ def _duplicate_boolean_cutter_as_mesh(
 
     if work.type != "MESH":
         source_data = work.data
+        if work.type == "CURVE":
+            settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
+            work.data.dimensions = "3D"
+            if hasattr(work.data, "fill_mode"):
+                work.data.fill_mode = "FULL"
+            if getattr(work.data, "extrude", 0.0) <= 0.000001:
+                work.data.extrude = max(getattr(settings, "cutter_path_extrude", 0.015), 0.001)
         bpy.ops.object.convert(target="MESH")
         work = context.view_layer.objects.active
         if source_data and source_data.users == 0 and bpy.data.curves.get(source_data.name) == source_data:
@@ -2730,6 +2783,156 @@ class OBJECT_OT_polygroups_join_cutter_paths(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _run_selected_cutter_curve_edit_op(context, curves, operator_callback):
+    original_active = context.view_layer.objects.active
+    original_selection = tuple(context.selected_objects)
+    changed = 0
+
+    if context.mode != "OBJECT":
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+        except Exception:
+            pass
+
+    try:
+        for obj in curves:
+            if obj.name not in context.view_layer.objects:
+                continue
+            bpy.ops.object.select_all(action="DESELECT")
+            obj.select_set(True)
+            context.view_layer.objects.active = obj
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.curve.select_all(action="SELECT")
+            operator_callback(obj)
+            bpy.ops.object.mode_set(mode="OBJECT")
+            _update_curve_path_data_from_splines(obj)
+            changed += 1
+    finally:
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in original_selection:
+            if obj.name in context.view_layer.objects:
+                obj.select_set(True)
+        if original_active and original_active.name in context.view_layer.objects:
+            context.view_layer.objects.active = original_active
+
+    return changed
+
+
+class OBJECT_OT_polygroups_bezier_cutter_paths(bpy.types.Operator):
+    bl_idname = "object.polygroups_bezier_cutter_paths"
+    bl_label = "Bezier Cutter Paths"
+    bl_description = "Convert selected cutter path and draw curves to Bezier splines with automatic handles"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        curves = _selected_cutter_path_curves(context)
+        if not curves:
+            self.report({"WARNING"}, "Select cutter path or draw curves")
+            return {"CANCELLED"}
+
+        def convert_to_bezier(obj):
+            del obj
+            try:
+                bpy.ops.curve.spline_type_set(type="BEZIER")
+            except RuntimeError:
+                pass
+            try:
+                bpy.ops.curve.handle_type_set(type="AUTO")
+            except (RuntimeError, TypeError):
+                try:
+                    bpy.ops.curve.handle_type_set(type="AUTOMATIC")
+                except (RuntimeError, TypeError):
+                    pass
+
+        changed = _run_selected_cutter_curve_edit_op(context, curves, convert_to_bezier)
+        for obj in curves:
+            for spline in obj.data.splines:
+                if spline.type != "BEZIER":
+                    continue
+                for point in spline.bezier_points:
+                    _set_bezier_handle_auto(point)
+                    if hasattr(point, "tilt") and abs(point.tilt) < 0.000001:
+                        point.tilt = DEFAULT_CUTTER_PATH_TILT
+            obj.data.update_tag()
+
+        self.report({"INFO"}, f"Converted {changed} cutter curve(s) to Bezier")
+        return {"FINISHED"} if changed else {"CANCELLED"}
+
+
+class OBJECT_OT_polygroups_toggle_cyclic_cutter_paths(bpy.types.Operator):
+    bl_idname = "object.polygroups_toggle_cyclic_cutter_paths"
+    bl_label = "Toggle Cyclic Cutter Paths"
+    bl_description = "Toggle cyclic state on selected cutter path and draw curves"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        curves = _selected_cutter_path_curves(context)
+        if not curves:
+            self.report({"WARNING"}, "Select cutter path or draw curves")
+            return {"CANCELLED"}
+
+        def toggle_cyclic(obj):
+            try:
+                bpy.ops.curve.cyclic_toggle(direction="CYCLIC_U")
+            except (RuntimeError, TypeError):
+                for spline in obj.data.splines:
+                    spline.use_cyclic_u = not spline.use_cyclic_u
+
+        changed = _run_selected_cutter_curve_edit_op(context, curves, toggle_cyclic)
+        self.report({"INFO"}, f"Toggled cyclic on {changed} cutter curve(s)")
+        return {"FINISHED"} if changed else {"CANCELLED"}
+
+
+class OBJECT_OT_polygroups_smooth_cutter_paths(bpy.types.Operator):
+    bl_idname = "object.polygroups_smooth_cutter_paths"
+    bl_label = "Smooth Cutter Paths"
+    bl_description = "Smooth selected cutter path and draw curve points"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        curves = _selected_cutter_path_curves(context)
+        if not curves:
+            self.report({"WARNING"}, "Select cutter path or draw curves")
+            return {"CANCELLED"}
+
+        def smooth_curve(obj):
+            del obj
+            try:
+                bpy.ops.curve.smooth()
+            except RuntimeError:
+                pass
+
+        changed = _run_selected_cutter_curve_edit_op(context, curves, smooth_curve)
+        self.report({"INFO"}, f"Smoothed {changed} cutter curve(s)")
+        return {"FINISHED"} if changed else {"CANCELLED"}
+
+
+class OBJECT_OT_polygroups_smooth_cutter_path_tilt(bpy.types.Operator):
+    bl_idname = "object.polygroups_smooth_cutter_path_tilt"
+    bl_label = "Smooth Cutter Path Tilt"
+    bl_description = "Smooth tilt values on selected cutter path and draw curves"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        curves = _selected_cutter_path_curves(context)
+        if not curves:
+            self.report({"WARNING"}, "Select cutter path or draw curves")
+            return {"CANCELLED"}
+
+        def smooth_tilt(obj):
+            del obj
+            try:
+                bpy.ops.curve.smooth_tilt()
+            except RuntimeError:
+                pass
+
+        changed = _run_selected_cutter_curve_edit_op(context, curves, smooth_tilt)
+        self.report({"INFO"}, f"Smoothed tilt on {changed} cutter curve(s)")
+        return {"FINISHED"} if changed else {"CANCELLED"}
+
+
 class OBJECT_OT_polygroups_tilt_cutter_path(bpy.types.Operator):
     bl_idname = "object.polygroups_tilt_cutter_path"
     bl_label = "Tilt Cutter Path"
@@ -2768,7 +2971,7 @@ class OBJECT_OT_polygroups_tilt_cutter_path(bpy.types.Operator):
 
             object_changed = False
             for spline in obj.data.splines:
-                for point in spline.points:
+                for point in _curve_spline_points(spline):
                     if not hasattr(point, "tilt"):
                         continue
                     if self.mode == "RESET":
@@ -2778,6 +2981,7 @@ class OBJECT_OT_polygroups_tilt_cutter_path(bpy.types.Operator):
                     changed += 1
                     object_changed = True
             if object_changed:
+                _update_curve_path_data_from_splines(obj)
                 changed_objects.append(obj)
 
         if not changed:
