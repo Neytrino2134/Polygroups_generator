@@ -41,7 +41,11 @@ from .mesh_checks import OBJECT_OT_polygroups_fill_nonmanifold
 from .mesh_checks import OBJECT_OT_polygroups_fix_mesh_normals
 from .mesh_checks import OBJECT_OT_polygroups_select_thin_protrusions
 from .mesh_checks import OBJECT_OT_polygroups_triangulate_ngons
+from .mesh_export import OBJECT_OT_polygroups_export_blend_assets
 from .mesh_export import OBJECT_OT_polygroups_export_selected_meshes
+from .mesh_export import OBJECT_OT_polygroups_add_blend_static_collection
+from .mesh_export import OBJECT_OT_polygroups_clear_blend_static_collections
+from .mesh_export import OBJECT_OT_polygroups_scan_blend_assets
 from .object_seam_cutter import OBJECT_OT_polygroups_apply_cutter_seams
 from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
 from .object_seam_cutter import OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths
@@ -156,6 +160,10 @@ CLASSES = (
     OBJECT_OT_polygroups_clean_mesh,
     OBJECT_OT_polygroups_create_mesh_backup,
     OBJECT_OT_polygroups_export_selected_meshes,
+    OBJECT_OT_polygroups_scan_blend_assets,
+    OBJECT_OT_polygroups_add_blend_static_collection,
+    OBJECT_OT_polygroups_clear_blend_static_collections,
+    OBJECT_OT_polygroups_export_blend_assets,
     MESH_OT_polygroups_knife_seam,
     MESH_OT_polygroups_quick_knife_seam,
     MESH_OT_polygroups_select_seam_tool,

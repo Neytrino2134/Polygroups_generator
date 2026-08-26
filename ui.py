@@ -1664,6 +1664,71 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             icon="EXPORT",
         )
 
+        column.separator()
+        blend_box = column.box()
+        blend_box.label(text=t(context, "blend_asset_export"), icon="FILE_BLEND")
+        blend_column = blend_box.column(align=True)
+        blend_column.prop(settings, "blend_export_directory", text=t(context, "blend_export_directory"))
+        picker_row = blend_column.row(align=True)
+        picker_row.prop(
+            settings,
+            "blend_export_static_collection_picker",
+            text=t(context, "blend_export_static_collection_picker"),
+        )
+        picker_row.operator(
+            "object.polygroups_add_blend_static_collection",
+            text="",
+            icon="ADD",
+        )
+        picker_row.operator(
+            "object.polygroups_clear_blend_static_collections",
+            text="",
+            icon="TRASH",
+        )
+        blend_column.prop(
+            settings,
+            "blend_export_static_collections",
+            text=t(context, "blend_export_static_collections"),
+        )
+        option_column = blend_column.column(align=True)
+        option_column.prop(
+            settings,
+            "blend_export_individual_assets",
+            text=t(context, "blend_export_individual_assets"),
+        )
+        option_column.prop(settings, "blend_export_all_low", text=t(context, "blend_export_all_low"))
+        option_column.prop(settings, "blend_export_all_mid", text=t(context, "blend_export_all_mid"))
+        option_column.prop(
+            settings,
+            "blend_export_include_render_settings",
+            text=t(context, "blend_export_include_render_settings"),
+        )
+        option_column.prop(
+            settings,
+            "blend_export_overwrite_existing",
+            text=t(context, "blend_export_overwrite_existing"),
+        )
+
+        action_row = blend_column.row(align=True)
+        action_row.operator(
+            "object.polygroups_scan_blend_assets",
+            text=t(context, "blend_export_scan"),
+            icon="VIEWZOOM",
+        )
+        action_row.operator(
+            "object.polygroups_export_blend_assets",
+            text=t(context, "blend_export_start"),
+            icon="FILE_BLEND",
+        )
+
+        blend_column.label(text=t(context, "blend_export_status", value=settings.blend_export_status))
+        stats_row = blend_column.row(align=True)
+        stats_row.label(text=t(context, "blend_export_collections", value=settings.blend_export_collection_count))
+        stats_row.label(text=t(context, "blend_export_files", value=settings.blend_export_file_count))
+        stats_row = blend_column.row(align=True)
+        stats_row.label(text=t(context, "blend_export_low", value=settings.blend_export_low_count))
+        stats_row.label(text=t(context, "blend_export_mid", value=settings.blend_export_mid_count))
+
 
 class VIEW3D_PT_polygroups_render(bpy.types.Panel):
     bl_label = "13 |"

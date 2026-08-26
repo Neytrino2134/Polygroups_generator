@@ -601,6 +601,55 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         ),
         default="FBX",
     )
+    blend_export_directory: bpy.props.StringProperty(
+        name="Blend Output",
+        description="Folder used for exported asset blend files",
+        default="//Blend",
+        subtype="DIR_PATH",
+    )
+    blend_export_static_collections: bpy.props.StringProperty(
+        name="Static Collections",
+        description="Comma-separated collection names copied into every individual asset blend file",
+        default="",
+    )
+    blend_export_static_collection_picker: bpy.props.PointerProperty(
+        name="Static Collection",
+        description="Collection picked from the scene and added to the static export list",
+        type=bpy.types.Collection,
+    )
+    blend_export_individual_assets: bpy.props.BoolProperty(
+        name="Individual Assets",
+        description="Export one blend file for every *_Collection asset collection",
+        default=True,
+    )
+    blend_export_all_low: bpy.props.BoolProperty(
+        name="All LOW",
+        description="Export one blend file containing all *_LOW objects",
+        default=True,
+    )
+    blend_export_all_mid: bpy.props.BoolProperty(
+        name="All MID",
+        description="Export one blend file containing all *_MID objects",
+        default=True,
+    )
+    blend_export_include_render_settings: bpy.props.BoolProperty(
+        name="Render Settings",
+        description="Copy world, render, camera, color management, and unit settings into exported blend files",
+        default=True,
+    )
+    blend_export_overwrite_existing: bpy.props.BoolProperty(
+        name="Overwrite Existing",
+        description="Overwrite existing blend export files",
+        default=True,
+    )
+    blend_export_collection_count: bpy.props.IntProperty(name="Blend Collections", default=0, min=0)
+    blend_export_low_count: bpy.props.IntProperty(name="LOW Objects", default=0, min=0)
+    blend_export_mid_count: bpy.props.IntProperty(name="MID Objects", default=0, min=0)
+    blend_export_file_count: bpy.props.IntProperty(name="Blend Files", default=0, min=0)
+    blend_export_status: bpy.props.StringProperty(
+        name="Blend Export Status",
+        default="Not scanned",
+    )
     mesh_check_status: bpy.props.StringProperty(
         name="Mesh Check Status",
         default="Not checked",
