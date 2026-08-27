@@ -71,6 +71,7 @@ from .render_queue import OBJECT_OT_polygroups_clear_multiview_render
 from .render_queue import OBJECT_OT_polygroups_clear_freestyle_edges
 from .render_queue import OBJECT_OT_polygroups_continue_render_queue
 from .render_queue import OBJECT_OT_polygroups_mark_freestyle_edges
+from .render_queue import OBJECT_OT_polygroups_render_current_state
 from .render_queue import OBJECT_OT_polygroups_scan_render_queue
 from .render_queue import OBJECT_OT_polygroups_start_render_queue
 from .render_queue import OBJECT_OT_polygroups_stop_render_queue
@@ -131,6 +132,7 @@ CLASSES = (
     OBJECT_OT_polygroups_skip_prepare_and_bake,
     OBJECT_OT_polygroups_make_lowpoly_active,
     OBJECT_OT_polygroups_set_quad_count_preset,
+    OBJECT_OT_polygroups_render_current_state,
     OBJECT_OT_polygroups_scan_render_queue,
     OBJECT_OT_polygroups_start_render_queue,
     OBJECT_OT_polygroups_stop_render_queue,

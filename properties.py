@@ -639,7 +639,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     blend_export_directory: bpy.props.StringProperty(
         name="Blend Output",
         description="Folder used for exported asset blend files",
-        default="//Blend",
+        default="//!Blend",
         subtype="DIR_PATH",
     )
     blend_export_static_collections: bpy.props.StringProperty(
@@ -747,7 +747,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     output_directory: bpy.props.StringProperty(
         name="Output Folder",
         description="Base folder for render output",
-        default="Renders",
+        default="//!Renders",
         subtype="DIR_PATH",
         update=_normalize_render_output_directory,
     )

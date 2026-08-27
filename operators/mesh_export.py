@@ -77,7 +77,7 @@ def _objects_with_suffix(collections, suffix):
 def _blend_export_root_directory(settings):
     if (settings.blend_export_directory or "").startswith("//") and not bpy.data.filepath:
         return None
-    path = bpy.path.abspath(settings.blend_export_directory or "//Blend")
+    path = bpy.path.abspath(settings.blend_export_directory or "//!Blend")
     return os.path.normpath(path)
 
 
@@ -131,7 +131,7 @@ def _export_root_directory(settings):
         return None
 
     blend_dir = os.path.dirname(blend_filepath)
-    folder_name = "FBX" if settings.mesh_export_format == "FBX" else "GLTF"
+    folder_name = "!FBX"
     return os.path.join(blend_dir, folder_name)
 
 
@@ -418,7 +418,7 @@ class OBJECT_OT_polygroups_export_blend_assets(bpy.types.Operator):
         settings = context.scene.polygroups_mesh_finalization_settings
         root_dir = _blend_export_root_directory(settings)
         if root_dir is None:
-            self.report({"ERROR"}, "Save the blend file before exporting to a // relative Blend folder")
+            self.report({"ERROR"}, "Save the blend file before exporting to a // relative !Blend folder")
             return {"CANCELLED"}
         collections, low_objects, mid_objects = _blend_export_scan(settings)
         static_collections, missing_static = _static_collections(settings)

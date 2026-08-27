@@ -1793,6 +1793,14 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             icon="RENDER_STILL",
         )
 
+        current_row = column.row(align=True)
+        current_row.enabled = not settings.is_running
+        current_row.operator(
+            "object.polygroups_render_current_state",
+            text=t(context, "render_current_state"),
+            icon="RENDER_RESULT",
+        )
+
         row = column.row(align=True)
         row.operator(
             "object.polygroups_continue_render_queue",

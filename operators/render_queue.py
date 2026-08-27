@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from datetime import datetime
 from math import radians
 
 import bpy
@@ -47,7 +48,7 @@ def _clean_name(name):
 
 
 def _render_output_base_directory(settings):
-    directory = (settings.output_directory or "Renders").strip() or "Renders"
+    directory = (settings.output_directory or "//!Renders").strip() or "//!Renders"
     if directory.startswith("//"):
         return bpy.path.abspath(directory)
     if os.path.isabs(directory):
@@ -69,6 +70,23 @@ def _freestyle_pass_path(output_path):
 def _freestyle_overlay_path(output_path):
     root, _ = os.path.splitext(output_path)
     return f"{root}_freestyle_overlay.png"
+
+
+def _current_state_render_path():
+    base_directory = os.path.join(bpy.path.abspath("//"), "!Renders")
+    os.makedirs(base_directory, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    base_path = os.path.join(base_directory, f"Render_Image_{timestamp}.png")
+    if not os.path.exists(base_path):
+        return base_path
+
+    root, extension = os.path.splitext(base_path)
+    index = 1
+    while True:
+        output_path = f"{root}_{index:03d}{extension}"
+        if not os.path.exists(output_path):
+            return output_path
+        index += 1
 
 
 def _render_suffix_from_name(name):
@@ -904,6 +922,61 @@ def _configure_render(scene, settings, job, filepath=None, file_format="PNG", fr
     output_path = filepath or job["output_path"]
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     scene.render.filepath = output_path
+
+
+class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
+    bl_idname = "object.polygroups_render_current_state"
+    bl_label = "Render Current State"
+    bl_description = "Render the current visible scene state once and save it directly into the render output folder"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.polygroups_render_settings.is_running
+
+    def execute(self, context):
+        settings = context.scene.polygroups_render_settings
+        scene = context.scene
+        output_path = _current_state_render_path()
+        job = {
+            "output_path": output_path,
+            "freestyle_output_path": _freestyle_pass_path(output_path),
+            "freestyle_overlay_path": _freestyle_overlay_path(output_path),
+        }
+        render = scene.render
+        visibility_snapshot = _snapshot_visibility()
+        previous_settings = {
+            "use_file_extension": render.use_file_extension,
+            "resolution_x": render.resolution_x,
+            "resolution_y": render.resolution_y,
+        }
+
+        try:
+            settings.status = "Rendering current state"
+            _prepare_transparent_background(settings)
+            _render_current_job(context, settings, job)
+        except Exception as error:
+            settings.status = f"Current state render failed: {error}"
+            self.report({"ERROR"}, settings.status)
+            return {"CANCELLED"}
+        finally:
+            _restore_visibility(visibility_snapshot)
+            render.use_file_extension = previous_settings["use_file_extension"]
+            render.resolution_x = previous_settings["resolution_x"]
+            render.resolution_y = previous_settings["resolution_y"]
+
+        settings.last_output_path = output_path
+        if settings.freestyle_edges and settings.freestyle_as_render_pass:
+            settings.status = "Rendered current state with Freestyle pass"
+            self.report(
+                {"INFO"},
+                f"Rendered current state: {output_path}, {job['freestyle_overlay_path']}, {job['freestyle_output_path']}",
+            )
+            return {"FINISHED"}
+
+        settings.status = "Rendered current state"
+        self.report({"INFO"}, f"Rendered current state: {output_path}")
+        return {"FINISHED"}
 
 
 def _render_current_job(context, settings, job):
