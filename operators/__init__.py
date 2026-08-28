@@ -14,6 +14,8 @@ from .baking import OBJECT_OT_polygroups_merge_bake_textures
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
 from .baking import OBJECT_OT_polygroups_prepare_highpoly_bake_materials
 from .baking import OBJECT_OT_polygroups_prepare_lowpoly_bake_material
+from .baking import OBJECT_OT_polygroups_save_blend_file
+from .baking import OBJECT_OT_polygroups_save_blend_file_as
 from .baking import OBJECT_OT_polygroups_save_bake_textures
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
@@ -116,6 +118,8 @@ CLASSES = (
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_prepare_and_bake,
+    OBJECT_OT_polygroups_save_blend_file,
+    OBJECT_OT_polygroups_save_blend_file_as,
     OBJECT_OT_polygroups_save_bake_textures,
     OBJECT_OT_polygroups_merge_bake_textures,
     OBJECT_OT_polygroups_clear_bake_temp_images,

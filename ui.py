@@ -898,6 +898,20 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         settings = context.scene.polygroups_baking_settings
 
         column = layout.column(align=True)
+        column.label(text=t(context, "baking_save_blend_reminder"), icon="INFO")
+        save_row = column.row(align=True)
+        save_row.operator(
+            "object.polygroups_save_blend_file",
+            text=t(context, "save_blend_file"),
+            icon="FILE_BLEND",
+        )
+        save_row.operator(
+            "object.polygroups_save_blend_file_as",
+            text=t(context, "save_blend_file_as"),
+            icon="FILE_FOLDER",
+        )
+        column.separator()
+
         column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
         column.prop(settings, "bake_margin", text=t(context, "bake_margin"))
         column.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))

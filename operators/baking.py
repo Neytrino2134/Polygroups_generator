@@ -818,6 +818,34 @@ class OBJECT_OT_polygroups_prepare_lowpoly_bake_material(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class OBJECT_OT_polygroups_save_blend_file(bpy.types.Operator):
+    bl_idname = "object.polygroups_save_blend_file"
+    bl_label = "Save Blend File"
+    bl_description = "Save the current blend file so baked textures can be written next to it"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        del context
+        if bpy.data.filepath:
+            result = bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
+            if "FINISHED" in result:
+                self.report({"INFO"}, "Saved blend file")
+            return result
+
+        return bpy.ops.wm.save_as_mainfile("INVOKE_DEFAULT")
+
+
+class OBJECT_OT_polygroups_save_blend_file_as(bpy.types.Operator):
+    bl_idname = "object.polygroups_save_blend_file_as"
+    bl_label = "Save Blend File As"
+    bl_description = "Choose where to save the current blend file before saving baked textures"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        del context
+        return bpy.ops.wm.save_as_mainfile("INVOKE_DEFAULT")
+
+
 class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
     bl_idname = "object.polygroups_save_bake_textures"
     bl_label = "Save Textures"

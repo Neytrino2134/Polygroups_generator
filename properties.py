@@ -902,7 +902,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     auto_save_textures_after_bake: bpy.props.BoolProperty(
         name="Auto Save Textures After Bake",
         description="Run Save Textures automatically after Prepare And Bake finishes",
-        default=False,
+        default=True,
     )
 
 
