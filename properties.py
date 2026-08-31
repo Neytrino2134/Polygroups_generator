@@ -1002,6 +1002,7 @@ class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
         name="Model",
         description="OpenAI image generation model",
         items=(
+            ("gpt-image-2", "gpt-image-2", "State-of-the-art image generation model"),
             ("gpt-image-1", "gpt-image-1", "High quality image generation model"),
             ("gpt-image-1-mini", "gpt-image-1-mini", "Faster and lower cost image generation model"),
         ),
