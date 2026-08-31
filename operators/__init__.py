@@ -18,6 +18,7 @@ from .baking import OBJECT_OT_polygroups_save_blend_file
 from .baking import OBJECT_OT_polygroups_save_blend_file_as
 from .baking import OBJECT_OT_polygroups_save_bake_textures
 from .batch_import import OBJECT_OT_polygroups_batch_import
+from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
 from .check_material_textures import OBJECT_OT_polygroups_check_material_textures
@@ -112,6 +113,7 @@ CLASSES = (
     OBJECT_OT_airetopo_set_all_section_visibility,
     OBJECT_OT_polygroups_scan_import_folder,
     OBJECT_OT_polygroups_batch_import,
+    OBJECT_OT_polygroups_arrange_batch_objects,
     OBJECT_OT_polygroups_rename_objects,
     OBJECT_OT_polygroups_check_material_textures,
     OBJECT_OT_polygroups_prepare_highpoly_bake_materials,

@@ -446,6 +446,22 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         layout.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
         layout.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
         layout.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
+        layout.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
+
+        arrange_box = layout.box()
+        arrange_box.label(text=t(context, "arrange_objects"), icon="SNAP_EDGE")
+        arrange_box.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing"))
+        arrange_box.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
+        rows_row = arrange_box.row(align=True)
+        rows_row.enabled = settings.batch_arrange_mode == "GRID"
+        rows_row.prop(settings, "batch_arrange_rows", text=t(context, "arrange_rows"))
+        arrange_row = arrange_box.row(align=True)
+        arrange_row.enabled = not settings.batch_is_running
+        arrange_row.operator(
+            "object.polygroups_arrange_batch_objects",
+            text=t(context, "arrange_selected"),
+            icon="ALIGN_CENTER",
+        )
 
         progress_column = layout.column(align=True)
         progress_column.enabled = False

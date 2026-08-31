@@ -1,6 +1,8 @@
 import os
+from math import ceil
 
 import bpy
+from mathutils import Vector
 
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import get_next_object_index, rename_and_move_objects
@@ -99,6 +101,72 @@ def collect_selected_import_files(directory, selected_files, import_format):
     return files
 
 
+def object_world_bounds(obj):
+    corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+    min_corner = Vector((
+        min(corner.x for corner in corners),
+        min(corner.y for corner in corners),
+        min(corner.z for corner in corners),
+    ))
+    max_corner = Vector((
+        max(corner.x for corner in corners),
+        max(corner.y for corner in corners),
+        max(corner.z for corner in corners),
+    ))
+    return min_corner, max_corner
+
+
+def arrange_objects_zx(objects, spacing=0.1, mode="LINE", rows=1):
+    arranged_objects = [obj for obj in objects if obj and obj.type == "MESH"]
+    if not arranged_objects:
+        return 0
+
+    arranged_objects.sort(key=lambda obj: obj.name.lower())
+    rows = max(1, int(rows))
+    if mode == "LINE":
+        rows = 1
+    else:
+        rows = min(rows, len(arranged_objects))
+
+    columns = max(1, ceil(len(arranged_objects) / rows))
+    spacing = max(0.0, spacing)
+    bounds = [object_world_bounds(obj) for obj in arranged_objects]
+    sizes = [
+        (
+            max_corner.x - min_corner.x,
+            max_corner.z - min_corner.z,
+        )
+        for min_corner, max_corner in bounds
+    ]
+    column_widths = [0.0] * columns
+    row_heights = [0.0] * rows
+
+    for index, (width, height) in enumerate(sizes):
+        row = index // columns
+        column = index % columns
+        column_widths[column] = max(column_widths[column], width)
+        row_heights[row] = max(row_heights[row], height)
+
+    x_positions = [bounds[0][0].x]
+    for column in range(1, columns):
+        previous_width = column_widths[column - 1]
+        x_positions.append(x_positions[-1] + previous_width + spacing)
+
+    z_positions = [bounds[0][0].z]
+    for row in range(1, rows):
+        previous_height = row_heights[row - 1]
+        z_positions.append(z_positions[-1] + previous_height + spacing)
+
+    for index, obj in enumerate(arranged_objects):
+        row = index // columns
+        column = index % columns
+        min_corner, _max_corner = object_world_bounds(obj)
+        obj.location.x += x_positions[column] - min_corner.x
+        obj.location.z += z_positions[row] - min_corner.z
+
+    return len(arranged_objects)
+
+
 class OBJECT_OT_polygroups_select_import_folder(bpy.types.Operator):
     bl_idname = "object.polygroups_select_import_folder"
     bl_label = "Select Folder"
@@ -186,6 +254,11 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
     _rename_index = 1
     _auto_rename_objects = True
     _apply_weld = True
+    _auto_arrange_objects = False
+    _arrange_spacing = 0.1
+    _arrange_mode = "LINE"
+    _arrange_rows = 1
+    _imported_mesh_objects = None
 
     use_file_selection: bpy.props.BoolProperty(
         default=False,
@@ -227,6 +300,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
             )
             self._auto_rename_objects = settings.file_import_auto_rename_objects
             self._apply_weld = settings.file_import_apply_weld
+            self._auto_arrange_objects = settings.batch_auto_arrange_objects
         else:
             directory = bpy.path.abspath(settings.batch_import_directory)
             if not directory or not os.path.isdir(directory):
@@ -239,6 +313,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
             )
             self._auto_rename_objects = settings.batch_auto_rename_objects
             self._apply_weld = settings.batch_apply_weld
+            self._auto_arrange_objects = settings.batch_auto_arrange_objects
 
         if not self._files:
             self.report({"WARNING"}, "No supported mesh files found")
@@ -246,6 +321,10 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
 
         self._processed_count = 0
         self._rename_index = get_next_object_index()
+        self._arrange_spacing = settings.batch_arrange_spacing
+        self._arrange_mode = settings.batch_arrange_mode
+        self._arrange_rows = settings.batch_arrange_rows
+        self._imported_mesh_objects = []
 
         settings.batch_is_running = True
         settings.batch_total_count = len(self._files)
@@ -337,6 +416,17 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
                 self.report,
             )
 
+        if imported_mesh_objects:
+            self._imported_mesh_objects.extend(imported_mesh_objects)
+
+        if self._auto_arrange_objects:
+            arrange_objects_zx(
+                self._imported_mesh_objects,
+                self._arrange_spacing,
+                self._arrange_mode,
+                self._arrange_rows,
+            )
+
         settings.batch_imported_count += 1
         settings.batch_imported_object_count += len(imported_mesh_objects)
 
@@ -371,3 +461,29 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
                 {"INFO"},
                 f"Batch import finished: {settings.batch_imported_count} file(s)",
             )
+
+
+class OBJECT_OT_polygroups_arrange_batch_objects(bpy.types.Operator):
+    bl_idname = "object.polygroups_arrange_batch_objects"
+    bl_label = "Arrange Objects"
+    bl_description = "Arrange selected mesh objects in a line or rows on the ZX plane"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return any(obj.type == "MESH" for obj in context.selected_objects)
+
+    def execute(self, context):
+        settings = context.scene.polygroups_model_preparation_settings
+        selected_mesh_objects = [
+            obj for obj in context.selected_objects if obj.type == "MESH"
+        ]
+        arranged_count = arrange_objects_zx(
+            selected_mesh_objects,
+            settings.batch_arrange_spacing,
+            settings.batch_arrange_mode,
+            settings.batch_arrange_rows,
+        )
+
+        self.report({"INFO"}, f"Arranged {arranged_count} object(s)")
+        return {"FINISHED"}

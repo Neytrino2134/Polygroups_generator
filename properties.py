@@ -197,6 +197,36 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Scan and import supported mesh files from nested folders",
         default=False,
     )
+    batch_auto_arrange_objects: bpy.props.BoolProperty(
+        name="Auto Arrange Imports",
+        description="Automatically arrange imported mesh objects after each batch import step",
+        default=False,
+    )
+    batch_arrange_spacing: bpy.props.FloatProperty(
+        name="Spacing",
+        description="Distance between arranged imported objects",
+        default=0.1,
+        min=0.0,
+        max=1.0,
+        precision=2,
+        unit="LENGTH",
+    )
+    batch_arrange_mode: bpy.props.EnumProperty(
+        name="Arrange Mode",
+        description="How to arrange imported objects on the ZX plane",
+        items=(
+            ("LINE", "One Row", "Arrange objects in one horizontal row"),
+            ("GRID", "Rows", "Arrange objects in a grid with a fixed row count"),
+        ),
+        default="LINE",
+    )
+    batch_arrange_rows: bpy.props.IntProperty(
+        name="Rows",
+        description="Number of rows used when Arrange Mode is Rows",
+        default=2,
+        min=1,
+        soft_max=10,
+    )
     batch_is_running: bpy.props.BoolProperty(
         name="Running",
         default=False,
@@ -586,7 +616,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     smart_decimate_duplicate_and_apply: bpy.props.BoolProperty(
         name="Duplicate And Apply Decimate",
         description="Duplicate the active object, add Smart Decimate to the duplicate, and apply it",
-        default=False,
+        default=True,
     )
     fab_asset_name: bpy.props.StringProperty(
         name="Asset Name",
