@@ -9,6 +9,7 @@ from .ai_generation import OBJECT_OT_airetopo_refresh_prompt_library
 from .ai_generation import OBJECT_OT_airetopo_save_generated_image
 from .ai_generation import OBJECT_OT_airetopo_select_material_image
 from .baking import OBJECT_OT_polygroups_bake_selected_to_active
+from .baking import OBJECT_OT_polygroups_calculate_auto_cage
 from .baking import OBJECT_OT_polygroups_clear_bake_temp_images
 from .baking import OBJECT_OT_polygroups_merge_bake_textures
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
@@ -53,6 +54,7 @@ from .object_seam_cutter import OBJECT_OT_polygroups_apply_cutter_seams
 from .object_seam_cutter import OBJECT_OT_polygroups_bezier_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
 from .object_seam_cutter import OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths
+from .object_seam_cutter import OBJECT_OT_polygroups_copy_mirror_cutters
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_arc
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_draw
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_local_ring
@@ -118,6 +120,7 @@ CLASSES = (
     OBJECT_OT_polygroups_check_material_textures,
     OBJECT_OT_polygroups_prepare_highpoly_bake_materials,
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
+    OBJECT_OT_polygroups_calculate_auto_cage,
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_prepare_and_bake,
     OBJECT_OT_polygroups_save_blend_file,
@@ -194,6 +197,7 @@ CLASSES = (
     OBJECT_OT_polygroups_smooth_cutter_paths,
     OBJECT_OT_polygroups_smooth_cutter_path_tilt,
     OBJECT_OT_polygroups_tilt_cutter_path,
+    OBJECT_OT_polygroups_copy_mirror_cutters,
     OBJECT_OT_polygroups_apply_cutter_seams,
     OBJECT_OT_polygroups_split_object_by_cutters,
     OBJECT_OT_polygroups_select_cutter_planes,

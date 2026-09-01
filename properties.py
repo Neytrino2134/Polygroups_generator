@@ -410,6 +410,16 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         ),
         default="BOOLEAN",
     )
+    cutter_mirror_axis: bpy.props.EnumProperty(
+        name="Mirror Axis",
+        description="Object-mode axis used when copying and mirroring selected cutters",
+        items=(
+            ("X", "X", "Mirror across the X axis"),
+            ("Y", "Y", "Mirror across the Y axis"),
+            ("Z", "Z", "Mirror across the Z axis"),
+        ),
+        default="X",
+    )
     cutter_path_render_u: bpy.props.IntProperty(
         name="Path Render U",
         description="Render U resolution for newly created cutter path curves",
@@ -908,6 +918,68 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         soft_max=1.0,
         step=0.5,
         precision=4,
+    )
+    use_auto_cage: bpy.props.BoolProperty(
+        name="AutoCage",
+        description="Automatically calculate cage extrusion from selected highpoly and active lowpoly before baking",
+        default=False,
+    )
+    auto_cage_coverage: bpy.props.FloatProperty(
+        name="Coverage",
+        description="Highpoly surface coverage percentile used for automatic cage extrusion",
+        default=95.0,
+        min=90.0,
+        max=99.8,
+        precision=1,
+        subtype="PERCENTAGE",
+    )
+    auto_cage_margin: bpy.props.FloatProperty(
+        name="Safety Margin",
+        description="Fixed extra distance added to the automatic cage extrusion",
+        default=0.001,
+        min=0.0,
+        soft_max=0.02,
+        precision=5,
+        unit="LENGTH",
+    )
+    auto_cage_margin_percent: bpy.props.FloatProperty(
+        name="Size Margin",
+        description="Object-size relative margin added to the automatic cage extrusion",
+        default=0.001,
+        min=0.0,
+        max=0.05,
+        precision=4,
+        subtype="FACTOR",
+    )
+    auto_cage_safe_zone: bpy.props.FloatProperty(
+        name="Safe Zone",
+        description="Extra percentage added on top of the calculated automatic cage extrusion",
+        default=3.0,
+        min=0.0,
+        max=10.0,
+        precision=1,
+        subtype="PERCENTAGE",
+    )
+    auto_cage_max: bpy.props.FloatProperty(
+        name="Max Cage",
+        description="Maximum allowed automatic cage extrusion; 0 disables the limit",
+        default=0.05,
+        min=0.0,
+        soft_max=1.0,
+        precision=4,
+        unit="LENGTH",
+    )
+    auto_cage_sample_limit: bpy.props.IntProperty(
+        name="Samples",
+        description="Maximum highpoly sample points used for AutoCage analysis",
+        default=10000,
+        min=100,
+        max=200000,
+        soft_max=50000,
+    )
+    auto_cage_status: bpy.props.StringProperty(
+        name="AutoCage Status",
+        default="Not calculated",
     )
     image_prefix: bpy.props.StringProperty(
         name="Image Prefix",

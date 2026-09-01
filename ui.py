@@ -719,6 +719,13 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             "delete_cutters_after_apply",
             text=t(context, "delete_cutters_after_apply"),
         )
+        layout.label(text=t(context, "ctrl_draw_hint"), icon="MOUSE_LMB")
+        layout.prop(settings, "cutter_mirror_axis", text=t(context, "mirror_axis"), expand=True)
+        layout.operator(
+            "object.polygroups_copy_mirror_cutters",
+            text=t(context, "copy_mirror_cutters"),
+            icon="MOD_MIRROR",
+        )
         layout.separator()
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
@@ -931,6 +938,21 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
         column.prop(settings, "bake_margin", text=t(context, "bake_margin"))
         column.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
+        auto_cage_box = column.box()
+        auto_cage_box.prop(settings, "use_auto_cage", text=t(context, "auto_cage"))
+        auto_cage_column = auto_cage_box.column(align=True)
+        auto_cage_column.prop(settings, "auto_cage_coverage", text=t(context, "auto_cage_coverage"), slider=True)
+        auto_cage_column.prop(settings, "auto_cage_margin", text=t(context, "auto_cage_margin"))
+        auto_cage_column.prop(settings, "auto_cage_margin_percent", text=t(context, "auto_cage_margin_percent"), slider=True)
+        auto_cage_column.prop(settings, "auto_cage_safe_zone", text=t(context, "auto_cage_safe_zone"), slider=True)
+        auto_cage_column.prop(settings, "auto_cage_max", text=t(context, "auto_cage_max"))
+        auto_cage_column.prop(settings, "auto_cage_sample_limit", text=t(context, "auto_cage_samples"))
+        auto_cage_column.operator(
+            "object.polygroups_calculate_auto_cage",
+            text=t(context, "calculate_auto_cage"),
+            icon="MOD_SHRINKWRAP",
+        )
+        auto_cage_box.label(text=t(context, "auto_cage_status", value=settings.auto_cage_status), icon="INFO")
         column.prop(settings, "ray_distance", text=t(context, "ray_distance"))
         column.prop(settings, "image_prefix", text=t(context, "image_prefix"))
         column.prop(settings, "use_selected_to_active", text=t(context, "selected_to_active"))

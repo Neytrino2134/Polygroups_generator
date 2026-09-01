@@ -107,6 +107,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     if cutter_type in {"ARC", "LOCAL_RING", "PATH", "DRAW"}:
         row.prop(settings, "cutter_apply_method", text=t(context, "cutter_apply_method"))
     row.label(text=t(context, "ctrl_draw_hint"))
+    row.prop(settings, "cutter_mirror_axis", text="", expand=True)
+    row.operator(
+        "object.polygroups_copy_mirror_cutters",
+        text=t(context, "copy_mirror_cutters"),
+        icon="MOD_MIRROR",
+    )
 
     if cutter_type in {"PLANE", "ARC"}:
         layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))

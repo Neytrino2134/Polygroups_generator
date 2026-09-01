@@ -29,6 +29,8 @@ BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
 DEFAULT_CUTTER_PATH_TILT = radians(90.0)
 CUTTER_PATH_TILT_STEP = radians(15.0)
+BOOLEAN_CUTTER_SOLIDIFY_THICKNESS = 0.00001
+BOOLEAN_SEAM_MERGE_DISTANCE = 0.00002
 
 
 def _view3d_under_mouse(context, event):
@@ -151,6 +153,13 @@ def _tool_collection(cutter_type):
         if parent.children.get(collection.name) is None:
             parent.children.link(collection)
     return collection
+
+
+def _tool_collection_type_for_cutter(cutter):
+    cutter_type = cutter.get(CUTTER_TYPE_PROP)
+    if cutter_type == "DRAW_STROKE":
+        return "DRAW"
+    return cutter_type or ""
 
 
 def _collection_objects_recursive(collection, seen=None):
@@ -903,6 +912,41 @@ def _selected_cutters(context, target):
         for obj in _cutter_collection_objects()
         if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
     ]
+
+
+def _selected_cutters_only(context):
+    return [
+        obj
+        for obj in context.selected_objects
+        if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+    ]
+
+
+def _mirror_matrix_from_target(target, axis):
+    axis = axis if axis in {"X", "Y", "Z"} else "X"
+    scale = {
+        "X": (-1.0, 1.0, 1.0, 1.0),
+        "Y": (1.0, -1.0, 1.0, 1.0),
+        "Z": (1.0, 1.0, -1.0, 1.0),
+    }[axis]
+    pivot = target.matrix_world.translation
+    return (
+        Matrix.Translation(pivot)
+        @ Matrix.Diagonal(scale)
+        @ Matrix.Translation(-pivot)
+    )
+
+
+def _copy_mirror_cutter(cutter, mirror_matrix):
+    mirrored = cutter.copy()
+    mirrored.data = cutter.data.copy()
+    mirrored.animation_data_clear()
+    mirrored.name = f"{cutter.name}_Mirror"
+    mirrored.matrix_world = mirror_matrix @ cutter.matrix_world
+
+    _tool_collection(_tool_collection_type_for_cutter(cutter)).objects.link(mirrored)
+    mirrored.select_set(True)
+    return mirrored
 
 
 def _curve_spline_points(spline):
@@ -1724,6 +1768,11 @@ def _arc_heal_distance(context):
     return weld_distance
 
 
+def _boolean_seam_merge_distance(context):
+    del context
+    return BOOLEAN_SEAM_MERGE_DISTANCE
+
+
 def _cutter_apply_method(context):
     settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
     return getattr(settings, "cutter_apply_method", "BOOLEAN")
@@ -1812,6 +1861,7 @@ def _apply_arc_cutters_to_mesh(context, target, cutters):
                 context,
                 target,
                 cutter,
+                boolean_solidify_thickness=BOOLEAN_CUTTER_SOLIDIFY_THICKNESS,
                 extension_distance=0.0,
             )
         else:
@@ -1898,13 +1948,31 @@ def _apply_cutters_to_mesh(context, target, cutters):
         if apply_method == "KNIFE":
             marked_edges += _apply_knife_intersect_cutter_to_mesh(context, target, cutter)
         else:
-            marked_edges += _apply_boolean_cutter_to_mesh(context, target, cutter)
+            cutter_type = cutter.get(CUTTER_TYPE_PROP)
+            solidify_thickness = (
+                BOOLEAN_CUTTER_SOLIDIFY_THICKNESS
+                if cutter_type == "LOCAL_RING"
+                else None
+            )
+            marked_edges += _apply_boolean_cutter_to_mesh(
+                context,
+                target,
+                cutter,
+                boolean_solidify_thickness=solidify_thickness,
+            )
 
     return marked_edges
 
 
 def _has_arc_cutters(cutters):
     return any(cutter.get(CUTTER_TYPE_PROP) == "ARC" for cutter in cutters)
+
+
+def _has_boolean_solidify_cutters(cutters):
+    return any(
+        cutter.get(CUTTER_TYPE_PROP) in {"ARC", "LOCAL_RING"}
+        for cutter in cutters
+    )
 
 
 def _split_supported_cutters(cutters):
@@ -3416,6 +3484,47 @@ class OBJECT_OT_polygroups_tilt_cutter_path(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class OBJECT_OT_polygroups_copy_mirror_cutters(bpy.types.Operator):
+    bl_idname = "object.polygroups_copy_mirror_cutters"
+    bl_label = "Copy Mirror Cutters"
+    bl_description = "Copy selected cutter objects and mirror them in Object Mode around the active mesh origin"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        target = context.active_object
+        return (
+            _is_target_mesh_candidate(target)
+            and bool(_selected_cutters_only(context))
+        )
+
+    def execute(self, context):
+        target = context.active_object
+        cutters = _selected_cutters_only(context)
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        if target is None or not cutters:
+            self.report({"WARNING"}, "Select cutter objects and make the mirror mesh active")
+            return {"CANCELLED"}
+
+        mirror_matrix = _mirror_matrix_from_target(target, settings.cutter_mirror_axis)
+        mirrored_cutters = []
+        for cutter in cutters:
+            mirrored = _copy_mirror_cutter(cutter, mirror_matrix)
+            if mirrored is not None:
+                mirrored_cutters.append(mirrored)
+        if not mirrored_cutters:
+            self.report({"WARNING"}, "Selected cutters could not be mirrored")
+            return {"CANCELLED"}
+
+        context.view_layer.objects.active = target
+        target.select_set(True)
+        self.report(
+            {"INFO"},
+            f"Copied and mirrored {len(mirrored_cutters)} cutter(s) on {settings.cutter_mirror_axis}",
+        )
+        return {"FINISHED"}
+
+
 class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
     bl_idname = "object.polygroups_apply_cutter_seams"
     bl_label = "Apply Cutter Seams To Active"
@@ -3438,10 +3547,21 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             self.report({"WARNING"}, "No cutter planes found")
             return {"CANCELLED"}
 
-        use_arc_split_cleanup = _has_arc_cutters(cutters)
+        apply_method = _cutter_apply_method(context)
+        use_boolean_seam_cleanup = (
+            apply_method == "BOOLEAN"
+            and _has_boolean_solidify_cutters(cutters)
+        )
+        use_arc_split_cleanup = (
+            apply_method != "BOOLEAN"
+            and _has_arc_cutters(cutters)
+        )
         open_edges_before = _count_open_boundary_edges(target) if use_arc_split_cleanup else 0
         _clear_mesh_component_selection(target.data)
         marked_edges = _apply_cutters_to_mesh(context, target, cutters)
+        if use_boolean_seam_cleanup and marked_edges:
+            heal_distance = _boolean_seam_merge_distance(context)
+            _merge_selected_cut_vertices(target, heal_distance)
         if use_arc_split_cleanup and marked_edges:
             heal_distance = _arc_heal_distance(context)
             _merge_selected_cut_vertices(target, heal_distance)
