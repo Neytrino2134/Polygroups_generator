@@ -93,8 +93,27 @@ def _active_cutter_label_key(tool_id):
 
 def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     settings = context.scene.polygroups_object_seam_cutter_settings
+
+    def draw_enum_icon_toggle(row, property_name, items):
+        current_value = getattr(settings, property_name)
+        for value, label, icon in items:
+            operator = row.operator(
+                "wm.context_set_enum",
+                text=label,
+                icon=icon,
+                depress=current_value == value,
+            )
+            operator.data_path = f"scene.polygroups_object_seam_cutter_settings.{property_name}"
+            operator.value = value
+
     row = layout.row(align=True)
-    row.operator(
+    apply_button_row = row.row(align=True)
+    apply_button_row.enabled = any(
+        obj.type in {"MESH", "CURVE"}
+        and obj.get("polygroups_object_seam_cutter")
+        for obj in context.selected_objects
+    )
+    apply_button_row.operator(
         "object.polygroups_apply_cutter_seams",
         text=t(context, "apply_cutter_seams"),
         icon="MOD_BOOLEAN",
@@ -105,7 +124,24 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         icon="TOOL_SETTINGS",
     )
     if cutter_type in {"ARC", "LOCAL_RING", "PATH", "DRAW"}:
-        row.prop(settings, "cutter_apply_method", text=t(context, "cutter_apply_method"))
+        draw_enum_icon_toggle(
+            row,
+            "cutter_apply_method",
+            (
+                ("BOOLEAN", "Boolean", "MOD_BOOLEAN"),
+                ("KNIFE", "Knife", "EDGESEL"),
+            ),
+        )
+        if settings.cutter_apply_method == "BOOLEAN":
+            draw_enum_icon_toggle(
+                row,
+                "cutter_boolean_solver",
+                (
+                    ("FLOAT", "Float", "VIEWZOOM"),
+                    ("EXACT", "Exact", "CHECKMARK"),
+                ),
+            )
+        row.prop(settings, "cutter_auto_fix_mesh", text=t(context, "cutter_auto_fix_mesh"), toggle=True)
     row.label(text=t(context, "ctrl_draw_hint"))
     row.prop(settings, "cutter_mirror_axis", text="", expand=True)
     row.operator(

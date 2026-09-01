@@ -431,6 +431,20 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         ),
         default="BOOLEAN",
     )
+    cutter_boolean_solver: bpy.props.EnumProperty(
+        name="Boolean Solver",
+        description="Boolean solver used when Apply Method is Boolean",
+        items=(
+            ("FLOAT", "Float", "Use the faster float boolean solver"),
+            ("EXACT", "Exact", "Use the exact boolean solver for difficult or self-intersecting cutters"),
+        ),
+        default="FLOAT",
+    )
+    cutter_auto_fix_mesh: bpy.props.BoolProperty(
+        name="Autofix",
+        description="After applying cutter seams, delete loose/protruding geometry and fill boundary holes",
+        default=False,
+    )
     cutter_mirror_axis: bpy.props.EnumProperty(
         name="Mirror Axis",
         description="Object-mode axis used when copying and mirroring selected cutters",

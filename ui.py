@@ -99,6 +99,21 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
     return content
 
 
+def draw_enum_icon_toggle(layout, data_path, settings, property_name, items):
+    row = layout.row(align=True)
+    current_value = getattr(settings, property_name)
+    for value, label, icon in items:
+        operator = row.operator(
+            "wm.context_set_enum",
+            text=label,
+            icon=icon,
+            depress=current_value == value,
+        )
+        operator.data_path = f"{data_path}.{property_name}"
+        operator.value = value
+    return row
+
+
 def draw_section_header_icon(self, context):
     self.layout.label(text="", icon=self.bl_icon)
 
@@ -705,7 +720,35 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_local_ring_fit_mode", text=t(context, "local_ring_fit_mode"))
         layout.prop(settings, "cutter_local_ring_segments", text=t(context, "local_ring_segments"))
         layout.prop(settings, "cutter_local_ring_radius_offset", text=t(context, "local_ring_radius_offset"))
-        layout.prop(settings, "cutter_apply_method", text=t(context, "cutter_apply_method"))
+        layout.label(text=t(context, "cutter_apply_method"))
+        draw_enum_icon_toggle(
+            layout,
+            "scene.polygroups_object_seam_cutter_settings",
+            settings,
+            "cutter_apply_method",
+            (
+                ("BOOLEAN", "Boolean", "MOD_BOOLEAN"),
+                ("KNIFE", "Knife", "EDGESEL"),
+            ),
+        )
+        if settings.cutter_apply_method == "BOOLEAN":
+            layout.label(text=t(context, "cutter_boolean_solver"))
+            draw_enum_icon_toggle(
+                layout,
+                "scene.polygroups_object_seam_cutter_settings",
+                settings,
+                "cutter_boolean_solver",
+                (
+                    ("FLOAT", "Float", "VIEWZOOM"),
+                    ("EXACT", "Exact", "CHECKMARK"),
+                ),
+            )
+        layout.prop(
+            settings,
+            "cutter_auto_fix_mesh",
+            text=t(context, "cutter_auto_fix_mesh"),
+            toggle=True,
+        )
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
@@ -841,7 +884,13 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         curve_row.operator("object.polygroups_toggle_cyclic_cutter_paths", text=t(context, "curve_cyclic"))
         curve_row.operator("object.polygroups_smooth_cutter_paths", text=t(context, "curve_smooth"))
         curve_row.operator("object.polygroups_smooth_cutter_path_tilt", text=t(context, "curve_smooth_tilt"))
-        layout.operator(
+        apply_row = layout.row(align=True)
+        apply_row.enabled = any(
+            obj.type in {"MESH", "CURVE"}
+            and obj.get("polygroups_object_seam_cutter")
+            for obj in context.selected_objects
+        )
+        apply_row.operator(
             "object.polygroups_apply_cutter_seams",
             text=t(context, "apply_cutter_seams"),
             icon="MOD_BOOLEAN",

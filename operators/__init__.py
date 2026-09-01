@@ -51,6 +51,7 @@ from .mesh_export import OBJECT_OT_polygroups_add_blend_static_collection
 from .mesh_export import OBJECT_OT_polygroups_clear_blend_static_collections
 from .mesh_export import OBJECT_OT_polygroups_scan_blend_assets
 from .object_seam_cutter import OBJECT_OT_polygroups_apply_cutter_seams
+from .object_seam_cutter import OBJECT_OT_polygroups_auto_fix_after_cutter
 from .object_seam_cutter import OBJECT_OT_polygroups_bezier_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
 from .object_seam_cutter import OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths
@@ -202,6 +203,7 @@ CLASSES = (
     OBJECT_OT_polygroups_smooth_cutter_path_tilt,
     OBJECT_OT_polygroups_tilt_cutter_path,
     OBJECT_OT_polygroups_copy_mirror_cutters,
+    OBJECT_OT_polygroups_auto_fix_after_cutter,
     OBJECT_OT_polygroups_apply_cutter_seams,
     OBJECT_OT_polygroups_split_object_by_cutters,
     OBJECT_OT_polygroups_select_cutter_planes,
