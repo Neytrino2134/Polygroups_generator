@@ -328,6 +328,27 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
         max=25,
         soft_max=10,
     )
+    seam_gap_max_edges: bpy.props.IntProperty(
+        name="Max Gap Edges",
+        description="Maximum number of non-seam edges allowed between two seam endpoints",
+        default=3,
+        min=1,
+        max=20,
+        soft_max=8,
+    )
+    seam_gap_max_distance: bpy.props.FloatProperty(
+        name="Max Gap Distance",
+        description="Maximum distance allowed when matching seam endpoints or short gap paths",
+        default=0.02,
+        min=0.0,
+        soft_max=0.2,
+        precision=4,
+        unit="LENGTH",
+    )
+    seam_gap_status: bpy.props.StringProperty(
+        name="Seam Gap Status",
+        default="Not checked",
+    )
     show_knife_seam_settings: bpy.props.BoolProperty(
         name="Knife Seam",
         default=False,

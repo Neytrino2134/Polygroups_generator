@@ -1330,6 +1330,12 @@ def _duplicate_boolean_cutter_as_mesh(
 
     if boolean_solidify_thickness is not None:
         modifier = work.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
+        if modifier is None:
+            modifier = work.modifiers.new(CUTTER_SOLIDIFY_MODIFIER_NAME, "SOLIDIFY")
+            modifier.thickness = boolean_solidify_thickness
+            modifier.offset = 0.0
+            if hasattr(modifier, "use_rim"):
+                modifier.use_rim = True
         if modifier is not None:
             try:
                 bpy.ops.object.modifier_apply(modifier=modifier.name)
@@ -1951,7 +1957,7 @@ def _apply_cutters_to_mesh(context, target, cutters):
             cutter_type = cutter.get(CUTTER_TYPE_PROP)
             solidify_thickness = (
                 BOOLEAN_CUTTER_SOLIDIFY_THICKNESS
-                if cutter_type == "LOCAL_RING"
+                if cutter_type in {"PATH", "LOCAL_RING"}
                 else None
             )
             marked_edges += _apply_boolean_cutter_to_mesh(
@@ -1970,7 +1976,7 @@ def _has_arc_cutters(cutters):
 
 def _has_boolean_solidify_cutters(cutters):
     return any(
-        cutter.get(CUTTER_TYPE_PROP) in {"ARC", "LOCAL_RING"}
+        cutter.get(CUTTER_TYPE_PROP) in {"ARC", "PATH", "LOCAL_RING"}
         for cutter in cutters
     )
 

@@ -232,6 +232,33 @@ def draw_ai_input_image_controls(layout, context, settings, provider):
     preview_operator.provider = provider
 
 
+def draw_seam_gap_controls(layout, context, settings):
+    gap_box = layout.box()
+    gap_box.label(text=t(context, "seam_gap_check"), icon="VIEWZOOM")
+    gap_column = gap_box.column(align=True)
+    gap_column.prop(settings, "seam_gap_max_edges", text=t(context, "seam_gap_max_edges"))
+    gap_column.prop(settings, "seam_gap_max_distance", text=t(context, "seam_gap_max_distance"))
+    action_row = gap_column.row(align=True)
+    check_operator = action_row.operator(
+        "mesh.polygroups_check_seam_gaps",
+        text=t(context, "check_seam_gaps"),
+        icon="VIEWZOOM",
+    )
+    check_operator.mode = "SELECT"
+    close_operator = action_row.operator(
+        "mesh.polygroups_check_seam_gaps",
+        text=t(context, "close_seam_gaps"),
+        icon="EDGE_SEAM",
+    )
+    close_operator.mode = "MARK"
+    gap_column.operator(
+        "mesh.polygroups_connect_seam_gap_pairs",
+        text=t(context, "connect_seam_gap_pairs"),
+        icon="AUTOMERGE_ON",
+    )
+    gap_box.label(text=t(context, "seam_gap_status", value=settings.seam_gap_status), icon="INFO")
+
+
 class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     bl_label = f"AI Retopo Toolkit v{addon_version_string()}"
     bl_space_type = "VIEW_3D"
@@ -597,6 +624,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             text=t(context, "mark_selection_boundary_seam"),
             icon="EDGESEL",
         )
+        draw_seam_gap_controls(tools_column, context, seam_settings)
 
         layout.separator()
         knife_content = draw_collapsible_box(
@@ -1409,6 +1437,7 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
             text=t(context, "boundary_longitudinal_seam"),
             icon="EDGE_SEAM",
         )
+        draw_seam_gap_controls(column, context, context.scene.polygroups_seam_preparation_settings)
 
         column.separator()
         column.prop(settings, "checker_scale", text=t(context, "checker_scale"))
