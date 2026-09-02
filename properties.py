@@ -2,6 +2,12 @@ import os
 
 import bpy
 
+REMESH_PRESET_ITEMS = (
+    ("LOW", "LOW", "Use the LOW quad count from add-on preferences"),
+    ("MID", "MID", "Use the MID quad count from add-on preferences"),
+    ("HIGH", "HIGH", "Use the HIGH quad count from add-on preferences"),
+)
+
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
@@ -252,7 +258,20 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_is_running: bpy.props.BoolProperty(
         name="Running",
         default=False,
+        options={"SKIP_SAVE"},
     )
+    file_import_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=False)
+    file_import_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
+    file_import_separate_collections: bpy.props.BoolProperty(default=False)
+    batch_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=False)
+    batch_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
+    batch_separate_collections: bpy.props.BoolProperty(default=False)
+    batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    batch_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    batch_cancel_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    batch_failed_count: bpy.props.IntProperty(default=0, min=0)
+    batch_stage: bpy.props.StringProperty(default="")
+    batch_last_error: bpy.props.StringProperty(default="")
     batch_total_count: bpy.props.IntProperty(
         name="Total",
         default=0,
@@ -272,6 +291,14 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Remaining",
         default=0,
         min=0,
+    )
+    batch_current_progress: bpy.props.FloatProperty(
+        name="Current Progress",
+        description="Processing progress of the current file",
+        default=0.0,
+        min=0.0,
+        max=100.0,
+        subtype="PERCENTAGE",
     )
     batch_import_progress: bpy.props.FloatProperty(
         name="Progress",

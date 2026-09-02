@@ -1,5 +1,7 @@
 import bpy
 
+from ..localization import get_preferences
+
 
 DEFAULT_QUAD_COUNT = 3000
 DEFAULT_USE_MATERIALS = True
@@ -10,6 +12,18 @@ MAX_TIMER_ATTEMPTS = 30
 _timer_attempts = 0
 
 
+def get_remesh_preset_counts(context):
+    preferences = get_preferences(context)
+    return tuple(
+        (label, getattr(preferences, property_name, default))
+        for label, property_name, default in (
+            ("LOW", "remesh_low_count", 1000),
+            ("MID", "remesh_mid_count", DEFAULT_QUAD_COUNT),
+            ("HIGH", "remesh_high_count", 50000),
+        )
+    )
+
+
 def apply_quad_remesher_defaults_once(scene):
     if scene.get(DEFAULTS_APPLIED_KEY):
         return
@@ -18,7 +32,7 @@ def apply_quad_remesher_defaults_once(scene):
 
     qremesher = scene.qremesher
     defaults = (
-        ("target_count", DEFAULT_QUAD_COUNT),
+        ("target_count", get_remesh_preset_counts(bpy.context)[1][1]),
         ("use_materials", DEFAULT_USE_MATERIALS),
         ("symmetry_x", DEFAULT_SYMMETRY_X),
     )

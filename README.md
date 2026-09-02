@@ -21,9 +21,14 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - `Import Files`: imports several selected files one by one through Blender's file browser, with its own auto rename and Weld options.
   - `Batch Import`: imports supported mesh files from a folder one by one, with separate auto rename and Weld options.
   - `Scan Folder`: counts supported mesh files in the selected batch folder without importing them.
+  - `Auto Remesh`: independently available in Import and Batch Import with LOW/MID/HIGH counts from add-on preferences. Each file completes Import → Rename → Weld → Remesh before the next file starts; Rename and Weld follow their checkboxes.
+  - The panel shows the file count, completed/failed/remaining counts, current file, processing stage, and overall progress.
+  - `Pause` waits until the current file finishes; `Resume` continues. `Stop` finishes the current file and keeps results. `Cancel` (or Esc) aborts remeshing and removes objects created by the current import run.
+  - `Each file in a separate collection` groups the imported file and its remeshed objects in `Generated.001`, `Generated.002`, etc. Automatic arrangement moves each file's objects together.
 - `Remesh`
   - Proxies selected Quad Remesher controls when the `quad_remesher` add-on is installed and enabled.
   - Exposes Quad Count, Use Materials, Symmetry X, and Remesh It.
+  - LOW/MID/HIGH default to 1,000 / 3,000 / 50,000 quads; customize these in add-on preferences. Separate Remesh LOW/MID/HIGH buttons also start remeshing.
 - `PolyGroups`
   - Generate material-based PolyGroups from seam-bounded mesh islands.
   - Convert sculpt Face Sets to materials.

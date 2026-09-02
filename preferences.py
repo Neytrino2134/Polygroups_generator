@@ -267,6 +267,19 @@ def _addon_info():
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
+    remesh_low_count: bpy.props.IntProperty(
+        name="LOW", description="Default target quad count for LOW remesh",
+        default=1000, min=1,
+    )
+    remesh_mid_count: bpy.props.IntProperty(
+        name="MID", description="Default target quad count for MID remesh and new scenes",
+        default=3000, min=1,
+    )
+    remesh_high_count: bpy.props.IntProperty(
+        name="HIGH", description="Default target quad count for HIGH remesh",
+        default=50000, min=1,
+    )
+
     interface_language: bpy.props.EnumProperty(
         name="Interface Language",
         description="Language used by AI Retopo Toolkit UI labels",
@@ -443,6 +456,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         self.draw_updates(context, layout.box())
         self.draw_language(context, layout.box())
         self.draw_operations(context, layout.box())
+        self.draw_remesh(context, layout.box())
         self.draw_api(context, layout.box())
         self.draw_hotkeys(context, layout.box())
         self.draw_pie_menu(context, layout.box())
@@ -478,6 +492,13 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
             "play_sound_after_operations",
             text=t(context, "play_sound_after_operations"),
         )
+
+    def draw_remesh(self, context, layout):
+        layout.label(text=t(context, "preferences_remesh"), icon="MOD_REMESH")
+        column = layout.column(align=True)
+        column.prop(self, "remesh_low_count")
+        column.prop(self, "remesh_mid_count")
+        column.prop(self, "remesh_high_count")
 
     def draw_api(self, context, layout):
         layout.label(text=t(context, "preferences_api"), icon="KEYINGSET")

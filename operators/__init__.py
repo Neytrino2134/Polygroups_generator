@@ -19,6 +19,7 @@ from .baking import OBJECT_OT_polygroups_save_blend_file
 from .baking import OBJECT_OT_polygroups_save_blend_file_as
 from .baking import OBJECT_OT_polygroups_save_bake_textures
 from .batch_import import OBJECT_OT_polygroups_batch_import
+from .import_queue import OBJECT_OT_polygroups_import_control
 from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
@@ -118,6 +119,7 @@ CLASSES = (
     OBJECT_OT_airetopo_set_all_section_visibility,
     OBJECT_OT_polygroups_scan_import_folder,
     OBJECT_OT_polygroups_batch_import,
+    OBJECT_OT_polygroups_import_control,
     OBJECT_OT_polygroups_arrange_batch_objects,
     OBJECT_OT_polygroups_rename_objects,
     OBJECT_OT_polygroups_check_material_textures,
@@ -213,13 +215,20 @@ CLASSES = (
 
 def register():
     import bpy
+    from .import_queue import stop_import_queue
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+    bpy.app.handlers.load_pre.append(stop_import_queue)
 
 
 def unregister():
     import bpy
+    from .import_queue import stop_import_queue
+
+    stop_import_queue()
+    if stop_import_queue in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(stop_import_queue)
 
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

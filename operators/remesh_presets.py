@@ -1,5 +1,7 @@
 import bpy
 
+from ..core.remesh_defaults import apply_quad_remesher_defaults_once
+
 
 class OBJECT_OT_polygroups_set_quad_count_preset(bpy.types.Operator):
     bl_idname = "object.polygroups_set_quad_count_preset"
@@ -18,6 +20,7 @@ class OBJECT_OT_polygroups_set_quad_count_preset(bpy.types.Operator):
         return hasattr(context.scene, "qremesher")
 
     def execute(self, context):
+        apply_quad_remesher_defaults_once(context.scene)
         context.scene.qremesher.target_count = self.quad_count
         self.report({"INFO"}, f"Quad Count set to {self.quad_count}")
         return {"FINISHED"}

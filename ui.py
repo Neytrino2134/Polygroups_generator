@@ -6,6 +6,7 @@ import bpy
 
 from .localization import get_preferences
 from .localization import t
+from .core.remesh_defaults import get_remesh_preset_counts
 
 
 def quad_remesher_status(context):
@@ -420,6 +421,53 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
         )
 
 
+def draw_import_remesh_options(layout, context, settings, prefix):
+    column = layout.column(align=True)
+    column.enabled = not settings.batch_is_running
+    column.prop(settings, prefix + "_auto_remesh", text="Auto Remesh")
+    presets = column.row(align=True)
+    presets.enabled = getattr(settings, prefix + "_auto_remesh")
+    presets.prop(settings, prefix + "_remesh_preset", expand=True)
+    if getattr(settings, prefix + "_auto_remesh"):
+        count = dict(get_remesh_preset_counts(context))[getattr(settings, prefix + "_remesh_preset")]
+        column.label(text=f'{t(context, "quad_count")}: {count:,}')
+    column.prop(settings, prefix + "_separate_collections", text=t(context, "import_separate_collections"))
+
+
+def draw_import_progress(layout, context, settings):
+    box = layout.box()
+    box.progress(factor=settings.batch_import_progress / 100, type="BAR",
+                 text=f'{t(context, "import_total_progress")}: {settings.batch_import_progress:.1f}%')
+    box.progress(factor=settings.batch_current_progress / 100, type="BAR",
+                 text=f'{t(context, "import_current_progress")}: {settings.batch_current_progress:.1f}%')
+    box.label(text=t(context, "total_files", value=settings.batch_total_count))
+    box.label(text=t(context, "import_completed", value=settings.batch_imported_count))
+    box.label(text=t(context, "import_failed", value=settings.batch_failed_count))
+    box.label(text=t(context, "remaining_files", value=settings.batch_remaining_count))
+    if settings.batch_current_file:
+        box.label(text=t(context, "current_file", value=settings.batch_current_file))
+    if settings.batch_stage:
+        box.label(text=t(context, "import_stage_" + settings.batch_stage))
+    if settings.batch_last_error:
+        box.label(text=settings.batch_last_error, icon="ERROR")
+    if settings.batch_is_running:
+        if settings.batch_cancel_requested:
+            box.label(text=t(context, "import_cancelling"))
+        elif settings.batch_stop_requested:
+            box.label(text=t(context, "import_stopping"))
+        elif settings.batch_is_paused and settings.batch_stage != "PAUSED":
+            box.label(text=t(context, "import_pausing"))
+        row = box.row(align=True)
+        row.enabled = not settings.batch_cancel_requested
+        pause = row.row(align=True)
+        pause.enabled = not settings.batch_stop_requested
+        pause.operator("object.polygroups_import_control",
+                       text=t(context, "import_resume" if settings.batch_is_paused else "import_pause"),
+                       icon="PLAY" if settings.batch_is_paused else "PAUSE").action = "PAUSE"
+        row.operator("object.polygroups_import_control", text=t(context, "import_stop")).action = "STOP"
+        row.operator("object.polygroups_import_control", text=t(context, "import_cancel"), icon="CANCEL").action = "CANCEL"
+
+
 class VIEW3D_PT_polygroups_import(bpy.types.Panel):
     bl_label = "01 |"
     bl_text_key = "section_import"
@@ -457,6 +505,8 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
             text=t(context, "auto_rename_objects"),
         )
         files_box.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
+        draw_import_remesh_options(files_box, context, settings, "file_import")
+        draw_import_progress(layout, context, settings)
 
 
 class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
@@ -487,7 +537,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         layout.prop(settings, "batch_import_format", text=t(context, "format"))
         layout.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
         layout.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
-        layout.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
+        draw_import_remesh_options(layout, context, settings, "batch")
         layout.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
 
         arrange_box = layout.box()
@@ -505,16 +555,11 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             icon="ALIGN_CENTER",
         )
 
-        progress_column = layout.column(align=True)
-        progress_column.enabled = False
-        progress_column.prop(settings, "batch_import_progress", slider=True)
-        progress_column.label(text=t(context, "total_files", value=settings.batch_total_count))
-        progress_column.label(text=t(context, "imported_files", value=settings.batch_imported_count))
-        progress_column.label(text=t(context, "imported_objects", value=settings.batch_imported_object_count))
-        progress_column.label(text=t(context, "remaining_files", value=settings.batch_remaining_count))
-        if settings.batch_current_file:
-            progress_column.label(text=t(context, "current_file", value=settings.batch_current_file))
+        draw_import_progress(layout, context, settings)
 
+        subfolders_row = layout.row()
+        subfolders_row.enabled = not settings.batch_is_running
+        subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
         scan_row = layout.row(align=True)
         scan_row.enabled = not settings.batch_is_running
         scan_row.operator(
@@ -525,11 +570,13 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         operator_row = layout.row(align=True)
         operator_row.enabled = not settings.batch_is_running
-        operator_row.operator(
+        operator_row.operator_context = "EXEC_DEFAULT"
+        start_import = operator_row.operator(
             "object.polygroups_batch_import",
             text=t(context, "import_folder"),
-            icon="FILE_REFRESH",
+            icon="PLAY",
         )
+        start_import.use_file_selection = False
 
 
 class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
@@ -550,6 +597,7 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
 
         layout = self.layout.box()
         installed, enabled, available = quad_remesher_status(context)
+        layout.enabled = not context.scene.polygroups_model_preparation_settings.batch_is_running
 
         if not installed:
             layout.label(text=t(context, "quad_not_installed"), icon="ERROR")
@@ -571,21 +619,16 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
         )
 
         preset_row = layout.row(align=True)
-        low_preset = preset_row.operator(
-            "object.polygroups_set_quad_count_preset",
-            text="LOW",
-        )
-        low_preset.quad_count = 500
-        mid_preset = preset_row.operator(
-            "object.polygroups_set_quad_count_preset",
-            text="MID",
-        )
-        mid_preset.quad_count = 3000
-        high_preset = preset_row.operator(
-            "object.polygroups_set_quad_count_preset",
-            text="HIGH",
-        )
-        high_preset.quad_count = 75000
+        remesh_row = layout.row(align=True)
+        for label, quad_count in get_remesh_preset_counts(context):
+            preset = preset_row.operator(
+                "object.polygroups_set_quad_count_preset", text=label,
+            )
+            preset.quad_count = quad_count
+            remesh = remesh_row.operator(
+                "object.polygroups_checked_quad_remesh", text=f"Remesh {label}",
+            )
+            remesh.quad_count = quad_count
 
         layout.prop(qremesher, "target_count", text=t(context, "quad_count"))
         layout.prop(qremesher, "use_materials", text=t(context, "use_materials"))

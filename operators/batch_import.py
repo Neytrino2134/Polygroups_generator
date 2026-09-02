@@ -1,11 +1,10 @@
 import os
+import time
 from math import ceil
 
 import bpy
 from mathutils import Vector
 
-from .apply_weld import apply_weld_to_objects
-from .rename_objects import get_next_object_index, rename_and_move_objects
 
 
 FORMAT_EXTENSIONS = {
@@ -216,7 +215,7 @@ class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.scene is not None
+        return context.scene is not None and not context.scene.polygroups_model_preparation_settings.batch_is_running
 
     def execute(self, context):
         settings = context.scene.polygroups_model_preparation_settings
@@ -233,9 +232,13 @@ class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
         )
         settings.batch_total_count = len(files)
         settings.batch_imported_count = 0
+        settings.batch_failed_count = 0
+        settings.batch_last_error = ""
+        settings.batch_stage = "QUEUED"
         settings.batch_imported_object_count = 0
         settings.batch_remaining_count = len(files)
         settings.batch_import_progress = 0.0
+        settings.batch_current_progress = 0.0
         settings.batch_current_file = "Scan complete"
 
         self.report({"INFO"}, f"Found {len(files)} supported file(s)")
@@ -249,20 +252,9 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     _timer = None
-    _files = None
-    _processed_count = 0
-    _rename_index = 1
-    _auto_rename_objects = True
-    _apply_weld = True
-    _auto_arrange_objects = False
-    _arrange_spacing = 0.1
-    _arrange_mode = "LINE"
-    _arrange_rows = 1
-    _imported_mesh_objects = None
-
     use_file_selection: bpy.props.BoolProperty(
         default=False,
-        options={"HIDDEN"},
+        options={"HIDDEN", "SKIP_SAVE"},
     )
     directory: bpy.props.StringProperty(
         subtype="DIR_PATH",
@@ -282,185 +274,85 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
         return context.scene is not None
 
     def execute(self, context):
+        from . import import_queue
+
         settings = context.scene.polygroups_model_preparation_settings
-
-        if settings.batch_is_running:
-            self.report({"WARNING"}, "Batch import is already running")
+        if import_queue.ACTIVE_QUEUE is not None:
+            self.report({"WARNING"}, "An import queue is already running")
             return {"CANCELLED"}
-
-        if len(self.files) > 0:
-            directory = bpy.path.abspath(self.directory)
-            if not directory or not os.path.isdir(directory):
-                self.report({"WARNING"}, "Select valid import files")
-                return {"CANCELLED"}
-            self._files = collect_selected_import_files(
-                directory,
-                self.files,
-                settings.batch_import_format,
-            )
-            self._auto_rename_objects = settings.file_import_auto_rename_objects
-            self._apply_weld = settings.file_import_apply_weld
-            self._auto_arrange_objects = settings.batch_auto_arrange_objects
-        else:
-            directory = bpy.path.abspath(settings.batch_import_directory)
-            if not directory or not os.path.isdir(directory):
-                self.report({"WARNING"}, "Select a valid import folder")
-                return {"CANCELLED"}
-            self._files = collect_import_files(
-                directory,
-                settings.batch_import_format,
-                include_subfolders=settings.batch_include_subfolders,
-            )
-            self._auto_rename_objects = settings.batch_auto_rename_objects
-            self._apply_weld = settings.batch_apply_weld
-            self._auto_arrange_objects = settings.batch_auto_arrange_objects
-
-        if not self._files:
-            self.report({"WARNING"}, "No supported mesh files found")
+        file_selection = self.use_file_selection
+        directory = bpy.path.abspath(self.directory if file_selection else settings.batch_import_directory)
+        if not directory or not os.path.isdir(directory):
+            self.report({"WARNING"}, "Select a valid import folder")
             return {"CANCELLED"}
-
-        self._processed_count = 0
-        self._rename_index = get_next_object_index()
-        self._arrange_spacing = settings.batch_arrange_spacing
-        self._arrange_mode = settings.batch_arrange_mode
-        self._arrange_rows = settings.batch_arrange_rows
-        self._imported_mesh_objects = []
-
-        settings.batch_is_running = True
-        settings.batch_total_count = len(self._files)
-        settings.batch_imported_count = 0
-        settings.batch_imported_object_count = 0
-        settings.batch_remaining_count = len(self._files)
-        settings.batch_import_progress = 0.0
-        settings.batch_current_file = ""
-
-        context.window_manager.progress_begin(0, len(self._files))
-        self._timer = context.window_manager.event_timer_add(
-            0.1,
-            window=context.window,
-        )
+        try:
+            files = (collect_selected_import_files(directory, self.files, settings.batch_import_format)
+                     if file_selection else collect_import_files(
+                         directory, settings.batch_import_format, settings.batch_include_subfolders))
+            if not files:
+                raise RuntimeError("No supported mesh files found")
+            self._queue = import_queue.ImportQueue(context, files, file_selection, self.report)
+        except Exception as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+        self._queue.begin()
+        import_queue.ACTIVE_QUEUE = self._queue
+        self._timer = context.window_manager.event_timer_add(0.2, window=context.window)
+        self._queue.timer = self._timer
+        self._next_tick = time.monotonic() + 0.2
         context.window_manager.modal_handler_add(self)
+        import_queue.redraw(context)
         return {"RUNNING_MODAL"}
 
     def invoke(self, context, event):
         if self.use_file_selection:
             context.window_manager.fileselect_add(self)
             return {"RUNNING_MODAL"}
-
         return self.execute(context)
 
     def modal(self, context, event):
-        if event.type == "ESC":
-            self._finish(context, cancelled=True)
-            return {"CANCELLED"}
+        from . import import_queue
 
-        if event.type != "TIMER":
-            return {"PASS_THROUGH"}
-
-        if not self._files:
+        if self._queue.finished:
             self._finish(context)
             return {"FINISHED"}
-
-        filepath = self._files.pop(0)
-        try:
-            self._import_one_file(context, filepath)
-        except Exception as error:
-            self.report({"WARNING"}, f"{os.path.basename(filepath)}: {error}")
-        self._update_progress(context)
-
-        return {"RUNNING_MODAL"}
-
-    def _import_one_file(self, context, filepath):
-        settings = context.scene.polygroups_model_preparation_settings
-        extension = os.path.splitext(filepath)[1].lower()
-        import_operator = find_import_operator(extension)
-
-        settings.batch_current_file = os.path.basename(filepath)
-
-        if import_operator is None:
-            self.report({"WARNING"}, f"No importer available for {extension}")
-            return
-
-        before_objects = {obj.as_pointer() for obj in bpy.data.objects}
-
-        try:
-            result = import_operator(filepath=filepath)
-        except Exception as error:
-            self.report({"WARNING"}, f"{os.path.basename(filepath)}: {error}")
-            return
-
-        if "FINISHED" not in result:
-            self.report({"WARNING"}, f"Import skipped: {os.path.basename(filepath)}")
-            return
-
-        imported_objects = [
-            obj for obj in bpy.data.objects if obj.as_pointer() not in before_objects
-        ]
-        imported_mesh_objects = [
-            obj for obj in imported_objects if obj.type == "MESH"
-        ]
-
-        if self._auto_rename_objects and imported_mesh_objects:
-            rename_and_move_objects(
-                context,
-                imported_mesh_objects,
-                start_index=self._rename_index,
-            )
-            self._rename_index += len(imported_mesh_objects)
-
-        if self._apply_weld:
-            apply_weld_to_objects(
-                context,
-                imported_mesh_objects,
-                settings.weld_distance,
-                self.report,
-            )
-
-        if imported_mesh_objects:
-            self._imported_mesh_objects.extend(imported_mesh_objects)
-
-        if self._auto_arrange_objects:
-            arrange_objects_zx(
-                self._imported_mesh_objects,
-                self._arrange_spacing,
-                self._arrange_mode,
-                self._arrange_rows,
-            )
-
-        settings.batch_imported_count += 1
-        settings.batch_imported_object_count += len(imported_mesh_objects)
-
-    def _update_progress(self, context):
-        settings = context.scene.polygroups_model_preparation_settings
-        self._processed_count += 1
-        settings.batch_remaining_count = len(self._files)
-
-        if settings.batch_total_count > 0:
-            settings.batch_import_progress = (
-                self._processed_count / settings.batch_total_count
-            ) * 100.0
-
-        context.window_manager.progress_update(self._processed_count)
-
-    def _finish(self, context, cancelled=False):
-        settings = context.scene.polygroups_model_preparation_settings
-
-        if self._timer is not None:
-            context.window_manager.event_timer_remove(self._timer)
-            self._timer = None
-
-        context.window_manager.progress_end()
-        settings.batch_is_running = False
-        settings.batch_remaining_count = 0 if not cancelled else len(self._files or [])
-        settings.batch_current_file = "Cancelled" if cancelled else "Done"
-
-        if cancelled:
-            self.report({"WARNING"}, "Batch import cancelled")
+        if event.type == "ESC":
+            self._queue.settings.batch_cancel_requested = True
+        elif event.type != "TIMER":
+            return {"PASS_THROUGH"}
         else:
-            self.report(
-                {"INFO"},
-                f"Batch import finished: {settings.batch_imported_count} file(s)",
-            )
+            # Blender's Event exposes no timer handle. Other modal tools may
+            # emit TIMER events too, so limit queue steps using elapsed time.
+            now = time.monotonic()
+            if now < self._next_tick:
+                return {"PASS_THROUGH"}
+            self._next_tick = now + 0.2
+        try:
+            with context.temp_override(scene=self._queue.scene, view_layer=self._queue.view_layer):
+                self._queue.step(context)
+        except Exception as error:
+            self.report({"ERROR"}, str(error))
+            self._queue.finish(context, "STOPPED")
+        import_queue.redraw(context)
+        if self._queue.finished:
+            self._finish(context)
+            # Keep an undo entry for completed work, including a stopped queue.
+            return {"FINISHED"}
+        return {"PASS_THROUGH"}
+
+    def _finish(self, context):
+        from . import import_queue
+
+        if self._timer is not None and self._queue.timer is not None:
+            context.window_manager.event_timer_remove(self._timer)
+        self._timer = None
+        self._queue.timer = None
+        import_queue.ACTIVE_QUEUE = None
+
+    def cancel(self, context):
+        if getattr(self, "_queue", None) is not None:
+            self._queue.finish(context, "CANCELLED", rollback=True)
+        self._finish(context)
 
 
 class OBJECT_OT_polygroups_arrange_batch_objects(bpy.types.Operator):

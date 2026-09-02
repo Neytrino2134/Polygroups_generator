@@ -126,6 +126,11 @@ class OBJECT_OT_polygroups_checked_quad_remesh(bpy.types.Operator):
     bl_description = "Check the selected highpoly name before running Quad Remesher"
     bl_options = {"UNDO"}
 
+    quad_count: bpy.props.IntProperty(
+        name="Quad Count", description="Target quad count; zero keeps the current value",
+        default=0, min=0, options={"HIDDEN", "SKIP_SAVE"},
+    )
+
     @classmethod
     def poll(cls, context):
         return context.active_object is not None
@@ -155,7 +160,7 @@ class OBJECT_OT_polygroups_checked_quad_remesh(bpy.types.Operator):
             "object.polygroups_skip_quad_remesh",
             text="Skip - Just Remesh",
             icon="MOD_REMESH",
-        )
+        ).quad_count = self.quad_count
 
     def execute(self, context):
         active_object = context.active_object
@@ -197,6 +202,8 @@ class OBJECT_OT_polygroups_checked_quad_remesh(bpy.types.Operator):
     def run_quad_remesher(self, context):
         apply_quad_remesher_defaults_once(context.scene)
         try:
+            if self.quad_count:
+                context.scene.qremesher.target_count = self.quad_count
             return bpy.ops.qremesher.remesh()
         except Exception as error:
             self.report({"ERROR"}, f"Quad Remesher failed: {error}")
@@ -209,6 +216,11 @@ class OBJECT_OT_polygroups_skip_quad_remesh(bpy.types.Operator):
     bl_description = "Skip preparation checks and run Quad Remesher on the active mesh"
     bl_options = {"UNDO"}
 
+    quad_count: bpy.props.IntProperty(
+        name="Quad Count", description="Target quad count; zero keeps the current value",
+        default=0, min=0, options={"HIDDEN", "SKIP_SAVE"},
+    )
+
     @classmethod
     def poll(cls, context):
         obj = context.active_object
@@ -217,6 +229,8 @@ class OBJECT_OT_polygroups_skip_quad_remesh(bpy.types.Operator):
     def execute(self, context):
         apply_quad_remesher_defaults_once(context.scene)
         try:
+            if self.quad_count:
+                context.scene.qremesher.target_count = self.quad_count
             return bpy.ops.qremesher.remesh()
         except Exception as error:
             self.report({"ERROR"}, f"Quad Remesher failed: {error}")
