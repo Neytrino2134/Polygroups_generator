@@ -36,8 +36,7 @@ BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
 DEFAULT_CUTTER_PATH_TILT = radians(90.0)
 CUTTER_PATH_TILT_STEP = radians(15.0)
-BOOLEAN_CUTTER_SOLIDIFY_THICKNESS = 0.00001
-BOOLEAN_SEAM_MERGE_DISTANCE = 0.00002
+DEFAULT_NON_PLANE_CUTTER_THICKNESS = 0.002
 AUTOFIX_MAX_PROTRUSION_FACES = 2000
 AUTOFIX_MAX_LOOSE_GEOMETRY = 10000
 AUTOFIX_MAX_HOLE_EDGE_COUNT = 128
@@ -521,7 +520,7 @@ def _create_cutter_arc(name, center_points, depth_axis, size, alpha, thickness):
     return obj
 
 
-def _create_cutter_local_ring(name, center, axis_a, axis_b, radius, segments, alpha):
+def _create_cutter_local_ring(name, center, axis_a, axis_b, radius, segments, alpha, thickness):
     vertices = [(0.0, 0.0, 0.0)]
     for index in range(segments):
         angle = tau * (index / segments)
@@ -545,6 +544,9 @@ def _create_cutter_local_ring(name, center, axis_a, axis_b, radius, segments, al
     obj[CUTTER_PROP] = True
     obj[CUTTER_TYPE_PROP] = "LOCAL_RING"
     obj.data.materials.append(_material(alpha))
+    modifier = _add_solidify_modifier(obj, thickness)
+    if hasattr(modifier, "use_rim"):
+        modifier.use_rim = True
     _tool_collection("LOCAL_RING").objects.link(obj)
     return obj
 
@@ -607,13 +609,14 @@ def _write_cutter_path_points(cutter, path_points):
     )
 
 
-def _create_cutter_draw_stroke(name, path_points, render_u, alpha):
+def _create_cutter_draw_stroke(name, path_points, render_u, alpha, thickness):
     curve = bpy.data.curves.new(name, "CURVE")
     curve.dimensions = "3D"
     curve.resolution_u = render_u
     curve.render_resolution_u = render_u
-    curve.bevel_depth = 0.002
-    curve.bevel_resolution = 1
+    curve.extrude = thickness
+    curve.bevel_depth = 0.0
+    curve.bevel_resolution = 0
 
     spline = curve.splines.new("POLY")
     spline.points.add(len(path_points) - 1)
@@ -724,7 +727,7 @@ def _convert_draw_stroke_to_cutter_path(context, stroke):
         "Seam_Cutter_Path",
         path_points,
         settings.cutter_path_render_u,
-        settings.cutter_path_extrude,
+        settings.cutter_thickness,
         settings.cutter_alpha,
     )
     if settings.delete_draw_strokes_after_convert and stroke.name in bpy.data.objects:
@@ -1315,6 +1318,7 @@ def _duplicate_boolean_cutter_as_mesh(
     bpy.ops.object.select_all(action="DESELECT")
     work.select_set(True)
     context.view_layer.objects.active = work
+    _apply_object_scale(context, work)
 
     if work.type != "MESH":
         source_data = work.data
@@ -1324,11 +1328,15 @@ def _duplicate_boolean_cutter_as_mesh(
             if hasattr(work.data, "fill_mode"):
                 work.data.fill_mode = "FULL"
             if getattr(work.data, "extrude", 0.0) <= 0.000001:
-                work.data.extrude = max(getattr(settings, "cutter_path_extrude", 0.015), 0.001)
+                work.data.extrude = max(
+                    getattr(settings, "cutter_thickness", DEFAULT_NON_PLANE_CUTTER_THICKNESS),
+                    0.001,
+                )
         bpy.ops.object.convert(target="MESH")
         work = context.view_layer.objects.active
         if source_data and source_data.users == 0 and bpy.data.curves.get(source_data.name) == source_data:
             bpy.data.curves.remove(source_data)
+        _apply_object_scale(context, work)
 
     if work is None or work.type != "MESH" or not work.data.polygons:
         if work is not None:
@@ -1365,135 +1373,19 @@ def _duplicate_boolean_cutter_as_mesh(
     return work
 
 
-def _apply_boolean_modifier(context, target, cutter_mesh, solver="FLOAT"):
-    modifier = target.modifiers.new("Cutter Path Boolean Seam", "BOOLEAN")
-    modifier.operation = "UNION"
-    try:
-        modifier.solver = solver
-    except TypeError:
-        modifier.solver = "FLOAT"
-    if solver == "EXACT" and hasattr(modifier, "use_self"):
-        modifier.use_self = True
-    if solver == "EXACT" and hasattr(modifier, "use_hole_tolerant"):
-        modifier.use_hole_tolerant = True
-    modifier.object = cutter_mesh
+def _apply_object_scale(context, obj):
+    if obj is None or obj.name not in bpy.data.objects:
+        return
 
+    if context.object and context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
     bpy.ops.object.select_all(action="DESELECT")
-    target.select_set(True)
-    context.view_layer.objects.active = target
-    bpy.ops.object.modifier_apply(modifier=modifier.name)
-
-
-def _bvh_from_cutter_mesh(target, cutter_mesh):
-    from mathutils.bvhtree import BVHTree
-
-    matrix = target.matrix_world.inverted() @ cutter_mesh.matrix_world
-    vertices = [matrix @ vertex.co for vertex in cutter_mesh.data.vertices]
-    faces = []
-    for polygon in cutter_mesh.data.polygons:
-        polygon_vertices = list(polygon.vertices)
-        if len(polygon_vertices) < 3:
-            continue
-        for index in range(1, len(polygon_vertices) - 1):
-            faces.append((polygon_vertices[0], polygon_vertices[index], polygon_vertices[index + 1]))
-    if not vertices or not faces:
-        return None
-    return BVHTree.FromPolygons(vertices, faces)
-
-
-def _point_near_cutter_bvh(point, cutter_bvh, threshold):
-    nearest = cutter_bvh.find_nearest(point, threshold)
-    return nearest is not None
-
-
-def _mark_boolean_path_boundaries_and_remove_faces_bmesh(
-    target,
-    temp_material_index,
-    original_face_count,
-    cutter_bvh=None,
-):
-    import bmesh
-
-    mesh = target.data
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-    bm.faces.ensure_lookup_table()
-
-    material_faces = [
-        face
-        for face in bm.faces
-        if face.material_index == temp_material_index
-    ]
-    new_material_faces = [
-        face
-        for index, face in enumerate(bm.faces)
-        if index >= original_face_count and face.material_index == temp_material_index
-    ]
-    if new_material_faces:
-        material_faces = new_material_faces
-    elif not material_faces and original_face_count < len(bm.faces):
-        material_faces = [
-            face
-            for index, face in enumerate(bm.faces)
-            if index >= original_face_count
-        ]
-
-    if cutter_bvh and material_faces:
-        _center, target_diagonal = _target_bounds(target)
-        temp_faces = []
-        for scale in (0.0001, 0.0005, 0.001):
-            threshold = max(target_diagonal * scale, 0.00001)
-            temp_faces = [
-                face
-                for face in material_faces
-                if _point_near_cutter_bvh(face.calc_center_median(), cutter_bvh, threshold)
-            ]
-            if temp_faces:
-                break
-        temp_face_set = set(temp_faces)
-        preserved_faces = [face for face in material_faces if face not in temp_face_set]
-        fallback_index = max(0, temp_material_index - 1)
-        for face in preserved_faces:
-            face.material_index = fallback_index
-    else:
-        temp_faces = material_faces
-
-    if not temp_faces:
-        bm.free()
-        return 0
-
-    initial_seam_count = sum(1 for edge in bm.edges if edge.seam)
-    temp_face_set = set(temp_faces)
-    temp_edges = {edge for face in temp_faces for edge in face.edges}
-    boundary_edges = set()
-    for face in temp_faces:
-        for edge in face.edges:
-            has_regular_neighbor = any(neighbor not in temp_face_set for neighbor in edge.link_faces)
-            if not has_regular_neighbor:
-                continue
-
-            boundary_edges.add(edge)
-            edge.seam = True
-            edge.select_set(True)
-
-    bmesh.ops.delete(bm, geom=temp_faces, context="FACES_ONLY")
-    loose_temp_edges = [
-        edge
-        for edge in temp_edges
-        if edge.is_valid and edge not in boundary_edges and not edge.link_faces
-    ]
-    if loose_temp_edges:
-        bmesh.ops.delete(bm, geom=loose_temp_edges, context="EDGES")
-    loose_verts = [vert for vert in bm.verts if vert.is_valid and not vert.link_edges]
-    if loose_verts:
-        bmesh.ops.delete(bm, geom=loose_verts, context="VERTS")
-
-    final_seam_count = sum(1 for edge in bm.edges if edge.is_valid and edge.seam)
-    bm.normal_update()
-    bm.to_mesh(mesh)
-    bm.free()
-    mesh.update()
-    return max(0, final_seam_count - initial_seam_count)
+    obj.select_set(True)
+    context.view_layer.objects.active = obj
+    try:
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    except RuntimeError:
+        pass
 
 
 def _mesh_has_selected_edges(mesh):
@@ -1620,9 +1512,13 @@ def _select_faces_by_material_index(obj, material_index, min_face_index=None):
 
 
 def _selected_edge_snapshots(mesh):
+    return _edge_snapshots(mesh, selected_only=True)
+
+
+def _edge_snapshots(mesh, selected_only=False):
     snapshots = []
     for edge in mesh.edges:
-        if not edge.select:
+        if selected_only and not edge.select:
             continue
         start = mesh.vertices[edge.vertices[0]].co.copy()
         end = mesh.vertices[edge.vertices[1]].co.copy()
@@ -1667,6 +1563,66 @@ def _mark_edges_matching_snapshots(mesh, edge_snapshots, threshold):
     return marked
 
 
+def _material_boundary_edge_snapshots(mesh, material_index, min_face_index=None):
+    temp_face_indices = {
+        polygon.index
+        for polygon in _candidate_faces_by_material_index(mesh, material_index, min_face_index)
+    }
+    if not temp_face_indices:
+        return []
+
+    edge_to_faces = {}
+    for polygon in mesh.polygons:
+        for key in polygon.edge_keys:
+            edge_to_faces.setdefault(tuple(sorted(key)), []).append(polygon.index)
+
+    boundary_keys = set()
+    for key, face_indices in edge_to_faces.items():
+        has_temp_face = any(face_index in temp_face_indices for face_index in face_indices)
+        has_target_face = any(face_index not in temp_face_indices for face_index in face_indices)
+        if has_temp_face and has_target_face:
+            boundary_keys.add(key)
+
+    snapshots = []
+    for edge in mesh.edges:
+        key = tuple(sorted(edge.vertices))
+        if key not in boundary_keys:
+            edge.select = False
+            continue
+
+        start = mesh.vertices[edge.vertices[0]].co.copy()
+        end = mesh.vertices[edge.vertices[1]].co.copy()
+        edge.use_seam = True
+        edge.select = True
+        snapshots.append(
+            {
+                "midpoint": (start + end) * 0.5,
+                "length": (end - start).length,
+            },
+        )
+    mesh.update()
+    return snapshots
+
+
+def _merge_edge_snapshots(*snapshot_groups):
+    merged = []
+    seen = set()
+    for snapshots in snapshot_groups:
+        for item in snapshots:
+            midpoint = item["midpoint"]
+            key = (
+                round(midpoint.x, 6),
+                round(midpoint.y, 6),
+                round(midpoint.z, 6),
+                round(item["length"], 6),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
 def _apply_boolean_cutter_to_mesh(
     context,
     target,
@@ -1675,50 +1631,14 @@ def _apply_boolean_cutter_to_mesh(
     extension_distance=0.0,
     boolean_solver="FLOAT",
 ):
-    material = _path_boolean_material()
-    temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
-        target,
-        material,
-    )
-    original_face_count = len(target.data.polygons)
-    work = _duplicate_boolean_cutter_as_mesh(
+    return _apply_knife_intersect_cutter_to_mesh(
         context,
+        target,
         cutter,
-        material,
         boolean_solidify_thickness=boolean_solidify_thickness,
         extension_distance=extension_distance,
+        boolean_solver=boolean_solver,
     )
-    if work is None:
-        _remove_material_slot_by_index(target, temp_material_index)
-        if placeholder_index is not None:
-            _remove_material_slot_by_index(target, placeholder_index)
-        _remove_material_if_unused(material)
-        _remove_material_if_unused(placeholder_material)
-        return 0
-
-    cutter_bvh = _bvh_from_cutter_mesh(target, work)
-    try:
-        _apply_boolean_modifier(context, target, work, boolean_solver)
-        return _mark_boolean_path_boundaries_and_remove_faces_bmesh(
-            target,
-            temp_material_index,
-            original_face_count,
-            cutter_bvh,
-        )
-    finally:
-        if work.name in bpy.data.objects:
-            work_data = work.data
-            bpy.data.objects.remove(work, do_unlink=True)
-            if work_data and work_data.users == 0:
-                if hasattr(bpy.data, "meshes") and bpy.data.meshes.get(work_data.name) == work_data:
-                    bpy.data.meshes.remove(work_data)
-                elif hasattr(bpy.data, "curves") and bpy.data.curves.get(work_data.name) == work_data:
-                    bpy.data.curves.remove(work_data)
-        _remove_material_slot_by_index(target, temp_material_index)
-        if placeholder_index is not None:
-            _remove_material_slot_by_index(target, placeholder_index)
-        _remove_material_if_unused(material)
-        _remove_material_if_unused(placeholder_material)
 
 
 def _apply_knife_intersect_cutter_to_mesh(
@@ -1727,6 +1647,7 @@ def _apply_knife_intersect_cutter_to_mesh(
     cutter,
     extension_distance=0.0,
     boolean_solidify_thickness=None,
+    boolean_solver="FLOAT",
 ):
     material = _path_boolean_material()
     temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
@@ -1766,17 +1687,32 @@ def _apply_knife_intersect_cutter_to_mesh(
             return 0
 
         target.active_material_index = temp_material_index
-        bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_mode(type="FACE")
-        bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.mesh.intersect(
-            mode="SELECT",
-            separate_mode="CUT",
-            threshold=0.000001,
-            solver="FLOAT",
+        _select_faces_by_material_index(
+            target,
+            temp_material_index,
+            min_face_index=original_face_count,
         )
+        context.view_layer.objects.active = target
+        if context.object and context.object.mode != "EDIT":
+            bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="FACE")
+        try:
+            bpy.ops.mesh.intersect(
+                mode="SELECT_UNSELECT",
+                separate_mode="CUT",
+                threshold=0.000001,
+                solver=boolean_solver,
+            )
+        except TypeError:
+            bpy.ops.mesh.intersect(
+                mode="SELECT",
+                separate_mode="CUT",
+                threshold=0.000001,
+                solver=boolean_solver,
+            )
 
         bpy.ops.object.mode_set(mode="OBJECT")
+        selected_edge_snapshots = _selected_edge_snapshots(target.data)
         temp_face_count = _select_faces_by_material_index(
             target,
             temp_material_index,
@@ -1785,12 +1721,22 @@ def _apply_knife_intersect_cutter_to_mesh(
         if not temp_face_count:
             return 0
 
-        bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_mode(type="FACE")
-        bpy.ops.mesh.region_to_loop()
+        boundary_edge_snapshots = _material_boundary_edge_snapshots(
+            target.data,
+            temp_material_index,
+            min_face_index=original_face_count,
+        )
+        edge_snapshots = _merge_edge_snapshots(boundary_edge_snapshots)
 
-        bpy.ops.object.mode_set(mode="OBJECT")
-        edge_snapshots = _selected_edge_snapshots(target.data)
+        if not edge_snapshots and selected_edge_snapshots:
+            edge_snapshots = selected_edge_snapshots
+
+        if not edge_snapshots:
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_mode(type="FACE")
+            bpy.ops.mesh.region_to_loop()
+            bpy.ops.object.mode_set(mode="OBJECT")
+            edge_snapshots = _selected_edge_snapshots(target.data)
 
         _select_faces_by_material_index(
             target,
@@ -1801,13 +1747,27 @@ def _apply_knife_intersect_cutter_to_mesh(
         bpy.ops.mesh.select_mode(type="FACE")
         bpy.ops.mesh.delete(type="FACE")
         bpy.ops.object.mode_set(mode="OBJECT")
+        _delete_loose_geometry_for_autofix(context, target)
         _clear_mesh_component_selection(target.data)
         _center, target_diagonal = _target_bounds(target)
+        base_mark_threshold = max(target_diagonal * 0.000001, 0.000001)
         marked_edges = _mark_edges_matching_snapshots(
             target.data,
             edge_snapshots,
-            max(target_diagonal * 0.000001, 0.000001),
+            base_mark_threshold,
         )
+        if not marked_edges and edge_snapshots:
+            fallback_mark_threshold = max(
+                base_mark_threshold,
+                _cutter_thickness(context) * 0.25,
+                target_diagonal * 0.00001,
+                0.00001,
+            )
+            marked_edges = _mark_edges_matching_snapshots(
+                target.data,
+                edge_snapshots,
+                fallback_mark_threshold,
+            )
         target.data.update()
 
         return marked_edges
@@ -1834,8 +1794,7 @@ def _arc_heal_distance(context):
 
 
 def _boolean_seam_merge_distance(context):
-    del context
-    return BOOLEAN_SEAM_MERGE_DISTANCE
+    return _cutter_thickness(context) * 2.0
 
 
 def _cutter_apply_method(context):
@@ -1847,6 +1806,12 @@ def _cutter_boolean_solver(context):
     settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
     solver = getattr(settings, "cutter_boolean_solver", "FLOAT")
     return solver if solver in {"FLOAT", "EXACT"} else "FLOAT"
+
+
+def _cutter_thickness(context):
+    settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
+    thickness = getattr(settings, "cutter_thickness", DEFAULT_NON_PLANE_CUTTER_THICKNESS)
+    return max(0.0, float(thickness))
 
 
 def _merge_selected_cut_vertices(target, merge_distance):
@@ -2033,7 +1998,7 @@ def _apply_arc_cutters_to_mesh(context, target, cutters):
                 context,
                 target,
                 cutter,
-                boolean_solidify_thickness=BOOLEAN_CUTTER_SOLIDIFY_THICKNESS,
+                boolean_solidify_thickness=None,
                 extension_distance=0.0,
                 boolean_solver=boolean_solver,
             )
@@ -2043,6 +2008,7 @@ def _apply_arc_cutters_to_mesh(context, target, cutters):
                 target,
                 cutter,
                 extension_distance=knife_extension_distance,
+                boolean_solver=boolean_solver,
             )
     return marked_edges
 
@@ -2124,20 +2090,14 @@ def _apply_cutters_to_mesh(context, target, cutters):
                 context,
                 target,
                 cutter,
-                boolean_solidify_thickness=BOOLEAN_CUTTER_SOLIDIFY_THICKNESS,
+                boolean_solver=boolean_solver,
             )
         else:
-            cutter_type = cutter.get(CUTTER_TYPE_PROP)
-            solidify_thickness = (
-                BOOLEAN_CUTTER_SOLIDIFY_THICKNESS
-                if cutter_type in {"PATH", "LOCAL_RING"}
-                else None
-            )
             marked_edges += _apply_boolean_cutter_to_mesh(
                 context,
                 target,
                 cutter,
-                boolean_solidify_thickness=solidify_thickness,
+                boolean_solidify_thickness=None,
                 boolean_solver=boolean_solver,
             )
 
@@ -2700,6 +2660,7 @@ class OBJECT_OT_polygroups_draw_cutter_local_ring(bpy.types.Operator):
             surface[3],
             settings.cutter_local_ring_segments,
             settings.cutter_alpha,
+            settings.cutter_thickness,
         )
         cutter.select_set(True)
         target.select_set(True)
@@ -2855,7 +2816,7 @@ class OBJECT_OT_polygroups_draw_cutter_arc(bpy.types.Operator):
             surface[1],
             surface[2],
             settings.cutter_alpha,
-            settings.cutter_solidify_thickness,
+            settings.cutter_thickness,
         )
         cutter.select_set(True)
         target.select_set(True)
@@ -3103,7 +3064,7 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
                 "Seam_Cutter_Path",
                 self._surface_points,
                 settings.cutter_path_render_u,
-                settings.cutter_path_extrude,
+                settings.cutter_thickness,
                 settings.cutter_alpha,
             )
         bpy.ops.object.select_all(action="DESELECT")
@@ -3324,7 +3285,7 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
                 "Seam_Cutter_Path",
                 path_points,
                 settings.cutter_path_render_u,
-                settings.cutter_path_extrude,
+                settings.cutter_thickness,
                 settings.cutter_alpha,
                 "DRAW",
             )
@@ -3850,6 +3811,7 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             apply_method != "BOOLEAN"
             and _has_knife_cleanup_cutters(cutters)
         )
+        _apply_object_scale(context, target)
         open_edges_before = _count_open_boundary_edges(target) if use_knife_seam_cleanup else 0
         _clear_mesh_component_selection(target.data)
         marked_edges = _apply_cutters_to_mesh(context, target, cutters)

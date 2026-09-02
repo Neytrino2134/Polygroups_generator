@@ -86,7 +86,7 @@ def _sync_cutter_solidify_thickness(self, context):
         return
 
     for obj in collection.objects:
-        if obj.type != "MESH" or not obj.get(CUTTER_PROP):
+        if obj.type != "MESH" or not obj.get(CUTTER_PROP) or obj.get(CUTTER_TYPE_PROP) != "PLANE":
             continue
 
         modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
@@ -95,6 +95,28 @@ def _sync_cutter_solidify_thickness(self, context):
 
         modifier.thickness = self.cutter_solidify_thickness
         modifier.offset = 0.0
+
+
+def _sync_cutter_thickness(self, context):
+    if context is None:
+        return
+
+    for obj in context.scene.objects:
+        if not obj.get(CUTTER_PROP):
+            continue
+
+        cutter_type = obj.get(CUTTER_TYPE_PROP)
+        if cutter_type in {"ARC", "LOCAL_RING"} and obj.type == "MESH":
+            modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
+            if modifier is None:
+                modifier = obj.modifiers.new(CUTTER_SOLIDIFY_MODIFIER_NAME, "SOLIDIFY")
+            modifier.thickness = self.cutter_thickness
+            modifier.offset = 0.0
+            if hasattr(modifier, "use_rim"):
+                modifier.use_rim = True
+        elif cutter_type in {"PATH", "DRAW_STROKE"} and obj.type == "CURVE":
+            obj.data.extrude = self.cutter_thickness
+            obj.data.bevel_depth = 0.0
 
 
 def _sync_selected_cutter_path_settings(self, context):
@@ -107,7 +129,7 @@ def _sync_selected_cutter_path_settings(self, context):
 
         obj.data.resolution_u = self.cutter_path_render_u
         obj.data.render_resolution_u = self.cutter_path_render_u
-        obj.data.extrude = self.cutter_path_extrude
+        obj.data.extrude = self.cutter_thickness
 
 
 def _prompt_collection_items(self, context):
@@ -389,6 +411,15 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         precision=5,
         update=_sync_cutter_solidify_thickness,
     )
+    cutter_thickness: bpy.props.FloatProperty(
+        name="Cutter Thickness",
+        description="Visual thickness for non-plane cutters; Boolean uses this as cutter thickness and Knife ignores it",
+        default=0.002,
+        min=0.0,
+        soft_max=0.02,
+        precision=5,
+        update=_sync_cutter_thickness,
+    )
     cutter_arc_segments: bpy.props.IntProperty(
         name="Cylinder Segments",
         description="Number of segments used for the open arc cylinder cutter",
@@ -432,8 +463,8 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         default="BOOLEAN",
     )
     cutter_boolean_solver: bpy.props.EnumProperty(
-        name="Boolean Solver",
-        description="Boolean solver used when Apply Method is Boolean",
+        name="Solver",
+        description="Solver used by Boolean and Knife Intersect cutter application",
         items=(
             ("FLOAT", "Float", "Use the faster float boolean solver"),
             ("EXACT", "Exact", "Use the exact boolean solver for difficult or self-intersecting cutters"),
@@ -462,15 +493,6 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         min=1,
         max=128,
         soft_max=64,
-        update=_sync_selected_cutter_path_settings,
-    )
-    cutter_path_extrude: bpy.props.FloatProperty(
-        name="Path Extrude",
-        description="Visual curve extrude for cutter paths; seam calculation uses the path centerline",
-        default=0.015,
-        min=0.0,
-        soft_max=0.05,
-        precision=4,
         update=_sync_selected_cutter_path_settings,
     )
     continue_path_cutters: bpy.props.BoolProperty(

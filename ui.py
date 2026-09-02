@@ -731,18 +731,17 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 ("KNIFE", "Knife", "EDGESEL"),
             ),
         )
-        if settings.cutter_apply_method == "BOOLEAN":
-            layout.label(text=t(context, "cutter_boolean_solver"))
-            draw_enum_icon_toggle(
-                layout,
-                "scene.polygroups_object_seam_cutter_settings",
-                settings,
-                "cutter_boolean_solver",
-                (
-                    ("FLOAT", "Float", "VIEWZOOM"),
-                    ("EXACT", "Exact", "CHECKMARK"),
-                ),
-            )
+        layout.label(text=t(context, "cutter_boolean_solver"))
+        draw_enum_icon_toggle(
+            layout,
+            "scene.polygroups_object_seam_cutter_settings",
+            settings,
+            "cutter_boolean_solver",
+            (
+                ("FLOAT", "Float", "VIEWZOOM"),
+                ("EXACT", "Exact", "CHECKMARK"),
+            ),
+        )
         layout.prop(
             settings,
             "cutter_auto_fix_mesh",
@@ -751,8 +750,8 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         )
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
+        layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
-        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
         tilt_row = layout.row(align=True)
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
         tilt_operator.mode = "DECREASE"

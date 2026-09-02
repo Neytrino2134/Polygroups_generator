@@ -132,15 +132,14 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
                 ("KNIFE", "Knife", "EDGESEL"),
             ),
         )
-        if settings.cutter_apply_method == "BOOLEAN":
-            draw_enum_icon_toggle(
-                row,
-                "cutter_boolean_solver",
-                (
-                    ("FLOAT", "Float", "VIEWZOOM"),
-                    ("EXACT", "Exact", "CHECKMARK"),
-                ),
-            )
+        draw_enum_icon_toggle(
+            row,
+            "cutter_boolean_solver",
+            (
+                ("FLOAT", "Float", "VIEWZOOM"),
+                ("EXACT", "Exact", "CHECKMARK"),
+            ),
+        )
         row.prop(settings, "cutter_auto_fix_mesh", text=t(context, "cutter_auto_fix_mesh"), toggle=True)
     row.label(text=t(context, "ctrl_draw_hint"))
     row.prop(settings, "cutter_mirror_axis", text="", expand=True)
@@ -166,7 +165,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         layout.prop(settings, "cutter_local_ring_radius_offset", text=t(context, "local_ring_radius_offset"))
     if cutter_type == "PATH":
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
-        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
+        layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
         tilt_row = layout.row(align=True)
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
         tilt_operator.mode = "DECREASE"
@@ -186,7 +185,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         )
     if cutter_type == "DRAW":
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
-        layout.prop(settings, "cutter_path_extrude", text=t(context, "path_extrude"))
+        layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
         tilt_row = layout.row(align=True)
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
         tilt_operator.mode = "DECREASE"
@@ -207,8 +206,10 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
             icon="AUTOMERGE_ON",
         )
     layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
-    if cutter_type in {"PLANE", "ARC"}:
+    if cutter_type == "PLANE":
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
+    if cutter_type in {"ARC", "LOCAL_RING"}:
+        layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
 
 
 class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
