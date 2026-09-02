@@ -239,6 +239,10 @@ class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
         settings.batch_remaining_count = len(files)
         settings.batch_import_progress = 0.0
         settings.batch_current_progress = 0.0
+        settings.batch_elapsed_seconds = 0.0
+        settings.batch_current_seconds = 0.0
+        settings.batch_average_seconds = 0.0
+        settings.batch_eta_seconds = -1.0
         settings.batch_current_file = "Scan complete"
 
         self.report({"INFO"}, f"Found {len(files)} supported file(s)")

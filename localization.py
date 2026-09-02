@@ -6,6 +6,16 @@ LANGUAGE_ITEMS = (
 
 TEXT = {
     "EN": {
+        "hide_all_named": "Hide All {value}",
+        "show_all_named": "Show All {value}",
+        "isolate_generated_collections": "Isolate Other Collections",
+        "previous_generated_collection": "Previous Collection",
+        "next_generated_collection": "Next Collection",
+        "import_elapsed_time": "Total time (without pauses): {value}",
+        "import_current_time": "Current file time: {value}",
+        "import_average_time": "Average per file: {value}",
+        "import_remaining_time": "Estimated remaining: ~{value}",
+        "import_estimating_time": "Remaining: waiting for the first completed file",
         "import_total_progress": "Total Progress",
         "import_current_progress": "Current Progress",
         "import_separate_collections": "Each file in a separate collection",
@@ -381,6 +391,16 @@ TEXT = {
         "open_prompt_folder": "Open Folder",
     },
     "RU": {
+        "hide_all_named": "Скрыть все {value}",
+        "show_all_named": "Показать все {value}",
+        "isolate_generated_collections": "Изолировать коллекцию",
+        "previous_generated_collection": "Предыдущая коллекция",
+        "next_generated_collection": "Следующая коллекция",
+        "import_elapsed_time": "Всего (без пауз): {value}",
+        "import_current_time": "Текущий файл: {value}",
+        "import_average_time": "В среднем на файл: {value}",
+        "import_remaining_time": "Осталось примерно: ~{value}",
+        "import_estimating_time": "Осталось: ждём завершения первого файла",
         "import_total_progress": "Общий прогресс",
         "import_current_progress": "Прогресс текущего файла",
         "import_separate_collections": "Каждый файл в отдельную коллекцию",

@@ -7,6 +7,7 @@ import bpy
 from .localization import get_preferences
 from .localization import t
 from .core.remesh_defaults import get_remesh_preset_counts
+from .core.import_timing import format_duration
 
 
 def quad_remesher_status(context):
@@ -419,6 +420,23 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
             text=t(context, "apply_weld"),
             icon="AUTOMERGE_ON",
         )
+        column.separator()
+        for prefix, label in (("Highpoly_", "Highpoly"), ("Retopo_", "Retopo")):
+            row = column.row(align=True)
+            for hidden, key, icon in ((True, "hide_all_named", "HIDE_ON"),
+                                      (False, "show_all_named", "HIDE_OFF")):
+                operator = row.operator("object.polygroups_object_visibility",
+                                        text=t(context, key, value=label), icon=icon)
+                operator.prefix = prefix
+                operator.hidden = hidden
+        column.operator("object.polygroups_generated_collection",
+                        text=t(context, "isolate_generated_collections"),
+                        icon="OUTLINER_COLLECTION").action = "ISOLATE"
+        row = column.row(align=True)
+        row.operator("object.polygroups_generated_collection",
+                     text=t(context, "previous_generated_collection"), icon="TRIA_LEFT").action = "PREVIOUS"
+        row.operator("object.polygroups_generated_collection",
+                     text=t(context, "next_generated_collection"), icon="TRIA_RIGHT").action = "NEXT"
 
 
 def draw_import_remesh_options(layout, context, settings, prefix):
@@ -440,6 +458,14 @@ def draw_import_progress(layout, context, settings):
                  text=f'{t(context, "import_total_progress")}: {settings.batch_import_progress:.1f}%')
     box.progress(factor=settings.batch_current_progress / 100, type="BAR",
                  text=f'{t(context, "import_current_progress")}: {settings.batch_current_progress:.1f}%')
+    box.label(text=t(context, "import_elapsed_time", value=format_duration(settings.batch_elapsed_seconds)))
+    box.label(text=t(context, "import_current_time", value=format_duration(settings.batch_current_seconds)))
+    if settings.batch_imported_count:
+        box.label(text=t(context, "import_average_time", value=format_duration(settings.batch_average_seconds)))
+    if settings.batch_eta_seconds >= 0:
+        box.label(text=t(context, "import_remaining_time", value=format_duration(settings.batch_eta_seconds)))
+    elif settings.batch_is_running:
+        box.label(text=t(context, "import_estimating_time"))
     box.label(text=t(context, "total_files", value=settings.batch_total_count))
     box.label(text=t(context, "import_completed", value=settings.batch_imported_count))
     box.label(text=t(context, "import_failed", value=settings.batch_failed_count))

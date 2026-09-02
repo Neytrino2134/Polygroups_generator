@@ -12,6 +12,8 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - `Rename Objects`: renames selected objects as `Highpoly_Generated.001`, `Highpoly_Generated.002`, and so on, then moves them to the `Generated` collection.
   - `Apply Weld`: adds and applies a Weld modifier on selected mesh objects.
   - Default weld distance: `0.0001`.
+  - Hide/Show All Highpoly and Retopo changes eye visibility for matching `Highpoly_` / `Retopo_` objects in the current View Layer.
+  - Isolate Other Collections excludes other numbered `Generated.N` collections. Previous/Next Collection switches them in numeric order and selects a visible object in the destination; unrelated collections are preserved.
 - `Seam Preparation`
   - Knife Seam and Quick Knife Seam tools for preparing group boundaries.
   - Smooth Face Selection for relaxing selected face regions in Edit Mode.
@@ -23,6 +25,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - `Scan Folder`: counts supported mesh files in the selected batch folder without importing them.
   - `Auto Remesh`: independently available in Import and Batch Import with LOW/MID/HIGH counts from add-on preferences. Each file completes Import → Rename → Weld → Remesh before the next file starts; Rename and Weld follow their checkboxes.
   - The panel shows the file count, completed/failed/remaining counts, current file, processing stage, and overall progress.
+  - Timers show total active time, current file time, and approximate remaining time based on the average of successfully completed files. Pauses are excluded; the estimate appears after the first completed file.
   - `Pause` waits until the current file finishes; `Resume` continues. `Stop` finishes the current file and keeps results. `Cancel` (or Esc) aborts remeshing and removes objects created by the current import run.
   - `Each file in a separate collection` groups the imported file and its remeshed objects in `Generated.001`, `Generated.002`, etc. Automatic arrangement moves each file's objects together.
 - `Remesh`

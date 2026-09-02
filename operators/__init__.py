@@ -1,4 +1,6 @@
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
+from .generated_visibility import OBJECT_OT_polygroups_object_visibility
+from .generated_visibility import OBJECT_OT_polygroups_generated_collection
 from .ai_generation import OBJECT_OT_airetopo_generate_google_image
 from .ai_generation import OBJECT_OT_airetopo_generate_openai_image
 from .ai_generation import OBJECT_OT_airetopo_load_library_prompt
@@ -106,6 +108,8 @@ from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
 CLASSES = (
     OBJECT_OT_polygroups_apply_weld,
+    OBJECT_OT_polygroups_object_visibility,
+    OBJECT_OT_polygroups_generated_collection,
     OBJECT_OT_polygroups_select_import_folder,
     OBJECT_OT_airetopo_generate_openai_image,
     OBJECT_OT_airetopo_generate_google_image,

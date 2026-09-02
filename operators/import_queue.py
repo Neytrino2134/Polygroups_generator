@@ -7,6 +7,7 @@ from bpy.app.handlers import persistent
 
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once, get_remesh_preset_counts
 from ..core.remesh_job import RemeshJob, remesh_backend
+from ..core.import_timing import ImportTiming
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import get_next_object_index, rename_and_move_objects
 
@@ -79,6 +80,7 @@ class ImportQueue:
         self.timer = None
 
     def begin(self):
+        self.timing = ImportTiming()
         settings = self.settings
         settings.batch_is_running = True
         settings.batch_is_paused = False
@@ -94,6 +96,13 @@ class ImportQueue:
         settings.batch_current_file = ""
         settings.batch_last_error = ""
         settings.batch_stage = "QUEUED"
+        self.update_timing()
+
+    def update_timing(self):
+        self.settings.batch_elapsed_seconds = self.timing.elapsed()
+        self.settings.batch_current_seconds = self.timing.current_elapsed()
+        self.settings.batch_average_seconds = self.timing.average()
+        self.settings.batch_eta_seconds = self.timing.remaining(len(self.files) - self.index)
 
     def tracked(self, action):
         """Track only IDs created by our synchronous action, even if it fails."""
@@ -118,6 +127,7 @@ class ImportQueue:
 
     def step(self, context):
         settings = self.settings
+        self.update_timing()
         if settings.batch_cancel_requested:
             self.finish(context, "CANCELLED", rollback=True)
             return
@@ -129,6 +139,8 @@ class ImportQueue:
                 self.finish(context, "DONE")
                 return
             if settings.batch_is_paused:
+                self.timing.pause()
+                self.update_timing()
                 settings.batch_stage = "PAUSED"
                 return
             self.file_objects = []
@@ -137,6 +149,8 @@ class ImportQueue:
             self.collection = None
             settings.batch_current_file = os.path.basename(self.files[self.index])
             settings.batch_current_progress = 0
+            self.timing.start_file()
+            self.update_timing()
             self.stage = "IMPORT"
             settings.batch_stage = self.stage
             return  # Give the panel a frame to display the next file.
@@ -153,6 +167,7 @@ class ImportQueue:
             settings.batch_failed_count += 1
             self.complete_file(success=False)
         self.update_progress()
+        self.update_timing()
 
     def advance(self, context):
         from .batch_import import find_import_operator
@@ -259,6 +274,7 @@ class ImportQueue:
                 self.view_layer.update()
 
     def complete_file(self, success):
+        self.timing.complete_file(success)
         if success:
             self.settings.batch_current_progress = 100
             self.settings.batch_imported_count += 1
@@ -311,6 +327,10 @@ class ImportQueue:
         self.settings.batch_is_running = False
         self.settings.batch_is_paused = False
         self.settings.batch_stage = status
+        self.timing.stop()
+        self.update_timing()
+        if status != "DONE":
+            self.settings.batch_eta_seconds = -1.0
         self.finished = True
         redraw(context)
 

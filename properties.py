@@ -272,6 +272,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_failed_count: bpy.props.IntProperty(default=0, min=0)
     batch_stage: bpy.props.StringProperty(default="")
     batch_last_error: bpy.props.StringProperty(default="")
+    batch_elapsed_seconds: bpy.props.FloatProperty(default=0.0, min=0.0)
+    batch_current_seconds: bpy.props.FloatProperty(default=0.0, min=0.0)
+    batch_average_seconds: bpy.props.FloatProperty(default=0.0, min=0.0)
+    batch_eta_seconds: bpy.props.FloatProperty(default=-1.0, min=-1.0)
     batch_total_count: bpy.props.IntProperty(
         name="Total",
         default=0,
