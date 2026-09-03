@@ -1,7 +1,7 @@
 bl_info = {
     "name": "AI Retopo Toolkit",
     "author": "Meowmaster",
-    "version": (0, 2, 25),
+    "version": (0, 2, 26),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > AI Retopo",
     "description": "Semi-automatic retopology toolkit for generated AI meshes",

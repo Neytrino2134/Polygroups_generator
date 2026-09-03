@@ -422,6 +422,13 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
             icon="AUTOMERGE_ON",
         )
         layout.separator(type="LINE")
+        layout.label(text=t(context, "model_preparation_group_mesh_edit"), icon="EDITMODE_HLT")
+        layout.operator(
+            "mesh.polygroups_delete_and_fill",
+            text=t(context, "delete_and_fill"),
+            icon="MESH_DATA",
+        )
+        layout.separator(type="LINE")
         layout.label(text=t(context, "model_preparation_group_manage"), icon="OUTLINER_COLLECTION")
         column = layout.column(align=True)
         for prefix, label in (("Highpoly_", "Highpoly"), ("Retopo_", "Retopo")):
@@ -730,6 +737,14 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
 
         layout.label(text=t(context, "seam_group_selection"), icon="FACESEL")
         tools_column = layout.column(align=True)
+        selection_row = tools_column.row(align=True)
+        selection_row.operator("mesh.select_more", text=t(context, "select_more"), icon="ADD")
+        selection_row.operator("mesh.select_less", text=t(context, "select_less"), icon="REMOVE")
+        linked_operator = tools_column.operator(
+            "mesh.select_linked", text=t(context, "select_linked_seam"), icon="LINKED",
+        )
+        linked_operator.delimit = {"SEAM"}
+        tools_column.separator()
         tools_column.prop(
             seam_settings,
             "selection_smooth_iterations",
@@ -742,6 +757,14 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             icon="MOD_SMOOTH",
         )
         smooth_operator.iterations = seam_settings.selection_smooth_iterations
+
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "model_preparation_group_mesh_edit"), icon="EDITMODE_HLT")
+        layout.operator(
+            "mesh.polygroups_delete_and_fill",
+            text=t(context, "delete_and_fill"),
+            icon="MESH_DATA",
+        )
 
         layout.separator(type="LINE")
         layout.label(text=t(context, "seam_group_mark_clear"), icon="EDGE_SEAM")

@@ -1,4 +1,5 @@
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
+from .delete_and_fill import MESH_OT_polygroups_delete_and_fill
 from .remesh_progress import OBJECT_OT_polygroups_run_remesh, OBJECT_OT_polygroups_cancel_remesh
 from .generated_visibility import OBJECT_OT_polygroups_object_visibility
 from .generated_visibility import OBJECT_OT_polygroups_generated_collection
@@ -151,6 +152,7 @@ CLASSES = (
     OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly,
     OBJECT_OT_polygroups_setup_resculpting,
     OBJECT_OT_polygroups_rename_and_apply_weld,
+    MESH_OT_polygroups_delete_and_fill,
     OBJECT_OT_polygroups_checked_quad_remesh,
     OBJECT_OT_polygroups_checked_generate_polygroups,
     OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material,

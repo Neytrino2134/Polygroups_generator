@@ -52,6 +52,10 @@ class RemeshJob:
     def start(self, context):
         self.source_name = context.active_object.name
         self.source_collections = tuple(context.active_object.users_collection)
+        # Every add-on Remesh entry point, including import queues, starts here.
+        # Enforce this for each job even if defaults were already applied or the
+        # user enabled angle detection in Quad Remesher between runs.
+        context.scene.qremesher.autodetect_hard_edges = False
         self.backend.doRemeshing_Start(self.state, context)
         if not self.state.IsRemeshing:
             raise RuntimeError("Quad Remesher could not start; check its installation and license")

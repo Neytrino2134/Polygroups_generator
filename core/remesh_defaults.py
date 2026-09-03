@@ -35,6 +35,7 @@ def apply_quad_remesher_defaults_once(scene):
         ("target_count", get_remesh_preset_counts(bpy.context)[1][1]),
         ("use_materials", DEFAULT_USE_MATERIALS),
         ("symmetry_x", DEFAULT_SYMMETRY_X),
+        ("autodetect_hard_edges", False),
     )
     for property_name, value in defaults:
         if hasattr(qremesher, property_name):

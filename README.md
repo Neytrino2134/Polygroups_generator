@@ -9,6 +9,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
 ## Current Tools
 
 - `Model Preparation`
+  - `Mesh Editing` → `Delete and Fill`: in Edit Mode, replace selected face patches with a triangular fill of their boundaries, removing unused interior edges and vertices. New triangles stay selected. Other holes, unselected islands, and boundary seams are preserved. Supports multiple edited meshes and Undo; an invalid boundary cancels before deleting geometry.
   - `Rename Objects`: renames selected objects as `Highpoly_Generated.001`, `Highpoly_Generated.002`, and so on. Objects already in a numbered `Generated.N` collection keep their collection memberships; other objects move to `Generated`.
   - `Apply Weld`: adds and applies a Weld modifier on selected mesh objects.
   - Default weld distance: `0.0001`.
@@ -39,6 +40,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - `Pause` waits until the current file finishes; `Resume` continues. `Stop` finishes the current file and keeps results. `Cancel` (or Esc) aborts remeshing and removes objects created by the current import run.
   - `Each file in a separate collection` groups the imported file and its remeshed objects in `Generated.001`, `Generated.002`, etc. Automatic arrangement moves each file's objects together.
 - `Remesh`
+  - All add-on Remesh buttons and Auto Remesh during import disable Quad Remesher's `Detect Hard Edges by angle` before every engine run, including when it was manually enabled again.
   - Proxies selected Quad Remesher controls when the `quad_remesher` add-on is installed and enabled.
   - Exposes Quad Count, Use Materials, Symmetry X, and Remesh It.
   - LOW/MID/HIGH default to 1,000 / 3,000 / 50,000 quads; customize these in add-on preferences. Separate Remesh LOW/MID/HIGH buttons also start remeshing.
