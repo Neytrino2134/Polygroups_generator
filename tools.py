@@ -8,6 +8,7 @@ from .operators.connect_vertex_seam import draw_vertex_seam_cursor
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
 DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
+DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID = "polygroups_generator.draw_cutter_local_contour_tool"
 DRAW_CUTTER_LOCAL_RING_TOOL_ID = "polygroups_generator.draw_cutter_local_ring_tool"
 DRAW_CUTTER_PATH_TOOL_ID = "polygroups_generator.draw_cutter_path_tool"
 DRAW_CUTTER_DRAW_TOOL_ID = "polygroups_generator.draw_cutter_draw_tool"
@@ -15,6 +16,7 @@ VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
 CUTTER_TOOL_ORDER = (
     DRAW_CUTTER_TOOL_ID,
     DRAW_CUTTER_LOCAL_RING_TOOL_ID,
+    DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID,
     DRAW_CUTTER_ARC_TOOL_ID,
     DRAW_CUTTER_PATH_TOOL_ID,
     DRAW_CUTTER_DRAW_TOOL_ID,
@@ -84,6 +86,8 @@ def _move_draw_cutter_tool_after_cursor():
 def _active_cutter_label_key(tool_id):
     if tool_id == DRAW_CUTTER_ARC_TOOL_ID:
         return "draw_cutter_arc"
+    if tool_id == DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID:
+        return "draw_cutter_local_contour"
     if tool_id == DRAW_CUTTER_LOCAL_RING_TOOL_ID:
         return "draw_cutter_local_ring"
     if tool_id == DRAW_CUTTER_PATH_TOOL_ID:
@@ -125,7 +129,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         text=t(context, _active_cutter_label_key(tool.idname)),
         icon="TOOL_SETTINGS",
     )
-    if cutter_type in {"ARC", "LOCAL_RING", "PATH", "DRAW"}:
+    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "PATH", "DRAW"}:
         draw_enum_icon_toggle(
             row,
             "cutter_apply_method",
@@ -168,6 +172,9 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         )
     if cutter_type == "ARC":
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
+    if cutter_type == "LOCAL_CONTOUR":
+        layout.prop(settings, "cutter_contour_points", text=t(context, "contour_points"))
+        layout.prop(settings, "cutter_contour_offset", text=t(context, "contour_offset"))
     if cutter_type == "LOCAL_RING":
         layout.prop(settings, "cutter_local_ring_fit_mode", text=t(context, "local_ring_fit_mode"))
         layout.prop(settings, "cutter_local_ring_segments", text=t(context, "local_ring_segments"))
@@ -213,7 +220,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
     if cutter_type == "PLANE":
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
-    if cutter_type in {"ARC", "LOCAL_RING"}:
+    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR"}:
         layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
 
 
@@ -225,6 +232,7 @@ class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
         items = (
             (DRAW_CUTTER_TOOL_ID, "draw_cutter_plane", "MESH_PLANE"),
             (DRAW_CUTTER_LOCAL_RING_TOOL_ID, "draw_cutter_local_ring", "MESH_CIRCLE"),
+            (DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID, "draw_cutter_local_contour", "MESH_CIRCLE"),
             (DRAW_CUTTER_ARC_TOOL_ID, "draw_cutter_arc", "CURVE_BEZCURVE"),
             (DRAW_CUTTER_PATH_TOOL_ID, "draw_cutter_path", "CURVE_PATH"),
             (DRAW_CUTTER_DRAW_TOOL_ID, "draw_cutter_draw", "GREASEPENCIL"),
@@ -305,6 +313,29 @@ class VIEW3D_WST_polygroups_draw_cutter_local_ring(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         _draw_cutter_tool_settings(context, layout, tool, "LOCAL_RING")
+
+
+class VIEW3D_WST_polygroups_draw_cutter_local_contour(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_idname = DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID
+    bl_label = "Cutter Tweak: Local Contour"
+    bl_description = "Select normally; hold Ctrl and click across a local mesh section to draw a fitted contour cutter"
+    bl_icon = "ops.mesh.primitive_cylinder_add_gizmo"
+    bl_cursor = "DEFAULT"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        (
+            "object.polygroups_draw_cutter_local_contour",
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        _draw_cutter_tool_settings(context, layout, tool, "LOCAL_CONTOUR")
 
 
 class VIEW3D_WST_polygroups_draw_cutter_path(WorkSpaceTool):
@@ -457,8 +488,14 @@ def register():
         group=False,
     )
     bpy.utils.register_tool(
-        VIEW3D_WST_polygroups_draw_cutter_arc,
+        VIEW3D_WST_polygroups_draw_cutter_local_contour,
         after={DRAW_CUTTER_LOCAL_RING_TOOL_ID},
+        separator=False,
+        group=False,
+    )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_draw_cutter_arc,
+        after={DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID},
         separator=False,
         group=False,
     )
@@ -516,6 +553,7 @@ def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_draw)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_path)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_local_contour)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_local_ring)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_arc)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)

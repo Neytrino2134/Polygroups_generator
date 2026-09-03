@@ -23,6 +23,7 @@ CUTTER_COLLECTION_BY_TOOL = {
     "PLANE": "Seam Cutters Plane",
     "ARC": "Seam Cutters Arc",
     "LOCAL_RING": "Seam Cutters Local Ring",
+    "LOCAL_CONTOUR": "Seam Cutters Local Contour",
     "PATH": "Seam Cutters Path",
     "DRAW": "Seam Cutters Draw",
 }
@@ -1518,6 +1519,19 @@ def _remove_cutter_faces_and_mark_seams(mesh, material_index, merge_distance):
         loose_verts = [v for v in cutter_verts if v.is_valid and not v.link_edges]
         bmesh.ops.delete(bm, geom=loose_verts, context="VERTS")
         cut_verts = {v for e in cut_edges if e.is_valid for v in e.verts}
+        # Boolean may triangulate the two sides of a filled cutter differently.
+        # Remove redundant points on straight cut segments before welding, so
+        # one side cannot leave a T-junction against an unsplit opposite edge.
+        redundant = []
+        for vert in cut_verts:
+            if len(vert.link_edges) != 2 or not all(e[cut_layer] for e in vert.link_edges):
+                continue
+            a, b = [e.other_vert(vert).co - vert.co for e in vert.link_edges]
+            if a.length_squared and b.length_squared and a.normalized().dot(b.normalized()) < -0.999999:
+                redundant.append(vert)
+        if redundant:
+            bmesh.ops.dissolve_verts(bm, verts=redundant)
+            cut_verts = {v for e in bm.edges if e[cut_layer] for v in e.verts}
         # Weld only the new cut, never unrelated open boundaries of the model.
         if cut_verts:
             bmesh.ops.remove_doubles(bm, verts=list(cut_verts), dist=merge_distance)
@@ -1825,7 +1839,7 @@ def _apply_cutters_to_mesh(context, target, cutters):
     boolean_cutters = [
         cutter
         for cutter in cutters
-        if cutter.get(CUTTER_TYPE_PROP) in {"PATH", "LOCAL_RING"}
+        if cutter.get(CUTTER_TYPE_PROP) in {"PATH", "LOCAL_RING", "LOCAL_CONTOUR"}
     ]
 
     marked_edges = 0
@@ -2275,19 +2289,7 @@ class OBJECT_OT_polygroups_draw_cutter_plane(bpy.types.Operator):
         self._tag_redraw()
 
 
-class OBJECT_OT_polygroups_draw_cutter_local_ring(bpy.types.Operator):
-    bl_idname = "object.polygroups_draw_cutter_local_ring"
-    bl_label = "Draw Local Ring Cutter"
-    bl_description = "Draw a local circular cutter disk from two viewport clicks"
-    bl_options = {"REGISTER", "UNDO"}
-
-    use_event_as_start: bpy.props.BoolProperty(
-        name="Use Event As Start",
-        description="Use the invoking mouse event as the local ring start point",
-        default=False,
-        options={"HIDDEN"},
-    )
-
+class _LocalDiskCutterInteraction:
     _target_name = ""
     _start_area = None
     _start_region = None
@@ -2322,9 +2324,9 @@ class OBJECT_OT_polygroups_draw_cutter_local_ring(bpy.types.Operator):
             self._start_pos = region_pos
             self._mouse_pos = region_pos
             self._add_draw_handler()
-            context.workspace.status_text_set("Local Ring Cutter: A placed, click B to set diameter")
+            context.workspace.status_text_set(f"{self.bl_label}: A placed, click B across the local section")
         else:
-            context.workspace.status_text_set("Local Ring Cutter: click A in the viewport")
+            context.workspace.status_text_set(f"{self.bl_label}: click A in the viewport")
 
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
@@ -2361,11 +2363,11 @@ class OBJECT_OT_polygroups_draw_cutter_local_ring(bpy.types.Operator):
             self._start_pos = region_pos
             self._mouse_pos = region_pos
             self._add_draw_handler()
-            context.workspace.status_text_set("Local Ring Cutter: A placed, click B to set diameter")
+            context.workspace.status_text_set(f"{self.bl_label}: A placed, click B across the local section")
             return {"RUNNING_MODAL"}
 
         if area != self._start_area or region != self._start_region:
-            self.report({"WARNING"}, "Use the same viewport for both local ring points")
+            self.report({"WARNING"}, "Use the same viewport for both cutter points")
             return {"RUNNING_MODAL"}
 
         target = bpy.data.objects.get(self._target_name)
@@ -2376,30 +2378,11 @@ class OBJECT_OT_polygroups_draw_cutter_local_ring(bpy.types.Operator):
         settings = context.scene.polygroups_object_seam_cutter_settings
         self._shift_locked = event.shift
         end_pos = _axis_locked_region_pos(self._start_pos, region_pos, self._shift_locked)
-        surface = _screen_local_ring_surface(
-            self._start_area,
-            self._start_region,
-            self._start_rv3d,
-            self._start_pos,
-            end_pos,
-            target,
-            settings.cutter_local_ring_radius_offset,
-            settings.cutter_local_ring_fit_mode,
-        )
-        if surface is None:
-            self.report({"WARNING"}, "Local ring diameter is too short")
+        try:
+            cutter = self._create_cutter(context, target, end_pos, settings)
+        except ValueError as exc:
+            self.report({"WARNING"}, str(exc))
             return {"RUNNING_MODAL"}
-
-        cutter = _create_cutter_local_ring(
-            "Seam_Cutter_Local_Ring",
-            surface[0],
-            surface[1],
-            surface[2],
-            surface[3],
-            settings.cutter_local_ring_segments,
-            settings.cutter_alpha,
-            settings.cutter_thickness,
-        )
         cutter.select_set(True)
         target.select_set(True)
         context.view_layer.objects.active = target
@@ -2428,6 +2411,96 @@ class OBJECT_OT_polygroups_draw_cutter_local_ring(bpy.types.Operator):
             self._draw_handle = None
         context.workspace.status_text_set(None)
         self._tag_redraw()
+
+
+class OBJECT_OT_polygroups_draw_cutter_local_ring(_LocalDiskCutterInteraction, bpy.types.Operator):
+    bl_idname = "object.polygroups_draw_cutter_local_ring"
+    bl_label = "Draw Local Ring Cutter"
+    bl_description = "Draw a local circular cutter disk from two viewport clicks"
+    bl_options = {"REGISTER", "UNDO"}
+
+    use_event_as_start: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
+
+    def _create_cutter(self, context, target, end_pos, settings):
+        surface = _screen_local_ring_surface(
+            self._start_area,
+            self._start_region,
+            self._start_rv3d,
+            self._start_pos,
+            end_pos,
+            target,
+            settings.cutter_local_ring_radius_offset,
+            settings.cutter_local_ring_fit_mode,
+        )
+        if surface is None:
+            raise ValueError("Local ring diameter is too short")
+
+        cutter = _create_cutter_local_ring(
+            "Seam_Cutter_Local_Ring",
+            surface[0],
+            surface[1],
+            surface[2],
+            surface[3],
+            settings.cutter_local_ring_segments,
+            settings.cutter_alpha,
+            settings.cutter_thickness,
+        )
+        return cutter
+
+
+class OBJECT_OT_polygroups_draw_cutter_local_contour(_LocalDiskCutterInteraction, bpy.types.Operator):
+    bl_idname = "object.polygroups_draw_cutter_local_contour"
+    bl_label = "Draw Local Contour Cutter"
+    bl_description = "Click across a local part of the mesh to create a filled cutter fitted to its cross-section"
+    bl_options = {"REGISTER", "UNDO"}
+
+    use_event_as_start: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
+
+    def _create_cutter(self, context, target, end_pos, settings):
+        from bpy_extras import view3d_utils
+        from ..core.local_contour import fitted_section
+
+        start, end = Vector(self._start_pos), Vector(end_pos)
+        if (end - start).length < 2.0:
+            raise ValueError("Place the two points farther apart, across the local section")
+        region, rv3d = self._start_region, self._start_rv3d
+        depsgraph = context.evaluated_depsgraph_get()
+        evaluated = target.evaluated_get(depsgraph)
+        # Search from the middle of the drawn line outwards; endpoints may be
+        # outside the silhouette, just as with Local Ring.
+        seed = None
+        for step in sorted(range(65), key=lambda i: abs(i - 32)):
+            hit = _surface_hit_from_region_pos(region, rv3d, start.lerp(end, step / 64), evaluated)
+            if hit is not None:
+                seed = hit[0]
+                break
+        if seed is None:
+            raise ValueError("The line must cross the visible surface of the target mesh")
+        ray_a = view3d_utils.region_2d_to_vector_3d(region, rv3d, start)
+        ray_b = view3d_utils.region_2d_to_vector_3d(region, rv3d, end)
+        if rv3d.is_perspective:
+            normal = ray_a.cross(ray_b)
+        else:
+            a = view3d_utils.region_2d_to_location_3d(region, rv3d, start, seed)
+            b = view3d_utils.region_2d_to_location_3d(region, rv3d, end, seed)
+            normal = (b - a).cross(ray_a)
+        if normal.length < 1e-10:
+            raise ValueError("Cannot determine the section plane from these points")
+        vertices, faces = fitted_section(
+            target, depsgraph, seed, normal.normalized(), seed,
+            settings.cutter_contour_points, settings.cutter_contour_offset,
+        )
+        mesh = bpy.data.meshes.new("Seam_Cutter_Local_Contour")
+        mesh.from_pydata([tuple(v - seed) for v in vertices], [], faces)
+        mesh.update()
+        cutter = bpy.data.objects.new("Seam_Cutter_Local_Contour", mesh)
+        cutter.location = seed
+        cutter[CUTTER_PROP] = True
+        cutter[CUTTER_TYPE_PROP] = "LOCAL_CONTOUR"
+        cutter.data.materials.append(_material(settings.cutter_alpha))
+        _add_solidify_modifier(cutter, settings.cutter_thickness)
+        _tool_collection("LOCAL_CONTOUR").objects.link(cutter)
+        return cutter
 
 
 class OBJECT_OT_polygroups_draw_cutter_arc(bpy.types.Operator):

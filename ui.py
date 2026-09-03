@@ -865,6 +865,8 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_local_ring_fit_mode", text=t(context, "local_ring_fit_mode"))
         layout.prop(settings, "cutter_local_ring_segments", text=t(context, "local_ring_segments"))
         layout.prop(settings, "cutter_local_ring_radius_offset", text=t(context, "local_ring_radius_offset"))
+        layout.prop(settings, "cutter_contour_points", text=t(context, "contour_points"))
+        layout.prop(settings, "cutter_contour_offset", text=t(context, "contour_offset"))
         layout.label(text=t(context, "cutter_apply_method"))
         draw_enum_icon_toggle(
             layout,
@@ -974,6 +976,17 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.operator(
             "object.polygroups_draw_cutter_local_ring",
             text=t(context, "draw_cutter_local_ring"),
+            icon="MESH_CIRCLE",
+        )
+        tool_operator = layout.operator(
+            "wm.tool_set_by_id",
+            text=t(context, "select_draw_cutter_local_contour"),
+            icon="MESH_CIRCLE",
+        )
+        tool_operator.name = "polygroups_generator.draw_cutter_local_contour_tool"
+        layout.operator(
+            "object.polygroups_draw_cutter_local_contour",
+            text=t(context, "draw_cutter_local_contour"),
             icon="MESH_CIRCLE",
         )
         tool_operator = layout.operator(

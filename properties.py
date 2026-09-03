@@ -112,7 +112,7 @@ def _sync_cutter_thickness(self, context):
             continue
 
         cutter_type = obj.get(CUTTER_TYPE_PROP)
-        if (cutter_type in {"ARC", "LOCAL_RING"} and obj.type == "MESH") or (
+        if (cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR"} and obj.type == "MESH") or (
             cutter_type in {"PATH", "DRAW_STROKE"} and obj.type == "CURVE"
         ):
             modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
@@ -496,6 +496,21 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         min=3,
         max=96,
         soft_max=32,
+    )
+    cutter_contour_points: bpy.props.IntProperty(
+        name="Contour Points",
+        description="Number of vertices around the fitted local cutter outline",
+        default=64,
+        min=8,
+        max=256,
+    )
+    cutter_contour_offset: bpy.props.FloatProperty(
+        name="Contour Offset",
+        description="Outward clearance beyond the mesh section; coarse contours also compensate for fitting error",
+        default=0.002,
+        min=0.0,
+        soft_max=0.1,
+        precision=5,
     )
     cutter_local_ring_segments: bpy.props.IntProperty(
         name="Local Ring Segments",
