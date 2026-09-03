@@ -793,6 +793,18 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             icon="X",
         )
 
+        tools_column.operator(
+            "mesh.polygroups_edge_seam_path",
+            text=t(context, "edge_seam_path"),
+            icon="EDGE_SEAM",
+        )
+        edge_tool = tools_column.operator(
+            "mesh.polygroups_select_seam_tool",
+            text=t(context, "select_edge_seam_tool"),
+            icon="VERTEXSEL",
+        )
+        edge_tool.tool_id = "polygroups_generator.edge_seam_path_tool"
+
         layout.separator(type="LINE")
         layout.label(text=t(context, "seam_group_check"), icon="VIEWZOOM")
         draw_seam_gap_controls(layout, context, seam_settings)

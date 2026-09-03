@@ -4,6 +4,8 @@ from bpy.types import WorkSpaceTool
 from .localization import t
 from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
 from .operators.connect_vertex_seam import draw_vertex_seam_cursor
+from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
+from .operators.edge_seam_path import draw_edge_seam_cursor
 
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
@@ -473,6 +475,31 @@ class VIEW3D_WST_polygroups_connect_vertex_seam(WorkSpaceTool):
         layout.label(text=t(context, "connect_seam_hint_next"))
 
 
+class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "EDIT_MESH"
+    bl_idname = EDGE_SEAM_TOOL_ID
+    bl_label = "Edge Seam Path"
+    bl_description = "Mark existing edge rows with seams: click A, B, C; Space/Esc/right-click finishes the chain"
+    bl_icon = "ops.mesh.dupli_extrude_cursor"
+    bl_cursor = "NONE"
+    bl_widget = None
+    bl_keymap = (
+        ("mesh.polygroups_edge_seam_path_click", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+        ("mesh.polygroups_edge_seam_path_click", {"type": "RIGHTMOUSE", "value": "PRESS"},
+         {"properties": [("reset", True)]}),
+        ("mesh.polygroups_edge_seam_path_click", {"type": "ESC", "value": "PRESS"},
+         {"properties": [("reset", True)]}),
+        ("mesh.polygroups_edge_seam_path_click", {"type": "SPACE", "value": "PRESS"},
+         {"properties": [("reset", True)]}),
+    )
+    draw_cursor = staticmethod(draw_edge_seam_cursor)
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        layout.label(text=t(context, "connect_seam_hint_next"))
+
+
 def register():
     bpy.utils.register_class(VIEW3D_MT_polygroups_cutter_tool_type)
     bpy.utils.register_tool(
@@ -530,6 +557,12 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_edge_seam_path,
+        after={VERTEX_SEAM_TOOL_ID},
+        separator=False,
+        group=False,
+    )
 
 
 def unregister():
@@ -546,8 +579,9 @@ def unregister():
                 if bpy.context.mode != "EDIT_MESH":
                     continue
                 tool = window.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
-                if tool is not None and tool.idname == VERTEX_SEAM_TOOL_ID:
+                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_connect_vertex_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)

@@ -19,8 +19,9 @@ class MESH_OT_polygroups_select_seam_tool(bpy.types.Operator):
 
     def execute(self, context):
         from .connect_vertex_seam import TOOL_ID
+        from .edge_seam_path import TOOL_ID as EDGE_TOOL_ID
 
-        mode = "VERT" if self.tool_id == TOOL_ID else "EDGE"
+        mode = "VERT" if self.tool_id in {TOOL_ID, EDGE_TOOL_ID} else "EDGE"
         bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type=mode)
         bpy.ops.wm.tool_set_by_id(name=self.tool_id)
         return {"FINISHED"}

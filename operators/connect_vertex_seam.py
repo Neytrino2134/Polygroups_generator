@@ -95,67 +95,72 @@ class MESH_OT_polygroups_connect_vertex_seam_click(bpy.types.Operator):
                 and context.region.type == "WINDOW")
 
     def invoke(self, context, event):
-        meshes = edit_meshes(context)
-        if self.reset:
-            select_vertices(meshes, [])
-            context.area.tag_redraw()
-            return {"FINISHED"}
+        return invoke_seam_click(self, context, event, connect_pair, "connect_seam_failed")
 
-        # Native picking respects viewport occlusion and X-Ray. Save selection
-        # so a click in empty space cannot discard the current starting point.
-        old_mode = tuple(context.tool_settings.mesh_select_mode)
-        saved = [(obj, bm, [(item, item.select) for seq in (bm.verts, bm.edges, bm.faces)
-                           for item in seq], list(bm.select_history)) for obj, bm in meshes]
-        old_active = context.view_layer.objects.active
-        previous = selected_vertices(meshes)
-        anchor = previous[0] if len(previous) == 1 else None
 
-        def restore():
-            context.tool_settings.mesh_select_mode = old_mode
-            context.view_layer.objects.active = old_active
-            for obj, bm, flags, history in saved:
-                for item, selected in flags:
-                    if item.is_valid:
-                        item.select = False
-                for item, selected in flags:
-                    if item.is_valid and selected:
-                        item.select_set(True)
-                bm.select_flush_mode()
-                bm.select_history.clear()
-                for item in history:
-                    if item.is_valid and item.select:
-                        bm.select_history.add(item)
-                bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
-
-        bpy.ops.mesh.select_mode(type="VERT")
-        bpy.ops.view3d.select(
-            location=(event.mouse_region_x, event.mouse_region_y),
-            deselect_all=True,
-        )
-        picked = selected_vertices(meshes)
-        if len(picked) != 1:
-            restore()
-            return {"CANCELLED"}
-        obj, bm, end = picked[0]
-        if anchor is None or anchor[0] != obj:
-            select_vertices(meshes, [(obj, end)])
-        elif anchor[2] == end:
-            restore()
-            return {"CANCELLED"}
-        else:
-            start = anchor[2]
-            select_vertices(meshes, [(obj, start), (obj, end)])
-            try:
-                count = connect_pair(context, obj, bm, start, end)
-            except RuntimeError:
-                count = 0
-            if not count:
-                restore()
-                self.report({"WARNING"}, t(context, "connect_seam_failed"))
-                return {"CANCELLED"}
-            select_vertices(meshes, [(obj, end)])
+def invoke_seam_click(self, context, event, connect, failure_key):
+    """Shared native picking and per-segment undo for both seam path tools."""
+    meshes = edit_meshes(context)
+    if self.reset:
+        select_vertices(meshes, [])
         context.area.tag_redraw()
         return {"FINISHED"}
+
+    # Native picking respects viewport occlusion and X-Ray. Save selection
+    # so a click in empty space cannot discard the current starting point.
+    old_mode = tuple(context.tool_settings.mesh_select_mode)
+    saved = [(obj, bm, [(item, item.select) for seq in (bm.verts, bm.edges, bm.faces)
+                       for item in seq], list(bm.select_history)) for obj, bm in meshes]
+    old_active = context.view_layer.objects.active
+    previous = selected_vertices(meshes)
+    anchor = previous[0] if len(previous) == 1 else None
+
+    def restore():
+        context.tool_settings.mesh_select_mode = old_mode
+        context.view_layer.objects.active = old_active
+        for obj, bm, flags, history in saved:
+            for item, selected in flags:
+                if item.is_valid:
+                    item.select = False
+            for item, selected in flags:
+                if item.is_valid and selected:
+                    item.select_set(True)
+            bm.select_flush_mode()
+            bm.select_history.clear()
+            for item in history:
+                if item.is_valid and item.select:
+                    bm.select_history.add(item)
+            bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+
+    bpy.ops.mesh.select_mode(type="VERT")
+    bpy.ops.view3d.select(
+        location=(event.mouse_region_x, event.mouse_region_y),
+        deselect_all=True,
+    )
+    picked = selected_vertices(meshes)
+    if len(picked) != 1:
+        restore()
+        return {"CANCELLED"}
+    obj, bm, end = picked[0]
+    if anchor is None or anchor[0] != obj:
+        select_vertices(meshes, [(obj, end)])
+    elif anchor[2] == end:
+        restore()
+        return {"CANCELLED"}
+    else:
+        start = anchor[2]
+        select_vertices(meshes, [(obj, start), (obj, end)])
+        try:
+            count = connect(context, obj, bm, start, end)
+        except RuntimeError:
+            count = 0
+        if not count:
+            restore()
+            self.report({"WARNING"}, t(context, failure_key))
+            return {"CANCELLED"}
+        select_vertices(meshes, [(obj, end)])
+    context.area.tag_redraw()
+    return {"FINISHED"}
 
 
 def draw_vertex_seam_cursor(_context, _tool, xy):
@@ -192,6 +197,8 @@ def draw_vertex_seam_cursor(_context, _tool, xy):
         blf.size(0, 13 * scale)
         blf.color(0, 1, 1, 1, 1)
         blf.position(0, context.region.x + 24 * scale, context.region.y + 40 * scale, 0)
-        blf.draw(0, t(context, "connect_seam_hint_next" if anchor else "connect_seam_hint_start"))
+        start_key = ("edge_seam_hint_start" if _tool.idname == "polygroups_generator.edge_seam_path_tool"
+                     else "connect_seam_hint_start")
+        blf.draw(0, t(context, "connect_seam_hint_next" if anchor else start_key))
     finally:
         gpu.state.blend_set(blend)

@@ -8,6 +8,10 @@ TEXT = {
     "EN": {
         "knife_cut_mode": "Knife Mode",
         "knife_polyline_hint": "Click points; Space/Enter: apply seams",
+        "edge_seam_path": "Edge Seam Path",
+        "select_edge_seam_tool": "Edge Seam Path Tool",
+        "edge_seam_failed": "No visible edge path connects these vertices",
+        "edge_seam_hint_start": "Edge Seam Path | LMB: start vertex",
         "connect_vertices_seam": "Connect Vertices with Seam",
         "select_vertex_seam_tool": "Vertex Seam Path Tool",
         "connect_seam_select_pair": "Select exactly two vertices in the same mesh",
@@ -469,6 +473,10 @@ TEXT = {
     "RU": {
         "knife_cut_mode": "Режим ножа",
         "knife_polyline_hint": "Точки — ЛКМ; Пробел/Enter — применить швы",
+        "edge_seam_path": "Шов по рёбрам между вершинами",
+        "select_edge_seam_tool": "Инструмент: шов по рёбрам",
+        "edge_seam_failed": "Между вершинами нет пути по видимым рёбрам",
+        "edge_seam_hint_start": "Шов по рёбрам | ЛКМ: начальная вершина",
         "connect_vertices_seam": "Соединить вершины швом",
         "select_vertex_seam_tool": "Инструмент: шов по вершинам",
         "connect_seam_select_pair": "Выделите ровно две вершины одного меша",

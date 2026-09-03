@@ -155,6 +155,16 @@ for level in ("LOW", "MID", "HIGH"):
                          "operator": "object.polygroups_checked_quad_remesh", "remesh_preset": level}
 
 
+# Append new commands to preserve numeric enum values in existing user presets.
+for key, name, label, operator, properties in (
+    ("EDGE_SEAM_PATH", "Edge Seam Path", "edge_seam_path", "mesh.polygroups_edge_seam_path", {}),
+    ("EDGE_SEAM_TOOL", "Edge Seam Path Tool", "select_edge_seam_tool", "mesh.polygroups_select_seam_tool",
+     {"tool_id": "polygroups_generator.edge_seam_path_tool"}),
+):
+    PIE_COMMAND_ITEMS += ((key, name, name),)
+    PIE_COMMANDS[key] = {"label": label, "icon": "EDGE_SEAM", "operator": operator, "properties": properties}
+
+
 def _operator_exists(operator_id):
     module_name, operator_name = operator_id.split(".", 1)
     try:

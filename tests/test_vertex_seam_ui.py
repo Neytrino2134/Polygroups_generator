@@ -12,7 +12,8 @@ from bpy_extras.view3d_utils import location_3d_to_region_2d
 bpy.context.preferences.view.show_splash = False
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
-LOG = Path(tempfile.gettempdir()) / "airetopo_vertex_seam_ui.log"
+EDGE_MODE = "--edge-path" in sys.argv
+LOG = Path(tempfile.gettempdir()) / ("airetopo_edge_seam_ui.log" if EDGE_MODE else "airetopo_vertex_seam_ui.log")
 LOG.write_text("Starting\n")
 
 
@@ -20,17 +21,23 @@ def run():
     addon_utils.enable(ROOT.name, default_set=True)
     from polygroups_generator import tools
     from polygroups_generator.operators import connect_vertex_seam as seam
+    from polygroups_generator.operators import edge_seam_path
+    tool_class = (tools.VIEW3D_WST_polygroups_edge_seam_path if EDGE_MODE
+                  else tools.VIEW3D_WST_polygroups_connect_vertex_seam)
+    tool_id = edge_seam_path.TOOL_ID if EDGE_MODE else seam.TOOL_ID
+    first_count, second_count = (3, 3) if EDGE_MODE else (2, 3)
     draws, errors = [], []
     def checked_draw(context, tool, xy):
         try:
-            seam.draw_vertex_seam_cursor(context, tool, xy)
+            draw = edge_seam_path.draw_edge_seam_cursor if EDGE_MODE else seam.draw_vertex_seam_cursor
+            draw(context, tool, xy)
             draws.append(True)
         except Exception:
             errors.append(traceback.format_exc())
     # ToolDef captures draw_cursor at registration, so re-register this tool.
-    bpy.utils.unregister_tool(tools.VIEW3D_WST_polygroups_connect_vertex_seam)
-    tools.VIEW3D_WST_polygroups_connect_vertex_seam.draw_cursor = staticmethod(checked_draw)
-    bpy.utils.register_tool(tools.VIEW3D_WST_polygroups_connect_vertex_seam,
+    bpy.utils.unregister_tool(tool_class)
+    tool_class.draw_cursor = staticmethod(checked_draw)
+    bpy.utils.register_tool(tool_class,
                             after={"polygroups_generator.quick_knife_seam_tool"})
     context = bpy.context
     window = context.window_manager.windows[0]
@@ -50,7 +57,7 @@ def run():
         bpy.ops.mesh.select_mode(type="VERT")
         bpy.ops.mesh.select_all(action="DESELECT")
         bpy.ops.view3d.view_axis(type="TOP")
-        bpy.ops.wm.tool_set_by_id(name=seam.TOOL_ID)
+        bpy.ops.wm.tool_set_by_id(name=tool_id)
         bpy.ops.ed.undo_push(message="Vertex seam test baseline")
     yield 0.6
 
@@ -83,18 +90,23 @@ def run():
         bpy.ops.screen.screenshot(filepath=str(LOG.with_suffix(".png")))
     click(b)
     yield 0.4
-    assert state() == (2, [(2.0, 1.0, 0.0)]), state()
+    assert state() == (first_count, [(2.0, 1.0, 0.0)]), state()
+    if EDGE_MODE:
+        bm = bmesh.from_edit_mesh(context.active_object.data)
+        bm.verts.ensure_lookup_table()
+        second_count = first_count + int(not bm.edges.get((bm.verts[5], bm.verts[2])).seam)
+        assert (len(bm.verts), len(bm.edges), len(bm.faces)) == (6, 7, 2)
     # Empty clicks must preserve the endpoint and existing seams.
     click((region.x + region.width - 120, region.y + 150))
     yield 0.3
-    assert state() == (2, [(2.0, 1.0, 0.0)]), state()
+    assert state() == (first_count, [(2.0, 1.0, 0.0)]), state()
     click(c)
     yield 0.4
-    assert state() == (3, [(2.0, 0.0, 0.0)]), state()
+    assert state() == (second_count, [(2.0, 0.0, 0.0)]), state()
     with context.temp_override(window=window, area=area, region=region):
         bpy.ops.ed.undo()
     yield 0.4
-    assert state() == (2, [(2.0, 1.0, 0.0)]), state()
+    assert state() == (first_count, [(2.0, 1.0, 0.0)]), state()
     # Continue after undo: no stale vertex references.
     with context.temp_override(window=window, area=area, region=region):
         bpy.ops.ed.undo()
@@ -104,40 +116,43 @@ def run():
     with context.temp_override(window=window, area=area, region=region):
         bpy.ops.ed.redo()
     yield 0.3
-    assert state() == (2, [(2.0, 1.0, 0.0)]), state()
+    assert state() == (first_count, [(2.0, 1.0, 0.0)]), state()
     click(c)
     yield 0.4
-    assert state() == (3, [(2.0, 0.0, 0.0)]), state()
+    assert state() == (second_count, [(2.0, 0.0, 0.0)]), state()
     event("ESC", "PRESS", c)
     event("ESC", "RELEASE", c)
     yield 0.3
-    assert state() == (3, []), state()
+    assert state() == (second_count, []), state()
     click(a)
     yield 0.3
     event("RIGHTMOUSE", "PRESS", a)
     event("RIGHTMOUSE", "RELEASE", a)
     yield 0.3
-    assert state() == (3, []), state()
+    assert state() == (second_count, []), state()
     click(a)
     yield 0.3
     event("SPACE", "PRESS", a)
     event("SPACE", "RELEASE", a)
     yield 0.3
-    assert state() == (3, []), state()
+    assert state() == (second_count, []), state()
     assert not context.screen.is_animation_playing
     with context.temp_override(window=window, area=area, region=region):
         bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
     yield 0.2
     assert not errors, errors
+    if EDGE_MODE:
+        bm = bmesh.from_edit_mesh(context.active_object.data)
+        assert (len(bm.verts), len(bm.edges), len(bm.faces)) == (6, 7, 2)
     with context.temp_override(window=window, area=area, region=region):
-        bpy.ops.wm.tool_set_by_id(name=seam.TOOL_ID)
+        bpy.ops.wm.tool_set_by_id(name=tool_id)
     yield 0.2
     addon_utils.disable(ROOT.name, default_set=True)
     count = len(draws)
     event("MOUSEMOVE", "NOTHING", c)
     yield 0.3
     assert len(draws) == count, "Cursor callback remained active after disabling the addon"
-    LOG.write_text("VERTEX_SEAM_UI_TESTS_PASSED\n")
+    LOG.write_text("EDGE_SEAM_UI_TESTS_PASSED\n" if EDGE_MODE else "VERTEX_SEAM_UI_TESTS_PASSED\n")
 
 
 steps = run()
