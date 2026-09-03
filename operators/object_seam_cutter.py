@@ -5,7 +5,6 @@ from math import cos
 from math import radians
 from math import sin
 from math import tau
-from mathutils import kdtree
 from mathutils import Matrix
 from mathutils import Vector
 
@@ -551,7 +550,10 @@ def _create_cutter_local_ring(name, center, axis_a, axis_b, radius, segments, al
     return obj
 
 
-def _create_cutter_path(name, path_points, render_u, extrude, alpha, collection_type="PATH"):
+def _create_cutter_path(
+    name, path_points, render_u, extrude, alpha, collection_type="PATH",
+    thickness=DEFAULT_NON_PLANE_CUTTER_THICKNESS,
+):
     curve = bpy.data.curves.new(name, "CURVE")
     curve.dimensions = "3D"
     curve.resolution_u = render_u
@@ -581,6 +583,7 @@ def _create_cutter_path(name, path_points, render_u, extrude, alpha, collection_
         ],
     )
     obj.data.materials.append(_material(alpha))
+    _add_solidify_modifier(obj, max(thickness, 0.0001))
     _tool_collection(collection_type).objects.link(obj)
     return obj
 
@@ -609,12 +612,14 @@ def _write_cutter_path_points(cutter, path_points):
     )
 
 
-def _create_cutter_draw_stroke(name, path_points, render_u, alpha, thickness):
+def _create_cutter_draw_stroke(
+    name, path_points, render_u, alpha, thickness, extrude=0.1,
+):
     curve = bpy.data.curves.new(name, "CURVE")
     curve.dimensions = "3D"
     curve.resolution_u = render_u
     curve.render_resolution_u = render_u
-    curve.extrude = thickness
+    curve.extrude = extrude
     curve.bevel_depth = 0.0
     curve.bevel_resolution = 0
 
@@ -641,6 +646,7 @@ def _create_cutter_draw_stroke(name, path_points, render_u, alpha, thickness):
         ],
     )
     obj.data.materials.append(_material(alpha))
+    _add_solidify_modifier(obj, max(thickness, 0.0001))
     _tool_collection("DRAW").objects.link(obj)
     return obj
 
@@ -727,8 +733,9 @@ def _convert_draw_stroke_to_cutter_path(context, stroke):
         "Seam_Cutter_Path",
         path_points,
         settings.cutter_path_render_u,
-        settings.cutter_thickness,
+        settings.cutter_extrude,
         settings.cutter_alpha,
+        thickness=settings.cutter_thickness,
     )
     if settings.delete_draw_strokes_after_convert and stroke.name in bpy.data.objects:
         bpy.data.objects.remove(stroke, do_unlink=True)
@@ -1299,18 +1306,10 @@ def _duplicate_boolean_cutter_as_mesh(
     work.hide_viewport = False
     work.hide_render = False
     work.hide_set(False)
-    if boolean_solidify_thickness is None:
-        for modifier in list(work.modifiers):
-            if modifier.name == CUTTER_SOLIDIFY_MODIFIER_NAME:
-                work.modifiers.remove(modifier)
-    else:
-        modifier = work.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
-        if modifier is None:
-            modifier = work.modifiers.new(CUTTER_SOLIDIFY_MODIFIER_NAME, "SOLIDIFY")
-        modifier.thickness = boolean_solidify_thickness
-        modifier.offset = 0.0
-        if hasattr(modifier, "use_rim"):
-            modifier.use_rim = True
+    # Convert the unthickened surface first; Solidify is applied once below.
+    for modifier in list(work.modifiers):
+        if modifier.name == CUTTER_SOLIDIFY_MODIFIER_NAME:
+            work.modifiers.remove(modifier)
 
     target_collection = cutter.users_collection[0] if cutter.users_collection else context.scene.collection
     target_collection.objects.link(work)
@@ -1323,15 +1322,9 @@ def _duplicate_boolean_cutter_as_mesh(
     if work.type != "MESH":
         source_data = work.data
         if work.type == "CURVE":
-            settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
             work.data.dimensions = "3D"
             if hasattr(work.data, "fill_mode"):
                 work.data.fill_mode = "FULL"
-            if getattr(work.data, "extrude", 0.0) <= 0.000001:
-                work.data.extrude = max(
-                    getattr(settings, "cutter_thickness", DEFAULT_NON_PLANE_CUTTER_THICKNESS),
-                    0.001,
-                )
         bpy.ops.object.convert(target="MESH")
         work = context.view_layer.objects.active
         if source_data and source_data.users == 0 and bpy.data.curves.get(source_data.name) == source_data:
@@ -1345,6 +1338,7 @@ def _duplicate_boolean_cutter_as_mesh(
 
     _extend_arc_cutter_mesh_ends(work, extension_distance)
 
+    work.data.materials.clear()
     material_index = _ensure_material_slot(work, material)
     for polygon in work.data.polygons:
         polygon.material_index = material_index
@@ -1477,324 +1471,144 @@ def _material_slot_index(obj, material):
     return -1
 
 
-def _candidate_faces_by_material_index(mesh, material_index, min_face_index=None):
-    material_faces = [
-        polygon
-        for polygon in mesh.polygons
-        if polygon.material_index == material_index
-    ]
-    if min_face_index is None:
-        return material_faces
-
-    new_material_faces = [
-        polygon
-        for polygon in material_faces
-        if polygon.index >= min_face_index
-    ]
-    return new_material_faces or material_faces
-
-
-def _select_faces_by_material_index(obj, material_index, min_face_index=None):
-    selected_face_indices = {
-        polygon.index
-        for polygon in _candidate_faces_by_material_index(obj.data, material_index, min_face_index)
-    }
-    selected = 0
-    for edge in obj.data.edges:
-        edge.select = False
-    for polygon in obj.data.polygons:
-        is_selected = polygon.index in selected_face_indices
-        polygon.select = is_selected
-        if is_selected:
-            selected += 1
-    obj.data.update()
-    return selected
-
-
-def _selected_edge_snapshots(mesh):
-    return _edge_snapshots(mesh, selected_only=True)
-
-
-def _edge_snapshots(mesh, selected_only=False):
-    snapshots = []
-    for edge in mesh.edges:
-        if selected_only and not edge.select:
-            continue
-        start = mesh.vertices[edge.vertices[0]].co.copy()
-        end = mesh.vertices[edge.vertices[1]].co.copy()
-        snapshots.append(
-            {
-                "midpoint": (start + end) * 0.5,
-                "length": (end - start).length,
-            },
-        )
-    return snapshots
-
-
-def _mark_edges_matching_snapshots(mesh, edge_snapshots, threshold):
-    if not edge_snapshots:
-        return 0
-
-    tree = kdtree.KDTree(len(edge_snapshots))
-    for index, item in enumerate(edge_snapshots):
-        tree.insert(item["midpoint"], index)
-    tree.balance()
-
-    marked = 0
-    length_threshold = max(threshold * 10.0, 0.000001)
-    for edge in mesh.edges:
-        start = mesh.vertices[edge.vertices[0]].co
-        end = mesh.vertices[edge.vertices[1]].co
-        midpoint = (start + end) * 0.5
-        nearest = tree.find(midpoint)
-        if nearest is None:
-            continue
-
-        _co, index, distance = nearest
-        if distance > threshold:
-            continue
-        if abs((end - start).length - edge_snapshots[index]["length"]) > length_threshold:
-            continue
-
-        edge.use_seam = True
-        edge.select = True
-        marked += 1
-    mesh.update()
-    return marked
-
-
-def _material_boundary_edge_snapshots(mesh, material_index, min_face_index=None):
-    temp_face_indices = {
-        polygon.index
-        for polygon in _candidate_faces_by_material_index(mesh, material_index, min_face_index)
-    }
-    if not temp_face_indices:
-        return []
-
-    edge_to_faces = {}
-    for polygon in mesh.polygons:
-        for key in polygon.edge_keys:
-            edge_to_faces.setdefault(tuple(sorted(key)), []).append(polygon.index)
-
-    boundary_keys = set()
-    for key, face_indices in edge_to_faces.items():
-        has_temp_face = any(face_index in temp_face_indices for face_index in face_indices)
-        has_target_face = any(face_index not in temp_face_indices for face_index in face_indices)
-        if has_temp_face and has_target_face:
-            boundary_keys.add(key)
-
-    snapshots = []
-    for edge in mesh.edges:
-        key = tuple(sorted(edge.vertices))
-        if key not in boundary_keys:
-            edge.select = False
-            continue
-
-        start = mesh.vertices[edge.vertices[0]].co.copy()
-        end = mesh.vertices[edge.vertices[1]].co.copy()
-        edge.use_seam = True
-        edge.select = True
-        snapshots.append(
-            {
-                "midpoint": (start + end) * 0.5,
-                "length": (end - start).length,
-            },
-        )
-    mesh.update()
-    return snapshots
-
-
-def _merge_edge_snapshots(*snapshot_groups):
-    merged = []
-    seen = set()
-    for snapshots in snapshot_groups:
-        for item in snapshots:
-            midpoint = item["midpoint"]
-            key = (
-                round(midpoint.x, 6),
-                round(midpoint.y, 6),
-                round(midpoint.z, 6),
-                round(item["length"], 6),
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            merged.append(item)
-    return merged
-
-
 def _apply_boolean_cutter_to_mesh(
-    context,
-    target,
-    cutter,
-    boolean_solidify_thickness=None,
-    extension_distance=0.0,
-    boolean_solver="FLOAT",
+    context, target, cutter, boolean_solidify_thickness=None,
+    extension_distance=0.0, boolean_solver="FLOAT",
 ):
-    return _apply_knife_intersect_cutter_to_mesh(
-        context,
-        target,
-        cutter,
-        boolean_solidify_thickness=boolean_solidify_thickness,
-        extension_distance=extension_distance,
-        boolean_solver=boolean_solver,
+    thickness = boolean_solidify_thickness
+    if thickness is None:
+        thickness = _cutter_thickness(context)
+    return _intersect_cutter_surface(
+        context, target, cutter, "BOOLEAN", extension_distance,
+        max(thickness, 0.000001), boolean_solver,
     )
 
 
 def _apply_knife_intersect_cutter_to_mesh(
-    context,
-    target,
-    cutter,
-    extension_distance=0.0,
-    boolean_solidify_thickness=None,
-    boolean_solver="FLOAT",
+    context, target, cutter, extension_distance=0.0,
+    boolean_solidify_thickness=None, boolean_solver="FLOAT",
 ):
-    material = _path_boolean_material()
-    temp_material_index, placeholder_index, placeholder_material = _prepare_target_path_boolean_materials(
-        target,
-        material,
+    return _intersect_cutter_surface(
+        context, target, cutter, "KNIFE", extension_distance, None, boolean_solver,
     )
-    original_face_count = len(target.data.polygons)
-    work = _duplicate_boolean_cutter_as_mesh(
-        context,
-        cutter,
-        material,
-        boolean_solidify_thickness=boolean_solidify_thickness,
-        extension_distance=extension_distance,
-    )
-    if work is None:
-        _remove_material_slot_by_index(target, temp_material_index)
-        if placeholder_index is not None:
-            _remove_material_slot_by_index(target, placeholder_index)
-        _remove_material_if_unused(material)
-        _remove_material_if_unused(placeholder_material)
-        return 0
 
-    work_name = work.name
-    work_data = work.data
+
+def _remove_cutter_faces_and_mark_seams(mesh, material_index, merge_distance):
+    """Keep the shared intersection edges, deleting only cutter-owned geometry."""
+    import bmesh
+
+    bm = bmesh.new()
     try:
-        if context.object and context.object.mode != "OBJECT":
-            bpy.ops.object.mode_set(mode="OBJECT")
+        bm.from_mesh(mesh)
+        cut_layer = bm.edges.layers.int.new("__cutter_new_seam")
+        cutter_faces = {f for f in bm.faces if f.material_index == material_index}
+        cutter_edges = {e for f in cutter_faces for e in f.edges}
+        cutter_verts = {v for f in cutter_faces for v in f.verts}
+        cut_edges = {
+            e for e in cutter_edges
+            if any(f not in cutter_faces for f in e.link_faces)
+        }
+        for edge in cut_edges:
+            edge.seam = True
+            edge[cut_layer] = 1
+        # FACES_ONLY preserves edges shared with the target and their seam flag.
+        bmesh.ops.delete(bm, geom=list(cutter_faces), context="FACES_ONLY")
+        loose_edges = [e for e in cutter_edges if e.is_valid and not e.link_faces]
+        bmesh.ops.delete(bm, geom=loose_edges, context="EDGES")
+        loose_verts = [v for v in cutter_verts if v.is_valid and not v.link_edges]
+        bmesh.ops.delete(bm, geom=loose_verts, context="VERTS")
+        cut_verts = {v for e in cut_edges if e.is_valid for v in e.verts}
+        # Weld only the new cut, never unrelated open boundaries of the model.
+        if cut_verts:
+            bmesh.ops.remove_doubles(bm, verts=list(cut_verts), dist=merge_distance)
+        marked = sum(1 for e in bm.edges if e[cut_layer])
+        for edge in bm.edges:
+            if edge[cut_layer]:
+                edge.seam = True
+                edge.select_set(True)
+        bm.edges.layers.int.remove(cut_layer)
+        bm.normal_update()
+        bm.to_mesh(mesh)
+        mesh.update()
+        return marked
+    finally:
+        bm.free()
 
+
+def _intersect_cutter_surface(
+    context, target, cutter, method, extension_distance, thickness, solver,
+):
+    import bmesh
+
+    material = _path_boolean_material()
+    temp_index, placeholder_index, placeholder = _prepare_target_path_boolean_materials(target, material)
+    work = None
+    work_data = None
+    previous_select_mode = tuple(context.tool_settings.mesh_select_mode)
+    selection_attribute = target.data.attributes.new("__cutter_previous_selection", "INT", "EDGE")
+    selection_name = selection_attribute.name
+    selection_attribute.data.foreach_set("value", [int(e.select) for e in target.data.edges])
+    try:
+        work = _duplicate_boolean_cutter_as_mesh(
+            context, cutter, material, boolean_solidify_thickness=thickness,
+            extension_distance=extension_distance,
+        )
+        if work is None:
+            return 0
+        work_data = work.data
         bpy.ops.object.select_all(action="DESELECT")
         target.select_set(True)
         work.select_set(True)
         context.view_layer.objects.active = target
         bpy.ops.object.join()
-
-        temp_material_index = _material_slot_index(target, material)
-        if temp_material_index < 0:
-            return 0
-
-        target.active_material_index = temp_material_index
-        _select_faces_by_material_index(
-            target,
-            temp_material_index,
-            min_face_index=original_face_count,
-        )
-        context.view_layer.objects.active = target
-        if context.object and context.object.mode != "EDIT":
-            bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_mode(type="FACE")
-        try:
-            bpy.ops.mesh.intersect(
-                mode="SELECT_UNSELECT",
-                separate_mode="CUT",
-                threshold=0.000001,
-                solver=boolean_solver,
-            )
-        except TypeError:
-            bpy.ops.mesh.intersect(
-                mode="SELECT",
-                separate_mode="CUT",
-                threshold=0.000001,
-                solver=boolean_solver,
-            )
-
-        bpy.ops.object.mode_set(mode="OBJECT")
-        selected_edge_snapshots = _selected_edge_snapshots(target.data)
-        temp_face_count = _select_faces_by_material_index(
-            target,
-            temp_material_index,
-            min_face_index=original_face_count,
-        )
-        if not temp_face_count:
-            return 0
-
-        boundary_edge_snapshots = _material_boundary_edge_snapshots(
-            target.data,
-            temp_material_index,
-            min_face_index=original_face_count,
-        )
-        edge_snapshots = _merge_edge_snapshots(boundary_edge_snapshots)
-
-        if not edge_snapshots and selected_edge_snapshots:
-            edge_snapshots = selected_edge_snapshots
-
-        if not edge_snapshots:
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_mode(type="FACE")
-            bpy.ops.mesh.region_to_loop()
-            bpy.ops.object.mode_set(mode="OBJECT")
-            edge_snapshots = _selected_edge_snapshots(target.data)
-
-        _select_faces_by_material_index(
-            target,
-            temp_material_index,
-            min_face_index=original_face_count,
-        )
+        work = None  # Join removes the temporary object.
+        temp_index = _material_slot_index(target, material)
+        context.tool_settings.mesh_select_mode = (False, False, True)
         bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_mode(type="FACE")
-        bpy.ops.mesh.delete(type="FACE")
+        bpy.ops.mesh.select_all(action="DESELECT")
+        bm = bmesh.from_edit_mesh(target.data)
+        for face in bm.faces:
+            face.select_set(face.material_index == temp_index)
+        bm.select_flush_mode()
+        bmesh.update_edit_mesh(target.data)
+        if method == "BOOLEAN":
+            bpy.ops.mesh.intersect_boolean(operation="UNION", solver=solver, threshold=0.000001)
+        else:
+            bpy.ops.mesh.intersect(
+                mode="SELECT_UNSELECT", separate_mode="NONE",
+                threshold=0.000001, solver=solver,
+            )
         bpy.ops.object.mode_set(mode="OBJECT")
-        _delete_loose_geometry_for_autofix(context, target)
         _clear_mesh_component_selection(target.data)
-        _center, target_diagonal = _target_bounds(target)
-        base_mark_threshold = max(target_diagonal * 0.000001, 0.000001)
-        marked_edges = _mark_edges_matching_snapshots(
-            target.data,
-            edge_snapshots,
-            base_mark_threshold,
+        return _remove_cutter_faces_and_mark_seams(
+            target.data, temp_index,
+            thickness * 2.0 if method == "BOOLEAN" else 0.000001,
         )
-        if not marked_edges and edge_snapshots:
-            fallback_mark_threshold = max(
-                base_mark_threshold,
-                _cutter_thickness(context) * 0.25,
-                target_diagonal * 0.00001,
-                0.00001,
-            )
-            marked_edges = _mark_edges_matching_snapshots(
-                target.data,
-                edge_snapshots,
-                fallback_mark_threshold,
-            )
-        target.data.update()
-
-        return marked_edges
     finally:
         if context.object and context.object.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
-        if bpy.data.objects.get(work_name) is not None:
-            bpy.data.objects.remove(bpy.data.objects[work_name], do_unlink=True)
-            if work_data and work_data.users == 0 and bpy.data.meshes.get(work_data.name) == work_data:
+        context.tool_settings.mesh_select_mode = previous_select_mode
+        selection_attribute = target.data.attributes.get(selection_name)
+        if selection_attribute is not None:
+            for edge, value in zip(target.data.edges, selection_attribute.data):
+                if value.value:
+                    edge.select = True
+            target.data.attributes.remove(selection_attribute)
+        if work is not None:
+            bpy.data.objects.remove(work, do_unlink=True)
+        # The join operator may already have freed this mesh datablock.
+        try:
+            if work_data is not None and work_data.users == 0:
                 bpy.data.meshes.remove(work_data)
-        temp_material_index = _material_slot_index(target, material)
-        if temp_material_index >= 0:
-            _remove_material_slot_by_index(target, temp_material_index)
+        except ReferenceError:
+            pass
+        temp_index = _material_slot_index(target, material)
+        if temp_index >= 0:
+            _remove_material_slot_by_index(target, temp_index)
         if placeholder_index is not None:
             _remove_material_slot_by_index(target, placeholder_index)
         _remove_material_if_unused(material)
-        _remove_material_if_unused(placeholder_material)
-
-
-def _arc_heal_distance(context):
-    model_settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
-    weld_distance = getattr(model_settings, "weld_distance", 0.0001)
-    return weld_distance
-
-
-def _boolean_seam_merge_distance(context):
-    return _cutter_thickness(context) * 2.0
+        _remove_material_if_unused(placeholder)
 
 
 def _cutter_apply_method(context):
@@ -1811,69 +1625,7 @@ def _cutter_boolean_solver(context):
 def _cutter_thickness(context):
     settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
     thickness = getattr(settings, "cutter_thickness", DEFAULT_NON_PLANE_CUTTER_THICKNESS)
-    return max(0.0, float(thickness))
-
-
-def _merge_selected_cut_vertices(target, merge_distance):
-    import bmesh
-
-    mesh = target.data
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-    bm.edges.ensure_lookup_table()
-
-    selected_edges = [edge for edge in bm.edges if edge.select]
-    if not selected_edges:
-        bm.free()
-        return 0
-
-    selected_verts = {vert for edge in selected_edges for vert in edge.verts}
-    before_vert_count = len(bm.verts)
-    bmesh.ops.remove_doubles(
-        bm,
-        verts=list(selected_verts),
-        dist=merge_distance,
-    )
-
-    for edge in bm.edges:
-        if edge.is_valid and edge.select:
-            edge.seam = True
-
-    after_vert_count = len([vert for vert in bm.verts if vert.is_valid])
-    bm.normal_update()
-    bm.to_mesh(mesh)
-    bm.free()
-    mesh.update()
-    return max(0, before_vert_count - after_vert_count)
-
-
-def _merge_open_boundary_vertices(target, merge_distance):
-    import bmesh
-
-    mesh = target.data
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-    bm.edges.ensure_lookup_table()
-
-    boundary_edges = [edge for edge in bm.edges if len(edge.link_faces) < 2]
-    if not boundary_edges:
-        bm.free()
-        return 0
-
-    boundary_verts = {vert for edge in boundary_edges for vert in edge.verts}
-    before_vert_count = len(bm.verts)
-    bmesh.ops.remove_doubles(
-        bm,
-        verts=list(boundary_verts),
-        dist=merge_distance,
-    )
-
-    after_vert_count = len([vert for vert in bm.verts if vert.is_valid])
-    bm.normal_update()
-    bm.to_mesh(mesh)
-    bm.free()
-    mesh.update()
-    return max(0, before_vert_count - after_vert_count)
+    return max(0.0001, float(thickness))
 
 
 def _count_open_boundary_edges(target):
@@ -2102,20 +1854,6 @@ def _apply_cutters_to_mesh(context, target, cutters):
             )
 
     return marked_edges
-
-
-def _has_knife_cleanup_cutters(cutters):
-    return any(
-        cutter.get(CUTTER_TYPE_PROP) in {"ARC", "PATH", "LOCAL_RING"}
-        for cutter in cutters
-    )
-
-
-def _has_boolean_solidify_cutters(cutters):
-    return any(
-        cutter.get(CUTTER_TYPE_PROP) in {"ARC", "PATH", "LOCAL_RING"}
-        for cutter in cutters
-    )
 
 
 def _split_supported_cutters(cutters):
@@ -3064,8 +2802,9 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
                 "Seam_Cutter_Path",
                 self._surface_points,
                 settings.cutter_path_render_u,
-                settings.cutter_thickness,
+                settings.cutter_extrude,
                 settings.cutter_alpha,
+                thickness=settings.cutter_thickness,
             )
         bpy.ops.object.select_all(action="DESELECT")
         cutter.select_set(True)
@@ -3285,9 +3024,10 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
                 "Seam_Cutter_Path",
                 path_points,
                 settings.cutter_path_render_u,
-                settings.cutter_thickness,
+                settings.cutter_extrude,
                 settings.cutter_alpha,
                 "DRAW",
+                thickness=settings.cutter_thickness,
             )
 
         bpy.ops.object.select_all(action="DESELECT")
@@ -3802,32 +3542,9 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             self.report({"WARNING"}, "Select at least one cutter object")
             return {"CANCELLED"}
 
-        apply_method = _cutter_apply_method(context)
-        use_boolean_seam_cleanup = (
-            apply_method == "BOOLEAN"
-            and _has_boolean_solidify_cutters(cutters)
-        )
-        use_knife_seam_cleanup = (
-            apply_method != "BOOLEAN"
-            and _has_knife_cleanup_cutters(cutters)
-        )
         _apply_object_scale(context, target)
-        open_edges_before = _count_open_boundary_edges(target) if use_knife_seam_cleanup else 0
         _clear_mesh_component_selection(target.data)
         marked_edges = _apply_cutters_to_mesh(context, target, cutters)
-        if use_boolean_seam_cleanup and marked_edges:
-            heal_distance = _boolean_seam_merge_distance(context)
-            _merge_selected_cut_vertices(target, heal_distance)
-        if use_knife_seam_cleanup and marked_edges:
-            heal_distance = _arc_heal_distance(context)
-            _merge_selected_cut_vertices(target, heal_distance)
-            _merge_open_boundary_vertices(target, heal_distance)
-            open_edges_after = _count_open_boundary_edges(target)
-            if open_edges_after > open_edges_before:
-                self.report(
-                    {"WARNING"},
-                    "Cutter seam applied, but open boundary edges remain. The local weld distance was not increased.",
-                )
 
         settings.last_cutter_count = len(cutters)
         settings.last_marked_edge_count = marked_edges

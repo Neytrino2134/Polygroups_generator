@@ -144,12 +144,19 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         )
         row.prop(settings, "cutter_auto_fix_mesh", text=t(context, "cutter_auto_fix_mesh"), toggle=True)
     row.label(text=t(context, "ctrl_draw_hint"))
-    row.prop(settings, "cutter_mirror_axis", text="", expand=True)
+    axis_row = row.row(align=True)
+    for axis in ("X", "Y", "Z"):
+        axis_row.prop_enum(settings, "cutter_mirror_axis", axis, text=axis)
     row.operator(
         "object.polygroups_copy_mirror_cutters",
         text=t(context, "copy_mirror_cutters"),
         icon="MOD_MIRROR",
     )
+
+    if cutter_type in {"PATH", "DRAW"}:
+        layout.prop(settings, "cutter_extrude", text=t(context, "cutter_extrude"))
+        layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
+        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
 
     if cutter_type in {"PLANE", "ARC"}:
         layout.prop(settings, "cutter_size_multiplier", text=t(context, "cutter_size"))
@@ -166,8 +173,6 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         layout.prop(settings, "cutter_local_ring_segments", text=t(context, "local_ring_segments"))
         layout.prop(settings, "cutter_local_ring_radius_offset", text=t(context, "local_ring_radius_offset"))
     if cutter_type == "PATH":
-        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
-        layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
         tilt_row = layout.row(align=True)
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
         tilt_operator.mode = "DECREASE"
@@ -186,8 +191,6 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
             icon="AUTOMERGE_ON",
         )
     if cutter_type == "DRAW":
-        layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
-        layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
         tilt_row = layout.row(align=True)
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
         tilt_operator.mode = "DECREASE"

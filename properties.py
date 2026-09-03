@@ -112,7 +112,9 @@ def _sync_cutter_thickness(self, context):
             continue
 
         cutter_type = obj.get(CUTTER_TYPE_PROP)
-        if cutter_type in {"ARC", "LOCAL_RING"} and obj.type == "MESH":
+        if (cutter_type in {"ARC", "LOCAL_RING"} and obj.type == "MESH") or (
+            cutter_type in {"PATH", "DRAW_STROKE"} and obj.type == "CURVE"
+        ):
             modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
             if modifier is None:
                 modifier = obj.modifiers.new(CUTTER_SOLIDIFY_MODIFIER_NAME, "SOLIDIFY")
@@ -120,9 +122,15 @@ def _sync_cutter_thickness(self, context):
             modifier.offset = 0.0
             if hasattr(modifier, "use_rim"):
                 modifier.use_rim = True
-        elif cutter_type in {"PATH", "DRAW_STROKE"} and obj.type == "CURVE":
-            obj.data.extrude = self.cutter_thickness
-            obj.data.bevel_depth = 0.0
+
+
+def _sync_cutter_extrude(self, context):
+    if context is None:
+        return
+    for obj in context.scene.objects:
+        if (obj.type == "CURVE" and obj.get(CUTTER_PROP)
+                and obj.get(CUTTER_TYPE_PROP) in {"PATH", "DRAW_STROKE"}):
+            obj.data.extrude = self.cutter_extrude
 
 
 def _sync_selected_cutter_path_settings(self, context):
@@ -135,7 +143,6 @@ def _sync_selected_cutter_path_settings(self, context):
 
         obj.data.resolution_u = self.cutter_path_render_u
         obj.data.render_resolution_u = self.cutter_path_render_u
-        obj.data.extrude = self.cutter_thickness
 
 
 def _prompt_collection_items(self, context):
@@ -466,12 +473,21 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     )
     cutter_thickness: bpy.props.FloatProperty(
         name="Cutter Thickness",
-        description="Visual thickness for non-plane cutters; Boolean uses this as cutter thickness and Knife ignores it",
+        description="Solidify thickness for non-plane cutters; Boolean uses this thickness and Knife ignores it",
         default=0.002,
-        min=0.0,
+        min=0.0001,
         soft_max=0.02,
         precision=5,
         update=_sync_cutter_thickness,
+    )
+    cutter_extrude: bpy.props.FloatProperty(
+        name="Curve Extrude",
+        description="Height of the cutter curve surface, independent of Solidify thickness",
+        default=0.1,
+        min=0.0,
+        soft_max=1.0,
+        precision=5,
+        update=_sync_cutter_extrude,
     )
     cutter_arc_segments: bpy.props.IntProperty(
         name="Cylinder Segments",
@@ -542,7 +558,7 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     cutter_path_render_u: bpy.props.IntProperty(
         name="Path Render U",
         description="Render U resolution for newly created cutter path curves",
-        default=20,
+        default=4,
         min=1,
         max=128,
         soft_max=64,

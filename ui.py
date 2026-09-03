@@ -896,6 +896,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
         layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
+        layout.prop(settings, "cutter_extrude", text=t(context, "cutter_extrude"))
         layout.prop(settings, "cutter_path_render_u", text=t(context, "path_render_u"))
         tilt_row = layout.row(align=True)
         tilt_operator = tilt_row.operator("object.polygroups_tilt_cutter_path", text=t(context, "tilt_minus"))
