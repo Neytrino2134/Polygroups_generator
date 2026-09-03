@@ -16,9 +16,16 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - Isolate Other Collections excludes other numbered `Generated.N` collections. Previous/Next Collection switches them in numeric order and selects a visible object in the destination; unrelated collections are preserved.
 - `Seam Preparation`
   - Knife Seam and Quick Knife Seam tools for preparing group boundaries.
+  - Knife Seam's Stable View Cut shows start/end points, a live cut segment, the extended cutting-plane guide, and on-screen hints. Click the end point, then Enter/Space to cut; Esc/right-click cancels.
+  - Knife Seam's Knife Mode menu (in the panel and toolbar settings) switches between Plane Cut and Multi-Point Knife. Multi-Point Knife uses the standard interactive Knife: click several points, use right-click to start another line, then Space/Enter applies all cuts and marks them as seams. Esc cancels. Cutting and seam marking share one Undo step.
   - Smooth Face Selection for relaxing selected face regions in Edit Mode.
   - Mark Selected Edges Seam for selected edges in Edit Mode.
   - Mark Selection Boundary Seam for selected faces in Edit Mode.
+  - Clear Selected Edges Seam removes seams only from selected edges.
+  - Clear Inside Edges Seam removes interior seams from selected faces and marks their boundary, including open mesh borders and holes. Selection and seams outside the region are preserved. Both clear tools support multiple meshes in Edit Mode.
+  - Selection, Mark and Clear Seams, Seam Checks, and Cutting Tools are grouped under headings with horizontal separators.
+  - Connect Vertices with Seam runs Blender's Connect Vertex Path for two selected vertices and marks the connecting edges as seams.
+  - Vertex Seam Path in the toolbar (beside Knife Seam / Quick Knife Seam) connects clicked vertices A → B → C. Only the latest endpoint remains selected. Space/Esc/right-click finishes the chain without removing completed seams; each segment has its own Undo step. The tool displays the start point, a cursor guide, and hints, and uses Blender's vertex picking with the current X-Ray setting.
 - `Import`
   - `Import Files`: imports several selected files one by one through Blender's file browser, with its own auto rename and Weld options.
   - `Batch Import`: imports supported mesh files from a folder one by one, with separate auto rename and Weld options.

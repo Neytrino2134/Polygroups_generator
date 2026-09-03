@@ -28,6 +28,10 @@ from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
 from .check_material_textures import OBJECT_OT_polygroups_check_material_textures
 from .clear_materials import OBJECT_OT_clear_polygroups_materials
+from .clear_edges_seam import MESH_OT_polygroups_clear_selected_edges_seam
+from .clear_edges_seam import MESH_OT_polygroups_clear_inside_edges_seam
+from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam
+from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam_click
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_fab_selection
 from .fab_preparation import OBJECT_OT_polygroups_prepare_fab_variant
@@ -35,6 +39,8 @@ from .generate_polygroups import OBJECT_OT_generate_polygroups
 from .generate_polygroups import OBJECT_OT_polygroups_apply_checker_material
 from .generate_polygroups import OBJECT_OT_polygroups_apply_material_mode
 from .knife_seam_tool import MESH_OT_polygroups_knife_seam
+from .knife_seam_tool import MESH_OT_polygroups_finish_knife_seam
+from .knife_seam_tool import MESH_OT_polygroups_native_knife_seam
 from .mark_material_boundaries_seam import MESH_OT_polygroups_mark_material_boundaries_seam
 from .mark_longitudinal_seam import MESH_OT_polygroups_mark_boundary_and_longitudinal_seam
 from .mark_longitudinal_seam import MESH_OT_polygroups_mark_longitudinal_seam
@@ -176,6 +182,10 @@ CLASSES = (
     MESH_OT_polygroups_mark_boundary_and_longitudinal_seam,
     MESH_OT_polygroups_mark_longitudinal_seam,
     MESH_OT_polygroups_mark_selected_edges_seam,
+    MESH_OT_polygroups_clear_selected_edges_seam,
+    MESH_OT_polygroups_clear_inside_edges_seam,
+    MESH_OT_polygroups_connect_vertex_seam,
+    MESH_OT_polygroups_connect_vertex_seam_click,
     MESH_OT_polygroups_mark_selection_boundary_seam,
     MESH_OT_polygroups_check_seam_gaps,
     MESH_OT_polygroups_connect_seam_gap_pairs,
@@ -195,6 +205,8 @@ CLASSES = (
     OBJECT_OT_polygroups_clear_blend_static_collections,
     OBJECT_OT_polygroups_export_blend_assets,
     MESH_OT_polygroups_knife_seam,
+    MESH_OT_polygroups_finish_knife_seam,
+    MESH_OT_polygroups_native_knife_seam,
     MESH_OT_polygroups_quick_knife_seam,
     MESH_OT_polygroups_select_seam_tool,
     OBJECT_OT_polygroups_smart_decimate,
@@ -224,20 +236,28 @@ def register():
     import bpy
     from .import_queue import stop_import_queue
     from .remesh_progress import stop_remesh
+    from .knife_seam_tool import stop_knife_seams
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+    MESH_OT_polygroups_native_knife_seam.define("MESH_OT_knife_tool")
+    MESH_OT_polygroups_native_knife_seam.define("MESH_OT_polygroups_finish_knife_seam")
     bpy.app.handlers.load_pre.append(stop_import_queue)
     bpy.app.handlers.load_pre.append(stop_remesh)
+    bpy.app.handlers.load_pre.append(stop_knife_seams)
 
 
 def unregister():
     import bpy
     from .import_queue import stop_import_queue
     from .remesh_progress import stop_remesh
+    from .knife_seam_tool import stop_knife_seams
 
     stop_import_queue()
     stop_remesh()
+    stop_knife_seams()
+    if stop_knife_seams in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(stop_knife_seams)
     if stop_remesh in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_remesh)
     if stop_import_queue in bpy.app.handlers.load_pre:

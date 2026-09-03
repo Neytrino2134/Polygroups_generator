@@ -728,8 +728,8 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout = self.layout
         seam_settings = context.scene.polygroups_seam_preparation_settings
 
-        tools_box = layout.box()
-        tools_column = tools_box.column(align=True)
+        layout.label(text=t(context, "seam_group_selection"), icon="FACESEL")
+        tools_column = layout.column(align=True)
         tools_column.prop(
             seam_settings,
             "selection_smooth_iterations",
@@ -743,6 +743,9 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         )
         smooth_operator.iterations = seam_settings.selection_smooth_iterations
 
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "seam_group_mark_clear"), icon="EDGE_SEAM")
+        tools_column = layout.column(align=True)
         tools_column.operator(
             "mesh.polygroups_mark_selected_edges_seam",
             text=t(context, "mark_selected_edges_seam"),
@@ -753,9 +756,35 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             text=t(context, "mark_selection_boundary_seam"),
             icon="EDGESEL",
         )
-        draw_seam_gap_controls(tools_column, context, seam_settings)
+        tools_column.operator(
+            "mesh.polygroups_clear_selected_edges_seam",
+            text=t(context, "clear_selected_edges_seam"),
+            icon="X",
+        )
+        tools_column.operator(
+            "mesh.polygroups_clear_inside_edges_seam",
+            text=t(context, "clear_inside_edges_seam"),
+            icon="X",
+        )
 
-        layout.separator()
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "seam_group_check"), icon="VIEWZOOM")
+        draw_seam_gap_controls(layout, context, seam_settings)
+
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "seam_group_cut"), icon="MOD_BEVEL")
+        connect_column = layout.column(align=True)
+        connect_column.operator(
+            "mesh.polygroups_connect_vertex_seam",
+            text=t(context, "connect_vertices_seam"),
+            icon="EDGE_SEAM",
+        )
+        connect_tool = connect_column.operator(
+            "mesh.polygroups_select_seam_tool",
+            text=t(context, "select_vertex_seam_tool"),
+            icon="VERTEXSEL",
+        )
+        connect_tool.tool_id = "polygroups_generator.connect_vertex_seam_tool"
         knife_content = draw_collapsible_box(
             layout,
             seam_settings,
@@ -789,7 +818,9 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
     def draw_knife_seam(self, context, layout):
         settings = context.scene.polygroups_knife_seam_settings
 
-        layout.prop(settings, "stable_view_cut", text=t(context, "stable_view_cut"))
+        layout.prop(settings, "cut_mode", text=t(context, "knife_cut_mode"))
+        if settings.cut_mode == "POLYLINE":
+            layout.label(text=t(context, "knife_polyline_hint"), icon="INFO")
         layout.prop(settings, "xray", text=t(context, "xray"))
         layout.prop(settings, "use_occlude_geometry", text=t(context, "occlude_geometry"))
         layout.prop(settings, "only_selected", text=t(context, "only_selected"))

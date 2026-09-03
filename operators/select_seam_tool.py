@@ -4,7 +4,7 @@ import bpy
 class MESH_OT_polygroups_select_seam_tool(bpy.types.Operator):
     bl_idname = "mesh.polygroups_select_seam_tool"
     bl_label = "Select Seam Tool"
-    bl_description = "Switch to edge select mode and select a PolyGroups seam tool"
+    bl_description = "Switch selection mode and activate a PolyGroups seam tool"
     bl_options = {"REGISTER"}
 
     tool_id: bpy.props.StringProperty(
@@ -18,6 +18,9 @@ class MESH_OT_polygroups_select_seam_tool(bpy.types.Operator):
         return obj is not None and obj.type == "MESH" and context.mode == "EDIT_MESH"
 
     def execute(self, context):
-        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="EDGE")
+        from .connect_vertex_seam import TOOL_ID
+
+        mode = "VERT" if self.tool_id == TOOL_ID else "EDGE"
+        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type=mode)
         bpy.ops.wm.tool_set_by_id(name=self.tool_id)
         return {"FINISHED"}

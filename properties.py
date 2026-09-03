@@ -352,6 +352,16 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
+    # Keep the stored boolean for compatibility with existing .blend files.
+    cut_mode: bpy.props.EnumProperty(
+        name="Knife Mode",
+        items=(
+            ("PLANE", "Plane Cut", "Continuous plane cut through the mesh", 0),
+            ("POLYLINE", "Multi-Point Knife", "Standard Knife: click multiple points, then Space/Enter to apply seams", 1),
+        ),
+        get=lambda self: 0 if self.stable_view_cut else 1,
+        set=lambda self, value: setattr(self, "stable_view_cut", value == 0),
+    )
     stable_view_cut: bpy.props.BoolProperty(
         name="Stable View Cut",
         description="Use a viewport-plane cut that stays continuous on dense meshes when zoomed out",

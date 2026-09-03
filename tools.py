@@ -2,6 +2,8 @@ import bpy
 from bpy.types import WorkSpaceTool
 
 from .localization import t
+from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
+from .operators.connect_vertex_seam import draw_vertex_seam_cursor
 
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
@@ -368,8 +370,8 @@ class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
 
     @staticmethod
     def draw_settings(context, layout, tool):
-        props = tool.operator_properties("mesh.polygroups_knife_seam")
-        layout.prop(props, "stable_view_cut", text=t(context, "stable_view_cut"))
+        props = context.scene.polygroups_knife_seam_settings
+        layout.prop(props, "cut_mode", text=t(context, "knife_cut_mode"))
         layout.prop(props, "use_occlude_geometry", text=t(context, "occlude_geometry"))
         layout.prop(props, "only_selected", text=t(context, "only_selected"))
         layout.prop(props, "xray", text=t(context, "xray"))
@@ -410,6 +412,31 @@ class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
             "clear_selection_after_cutting",
             text=t(context, "clear_selection_after_cutting"),
         )
+
+
+class VIEW3D_WST_polygroups_connect_vertex_seam(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "EDIT_MESH"
+    bl_idname = VERTEX_SEAM_TOOL_ID
+    bl_label = "Vertex Seam Path"
+    bl_description = "Connect vertices with seams: click A, B, C; Space/Esc/right-click finishes the chain"
+    bl_icon = "ops.mesh.dupli_extrude_cursor"
+    bl_cursor = "CROSSHAIR"
+    bl_widget = None
+    bl_keymap = (
+        ("mesh.polygroups_connect_vertex_seam_click", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+        ("mesh.polygroups_connect_vertex_seam_click", {"type": "RIGHTMOUSE", "value": "PRESS"},
+         {"properties": [("reset", True)]}),
+        ("mesh.polygroups_connect_vertex_seam_click", {"type": "ESC", "value": "PRESS"},
+         {"properties": [("reset", True)]}),
+        ("mesh.polygroups_connect_vertex_seam_click", {"type": "SPACE", "value": "PRESS"},
+         {"properties": [("reset", True)]}),
+    )
+    draw_cursor = staticmethod(draw_vertex_seam_cursor)
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        layout.label(text=t(context, "connect_seam_hint_next"))
 
 
 def register():
@@ -457,9 +484,31 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_connect_vertex_seam,
+        after={"polygroups_generator.quick_knife_seam_tool"},
+        separator=False,
+        group=False,
+    )
 
 
 def unregister():
+    # Switching tools removes Blender's cursor callback before unregister_tool
+    # removes the definition and keymap (it does not remove the callback itself).
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type != "VIEW_3D":
+                continue
+            region = next((r for r in area.regions if r.type == "WINDOW"), None)
+            if region is None:
+                continue
+            with bpy.context.temp_override(window=window, area=area, region=region):
+                if bpy.context.mode != "EDIT_MESH":
+                    continue
+                tool = window.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
+                if tool is not None and tool.idname == VERTEX_SEAM_TOOL_ID:
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_connect_vertex_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_knife_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_draw)
