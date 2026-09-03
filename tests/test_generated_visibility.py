@@ -33,10 +33,11 @@ unrelated.exclude = True
 for prefix in ("Highpoly_", "Retopo_"):
     assert bpy.ops.object.polygroups_object_visibility(prefix=prefix, hidden=True) == {"FINISHED"}
     for (number, obj_prefix), obj in objects.items():
-        assert obj.hide_get(view_layer=layer) == (obj_prefix == prefix)
-        assert not obj.hide_viewport and not obj.hide_render
+        assert obj.hide_viewport == (obj_prefix == prefix)
+        assert not obj.hide_get(view_layer=layer) and not obj.hide_render
         assert not obj.hide_get(view_layer=other_layer)
     bpy.ops.object.polygroups_object_visibility(prefix=prefix, hidden=False)
+    assert all(not obj.hide_viewport for obj in objects.values())
 
 selected = objects[2, "Retopo_"]
 selected.select_set(True)

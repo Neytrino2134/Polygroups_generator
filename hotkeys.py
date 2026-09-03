@@ -8,6 +8,8 @@ from .tools import DRAW_CUTTER_LOCAL_RING_TOOL_ID
 from .tools import DRAW_CUTTER_PATH_TOOL_ID
 from .tools import DRAW_CUTTER_TOOL_ID
 from .tools import CUTTER_TOOL_ORDER
+from .operators.section_hotkeys import AIRETOPO_OT_section_number
+from .operators.section_hotkeys import DIGIT_KEYS, cancel_pending_sections
 
 
 KEYMAP_ITEMS = []
@@ -226,6 +228,7 @@ class VIEW3D_MT_airetopo_pie(bpy.types.Menu):
 
 
 CLASSES = (
+    AIRETOPO_OT_section_number,
     AIRETOPO_OT_select_cutter_tweak,
     VIEW3D_MT_airetopo_pie,
 )
@@ -239,6 +242,20 @@ def register_keymaps():
         return
 
     keymap = keyconfig.keymaps.new(name="3D View", space_type="VIEW_3D")
+
+    if _preference_value(preferences, "enable_section_number_hotkeys", False):
+        maps = [("User Interface", "EMPTY"), ("View2D Buttons List", "EMPTY")]
+        if preferences.section_hotkey_scope == "VIEWPORT":
+            maps.extend((("3D View Generic", "VIEW_3D"), ("Mesh", "EMPTY"),
+                         ("Object Mode", "EMPTY"), ("Sculpt", "EMPTY")))
+        for name, space_type in maps:
+            number_map = keyconfig.keymaps.new(name=name, space_type=space_type)
+            for key, digit in DIGIT_KEYS.items():
+                item = number_map.keymap_items.new(
+                    AIRETOPO_OT_section_number.bl_idname, key, "PRESS", head=True, repeat=False,
+                )
+                item.properties.digit = digit
+                KEYMAP_ITEMS.append((number_map, item))
 
     if _preference_value(preferences, "enable_cutter_tweak_hotkey", True):
         item = keymap.keymap_items.new(
@@ -267,6 +284,7 @@ def register_keymaps():
 
 
 def unregister_keymaps():
+    cancel_pending_sections()
     for keymap, item in reversed(KEYMAP_ITEMS):
         try:
             keymap.keymap_items.remove(item)
@@ -279,9 +297,12 @@ def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     register_keymaps()
+    bpy.app.handlers.load_pre.append(cancel_pending_sections)
 
 
 def unregister():
     unregister_keymaps()
+    if cancel_pending_sections in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(cancel_pending_sections)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

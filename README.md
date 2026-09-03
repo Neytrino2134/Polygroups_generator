@@ -12,7 +12,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - `Rename Objects`: renames selected objects as `Highpoly_Generated.001`, `Highpoly_Generated.002`, and so on, then moves them to the `Generated` collection.
   - `Apply Weld`: adds and applies a Weld modifier on selected mesh objects.
   - Default weld distance: `0.0001`.
-  - Hide/Show All Highpoly and Retopo changes eye visibility for matching `Highpoly_` / `Retopo_` objects in the current View Layer.
+  - Hide/Show All Highpoly and Retopo toggles Disable in Viewport (monitor icon) for matching `Highpoly_` / `Retopo_` objects in the current scene, including excluded collections. This object setting applies across View Layers; eye visibility and render visibility are preserved.
   - Isolate Other Collections excludes other numbered `Generated.N` collections. Previous/Next Collection switches them in numeric order and selects a visible object in the destination; unrelated collections are preserved.
 - `Seam Preparation`
   - Knife Seam and Quick Knife Seam tools for preparing group boundaries.
@@ -58,6 +58,22 @@ Then enable the add-on in Blender:
 ```text
 Edit > Preferences > Add-ons > AI Retopo Toolkit
 ```
+
+## Section Number Shortcuts
+
+Enable `Toggle Sections with Number Keys 0–9` in the add-on's Hotkeys preferences.
+It is off by default. The default scope is the AI Retopo sidebar; the optional
+Entire 3D View scope takes priority over the usual number shortcuts, including
+mesh selection modes in Edit Mode. Numpad shortcuts are unchanged.
+
+- `2`–`9` toggle the corresponding section immediately; `0` toggles section 10.
+- `1` waits 0.35 seconds before toggling section 1. Change this interval in preferences.
+- Quickly type `10`, `11`, `12`, or `13` to toggle that section without first toggling section 1.
+- `Esc` cancels the pending first digit. Starting another command also cancels the wait.
+- Single Mode still closes the other sections when one opens. Text/number fields and
+  transform numeric input retain their normal keyboard handling.
+- Number shortcuts only change section expansion; they preserve the N-panel's
+  open/closed state and active sidebar category.
 
 ## Development Notes
 

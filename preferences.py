@@ -267,6 +267,19 @@ def _addon_info():
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
+    enable_section_number_hotkeys: bpy.props.BoolProperty(
+        name="Section Number Hotkeys", default=False, update=_update_hotkeys,
+    )
+    section_digit_interval: bpy.props.FloatProperty(
+        name="Digit Interval", default=0.35, min=0.15, max=1.0, precision=2,
+        description="Seconds to wait for a second digit after 1", update=_update_hotkeys,
+    )
+    section_hotkey_scope: bpy.props.EnumProperty(
+        name="Scope", default="SIDEBAR", update=_update_hotkeys,
+        items=(("SIDEBAR", "AI Retopo Sidebar", "Only over the AI Retopo sidebar"),
+               ("VIEWPORT", "Entire 3D View", "Override number shortcuts in the 3D View, including Edit Mode")),
+    )
+
     remesh_low_count: bpy.props.IntProperty(
         name="LOW", description="Default target quad count for LOW remesh",
         default=1000, min=1,
@@ -511,6 +524,13 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
 
     def draw_hotkeys(self, context, layout):
         layout.label(text=t(context, "hotkeys"), icon="KEYINGSET")
+        section_box = layout.box()
+        section_box.prop(self, "enable_section_number_hotkeys", text=t(context, "section_number_hotkeys"))
+        section_options = section_box.column(align=True)
+        section_options.enabled = self.enable_section_number_hotkeys
+        section_options.prop(self, "section_hotkey_scope", text=t(context, "section_hotkey_scope"))
+        section_options.prop(self, "section_digit_interval", text=t(context, "section_digit_interval"))
+        section_options.label(text=t(context, "section_number_hint"))
         column = layout.column(align=True)
         column.prop(self, "cutter_tweak_tool", text=t(context, "cutter_tweak_tool"))
         cutter_box = column.box()

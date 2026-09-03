@@ -43,7 +43,7 @@ def controls_available(context):
 class OBJECT_OT_polygroups_object_visibility(bpy.types.Operator):
     bl_idname = "object.polygroups_object_visibility"
     bl_label = "Highpoly / Retopo Visibility"
-    bl_description = "Change the eye visibility of matching objects in the current View Layer"
+    bl_description = "Enable or disable matching scene objects in all viewports using the monitor toggle"
     bl_options = {"REGISTER", "UNDO"}
 
     prefix: bpy.props.EnumProperty(items=(
@@ -57,10 +57,10 @@ class OBJECT_OT_polygroups_object_visibility(bpy.types.Operator):
         return controls_available(context)
 
     def execute(self, context):
-        objects = [obj for obj in context.view_layer.objects if obj.name.startswith(self.prefix)]
+        objects = [obj for obj in context.scene.objects if obj.name.startswith(self.prefix)]
         for obj in objects:
-            obj.hide_set(self.hidden, view_layer=context.view_layer)
-        self.report({"INFO"}, f"{'Hidden' if self.hidden else 'Shown'}: {len(objects)} object(s)")
+            obj.hide_viewport = self.hidden
+        self.report({"INFO"}, f"{'Disabled' if self.hidden else 'Enabled'} in viewport: {len(objects)} object(s)")
         return {"FINISHED"}
 
 

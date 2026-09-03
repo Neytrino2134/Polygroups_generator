@@ -402,6 +402,7 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
         layout = self.layout.box()
         settings = context.scene.polygroups_model_preparation_settings
 
+        layout.label(text=t(context, "model_preparation_group_prepare"), icon="AUTOMERGE_ON")
         column = layout.column(align=True)
         column.operator(
             "object.polygroups_rename_and_apply_weld",
@@ -420,11 +421,13 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
             text=t(context, "apply_weld"),
             icon="AUTOMERGE_ON",
         )
-        column.separator()
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "model_preparation_group_manage"), icon="OUTLINER_COLLECTION")
+        column = layout.column(align=True)
         for prefix, label in (("Highpoly_", "Highpoly"), ("Retopo_", "Retopo")):
             row = column.row(align=True)
-            for hidden, key, icon in ((True, "hide_all_named", "HIDE_ON"),
-                                      (False, "show_all_named", "HIDE_OFF")):
+            for hidden, key, icon in ((True, "hide_all_named", "RESTRICT_VIEW_ON"),
+                                      (False, "show_all_named", "RESTRICT_VIEW_OFF")):
                 operator = row.operator("object.polygroups_object_visibility",
                                         text=t(context, key, value=label), icon=icon)
                 operator.prefix = prefix
@@ -437,6 +440,26 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
                      text=t(context, "previous_generated_collection"), icon="TRIA_LEFT").action = "PREVIOUS"
         row.operator("object.polygroups_generated_collection",
                      text=t(context, "next_generated_collection"), icon="TRIA_RIGHT").action = "NEXT"
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "model_preparation_group_seams"), icon="EDGE_SEAM")
+        column = layout.column(align=True)
+        column.operator(
+            "mesh.polygroups_mark_material_boundaries_seam",
+            text=t(context, "generate_seams_materials"),
+            icon="EDGE_SEAM",
+        )
+        column.prop(context.scene.polygroups_generator_settings, "checker_scale",
+                    text=t(context, "checker_scale"))
+        column.operator(
+            "object.polygroups_apply_checker_material",
+            text=t(context, "apply_checker_material"),
+            icon="TEXTURE",
+        )
+        column.operator(
+            "object.polygroups_unwrap_angle_based",
+            text=t(context, "unwrap_angle_based"),
+            icon="UV",
+        )
 
 
 def draw_import_remesh_options(layout, context, settings, prefix):

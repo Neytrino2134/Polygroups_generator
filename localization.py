@@ -6,6 +6,13 @@ LANGUAGE_ITEMS = (
 
 TEXT = {
     "EN": {
+        "section_number_hotkeys": "Toggle Sections with Number Keys 0–9",
+        "section_hotkey_scope": "Scope",
+        "section_digit_interval": "Digit Interval (seconds)",
+        "section_number_hint": "1–9: sections; 0: 10; quickly type 10–13",
+        "model_preparation_group_prepare": "Preparation",
+        "model_preparation_group_manage": "Management",
+        "model_preparation_group_seams": "Seam Tools",
         "hide_all_named": "Hide All {value}",
         "show_all_named": "Show All {value}",
         "isolate_generated_collections": "Isolate Other Collections",
@@ -391,6 +398,13 @@ TEXT = {
         "open_prompt_folder": "Open Folder",
     },
     "RU": {
+        "section_number_hotkeys": "Управление секциями цифрами 0–9",
+        "section_hotkey_scope": "Область действия",
+        "section_digit_interval": "Интервал между цифрами (сек.)",
+        "section_number_hint": "1–9: секции; 0: 10; быстрый ввод 10–13",
+        "model_preparation_group_prepare": "Подготовка",
+        "model_preparation_group_manage": "Управление",
+        "model_preparation_group_seams": "Работа со швами",
         "hide_all_named": "Скрыть все {value}",
         "show_all_named": "Показать все {value}",
         "isolate_generated_collections": "Изолировать коллекцию",
