@@ -13,6 +13,7 @@ import bpy
 
 from .hotkeys import CUTTER_TOOL_ITEMS
 from .hotkeys import PIE_COMMAND_ITEMS
+from . import pie_presets
 from .localization import LANGUAGE_ITEMS
 from .localization import t
 
@@ -422,44 +423,63 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         default=False,
         update=_update_hotkeys,
     )
+    pie_presets: bpy.props.CollectionProperty(type=pie_presets.AIRETOPO_PG_pie_preset)
+    pie_current_slots: bpy.props.StringProperty(options={"HIDDEN"})
+    pie_next_preset_number: bpy.props.IntProperty(default=3, min=3, options={"HIDDEN"})
+    active_pie_preset: bpy.props.EnumProperty(
+        name="Active Preset",
+        description="Choose and load a pie menu layout",
+        items=pie_presets.preset_items,
+        default=0,
+        update=pie_presets.preset_updated,
+    )
+
     pie_slot_1: bpy.props.EnumProperty(
         name="Slot 1",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="IMPORT_FILES",
     )
     pie_slot_2: bpy.props.EnumProperty(
         name="Slot 2",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="APPLY_CUTTER_SEAMS",
     )
     pie_slot_3: bpy.props.EnumProperty(
         name="Slot 3",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="GENERATE_POLYGROUPS",
     )
     pie_slot_4: bpy.props.EnumProperty(
         name="Slot 4",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="CUTTER_TWEAK",
     )
     pie_slot_5: bpy.props.EnumProperty(
         name="Slot 5",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="UV_PACK",
     )
     pie_slot_6: bpy.props.EnumProperty(
         name="Slot 6",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="REMESH",
     )
     pie_slot_7: bpy.props.EnumProperty(
         name="Slot 7",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="CHECK_MATERIALS",
     )
     pie_slot_8: bpy.props.EnumProperty(
         name="Slot 8",
         items=PIE_COMMAND_ITEMS,
+        update=pie_presets.slot_updated,
         default="PREPARE_BAKE",
     )
 
@@ -560,15 +580,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         pie_row.prop(self, "pie_menu_alt", text="Alt")
 
     def draw_pie_menu(self, context, layout):
-        layout.label(text=t(context, "preferences_pie_menu"), icon="MENU_PANEL")
-        layout.label(text=t(context, "pie_menu_slots"))
-        slot_column = layout.column(align=True)
-        for index in range(1, 9):
-            slot_column.prop(
-                self,
-                f"pie_slot_{index}",
-                text=t(context, "pie_slot", index=index),
-            )
+        pie_presets.draw_pie_settings(self, context, layout)
 
     def draw_updates(self, context, layout):
         layout.label(text=t(context, "updates"), icon="FILE_REFRESH")
@@ -693,6 +705,7 @@ class AIRETOPO_OT_update_addon(bpy.types.Operator):
 
 
 CLASSES = (
+    *pie_presets.CLASSES,
     AIRETOPO_Preferences,
     AIRETOPO_OT_toggle_panel_settings,
     AIRETOPO_OT_check_updates,

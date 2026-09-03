@@ -75,6 +75,30 @@ Then enable the add-on in Blender:
 Edit > Preferences > Add-ons > AI Retopo Toolkit
 ```
 
+## Pie Menu Presets
+
+In the add-on preferences, open `Pie Menu Settings`. Click any of the eight slots
+to search commands by their English or translated name. The command list includes
+selection, seam marking/clearing, seam gap checks, mesh repair, Cutter Tweak tools,
+and LOW/MID/HIGH remesh presets. `Select Linked (Seam)` always limits selection by seams.
+Slots 1–8 run clockwise from the top; direction labels in preferences show their
+positions. Blender's small numeric hints are its standard numpad shortcuts, not slot numbers.
+
+- `General` provides the original broad workflow layout. `Seam Work` contains
+  Select Less/More, Delete and Fill, Select Linked (Seam), Mark Seam, Clear Selected
+  Seams, Mark Boundary Seam, and Knife Seam Tool.
+- Selecting an active preset loads its eight slots immediately. `Current / Custom`
+  preserves the previous custom layout and the most recently edited slots.
+- `Save As New` creates a named user preset; `Save` updates the active user preset.
+  The reload button restores its saved slots. Built-in presets cannot be overwritten.
+- `Export JSON` exports the current layout; `Import As New` adds a separate preset,
+  automatically giving duplicate names a numbered suffix. Delete removes only a user
+  preset and keeps its current slots available.
+
+Presets and the active layout are stored in Blender preferences. If preference
+Auto-Save is disabled, use Blender's `Save Preferences` to retain them after restart.
+The pie menu shortcut remains Shift+C by default.
+
 ## Section Number Shortcuts
 
 Enable `Toggle Sections with Number Keys 0–9` in the add-on's Hotkeys preferences.

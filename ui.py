@@ -321,6 +321,9 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             box.prop(preferences, "interface_language", text=t(context, "language"))
             box.label(text=t(context, "main_description"))
             box.separator()
+            box.label(text=t(context, "preferences_pie_menu"), icon="MENU_PANEL")
+            box.prop(preferences, "active_pie_preset", text=t(context, "pie_active_preset"))
+            box.separator()
             box.label(text=t(context, "updates"), icon="FILE_REFRESH")
             update_row = box.row(align=True)
             update_row.operator(
