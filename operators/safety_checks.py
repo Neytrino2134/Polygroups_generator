@@ -5,6 +5,7 @@ import bpy
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import rename_and_move_objects
+from .remesh_progress import remesh_available
 
 
 HIGHPOLY_NAME_PATTERN = re.compile(r"^Highpoly_Generated\.\d{3,}$")
@@ -39,6 +40,10 @@ def lowpoly_name_priority(name):
 
 def is_quad_remesh_ready_name(name):
     return is_generated_highpoly_name(name) or is_lowpoly_name(name)
+
+
+def is_polygroups_ready_name(name):
+    return is_generated_highpoly_name(name) or name.startswith("Retopo_")
 
 
 def selected_mesh_objects(context):
@@ -92,7 +97,7 @@ def run_bake_action(operator, context, action):
 class OBJECT_OT_polygroups_rename_and_apply_weld(bpy.types.Operator):
     bl_idname = "object.polygroups_rename_and_apply_weld"
     bl_label = "Rename And Apply Weld"
-    bl_description = "Rename selected objects, move them to Generated, then apply Weld"
+    bl_description = "Rename selected objects, keep existing Generated.N collections, then apply Weld"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -133,7 +138,7 @@ class OBJECT_OT_polygroups_checked_quad_remesh(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object is not None
+        return remesh_available(context)
 
     def invoke(self, context, event):
         active_object = context.active_object
@@ -204,7 +209,8 @@ class OBJECT_OT_polygroups_checked_quad_remesh(bpy.types.Operator):
         try:
             if self.quad_count:
                 context.scene.qremesher.target_count = self.quad_count
-            return bpy.ops.qremesher.remesh()
+            result = bpy.ops.object.polygroups_run_remesh()
+            return {"FINISHED"} if "RUNNING_MODAL" in result else result
         except Exception as error:
             self.report({"ERROR"}, f"Quad Remesher failed: {error}")
             return {"CANCELLED"}
@@ -224,14 +230,15 @@ class OBJECT_OT_polygroups_skip_quad_remesh(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.active_object
-        return obj is not None and obj.type == "MESH"
+        return remesh_available(context)
 
     def execute(self, context):
         apply_quad_remesher_defaults_once(context.scene)
         try:
             if self.quad_count:
                 context.scene.qremesher.target_count = self.quad_count
-            return bpy.ops.qremesher.remesh()
+            result = bpy.ops.object.polygroups_run_remesh()
+            return {"FINISHED"} if "RUNNING_MODAL" in result else result
         except Exception as error:
             self.report({"ERROR"}, f"Quad Remesher failed: {error}")
             return {"CANCELLED"}
@@ -272,7 +279,7 @@ class OBJECT_OT_polygroups_checked_generate_polygroups(bpy.types.Operator):
         if (
             active_object
             and active_object.type == "MESH"
-            and is_generated_highpoly_name(active_object.name)
+            and is_polygroups_ready_name(active_object.name)
         ):
             return self.execute(context)
 
@@ -299,7 +306,7 @@ class OBJECT_OT_polygroups_checked_generate_polygroups(bpy.types.Operator):
         if (
             active_object
             and active_object.type == "MESH"
-            and is_generated_highpoly_name(active_object.name)
+            and is_polygroups_ready_name(active_object.name)
         ):
             return self.run_generate_polygroups(context)
 

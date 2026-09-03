@@ -646,7 +646,6 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
 
         layout = self.layout.box()
         installed, enabled, available = quad_remesher_status(context)
-        layout.enabled = not context.scene.polygroups_model_preparation_settings.batch_is_running
 
         if not installed:
             layout.label(text=t(context, "quad_not_installed"), icon="ERROR")
@@ -660,7 +659,11 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
 
         qremesher = context.scene.qremesher
 
-        layout.label(text=t(context, "quad_available"), icon="CHECKMARK")
+        section_layout = layout
+        section_layout.label(text=t(context, "remesh_group_controls"), icon="MOD_REMESH")
+        status = context.scene.polygroups_remesh_status
+        layout = layout.column()
+        layout.enabled = not status.is_running and not context.scene.polygroups_model_preparation_settings.batch_is_running
         layout.operator(
             "object.polygroups_checked_quad_remesh",
             text=t(context, "remesh_it"),
@@ -685,6 +688,25 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
         symmetry_row = layout.row(align=True)
         symmetry_row.label(text=t(context, "symmetry"))
         symmetry_row.prop(qremesher, "symmetry_x")
+
+        if status.is_running:
+            section_layout.operator("object.polygroups_cancel_remesh", text=t(context, "import_cancel"), icon="CANCEL")
+
+        section_layout.separator(type="LINE")
+        section_layout.label(text=t(context, "remesh_group_status"), icon="INFO")
+        progress_box = section_layout.column(align=True)
+        if status.stage:
+            progress_box.label(text=t(context, "remesh_stage_" + status.stage))
+            progress_box.label(text=t(context, "remesh_source", value=status.source_name))
+            progress_box.progress(factor=status.progress / 100, type="BAR", text=f"{status.progress:.1f}%")
+            progress_box.label(text=t(context, "remesh_elapsed", value=format_duration(status.elapsed_seconds)))
+            if status.stage == "DONE":
+                progress_box.label(text=t(context, "remesh_completed_polygons", value=f"{status.polygon_count:,}"), icon="CHECKMARK")
+                progress_box.label(text=status.result_name)
+            elif status.message:
+                progress_box.label(text=status.message, icon="ERROR" if status.stage == "FAILED" else "INFO")
+        else:
+            progress_box.label(text=t(context, "quad_available"), icon="CHECKMARK")
 
 
 class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):

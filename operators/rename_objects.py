@@ -2,6 +2,9 @@ import bpy
 import re
 
 
+GENERATED_COLLECTION_PATTERN = re.compile(r"^Generated\.\d+$")
+
+
 def collection_is_in_tree(parent_collection, target_collection):
     for child_collection in parent_collection.children:
         if child_collection == target_collection:
@@ -67,7 +70,7 @@ def rename_and_move_objects(
     start_index=None,
 ):
     selected_objects = list(objects)
-    generated_collection = get_or_create_generated_collection(context, collection_name)
+    generated_collection = None
     if start_index is None:
         start_index = get_next_object_index(object_prefix)
 
@@ -77,6 +80,12 @@ def rename_and_move_objects(
     for index, obj in enumerate(selected_objects, start=start_index):
         obj.name = f"{object_prefix}.{index:03d}"
 
+        if any(GENERATED_COLLECTION_PATTERN.fullmatch(collection.name)
+               for collection in obj.users_collection):
+            continue
+
+        if generated_collection is None:
+            generated_collection = get_or_create_generated_collection(context, collection_name)
         for collection in list(obj.users_collection):
             collection.objects.unlink(obj)
 
@@ -105,7 +114,7 @@ def get_next_object_index(object_prefix="Highpoly_Generated"):
 class OBJECT_OT_polygroups_rename_objects(bpy.types.Operator):
     bl_idname = "object.polygroups_rename_objects"
     bl_label = "Rename Objects"
-    bl_description = "Rename selected objects and move them to the Generated collection"
+    bl_description = "Rename selected objects; keep existing Generated.N collections, otherwise move to Generated"
     bl_options = {"REGISTER", "UNDO"}
 
     collection_name = "Generated"
@@ -126,6 +135,6 @@ class OBJECT_OT_polygroups_rename_objects(bpy.types.Operator):
 
         self.report(
             {"INFO"},
-            f"Renamed and moved {renamed_count} object(s) to {self.collection_name}",
+            f"Renamed {renamed_count} object(s); existing Generated.N collections preserved",
         )
         return {"FINISHED"}

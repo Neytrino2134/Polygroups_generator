@@ -9,7 +9,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
 ## Current Tools
 
 - `Model Preparation`
-  - `Rename Objects`: renames selected objects as `Highpoly_Generated.001`, `Highpoly_Generated.002`, and so on, then moves them to the `Generated` collection.
+  - `Rename Objects`: renames selected objects as `Highpoly_Generated.001`, `Highpoly_Generated.002`, and so on. Objects already in a numbered `Generated.N` collection keep their collection memberships; other objects move to `Generated`.
   - `Apply Weld`: adds and applies a Weld modifier on selected mesh objects.
   - Default weld distance: `0.0001`.
   - Hide/Show All Highpoly and Retopo toggles Disable in Viewport (monitor icon) for matching `Highpoly_` / `Retopo_` objects in the current scene, including excluded collections. This object setting applies across View Layers; eye visibility and render visibility are preserved.
@@ -32,7 +32,11 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - Proxies selected Quad Remesher controls when the `quad_remesher` add-on is installed and enabled.
   - Exposes Quad Count, Use Materials, Symmetry X, and Remesh It.
   - LOW/MID/HIGH default to 1,000 / 3,000 / 50,000 quads; customize these in add-on preferences. Separate Remesh LOW/MID/HIGH buttons also start remeshing.
+  - Remesh displays its starting/running/importing status, percentage, elapsed time, and actual result polygon count. Cancel stops the current engine job.
+  - Results keep the source collection memberships and base name: `Highpoly_Generated.001` → `Retopo_Highpoly_Generated.001` → `Retopo_02_Highpoly_Generated.001`. Existing names advance the Retopo generation counter without changing the source suffix.
+  - After the first successful remesh of `Retopo_Highpoly_Generated.001`, that source becomes `Retopo_01_Highpoly_Generated.001`; the new result is generation `02`. Cancelling or failing the remesh leaves the source name unchanged.
 - `PolyGroups`
+  - Generate PolyGroups accepts `Retopo_*` objects, including `Retopo_Highpoly_Generated.001`, as prepared and starts without the Rename/Weld confirmation.
   - Generate material-based PolyGroups from seam-bounded mesh islands.
   - Convert sculpt Face Sets to materials.
   - Clear PolyGroups materials.

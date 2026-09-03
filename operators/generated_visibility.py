@@ -37,7 +37,8 @@ def current_generated_path(context, paths):
 
 def controls_available(context):
     return (context.mode == "OBJECT"
-            and not context.scene.polygroups_model_preparation_settings.batch_is_running)
+            and not context.scene.polygroups_model_preparation_settings.batch_is_running
+            and not context.scene.polygroups_remesh_status.is_running)
 
 
 class OBJECT_OT_polygroups_object_visibility(bpy.types.Operator):

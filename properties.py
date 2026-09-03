@@ -317,6 +317,18 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
 
 
+class POLYGROUPS_PG_remesh_status(bpy.types.PropertyGroup):
+    is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    cancel_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    stage: bpy.props.StringProperty(default="")
+    message: bpy.props.StringProperty(default="")
+    source_name: bpy.props.StringProperty(default="")
+    result_name: bpy.props.StringProperty(default="")
+    progress: bpy.props.FloatProperty(default=0.0, min=0.0, max=100.0)
+    elapsed_seconds: bpy.props.FloatProperty(default=0.0, min=0.0)
+    polygon_count: bpy.props.IntProperty(default=0, min=0)
+
+
 class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     single_section_mode: bpy.props.BoolProperty(
         name="Single Mode",
@@ -1303,6 +1315,7 @@ class AIRETOPO_PG_google_image_settings(bpy.types.PropertyGroup):
 
 
 CLASSES = (
+    POLYGROUPS_PG_remesh_status,
     AIRETOPO_PG_panel_visibility_settings,
     POLYGROUPS_PG_model_preparation_settings,
     POLYGROUPS_PG_knife_seam_settings,
@@ -1323,6 +1336,8 @@ CLASSES = (
 def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+
+    bpy.types.Scene.polygroups_remesh_status = bpy.props.PointerProperty(type=POLYGROUPS_PG_remesh_status)
 
     bpy.types.Scene.airetopo_panel_visibility_settings = bpy.props.PointerProperty(
         type=AIRETOPO_PG_panel_visibility_settings,
@@ -1369,6 +1384,7 @@ def register():
 
 
 def unregister():
+    del bpy.types.Scene.polygroups_remesh_status
     del bpy.types.Scene.airetopo_panel_visibility_settings
     del bpy.types.Scene.airetopo_google_image_settings
     del bpy.types.Scene.airetopo_ai_generation_settings

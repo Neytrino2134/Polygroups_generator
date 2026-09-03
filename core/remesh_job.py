@@ -2,11 +2,26 @@
 
 import importlib
 import math
+import re
 import subprocess
 import time
 from types import SimpleNamespace
 
 import bpy
+
+
+def next_retopo_name(source_name, result=None):
+    match = re.fullmatch(r"Retopo_(?:(\d+)_)?(.+)", source_name)
+    base = match.group(2) if match else source_name
+    generation = (int(match.group(1) or 1) + 1) if match else 1
+    while True:
+        if generation == 1 and bpy.data.objects.get(f"Retopo_01_{base}") is not None:
+            generation = 2
+        name = f"Retopo_{base}" if generation == 1 else f"Retopo_{generation:02d}_{base}"
+        existing = bpy.data.objects.get(name)
+        if existing is None or existing == result:
+            return name
+        generation += 1
 
 
 def remesh_backend(context):
@@ -32,8 +47,11 @@ class RemeshJob:
         )
         self.started = time.monotonic()
         self.exited = None
+        self.message = ""
 
     def start(self, context):
+        self.source_name = context.active_object.name
+        self.source_collections = tuple(context.active_object.users_collection)
         self.backend.doRemeshing_Start(self.state, context)
         if not self.state.IsRemeshing:
             raise RuntimeError("Quad Remesher could not start; check its installation and license")
@@ -45,6 +63,7 @@ class RemeshJob:
                 lines = stream.read().splitlines()
             value = float(lines[0])
             message = " ".join(lines[1:])
+            self.message = message
             if not math.isfinite(value):
                 value = None
         except (OSError, ValueError, IndexError, TypeError):
@@ -64,7 +83,41 @@ class RemeshJob:
         return False, max(0.0, min(1.0, value or 0.0))
 
     def finish(self, context):
+        before = set(bpy.data.objects)
         self.backend.doRemeshing_Finish(self.state, context)
+        outputs = sorted(set(bpy.data.objects) - before, key=lambda obj: obj.name)
+        meshes = [obj for obj in outputs if obj.type == "MESH"]
+        if not meshes:
+            raise RuntimeError("Quad Remesher did not create a mesh")
+        for obj in meshes:
+            obj.name = next_retopo_name(self.source_name, obj)
+        collections = [collection for collection in self.source_collections
+                       if collection in set(bpy.data.collections)]
+        if not collections:
+            collections = [context.scene.collection]
+        for obj in outputs:
+            for collection in collections:
+                if obj.name not in collection.objects:
+                    collection.objects.link(obj)
+            for collection in list(obj.users_collection):
+                if collection not in collections:
+                    collection.objects.unlink(obj)
+        context.view_layer.update()
+        for obj in context.selected_objects:
+            obj.select_set(False)
+        for obj in meshes:
+            obj.select_set(True)
+        context.view_layer.objects.active = meshes[0]
+        match = re.fullmatch(r"Retopo_(?:(\d+)_)?(.+)", self.source_name)
+        if match and match.group(1) is None:
+            source = self.state.the_input_object
+            first_name = f"Retopo_01_{match.group(2)}"
+            existing = bpy.data.objects.get(first_name)
+            if existing is None or existing == source:
+                source.name = first_name
+            else:
+                self.state.report({"WARNING"}, f"Source name kept: {first_name} already exists")
+        return outputs
 
     def abort(self):
         process = self.state.remeshProcess

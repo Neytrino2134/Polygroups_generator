@@ -1,4 +1,5 @@
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
+from .remesh_progress import OBJECT_OT_polygroups_run_remesh, OBJECT_OT_polygroups_cancel_remesh
 from .generated_visibility import OBJECT_OT_polygroups_object_visibility
 from .generated_visibility import OBJECT_OT_polygroups_generated_collection
 from .ai_generation import OBJECT_OT_airetopo_generate_google_image
@@ -107,6 +108,8 @@ from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
 CLASSES = (
+    OBJECT_OT_polygroups_run_remesh,
+    OBJECT_OT_polygroups_cancel_remesh,
     OBJECT_OT_polygroups_apply_weld,
     OBJECT_OT_polygroups_object_visibility,
     OBJECT_OT_polygroups_generated_collection,
@@ -220,17 +223,23 @@ CLASSES = (
 def register():
     import bpy
     from .import_queue import stop_import_queue
+    from .remesh_progress import stop_remesh
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     bpy.app.handlers.load_pre.append(stop_import_queue)
+    bpy.app.handlers.load_pre.append(stop_remesh)
 
 
 def unregister():
     import bpy
     from .import_queue import stop_import_queue
+    from .remesh_progress import stop_remesh
 
     stop_import_queue()
+    stop_remesh()
+    if stop_remesh in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(stop_remesh)
     if stop_import_queue in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_import_queue)
 

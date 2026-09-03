@@ -279,10 +279,11 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
 
     def execute(self, context):
         from . import import_queue
+        from .remesh_progress import ACTIVE_REMESH
 
         settings = context.scene.polygroups_model_preparation_settings
-        if import_queue.ACTIVE_QUEUE is not None:
-            self.report({"WARNING"}, "An import queue is already running")
+        if import_queue.ACTIVE_QUEUE is not None or ACTIVE_REMESH is not None:
+            self.report({"WARNING"}, "An import queue or Remesh is already running")
             return {"CANCELLED"}
         file_selection = self.use_file_selection
         directory = bpy.path.abspath(self.directory if file_selection else settings.batch_import_directory)
