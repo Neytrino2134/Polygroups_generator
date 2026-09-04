@@ -1,5 +1,7 @@
 """Build a local filled cutter from one closed planar mesh cross-section."""
-import bmesh
+from collections import defaultdict
+from itertools import product
+from math import floor
 from mathutils import Vector
 from mathutils.geometry import intersect_line_line_2d, tessellate_polygon
 
@@ -70,41 +72,82 @@ def _self_crosses(points):
 
 
 def section_loops(target, depsgraph, origin, normal):
-    """Read evaluated geometry in world space, without changing the source mesh."""
-    bm = bmesh.new()
+    """Intersect evaluated triangles without rebuilding or altering source faces.
+
+    Stitch only intersection endpoints, so duplicated faces and split vertices
+    (common in imported meshes) do not break otherwise closed geometric loops.
+    """
+    evaluated = target.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
     try:
-        # Ray casting intersects Blender's evaluated loop triangles. Bisecting
-        # the original non-planar quads/ngons instead creates straight chords
-        # that need not pass through that hit, even on a closed mesh.
-        evaluated = target.evaluated_get(depsgraph)
-        mesh = evaluated.data
-        mesh.calc_loop_triangles()
-        matrix = evaluated.matrix_world
-        vertices = [bm.verts.new(matrix @ v.co - origin) for v in mesh.vertices]
-        for triangle in mesh.loop_triangles:
-            bm.faces.new([vertices[i] for i in triangle.vertices])
-        if not bm.verts:
+        if mesh is None or not mesh.vertices:
             raise ValueError("The target mesh is empty")
-        # Work near zero to reduce rounding error on translated objects.
-        size = max(v.co.length for v in bm.verts)
-        epsilon = max(size * 1e-8, 1e-8)
-        result = bmesh.ops.bisect_plane(
-            bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
-            plane_co=Vector(), plane_no=normal, dist=epsilon,
-            clear_inner=False, clear_outer=False,
-        )
-        edges = {e for e in result['geom_cut'] if isinstance(e, bmesh.types.BMEdge)}
-        adjacency = {}
-        for edge in edges:
-            a, b = edge.verts
-            adjacency.setdefault(a, []).append(b)
-            adjacency.setdefault(b, []).append(a)
-        loops = []
-        remaining = set(adjacency)
+        mesh.calc_loop_triangles()
+        normal = normal.normalized()
+        matrix = evaluated.matrix_world
+        vertices = [matrix @ v.co - origin for v in mesh.vertices]
+        epsilon = max(max(v.length for v in vertices) * 1e-7, 1e-8)
+        distances = [v.dot(normal) for v in vertices]
+        points, cells = [], defaultdict(list)
+        neighbors = tuple(product((-1, 0, 1), repeat=3))
+
+        def node(point):
+            # Project near-plane endpoints exactly onto the cut plane.
+            point = point - normal * point.dot(normal)
+            key = tuple(floor(value / epsilon) for value in point)
+            for delta in neighbors:
+                for index in cells.get(tuple(k + d for k, d in zip(key, delta)), ()):
+                    if (points[index] - point).length <= epsilon:
+                        return index
+            index = len(points)
+            points.append(point)
+            cells[key].append(index)
+            return index
+
+        edges, coplanar = set(), defaultdict(int)
+        crossings = {}
+        seen_triangles = set()
+        for triangle in mesh.loop_triangles:
+            ids = tuple(triangle.vertices)
+            triangle_key = tuple(sorted(ids))
+            if triangle_key in seen_triangles:
+                continue
+            seen_triangles.add(triangle_key)
+            ds = [distances[i] for i in ids]
+            on = [abs(d) <= epsilon for d in ds]
+            if all(on):
+                ns = [node(vertices[i]) for i in ids]
+                for i in range(3):
+                    if ns[i] != ns[(i + 1) % 3]:
+                        coplanar[tuple(sorted((ns[i], ns[(i + 1) % 3])))] += 1
+                continue
+            if min(ds) > epsilon or max(ds) < -epsilon:
+                continue
+            intersections = set()
+            for i in range(3):
+                j = (i + 1) % 3
+                if on[i]:
+                    intersections.add(node(vertices[ids[i]]))
+                if not on[i] and not on[j] and (ds[i] < 0) != (ds[j] < 0):
+                    key = tuple(sorted((ids[i], ids[j])))
+                    if key not in crossings:
+                        a, b = key
+                        crossings[key] = node(vertices[a].lerp(
+                            vertices[b], distances[a] / (distances[a] - distances[b])))
+                    intersections.add(crossings[key])
+            if len(intersections) == 2:
+                edges.add(tuple(sorted(intersections)))
+        # A coplanar cap contributes its outline, not triangulation diagonals.
+        edges.update(edge for edge, uses in coplanar.items() if uses == 1)
+        adjacency = defaultdict(set)
+        for a, b in edges:
+            adjacency[a].add(b)
+            adjacency[b].add(a)
+        loops, remaining = [], set(adjacency)
         while remaining:
-            start = min(remaining, key=lambda v: tuple(v.co))
-            remaining.remove(start)
+            start = min(remaining, key=lambda i: tuple(points[i]))
             component, stack = {start}, [start]
+            remaining.remove(start)
             while stack:
                 for neighbor in adjacency[stack.pop()]:
                     if neighbor not in component:
@@ -115,8 +158,8 @@ def section_loops(target, depsgraph, origin, normal):
                 continue
             ordered, previous, current = [], None, start
             while True:
-                ordered.append(current.co + origin)
-                following = min((v for v in adjacency[current] if v != previous), key=lambda v: tuple(v.co))
+                ordered.append(points[current] + origin)
+                following = min(adjacency[current] - {previous})
                 previous, current = current, following
                 if current == start:
                     break
@@ -124,7 +167,7 @@ def section_loops(target, depsgraph, origin, normal):
                 loops.append(ordered)
         return loops, epsilon
     finally:
-        bm.free()
+        evaluated.to_mesh_clear()
 
 
 def fitted_section(target, depsgraph, origin, normal, seed, count, offset):
@@ -148,8 +191,9 @@ def fitted_section(target, depsgraph, origin, normal, seed, count, offset):
     # Chords of a coarse contour can sit inside the surface. Compensate for
     # that error before adding the requested outward clearance.
     error = max(min(_distance_to_segment(p, a, b) for a, b in _segments(sampled)) for p in outline)
-    fitted = _offset(sampled, max(0.0, offset) + error + epsilon * 4)
-    if _self_crosses(fitted) or _crosses(outline, fitted) or not all(_inside(p, fitted) for p in outline):
+    fitted = sampled if offset <= 0 else _offset(sampled, offset + error + epsilon * 4)
+    if _self_crosses(fitted) or (offset > 0 and (
+            _crosses(outline, fitted) or not all(_inside(p, fitted) for p in outline))):
         raise ValueError("Cannot fit this contour at the current resolution; increase Contour Points or reduce Contour Offset")
     for other_index, other in enumerate(loops):
         if other_index == index:
