@@ -8,7 +8,7 @@ from bpy_extras import view3d_utils
 
 from ..localization import t
 from .object_seam_cutter import (
-    CUTTER_PROP, CUTTER_TYPE_PROP, _add_solidify_modifier, _material,
+    CUTTER_PROP, CUTTER_TYPE_PROP, _material,
     _tool_collection, _view3d_under_mouse, _surface_hit_from_region_pos, _target_bounds,
 )
 
@@ -109,7 +109,6 @@ def create_grid(lower, upper, settings):
             obj[CUTTER_PROP] = True
             obj[CUTTER_TYPE_PROP] = "GRID_PLANE"
             obj.data.materials.append(_material(settings.cutter_alpha))
-            _add_solidify_modifier(obj, settings.cutter_thickness)
         return created
     except Exception:
         for obj in created:

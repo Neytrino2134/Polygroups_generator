@@ -1770,12 +1770,16 @@ def _apply_cutters_to_mesh(context, target, cutters):
         if isinstance(original_cutters, list):
             original_cutters[:] = cutters
 
+    grid_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "GRID_PLANE"]
+    grid_method = getattr(settings, "cutter_grid_apply_method", "BISECT")
     plane_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "PLANE"]
+    if grid_method == "BISECT":
+        plane_cutters.extend(grid_cutters)
     arc_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "ARC"]
     boolean_cutters = [
         cutter
         for cutter in cutters
-        if cutter.get(CUTTER_TYPE_PROP) in {"PATH", "LOCAL_RING", "LOCAL_CONTOUR", "GRID_PLANE"}
+        if cutter.get(CUTTER_TYPE_PROP) in {"PATH", "LOCAL_RING", "LOCAL_CONTOUR"}
     ]
 
     marked_edges = 0
@@ -1801,6 +1805,11 @@ def _apply_cutters_to_mesh(context, target, cutters):
                 cutter,
                 boolean_solidify_thickness=None,
                 boolean_solver=boolean_solver,
+            )
+    if grid_method == "KNIFE_INTERSECT":
+        for cutter in grid_cutters:
+            marked_edges += _apply_knife_intersect_cutter_to_mesh(
+                context, target, cutter, boolean_solver=boolean_solver,
             )
 
     return marked_edges

@@ -112,7 +112,7 @@ def _sync_cutter_thickness(self, context):
             continue
 
         cutter_type = obj.get(CUTTER_TYPE_PROP)
-        if (cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "GRID_PLANE"} and obj.type == "MESH") or (
+        if (cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR"} and obj.type == "MESH") or (
             cutter_type in {"PATH", "DRAW_STROKE"} and obj.type == "CURVE"
         ):
             modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
@@ -457,6 +457,12 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     cutter_grid_counts: bpy.props.IntVectorProperty(
         name="Planes per Axis", description="Number of internal planes on each enabled axis",
         size=3, default=(3, 3, 3), min=0, max=64,
+    )
+    cutter_grid_apply_method: bpy.props.EnumProperty(
+        name="Grid Apply Method", description="How Grid Volume planes cut the active mesh",
+        items=(("BISECT", "Bisect", "Cut the whole active mesh with each plane"),
+               ("KNIFE_INTERSECT", "Knife Intersect", "Intersect finite grid plane faces with the active mesh")),
+        default="BISECT",
     )
     cutter_size_multiplier: bpy.props.FloatProperty(
         name="Cutter Size",

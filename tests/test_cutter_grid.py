@@ -26,7 +26,7 @@ settings = bpy.context.scene.polygroups_object_seam_cutter_settings
 settings.cutter_grid_axes = (True, True, True)
 settings.cutter_grid_counts = (2, 1, 1)
 settings.cutter_auto_fix_mesh = False
-for method in ("BOOLEAN", "KNIFE"):
+for method in ("BISECT", "KNIFE_INTERSECT"):
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
     mesh = bpy.data.meshes.new("Two separate boxes")
@@ -47,17 +47,28 @@ for method in ("BOOLEAN", "KNIFE"):
     for obj in cutters:
         assert obj[c.CUTTER_TYPE_PROP] == "GRID_PLANE"
         assert len(obj.data.polygons) == 1 and len(obj.data.vertices) == 4
+        assert not obj.modifiers, "Grid planes must have no thickness"
+        # Legacy grids can still contain Solidify: applying must ignore it.
+        c._add_solidify_modifier(obj, .2)
         obj.select_set(True)
-    settings.cutter_apply_method = method
+    settings.cutter_grid_apply_method = method
     assert bpy.ops.object.polygroups_apply_cutter_seams() == {"FINISHED"}
     bm = bmesh.new()
     bm.from_mesh(mesh)
     seams = [e for e in bm.edges if e.seam]
-    assert seams and all(v.co.y < 2 for e in seams for v in e.verts), "Cut escaped the drawn volume"
-    assert all(e.is_manifold for e in bm.edges)
-    assert sum(v.co.y > 4 for v in bm.verts) == 8, "Unrelated box was split"
+    assert seams
+    # Every seam stays on the original center plane, even with legacy Solidify.
+    assert all(any(all(abs(v.co[axis] - plane[0][axis]) < 1e-5 for v in edge.verts)
+                       for axis, _, plane in grid_planes(lower, upper, (True, True, True), (2, 1, 1)))
+               for edge in seams), "Thickness produced offset seams"
+    assert all(e.is_manifold for e in bm.edges), "Cut left holes"
+    if method == "KNIFE_INTERSECT":
+        assert all(v.co.y < 2 for e in seams for v in e.verts)
+        assert sum(v.co.y > 4 for v in bm.verts) == 8
+    else:
+        assert any(v.co.y > 4 for e in seams for v in e.verts), "Bisect must cut across the whole mesh"
     bm.free()
-    print("PASS finite grid apply", method, flush=True)
+    print("PASS grid apply", method, flush=True)
 
 settings.cutter_grid_axes = (False, False, False)
 before = (len(bpy.data.objects), len(bpy.data.collections))

@@ -137,7 +137,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     )
     if cutter_type == "GRID_PLANE":
         draw_grid_actions(context, row)
-    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "PATH", "DRAW", "GRID_PLANE"}:
+        draw_enum_icon_toggle(
+            row, "cutter_grid_apply_method",
+            (("BISECT", "Bisect", "MOD_BOOLEAN"),
+             ("KNIFE_INTERSECT", "Knife Intersect", "EDGESEL")),
+        )
+    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "PATH", "DRAW"}:
         draw_enum_icon_toggle(
             row,
             "cutter_apply_method",
@@ -230,7 +235,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
     if cutter_type == "PLANE":
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
-    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "GRID_PLANE"}:
+    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR"}:
         layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
 
 
@@ -245,6 +250,7 @@ def draw_grid_settings(context, layout, show_actions=True):
     settings = context.scene.polygroups_object_seam_cutter_settings
     if show_actions:
         draw_grid_actions(context, layout)
+        layout.prop(settings, "cutter_grid_apply_method", text=t(context, "cutter_apply_method"), expand=True)
     row = layout.row(align=True)
     row.label(text=t(context, "grid_planes"))
     for index, axis in enumerate("XYZ"):
