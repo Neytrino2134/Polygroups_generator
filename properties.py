@@ -474,9 +474,9 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     cutter_thickness: bpy.props.FloatProperty(
         name="Cutter Thickness",
         description="Solidify thickness for non-plane cutters; Boolean uses this thickness and Knife ignores it",
-        default=0.002,
+        default=0.0001,
         min=0.0001,
-        soft_max=0.02,
+        max=0.001,
         precision=5,
         update=_sync_cutter_thickness,
     )

@@ -21,18 +21,18 @@ path = c._create_cutter_path('Settings', [
 modifier = path.modifiers[c.CUTTER_SOLIDIFY_MODIFIER_NAME]
 assert abs(modifier.thickness - .01) < 1e-7
 settings.cutter_thickness = .02
-assert abs(modifier.thickness - .02) < 1e-7
+assert abs(modifier.thickness - .001) < 1e-7
 assert abs(path.data.extrude - .5) < 1e-7
 settings.cutter_extrude = .3
 assert abs(path.data.extrude - .3) < 1e-7
-assert abs(modifier.thickness - .02) < 1e-7
+assert abs(modifier.thickness - .001) < 1e-7
 path.select_set(True)
 settings.cutter_path_render_u = 24
 assert abs(path.data.extrude - .3) < 1e-7
 settings.cutter_thickness = 0
 assert abs(settings.cutter_thickness - .0001) < 1e-8
 assert abs(modifier.thickness - .0001) < 1e-8
-settings.cutter_thickness = .002
+settings.cutter_thickness = .0001
 
 for method in ('KNIFE', 'BOOLEAN'):
     for solver in ('FLOAT', 'EXACT'):
@@ -42,9 +42,9 @@ for method in ('KNIFE', 'BOOLEAN'):
             bpy.ops.mesh.primitive_cube_add()
             target = bpy.context.object
             if kind == 'LOCAL_RING':
-                cutter = c._create_cutter_local_ring('Ring', Vector(), Vector((1,0,0)), Vector((0,1,0)), 3, 32, .5, .002)
+                cutter = c._create_cutter_local_ring('Ring', Vector(), Vector((1,0,0)), Vector((0,1,0)), 3, 32, .5, .0001)
             elif kind == 'ARC':
-                cutter = c._create_cutter_arc('Arc', [Vector((-3,0,0)), Vector((0,.2,0)), Vector((3,0,0))], Vector((0,0,1)), 6, .5, .002)
+                cutter = c._create_cutter_arc('Arc', [Vector((-3,0,0)), Vector((0,.2,0)), Vector((3,0,0))], Vector((0,0,1)), 6, .5, .0001)
             else:
                 cutter = c._create_cutter_path('Path', [{'location': Vector((-3,0,0)), 'normal': Vector((0,0,1))}, {'location': Vector((3,0,0)), 'normal': Vector((0,0,1))}], 12, 3, .5)
             settings = bpy.context.scene.polygroups_object_seam_cutter_settings
@@ -85,7 +85,7 @@ for method in ('KNIFE', 'BOOLEAN'):
     bm.free()
     settings.cutter_apply_method = method
     for z in (-.4, .4):
-        cutter = c._create_cutter_local_ring('Ring', Vector((0,0,z)), Vector((1,0,0)), Vector((0,1,0)), 3, 16, .5, .002)
+        cutter = c._create_cutter_local_ring('Ring', Vector((0,0,z)), Vector((1,0,0)), Vector((0,1,0)), 3, 16, .5, .0001)
         c._apply_cutters_to_mesh(bpy.context, target, [cutter])
     seams = [e for e in target.data.edges if e.use_seam]
     assert seams and all(e.select for e in seams)
@@ -98,7 +98,7 @@ for method in ('KNIFE', 'BOOLEAN'):
     bm.free()
     # A cutter that misses must leave existing topology and seams unchanged.
     before = (len(target.data.vertices), len(target.data.edges), len(target.data.polygons), sum(e.use_seam for e in target.data.edges))
-    cutter = c._create_cutter_local_ring('Miss', Vector((0,0,5)), Vector((1,0,0)), Vector((0,1,0)), 3, 16, .5, .002)
+    cutter = c._create_cutter_local_ring('Miss', Vector((0,0,5)), Vector((1,0,0)), Vector((0,1,0)), 3, 16, .5, .0001)
     assert c._apply_cutters_to_mesh(bpy.context, target, [cutter]) == 0
     assert before == (len(target.data.vertices), len(target.data.edges), len(target.data.polygons), sum(e.use_seam for e in target.data.edges))
 print('Cutter seam integration tests passed', flush=True)

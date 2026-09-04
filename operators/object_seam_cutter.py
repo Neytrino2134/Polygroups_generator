@@ -36,7 +36,7 @@ BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
 DEFAULT_CUTTER_PATH_TILT = radians(90.0)
 CUTTER_PATH_TILT_STEP = radians(15.0)
-DEFAULT_NON_PLANE_CUTTER_THICKNESS = 0.002
+DEFAULT_NON_PLANE_CUTTER_THICKNESS = 0.0001
 AUTOFIX_MAX_PROTRUSION_FACES = 2000
 AUTOFIX_MAX_LOOSE_GEOMETRY = 10000
 AUTOFIX_MAX_HOLE_EDGE_COUNT = 128
@@ -1596,7 +1596,7 @@ def _intersect_cutter_surface(
         _clear_mesh_component_selection(target.data)
         return _remove_cutter_faces_and_mark_seams(
             target.data, temp_index,
-            thickness * 2.0 if method == "BOOLEAN" else 0.000001,
+            thickness * 4.0 if method == "BOOLEAN" else 0.000001,
         )
     finally:
         if context.object and context.object.mode != "OBJECT":
@@ -1639,7 +1639,7 @@ def _cutter_boolean_solver(context):
 def _cutter_thickness(context):
     settings = getattr(context.scene, "polygroups_object_seam_cutter_settings", None)
     thickness = getattr(settings, "cutter_thickness", DEFAULT_NON_PLANE_CUTTER_THICKNESS)
-    return max(0.0001, float(thickness))
+    return min(0.001, max(0.0001, float(thickness)))
 
 
 def _count_open_boundary_edges(target):
