@@ -21,6 +21,7 @@ from .mesh_checks import analyze_mesh
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_COLLECTION_BY_TOOL = {
     "PLANE": "Seam Cutters Plane",
+    "GRID_PLANE": "Seam Cutters Grid",
     "ARC": "Seam Cutters Arc",
     "LOCAL_RING": "Seam Cutters Local Ring",
     "LOCAL_CONTOUR": "Seam Cutters Local Contour",
@@ -1774,7 +1775,7 @@ def _apply_cutters_to_mesh(context, target, cutters):
     boolean_cutters = [
         cutter
         for cutter in cutters
-        if cutter.get(CUTTER_TYPE_PROP) in {"PATH", "LOCAL_RING", "LOCAL_CONTOUR"}
+        if cutter.get(CUTTER_TYPE_PROP) in {"PATH", "LOCAL_RING", "LOCAL_CONTOUR", "GRID_PLANE"}
     ]
 
     marked_edges = 0

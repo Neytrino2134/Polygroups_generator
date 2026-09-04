@@ -7,6 +7,7 @@ from .tools import DRAW_CUTTER_DRAW_TOOL_ID
 from .tools import DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID
 from .tools import DRAW_CUTTER_LOCAL_RING_TOOL_ID
 from .tools import DRAW_CUTTER_PATH_TOOL_ID
+from .tools import DRAW_CUTTER_GRID_TOOL_ID
 from .tools import DRAW_CUTTER_TOOL_ID
 from .tools import CUTTER_TOOL_ORDER
 from .operators.section_hotkeys import AIRETOPO_OT_section_number
@@ -26,6 +27,7 @@ CUTTER_TOOL_ITEMS = (
     (DRAW_CUTTER_PATH_TOOL_ID, "Path", "Start cycling from the cutter path tool"),
     (DRAW_CUTTER_DRAW_TOOL_ID, "Draw", "Start cycling from the freehand cutter draw tool"),
     (DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID, "Local Contour", "Start cycling from the fitted local contour cutter"),
+    (DRAW_CUTTER_GRID_TOOL_ID, "Grid Volume", "Draw a volume filled with cutter planes"),
 )
 
 PIE_COMMAND_ITEMS = (
@@ -163,6 +165,20 @@ for key, name, label, operator, properties in (
 ):
     PIE_COMMAND_ITEMS += ((key, name, name),)
     PIE_COMMANDS[key] = {"label": label, "icon": "EDGE_SEAM", "operator": operator, "properties": properties}
+
+
+PIE_COMMAND_ITEMS += (("CUTTER_GRID", "Cutter Tweak: Grid Volume", "Draw a volume filled with cutter planes"),)
+PIE_COMMANDS["CUTTER_GRID"] = {
+    "label": "draw_cutter_grid", "icon": "MESH_CUBE", "operator": "wm.tool_set_by_id",
+    "properties": {"name": DRAW_CUTTER_GRID_TOOL_ID}, "mode": "OBJECT",
+}
+
+
+PIE_COMMAND_ITEMS += (("CUTTER_GRID_AUTO", "Generate Cutter Grid Auto", "Generate a cutter grid from the active object's bounds"),)
+PIE_COMMANDS["CUTTER_GRID_AUTO"] = {
+    "label": "grid_generate_auto", "icon": "MESH_CUBE",
+    "operator": "object.polygroups_generate_cutter_grid", "mode": "OBJECT",
+}
 
 
 def _operator_exists(operator_id):

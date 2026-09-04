@@ -8,6 +8,7 @@ from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
 from .operators.edge_seam_path import draw_edge_seam_cursor, register_hover_cache, unregister_hover_cache
 
 
+DRAW_CUTTER_GRID_TOOL_ID = "polygroups_generator.draw_cutter_grid_tool"
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
 DRAW_CUTTER_ARC_TOOL_ID = "polygroups_generator.draw_cutter_arc_tool"
 DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID = "polygroups_generator.draw_cutter_local_contour_tool"
@@ -22,6 +23,7 @@ CUTTER_TOOL_ORDER = (
     DRAW_CUTTER_ARC_TOOL_ID,
     DRAW_CUTTER_PATH_TOOL_ID,
     DRAW_CUTTER_DRAW_TOOL_ID,
+    DRAW_CUTTER_GRID_TOOL_ID,
 )
 
 
@@ -86,6 +88,8 @@ def _move_draw_cutter_tool_after_cursor():
 
 
 def _active_cutter_label_key(tool_id):
+    if tool_id == DRAW_CUTTER_GRID_TOOL_ID:
+        return "draw_cutter_grid"
     if tool_id == DRAW_CUTTER_ARC_TOOL_ID:
         return "draw_cutter_arc"
     if tool_id == DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID:
@@ -131,7 +135,9 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         text=t(context, _active_cutter_label_key(tool.idname)),
         icon="TOOL_SETTINGS",
     )
-    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "PATH", "DRAW"}:
+    if cutter_type == "GRID_PLANE":
+        draw_grid_actions(context, row)
+    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "PATH", "DRAW", "GRID_PLANE"}:
         draw_enum_icon_toggle(
             row,
             "cutter_apply_method",
@@ -172,6 +178,8 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
             text=t(context, "split_object"),
             icon="MOD_EXPLODE",
         )
+    if cutter_type == "GRID_PLANE":
+        draw_grid_settings(context, layout, show_actions=False)
     if cutter_type == "ARC":
         layout.prop(settings, "cutter_arc_segments", text=t(context, "cylinder_segments"))
     if cutter_type == "LOCAL_CONTOUR":
@@ -222,8 +230,28 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
     if cutter_type == "PLANE":
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
-    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR"}:
+    if cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "GRID_PLANE"}:
         layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
+
+
+def draw_grid_actions(context, layout):
+    settings = context.scene.polygroups_object_seam_cutter_settings
+    actions = layout.row(align=True)
+    actions.operator("object.polygroups_generate_cutter_grid", text=t(context, "grid_generate_auto"), icon="MESH_CUBE")
+    actions.prop(settings, "cutter_grid_auto_rotate", text=t(context, "grid_auto_rotate"), toggle=True)
+
+
+def draw_grid_settings(context, layout, show_actions=True):
+    settings = context.scene.polygroups_object_seam_cutter_settings
+    if show_actions:
+        draw_grid_actions(context, layout)
+    row = layout.row(align=True)
+    row.label(text=t(context, "grid_planes"))
+    for index, axis in enumerate("XYZ"):
+        row.prop(settings, "cutter_grid_axes", index=index, text=axis, toggle=True)
+        count = row.row(align=True)
+        count.enabled = settings.cutter_grid_axes[index]
+        count.prop(settings, "cutter_grid_counts", index=index, text="")
 
 
 class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
@@ -238,6 +266,7 @@ class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
             (DRAW_CUTTER_ARC_TOOL_ID, "draw_cutter_arc", "CURVE_BEZCURVE"),
             (DRAW_CUTTER_PATH_TOOL_ID, "draw_cutter_path", "CURVE_PATH"),
             (DRAW_CUTTER_DRAW_TOOL_ID, "draw_cutter_draw", "GREASEPENCIL"),
+            (DRAW_CUTTER_GRID_TOOL_ID, "draw_cutter_grid", "MESH_CUBE"),
         )
         for tool_id, text_key, icon in items:
             operator = layout.operator(
@@ -269,6 +298,29 @@ class VIEW3D_WST_polygroups_draw_cutter_plane(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         _draw_cutter_tool_settings(context, layout, tool, "PLANE")
+
+
+class VIEW3D_WST_polygroups_draw_cutter_grid(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_idname = DRAW_CUTTER_GRID_TOOL_ID
+    bl_label = "Cutter Tweak: Grid Volume"
+    bl_description = "Ctrl-click the first base corner, click the opposite corner, then set depth and click"
+    bl_icon = "ops.mesh.primitive_cube_add_gizmo"
+    bl_cursor = "DEFAULT"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        (
+            "object.polygroups_draw_cutter_grid",
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        _draw_cutter_tool_settings(context, layout, tool, "GRID_PLANE")
 
 
 class VIEW3D_WST_polygroups_draw_cutter_arc(WorkSpaceTool):
@@ -539,6 +591,10 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_draw_cutter_grid,
+        after={DRAW_CUTTER_DRAW_TOOL_ID}, separator=False, group=False,
+    )
     _move_draw_cutter_tool_after_cursor()
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_knife_seam,
@@ -592,5 +648,6 @@ def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_local_contour)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_local_ring)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_arc)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_grid)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)
     bpy.utils.unregister_class(VIEW3D_MT_polygroups_cutter_tool_type)

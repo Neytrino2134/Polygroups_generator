@@ -994,6 +994,13 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             text=t(context, "draw_cutter_plane"),
             icon="MESH_PLANE",
         )
+        grid_box = layout.box()
+        grid_box.label(text=t(context, "draw_cutter_grid"), icon="MESH_CUBE")
+        from .tools import draw_grid_settings
+        draw_grid_settings(context, grid_box)
+        grid_box.operator("wm.tool_set_by_id", text=t(context, "select_draw_cutter_grid"),
+                          icon="MESH_CUBE").name = "polygroups_generator.draw_cutter_grid_tool"
+        grid_box.operator("object.polygroups_draw_cutter_grid", text=t(context, "draw_cutter_grid"), icon="MESH_CUBE")
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_arc"),

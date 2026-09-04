@@ -6,6 +6,15 @@ LANGUAGE_ITEMS = (
 
 TEXT = {
     "EN": {
+        "grid_generate_auto": "Generate Auto",
+        "grid_auto_rotate": "Auto Rotate",
+        "grid_hint_depth_side": "Grid Volume: point to the depth boundary in side view, click to create | Esc/RMB: cancel",
+        "draw_cutter_grid": "Cutter Grid Volume",
+        "select_draw_cutter_grid": "Grid Volume Tool",
+        "grid_planes": "Planes",
+        "grid_hint_base": "Grid Volume: click two base corners | Esc/RMB: cancel",
+        "grid_hint_depth": "Grid Volume: move mouse up/down to set depth, click to create | Esc/RMB: cancel",
+        "grid_created": "Created {count} cutter planes",
         "knife_cut_mode": "Knife Mode",
         "knife_polyline_hint": "Click points; Space/Enter: apply seams",
         "edge_seam_path": "Edge Seam Path",
@@ -471,6 +480,15 @@ TEXT = {
         "open_prompt_folder": "Open Folder",
     },
     "RU": {
+        "grid_generate_auto": "Generate Auto",
+        "grid_auto_rotate": "Автоповорот",
+        "grid_hint_depth_side": "Сетка каттеров: укажите границу глубины на боковом виде, ЛКМ — создать | Esc/ПКМ: отмена",
+        "draw_cutter_grid": "Объём с сеткой каттеров",
+        "select_draw_cutter_grid": "Инструмент: сетка каттеров",
+        "grid_planes": "Плоскости",
+        "grid_hint_base": "Сетка каттеров: два угла основания — ЛКМ | Esc/ПКМ: отмена",
+        "grid_hint_depth": "Сетка каттеров: мышь вверх/вниз — глубина, ЛКМ — создать | Esc/ПКМ: отмена",
+        "grid_created": "Создано плоскостей-каттеров: {count}",
         "knife_cut_mode": "Режим ножа",
         "knife_polyline_hint": "Точки — ЛКМ; Пробел/Enter — применить швы",
         "edge_seam_path": "Шов по рёбрам между вершинами",

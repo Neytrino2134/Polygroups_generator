@@ -74,6 +74,7 @@ from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_local_ring
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_local_contour
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_path
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
+from .cutter_grid import OBJECT_OT_polygroups_draw_cutter_grid, OBJECT_OT_polygroups_generate_cutter_grid
 from .object_seam_cutter import OBJECT_OT_polygroups_join_draw_strokes
 from .object_seam_cutter import OBJECT_OT_polygroups_join_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_select_cutter_planes
@@ -217,6 +218,8 @@ CLASSES = (
     MESH_OT_polygroups_select_seam_tool,
     OBJECT_OT_polygroups_smart_decimate,
     OBJECT_OT_polygroups_draw_cutter_plane,
+    OBJECT_OT_polygroups_draw_cutter_grid,
+    OBJECT_OT_polygroups_generate_cutter_grid,
     OBJECT_OT_polygroups_draw_cutter_arc,
     OBJECT_OT_polygroups_draw_cutter_local_ring,
     OBJECT_OT_polygroups_draw_cutter_local_contour,

@@ -112,7 +112,7 @@ def _sync_cutter_thickness(self, context):
             continue
 
         cutter_type = obj.get(CUTTER_TYPE_PROP)
-        if (cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR"} and obj.type == "MESH") or (
+        if (cutter_type in {"ARC", "LOCAL_RING", "LOCAL_CONTOUR", "GRID_PLANE"} and obj.type == "MESH") or (
             cutter_type in {"PATH", "DRAW_STROKE"} and obj.type == "CURVE"
         ):
             modifier = obj.modifiers.get(CUTTER_SOLIDIFY_MODIFIER_NAME)
@@ -446,6 +446,18 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
+    cutter_grid_auto_rotate: bpy.props.BoolProperty(
+        name="Auto Rotate", description="Switch to a side view after the second base click to draw depth directly",
+        default=True,
+    )
+    cutter_grid_axes: bpy.props.BoolVectorProperty(
+        name="Grid Axes", description="Enable planes perpendicular to world X/Y/Z",
+        size=3, default=(True, True, True), subtype="XYZ",
+    )
+    cutter_grid_counts: bpy.props.IntVectorProperty(
+        name="Planes per Axis", description="Number of internal planes on each enabled axis",
+        size=3, default=(3, 3, 3), min=0, max=64,
+    )
     cutter_size_multiplier: bpy.props.FloatProperty(
         name="Cutter Size",
         description="Cutter plane size relative to the active object's bounding box diagonal",
