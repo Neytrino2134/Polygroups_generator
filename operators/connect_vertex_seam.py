@@ -7,6 +7,33 @@ from ..localization import t
 
 TOOL_ID = "polygroups_generator.connect_vertex_seam_tool"
 
+# Only modifier flags are cached; never mesh data or undo-sensitive references.
+_cursor_ctrl = {}
+
+
+def cursor_ctrl_held(context):
+    return _cursor_ctrl.get((context.window.as_pointer(), context.area.as_pointer()), False)
+
+
+def update_cursor_ctrl(context, event):
+    key = (context.window.as_pointer(), context.area.as_pointer())
+    held = bool(event.ctrl) and event.type != "WINDOW_DEACTIVATE"
+    if _cursor_ctrl.get(key, False) != held:
+        _cursor_ctrl[key] = held
+        context.area.tag_redraw()
+
+
+class MESH_OT_polygroups_seam_cursor_modifier(bpy.types.Operator):
+    """Observe tool events without consuming selection, navigation, or undo."""
+    bl_idname = "mesh.polygroups_seam_cursor_modifier"
+    bl_label = "Seam Cursor Modifier"
+    bl_options = {"INTERNAL"}
+
+    def invoke(self, context, event):
+        update_cursor_ctrl(context, event)
+        return {"PASS_THROUGH"}
+
+
 
 def edit_meshes(context):
     return [(obj, bmesh.from_edit_mesh(obj.data))
@@ -82,8 +109,8 @@ class MESH_OT_polygroups_connect_vertex_seam(bpy.types.Operator):
 
 class MESH_OT_polygroups_connect_vertex_seam_click(bpy.types.Operator):
     bl_idname = "mesh.polygroups_connect_vertex_seam_click"
-    bl_label = "Vertex Seam Path"
-    bl_description = "Click a start vertex, then successive endpoints; Space/Esc/right-click finishes the chain"
+    bl_label = "Start / Continue Drawing Seam"
+    bl_description = "Ctrl-click a start vertex, then successive endpoints; Space/Esc/right-click finishes the chain"
     bl_options = {"UNDO"}
 
     reset: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
@@ -100,6 +127,7 @@ class MESH_OT_polygroups_connect_vertex_seam_click(bpy.types.Operator):
 
 def invoke_seam_click(self, context, event, connect, failure_key):
     """Shared native picking and per-segment undo for both seam path tools."""
+    update_cursor_ctrl(context, event)
     meshes = edit_meshes(context)
     if self.reset:
         select_vertices(meshes, [])
@@ -174,7 +202,7 @@ def draw_vertex_seam_cursor(_context, _tool, xy):
     from gpu_extras.batch import batch_for_shader
     from gpu_extras.presets import draw_circle_2d
 
-    selected = selected_vertices(edit_meshes(context))
+    selected = selected_vertices(edit_meshes(context)) if cursor_ctrl_held(context) else []
     anchor = selected[0] if len(selected) == 1 else None
     scale = context.preferences.system.ui_scale
     blend = gpu.state.blend_get()

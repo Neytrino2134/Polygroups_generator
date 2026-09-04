@@ -32,6 +32,7 @@ from .clear_materials import OBJECT_OT_clear_polygroups_materials
 from .clear_edges_seam import MESH_OT_polygroups_clear_selected_edges_seam
 from .clear_edges_seam import MESH_OT_polygroups_clear_inside_edges_seam
 from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam
+from .connect_vertex_seam import MESH_OT_polygroups_seam_cursor_modifier
 from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam_click
 from .edge_seam_path import MESH_OT_polygroups_edge_seam_path, MESH_OT_polygroups_edge_seam_path_click
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
@@ -191,6 +192,7 @@ CLASSES = (
     MESH_OT_polygroups_clear_inside_edges_seam,
     MESH_OT_polygroups_connect_vertex_seam,
     MESH_OT_polygroups_connect_vertex_seam_click,
+    MESH_OT_polygroups_seam_cursor_modifier,
     MESH_OT_polygroups_edge_seam_path,
     MESH_OT_polygroups_edge_seam_path_click,
     MESH_OT_polygroups_mark_selection_boundary_seam,

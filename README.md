@@ -125,4 +125,4 @@ mesh selection modes in Edit Mode. Numpad shortcuts are unchanged.
 
 This repository should track source files only. Python caches, Blender backups, local editor settings, build folders, archives, and logs are ignored through `.gitignore`.
 The built-in updater expects this folder to stay a clean git repository; commit or stash local changes before running `Update`.
-Before each commit, bump the add-on patch version in `bl_info` by `0.0.1`.
+Bump the add-on patch version in `bl_info` by `0.0.1` only when the user requests a push to the remote repository. Include the version bump in a commit before pushing; ordinary commits do not change the version.

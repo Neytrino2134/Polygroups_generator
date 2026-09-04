@@ -67,19 +67,52 @@ def run():
         point = location_3d_to_region_2d(region, area.spaces.active.region_3d, bm.verts[index].co)
         return (round(point.x + region.x), round(point.y + region.y))
 
-    def event(key, value, pos):
-        window.event_simulate(type=key, value=value, x=pos[0], y=pos[1])
+    def event(key, value, pos, ctrl=False):
+        window.event_simulate(type=key, value=value, x=pos[0], y=pos[1], ctrl=ctrl)
 
-    def click(pos):
+    def click(pos, ctrl=True):
         event("MOUSEMOVE", "NOTHING", pos)
-        event("LEFTMOUSE", "PRESS", pos)
-        event("LEFTMOUSE", "RELEASE", pos)
+        event("LEFTMOUSE", "PRESS", pos, ctrl=ctrl)
+        event("LEFTMOUSE", "RELEASE", pos, ctrl=ctrl)
 
     def state():
         bm = bmesh.from_edit_mesh(context.active_object.data)
         return sum(e.seam for e in bm.edges), [tuple(v.co) for v in bm.verts if v.select]
 
     a, b, c = position(0), position(5), position(2)
+    # Ordinary clicks and the chosen fallback box selection must not create seams.
+    click(a, ctrl=False)
+    yield 0.3
+    click(b, ctrl=False)
+    yield 0.3
+    assert state() == (0, [(2.0, 1.0, 0.0)]), state()
+    if not EDGE_MODE:
+        with context.temp_override(window=window, area=area, region=region):
+            assert not seam.cursor_ctrl_held(context), "Plain selection enabled the seam preview"
+        for ctrl_key in ("LEFT_CTRL", "RIGHT_CTRL"):
+            event(ctrl_key, "PRESS", b, ctrl=True)
+            yield 0.2
+            with context.temp_override(window=window, area=area, region=region):
+                assert seam.cursor_ctrl_held(context), "Ctrl press did not enable preview"
+            event(ctrl_key, "RELEASE", b, ctrl=False)
+            yield 0.2
+            with context.temp_override(window=window, area=area, region=region):
+                assert not seam.cursor_ctrl_held(context), "Ctrl release left preview active"
+    lo = (min(a[0], b[0]) - 20, min(a[1], b[1]) - 20)
+    hi = (max(a[0], b[0]) + 20, max(a[1], b[1]) + 20)
+    event("MOUSEMOVE", "NOTHING", lo)
+    event("LEFTMOUSE", "PRESS", lo)
+    yield 0.1
+    event("MOUSEMOVE", "NOTHING", (lo[0] + 10, lo[1] + 10))
+    yield 0.2
+    event("MOUSEMOVE", "NOTHING", hi)
+    yield 0.2
+    event("LEFTMOUSE", "RELEASE", hi)
+    yield 0.3
+    assert state()[0] == 0 and len(state()[1]) == 6, state()
+    with context.temp_override(window=window, area=area, region=region):
+        bpy.ops.mesh.select_all(action="DESELECT")
+        bpy.ops.ed.undo_push(message="Selection fallback verified")
     click(a)
     yield 0.4
     assert state() == (0, [(0.0, 0.0, 0.0)]), state()

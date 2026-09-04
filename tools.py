@@ -3,7 +3,7 @@ from bpy.types import WorkSpaceTool
 
 from .localization import t
 from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
-from .operators.connect_vertex_seam import draw_vertex_seam_cursor
+from .operators.connect_vertex_seam import draw_vertex_seam_cursor, _cursor_ctrl
 from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
 from .operators.edge_seam_path import draw_edge_seam_cursor, register_hover_cache, unregister_hover_cache
 
@@ -513,12 +513,18 @@ class VIEW3D_WST_polygroups_connect_vertex_seam(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = VERTEX_SEAM_TOOL_ID
     bl_label = "Vertex Seam Path"
-    bl_description = "Connect vertices with seams: click A, B, C; Space/Esc/right-click finishes the chain"
+    bl_description = "Select normally; Ctrl-click A, B, C to connect vertices with seams; Space/Esc/right-click finishes the chain"
     bl_icon = "ops.mesh.dupli_extrude_cursor"
     bl_cursor = "CROSSHAIR"
+    bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
-        ("mesh.polygroups_connect_vertex_seam_click", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+        ("mesh.polygroups_connect_vertex_seam_click", {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
+        # Pass-through observers update the preview even when Ctrl changes without mouse motion.
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "MOUSEMOVE", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "LEFT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "RIGHT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "WINDOW_DEACTIVATE", "value": "ANY", "any": True}, None),
         ("mesh.polygroups_connect_vertex_seam_click", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("reset", True)]}),
         ("mesh.polygroups_connect_vertex_seam_click", {"type": "ESC", "value": "PRESS"},
@@ -538,12 +544,13 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = EDGE_SEAM_TOOL_ID
     bl_label = "Edge Seam Path"
-    bl_description = "Mark existing edge rows with seams: click A, B, C; Space/Esc/right-click finishes the chain"
+    bl_description = "Select normally; Ctrl-click A, B, C to mark existing edge rows with seams; Space/Esc/right-click finishes the chain"
     bl_icon = "ops.mesh.dupli_extrude_cursor"
     bl_cursor = "NONE"
+    bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
-        ("mesh.polygroups_edge_seam_path_click", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+        ("mesh.polygroups_edge_seam_path_click", {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
         ("mesh.polygroups_edge_seam_path_click", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("reset", True)]}),
         ("mesh.polygroups_edge_seam_path_click", {"type": "ESC", "value": "PRESS"},
@@ -558,7 +565,16 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
         layout.label(text=t(context, "connect_seam_hint_next"))
 
 
+def draw_seam_status(self, context):
+    if context.mode != "EDIT_MESH":
+        return
+    tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
+    if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
+        self.layout.label(text=t(context, "seam_ctrl_status"))
+
+
 def register():
+    bpy.types.STATUSBAR_HT_header.prepend(draw_seam_status)
     register_hover_cache()
     bpy.utils.register_class(VIEW3D_MT_polygroups_cutter_tool_type)
     bpy.utils.register_tool(
@@ -629,6 +645,8 @@ def register():
 
 
 def unregister():
+    bpy.types.STATUSBAR_HT_header.remove(draw_seam_status)
+    _cursor_ctrl.clear()
     unregister_hover_cache()
     # Switching tools removes Blender's cursor callback before unregister_tool
     # removes the definition and keymap (it does not remove the callback itself).
