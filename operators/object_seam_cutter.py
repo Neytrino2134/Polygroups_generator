@@ -334,124 +334,59 @@ def _screen_arc_surface(area, region, rv3d, start_pos, middle_pos, end_pos, targ
     return center_points, depth_axis, target_diagonal * size_multiplier
 
 
-def _surface_local_ring_surface(region, rv3d, start, end, target, radius_offset):
+def _screen_section_plane(context, region, rv3d, start_pos, end_pos, target):
     from bpy_extras import view3d_utils
 
-    target_center, _target_diagonal = _target_bounds(target)
-    start_hit = _surface_hit_from_region_pos(region, rv3d, start, target)
-    end_hit = _surface_hit_from_region_pos(region, rv3d, end, target)
-    if start_hit is not None and end_hit is not None:
-        start_world = start_hit[0]
-        end_world = end_hit[0]
+    start, end = Vector(start_pos), Vector(end_pos)
+    if (end - start).length < 2.0:
+        raise ValueError("Place the two points farther apart, across the local section")
+    depsgraph = context.evaluated_depsgraph_get()
+    evaluated = target.evaluated_get(depsgraph)
+    # Search from the middle of the drawn line outwards; endpoints may be
+    # outside the silhouette, just as with Local Ring.
+    seed = None
+    for step in sorted(range(65), key=lambda i: abs(i - 32)):
+        hit = _surface_hit_from_region_pos(region, rv3d, start.lerp(end, step / 64), evaluated)
+        if hit is not None:
+            seed = hit[0]
+            break
+    if seed is None:
+        raise ValueError("The line must cross the visible surface of the target mesh")
+    ray_a = view3d_utils.region_2d_to_vector_3d(region, rv3d, start)
+    ray_b = view3d_utils.region_2d_to_vector_3d(region, rv3d, end)
+    if rv3d.is_perspective:
+        normal = ray_a.cross(ray_b)
     else:
-        start_world = view3d_utils.region_2d_to_location_3d(region, rv3d, start, target_center)
-        end_world = view3d_utils.region_2d_to_location_3d(region, rv3d, end, target_center)
-
-    axis_a = end_world - start_world
-    radius = axis_a.length * 0.5 + radius_offset
-    if radius <= 0.000001:
-        return None
-    axis_a.normalize()
-
-    region_center = Vector((region.width * 0.5, region.height * 0.5))
-    view_axis = view3d_utils.region_2d_to_vector_3d(region, rv3d, region_center)
-    axis_b = view_axis - axis_a * view_axis.dot(axis_a)
-    if axis_b.length < 0.000001:
-        average_normal = Vector((0.0, 0.0, 0.0))
-        if start_hit is not None:
-            average_normal += start_hit[1]
-        if end_hit is not None:
-            average_normal += end_hit[1]
-        axis_b = average_normal - axis_a * average_normal.dot(axis_a)
-    if axis_b.length < 0.000001:
-        axis_b = axis_a.cross(Vector((0.0, 0.0, 1.0)))
-    if axis_b.length < 0.000001:
-        axis_b = axis_a.cross(Vector((0.0, 1.0, 0.0)))
-    if axis_b.length < 0.000001:
-        return None
-    axis_b.normalize()
-
-    center = (start_world + end_world) * 0.5
-    return center, axis_a, axis_b, radius
-
-
-def _volume_center_from_surface_hit(target, location, normal, epsilon):
-    if normal.length < 0.000001:
-        return None
-
-    for direction in (-normal, normal):
-        if direction.length < 0.000001:
-            continue
-        direction.normalize()
-        exit_hit = _target_ray_cast_world(target, location + direction * epsilon, direction)
-        if exit_hit is None:
-            continue
-        exit_location = exit_hit[0]
-        distance = (exit_location - location).length
-        if distance > epsilon * 2.0:
-            return (location + exit_location) * 0.5, distance * 0.5
-
-    return None
-
-
-def _volume_local_ring_surface(region, rv3d, start, end, target, radius_offset):
-    start_hit = _surface_hit_from_region_pos(region, rv3d, start, target)
-    end_hit = _surface_hit_from_region_pos(region, rv3d, end, target)
-    if start_hit is None or end_hit is None:
-        return None
-
-    start_world, start_normal, _start_face = start_hit
-    end_world, end_normal, _end_face = end_hit
-    axis_a = end_world - start_world
-    radius = axis_a.length * 0.5 + radius_offset
-    if radius <= 0.000001:
-        return None
-    axis_a.normalize()
-
-    _target_center, target_diagonal = _target_bounds(target)
-    epsilon = max(target_diagonal * 0.0001, 0.00001)
-    volume_samples = []
-    for location, normal in ((start_world, start_normal), (end_world, end_normal)):
-        sample = _volume_center_from_surface_hit(target, location, normal, epsilon)
-        if sample is not None:
-            volume_samples.append(sample)
-
-    center = (start_world + end_world) * 0.5
-    if volume_samples:
-        volume_center = sum((item[0] for item in volume_samples), Vector()) / len(volume_samples)
-        depth_hint = volume_center - center
-    else:
-        depth_hint = Vector((0.0, 0.0, 0.0))
-    if depth_hint.length < 0.000001:
-        average_normal = start_normal + end_normal
-        depth_hint = -average_normal if average_normal.length > 0.000001 else Vector((0.0, 0.0, 1.0))
-    axis_b = depth_hint - axis_a * depth_hint.dot(axis_a)
-    if axis_b.length < 0.000001:
-        axis_b = axis_a.cross(Vector((0.0, 0.0, 1.0)))
-    if axis_b.length < 0.000001:
-        axis_b = axis_a.cross(Vector((0.0, 1.0, 0.0)))
-    if axis_b.length < 0.000001:
-        return None
-    axis_b.normalize()
-
-    radius = max(radius, epsilon)
-    return center, axis_a, axis_b, radius
+        a = view3d_utils.region_2d_to_location_3d(region, rv3d, start, seed)
+        b = view3d_utils.region_2d_to_location_3d(region, rv3d, end, seed)
+        normal = (b - a).cross(ray_a)
+    if normal.length < 1e-10:
+        raise ValueError("Cannot determine the section plane from these points")
+    return seed, normal.normalized(), depsgraph
 
 
 def _screen_local_ring_surface(area, region, rv3d, start_pos, end_pos, target, radius_offset, fit_mode):
     del area
+    from bpy_extras import view3d_utils
+    from ..core.local_contour import fitted_ring_section
 
-    start = Vector(start_pos)
-    end = Vector(end_pos)
-    if (end - start).length < 2.0:
-        return None
+    seed, normal, depsgraph = _screen_section_plane(
+        bpy.context, region, rv3d, start_pos, end_pos, target,
+    )
+    settings = bpy.context.scene.polygroups_object_seam_cutter_settings
+    def radius_from_center(center):
+        # Measure the drawn diameter at the actual section depth, never at the
+        # whole object's bounding-box center or the front surface of a limb.
+        a = view3d_utils.region_2d_to_location_3d(region, rv3d, Vector(start_pos), center)
+        b = view3d_utils.region_2d_to_location_3d(region, rv3d, Vector(end_pos), center)
+        return (b - a).length * 0.5 + radius_offset
 
-    if fit_mode == "VOLUME":
-        surface = _volume_local_ring_surface(region, rv3d, start, end, target, radius_offset)
-        if surface is not None:
-            return surface
-
-    return _surface_local_ring_surface(region, rv3d, start, end, target, radius_offset)
+    return fitted_ring_section(
+        target, depsgraph, seed, normal, seed,
+        settings.cutter_local_ring_segments, radius_offset,
+        radius_from_center=radius_from_center if fit_mode == "SURFACE" else None,
+        radius_hint=max(0.0, radius_from_center(seed) - radius_offset),
+    )
 
 
 def _add_solidify_modifier(obj, thickness):
@@ -2457,35 +2392,11 @@ class OBJECT_OT_polygroups_draw_cutter_local_contour(_LocalDiskCutterInteraction
     use_event_as_start: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
 
     def _create_cutter(self, context, target, end_pos, settings):
-        from bpy_extras import view3d_utils
         from ..core.local_contour import fitted_section
 
-        start, end = Vector(self._start_pos), Vector(end_pos)
-        if (end - start).length < 2.0:
-            raise ValueError("Place the two points farther apart, across the local section")
-        region, rv3d = self._start_region, self._start_rv3d
-        depsgraph = context.evaluated_depsgraph_get()
-        evaluated = target.evaluated_get(depsgraph)
-        # Search from the middle of the drawn line outwards; endpoints may be
-        # outside the silhouette, just as with Local Ring.
-        seed = None
-        for step in sorted(range(65), key=lambda i: abs(i - 32)):
-            hit = _surface_hit_from_region_pos(region, rv3d, start.lerp(end, step / 64), evaluated)
-            if hit is not None:
-                seed = hit[0]
-                break
-        if seed is None:
-            raise ValueError("The line must cross the visible surface of the target mesh")
-        ray_a = view3d_utils.region_2d_to_vector_3d(region, rv3d, start)
-        ray_b = view3d_utils.region_2d_to_vector_3d(region, rv3d, end)
-        if rv3d.is_perspective:
-            normal = ray_a.cross(ray_b)
-        else:
-            a = view3d_utils.region_2d_to_location_3d(region, rv3d, start, seed)
-            b = view3d_utils.region_2d_to_location_3d(region, rv3d, end, seed)
-            normal = (b - a).cross(ray_a)
-        if normal.length < 1e-10:
-            raise ValueError("Cannot determine the section plane from these points")
+        seed, normal, depsgraph = _screen_section_plane(
+            context, self._start_region, self._start_rv3d, self._start_pos, end_pos, target,
+        )
         vertices, faces = fitted_section(
             target, depsgraph, seed, normal.normalized(), seed,
             settings.cutter_contour_points, settings.cutter_contour_offset,

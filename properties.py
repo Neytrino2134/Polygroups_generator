@@ -532,8 +532,8 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         name="Ring Fit Mode",
         description="How local ring cutters are oriented and centered",
         items=(
-            ("VOLUME", "Snap To Volume", "Use surface hits to estimate the local volume center and orient the ring across the form"),
-            ("SURFACE", "Surface Diameter", "Use the two clicked points as a screen-facing surface diameter"),
+            ("VOLUME", "Snap To Volume", "Estimate a circular disk from local surface intersections, accepting incomplete sections"),
+            ("SURFACE", "Surface Diameter", "Center on the actual section and use the drawn diameter, enlarged when needed to cover the section"),
         ),
         default="VOLUME",
     )

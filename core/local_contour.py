@@ -1,7 +1,7 @@
 """Build a local filled cutter from one closed planar mesh cross-section."""
 from collections import defaultdict
 from itertools import product
-from math import floor
+from math import floor, cos, pi
 from mathutils import Vector
 from mathutils.geometry import intersect_line_line_2d, tessellate_polygon
 
@@ -71,7 +71,7 @@ def _self_crosses(points):
     return False
 
 
-def section_loops(target, depsgraph, origin, normal):
+def section_loops(target, depsgraph, origin, normal, include_open=False, as_segments=False):
     """Intersect evaluated triangles without rebuilding or altering source faces.
 
     Stitch only intersection endpoints, so duplicated faces and split vertices
@@ -154,12 +154,28 @@ def section_loops(target, depsgraph, origin, normal):
                         component.add(neighbor)
                         remaining.discard(neighbor)
                         stack.append(neighbor)
-            if any(len(adjacency[v]) != 2 for v in component):
+            if as_segments:
+                # Coarse rings need surface samples, not an ordered manifold loop.
+                # Keep actual edge pairs for distance queries, including branches
+                # and isolated segments; do not invent links across gaps.
+                loops.append([points[v] + origin
+                              for a in sorted(component) for b in sorted(adjacency[a]) if a < b
+                              for v in (a, b)])
                 continue
+            endpoints = [v for v in component if len(adjacency[v]) == 1]
+            closed = all(len(adjacency[v]) == 2 for v in component)
+            if not closed:
+                if not (include_open and len(endpoints) == 2
+                        and all(len(adjacency[v]) <= 2 for v in component)):
+                    continue
+                start = min(endpoints, key=lambda i: tuple(points[i]))
             ordered, previous, current = [], None, start
             while True:
                 ordered.append(points[current] + origin)
-                following = min(adjacency[current] - {previous})
+                following_nodes = adjacency[current] - {previous}
+                if not following_nodes:
+                    break
+                following = min(following_nodes)
                 previous, current = current, following
                 if current == start:
                     break
@@ -170,15 +186,65 @@ def section_loops(target, depsgraph, origin, normal):
         evaluated.to_mesh_clear()
 
 
-def fitted_section(target, depsgraph, origin, normal, seed, count, offset):
-    normal = normal.normalized()
-    loops, epsilon = section_loops(target, depsgraph, origin, normal)
+def nearest_section(target, depsgraph, origin, normal, seed, include_open=False):
+    loops, epsilon = section_loops(target, depsgraph, origin, normal, include_open=include_open)
     if not loops:
         raise ValueError("No closed local section found; place the line across a closed part of the mesh")
     distances = [min(_distance_to_segment(seed, a, b) for a, b in _segments(loop)) for loop in loops]
     index = min(range(len(loops)), key=lambda i: distances[i])
-    if distances[index] > epsilon * 100:
+    # World-space ray hits lose precision on meshes far from the world origin.
+    # Keep this tolerance tied to numeric precision, not a fraction of the limb.
+    tolerance = max(epsilon * 100, max(abs(value) for value in seed) * 1e-6)
+    if distances[index] > tolerance:
         raise ValueError("The indicated section is open or ambiguous; move the two points slightly")
+    return loops, index, epsilon
+
+
+def fitted_ring_section(target, depsgraph, origin, normal, seed, count, offset,
+                        radius_from_center=None, radius_hint=0.0):
+    """Coarse circular fit; tolerate broken, branched and imperfect sections."""
+    normal = normal.normalized()
+    components, epsilon = section_loops(target, depsgraph, origin, normal, as_segments=True)
+    if components:
+        def distance(component):
+            return min(_distance_to_segment(seed, a, b)
+                       for a, b in zip(component[::2], component[1::2]))
+        index = min(range(len(components)), key=lambda i: distance(components[i]))
+        loop = list(components[index])
+        # Include nearby disconnected fragments within the scale of the stroke.
+        # Larger components farther away belong to other parts of the object.
+        reach = max(radius_hint * 2, epsilon * 100)
+        for i, component in enumerate(components):
+            if i != index and all((p - seed).length <= reach for p in component):
+                loop.extend(component)
+        if distance(components[index]) > reach:
+            loop = [seed]  # Do not relocate the ring onto an unrelated section.
+    else:
+        loop = [seed]
+    # The hit is a valid surface sample even if triangle stitching is ambiguous.
+    loop.append(seed)
+    axis_x = normal.orthogonal().normalized()
+    axis_y = normal.cross(axis_x).normalized()
+    outline = [Vector(((p - origin).dot(axis_x), (p - origin).dot(axis_y))) for p in loop]
+    center_2d = Vector(((min(p.x for p in outline) + max(p.x for p in outline)) * .5,
+                        (min(p.y for p in outline) + max(p.y for p in outline)) * .5))
+    center = origin + axis_x * center_2d.x + axis_y * center_2d.y
+    # The polygon's inradius must enclose the section even at low segment counts.
+    extent = max((p - center_2d).length for p in outline)
+    fitted_radius = extent / cos(pi / max(3, count))
+    if extent < radius_hint * .25:
+        fitted_radius = max(fitted_radius, radius_hint)
+    radius = fitted_radius + offset + epsilon * 4
+    if radius_from_center is not None:
+        radius = max(radius, radius_from_center(center))
+    if radius <= epsilon:
+        raise ValueError("Ring Radius Offset makes the ring too small")
+    return center, axis_x, axis_y, radius
+
+
+def fitted_section(target, depsgraph, origin, normal, seed, count, offset):
+    normal = normal.normalized()
+    loops, index, epsilon = nearest_section(target, depsgraph, origin, normal, seed)
     loop = loops[index]
     axis_x = (loop[1] - loop[0]).normalized()
     axis_y = normal.cross(axis_x).normalized()
