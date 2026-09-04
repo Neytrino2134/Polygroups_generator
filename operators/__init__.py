@@ -1,3 +1,5 @@
+from .seam_eraser import MESH_OT_polygroups_seam_eraser_resize
+from .seam_eraser import MESH_OT_polygroups_seam_eraser, MESH_OT_polygroups_edge_seam_eraser_click
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
 from .delete_and_fill import MESH_OT_polygroups_delete_and_fill
 from .remesh_progress import OBJECT_OT_polygroups_run_remesh, OBJECT_OT_polygroups_cancel_remesh
@@ -193,6 +195,9 @@ CLASSES = (
     MESH_OT_polygroups_connect_vertex_seam,
     MESH_OT_polygroups_connect_vertex_seam_click,
     MESH_OT_polygroups_seam_cursor_modifier,
+    MESH_OT_polygroups_seam_eraser,
+    MESH_OT_polygroups_seam_eraser_resize,
+    MESH_OT_polygroups_edge_seam_eraser_click,
     MESH_OT_polygroups_edge_seam_path,
     MESH_OT_polygroups_edge_seam_path_click,
     MESH_OT_polygroups_mark_selection_boundary_seam,

@@ -804,6 +804,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             icon="VERTEXSEL",
         )
         edge_tool.tool_id = "polygroups_generator.edge_seam_path_tool"
+        for key, tool_id in (("seam_eraser", "polygroups_generator.seam_eraser_tool"),
+                             ("edge_seam_eraser", "polygroups_generator.edge_seam_eraser_tool")):
+            button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), icon="X")
+            button.tool_id = tool_id
+
 
         layout.separator(type="LINE")
         layout.label(text=t(context, "seam_group_check"), icon="VIEWZOOM")

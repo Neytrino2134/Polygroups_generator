@@ -1,3 +1,4 @@
+from .operators.seam_eraser import AREA_TOOL_ID, PATH_TOOL_ID, draw_eraser_cursor, stop_erasers
 import bpy
 from bpy.types import WorkSpaceTool
 
@@ -565,11 +566,60 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
         layout.label(text=t(context, "connect_seam_hint_next"))
 
 
+class VIEW3D_WST_polygroups_seam_eraser(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "EDIT_MESH"
+    bl_idname = AREA_TOOL_ID
+    bl_label = "Seam Eraser"
+    bl_description = "Erase seams with Circle or Lasso; drag with the left mouse button"
+    bl_icon = "ops.generic.select_circle"
+    bl_cursor = "CROSSHAIR"
+    bl_widget = None
+    bl_keymap = (
+        ("mesh.polygroups_seam_eraser", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+        ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELUPMOUSE", "value": "PRESS"}, None),
+        ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELDOWNMOUSE", "value": "PRESS"}, None),
+    )
+    draw_cursor = staticmethod(draw_eraser_cursor)
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        props = tool.operator_properties("mesh.polygroups_seam_eraser")
+        layout.prop(props, "shape", expand=True)
+        if props.shape == "CIRCLE":
+            layout.prop(props, "radius")
+
+
+class VIEW3D_WST_polygroups_edge_seam_eraser(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "EDIT_MESH"
+    bl_idname = PATH_TOOL_ID
+    bl_label = "Edge Seam Eraser"
+    bl_description = "Ctrl-click vertices to erase seams along existing edge rows"
+    bl_icon = "ops.mesh.dupli_extrude_cursor"
+    bl_cursor = "NONE"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        ("mesh.polygroups_edge_seam_eraser_click", {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
+        ("mesh.polygroups_edge_seam_eraser_click", {"type": "RIGHTMOUSE", "value": "PRESS"}, {"properties": [("reset", True)]}),
+        ("mesh.polygroups_edge_seam_eraser_click", {"type": "ESC", "value": "PRESS"}, {"properties": [("reset", True)]}),
+        ("mesh.polygroups_edge_seam_eraser_click", {"type": "SPACE", "value": "PRESS"}, {"properties": [("reset", True)]}),
+    )
+    draw_cursor = staticmethod(draw_edge_seam_cursor)
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        layout.label(text=t(context, "seam_erase_path_hint"))
+
+
 def draw_seam_status(self, context):
     if context.mode != "EDIT_MESH":
         return
     tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
-    if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
+    if tool is not None and tool.idname in {AREA_TOOL_ID, PATH_TOOL_ID}:
+        self.layout.label(text=t(context, "seam_erase_drag_hint" if tool.idname == AREA_TOOL_ID else "seam_erase_path_hint"))
+    elif tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
         self.layout.label(text=t(context, "seam_ctrl_status"))
 
 
@@ -643,8 +693,11 @@ def register():
         group=False,
     )
 
+    bpy.utils.register_tool(VIEW3D_WST_polygroups_seam_eraser, after={EDGE_SEAM_TOOL_ID}, separator=True)
+    bpy.utils.register_tool(VIEW3D_WST_polygroups_edge_seam_eraser, after={AREA_TOOL_ID})
 
 def unregister():
+    stop_erasers()
     bpy.types.STATUSBAR_HT_header.remove(draw_seam_status)
     _cursor_ctrl.clear()
     unregister_hover_cache()
@@ -661,8 +714,10 @@ def unregister():
                 if bpy.context.mode != "EDIT_MESH":
                     continue
                 tool = window.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
-                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
+                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID, AREA_TOOL_ID, PATH_TOOL_ID}:
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_eraser)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_seam_eraser)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_connect_vertex_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)
