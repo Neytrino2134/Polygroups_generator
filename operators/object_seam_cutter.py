@@ -2392,14 +2392,20 @@ class OBJECT_OT_polygroups_draw_cutter_local_contour(_LocalDiskCutterInteraction
     use_event_as_start: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
 
     def _create_cutter(self, context, target, end_pos, settings):
-        from ..core.local_contour import fitted_section
+        from ..core.local_contour import fitted_section_with_retries
+        from bpy_extras import view3d_utils
 
         seed, normal, depsgraph = _screen_section_plane(
             context, self._start_region, self._start_rv3d, self._start_pos, end_pos, target,
         )
-        vertices, faces = fitted_section(
-            target, depsgraph, seed, normal.normalized(), seed,
+        start_world = view3d_utils.region_2d_to_location_3d(
+            self._start_region, self._start_rv3d, Vector(self._start_pos), seed)
+        end_world = view3d_utils.region_2d_to_location_3d(
+            self._start_region, self._start_rv3d, Vector(end_pos), seed)
+        vertices, faces = fitted_section_with_retries(
+            target, depsgraph, seed, normal,
             settings.cutter_contour_points, settings.cutter_contour_offset,
+            search_scale=(end_world - start_world).length,
         )
         mesh = bpy.data.meshes.new("Seam_Cutter_Local_Contour")
         mesh.from_pydata([tuple(v - seed) for v in vertices], [], faces)

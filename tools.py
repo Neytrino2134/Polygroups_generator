@@ -5,7 +5,7 @@ from .localization import t
 from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
 from .operators.connect_vertex_seam import draw_vertex_seam_cursor
 from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
-from .operators.edge_seam_path import draw_edge_seam_cursor
+from .operators.edge_seam_path import draw_edge_seam_cursor, register_hover_cache, unregister_hover_cache
 
 
 DRAW_CUTTER_TOOL_ID = "polygroups_generator.draw_cutter_plane_tool"
@@ -501,6 +501,7 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
 
 
 def register():
+    register_hover_cache()
     bpy.utils.register_class(VIEW3D_MT_polygroups_cutter_tool_type)
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_draw_cutter_plane,
@@ -566,6 +567,7 @@ def register():
 
 
 def unregister():
+    unregister_hover_cache()
     # Switching tools removes Blender's cursor callback before unregister_tool
     # removes the definition and keymap (it does not remove the callback itself).
     for window in bpy.context.window_manager.windows:

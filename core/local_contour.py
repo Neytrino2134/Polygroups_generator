@@ -2,8 +2,12 @@
 from collections import defaultdict
 from itertools import product
 from math import floor, cos, pi
-from mathutils import Vector
+from mathutils import Vector, Quaternion
 from mathutils.geometry import intersect_line_line_2d, tessellate_polygon
+
+
+class SectionNotFound(ValueError):
+    """A nearby plane may resolve an open or ambiguous surface intersection."""
 
 
 def _distance_to_segment(point, start, end):
@@ -189,14 +193,14 @@ def section_loops(target, depsgraph, origin, normal, include_open=False, as_segm
 def nearest_section(target, depsgraph, origin, normal, seed, include_open=False):
     loops, epsilon = section_loops(target, depsgraph, origin, normal, include_open=include_open)
     if not loops:
-        raise ValueError("No closed local section found; place the line across a closed part of the mesh")
+        raise SectionNotFound("No closed local section found; place the line across a closed part of the mesh")
     distances = [min(_distance_to_segment(seed, a, b) for a, b in _segments(loop)) for loop in loops]
     index = min(range(len(loops)), key=lambda i: distances[i])
     # World-space ray hits lose precision on meshes far from the world origin.
     # Keep this tolerance tied to numeric precision, not a fraction of the limb.
     tolerance = max(epsilon * 100, max(abs(value) for value in seed) * 1e-6)
     if distances[index] > tolerance:
-        raise ValueError("The indicated section is open or ambiguous; move the two points slightly")
+        raise SectionNotFound("The indicated section is open or ambiguous; move the two points slightly")
     return loops, index, epsilon
 
 
@@ -240,6 +244,50 @@ def fitted_ring_section(target, depsgraph, origin, normal, seed, count, offset,
     if radius <= epsilon:
         raise ValueError("Ring Radius Offset makes the ring too small")
     return center, axis_x, axis_y, radius
+
+
+def fitted_section_with_retries(target, depsgraph, seed, normal, count, offset, search_scale):
+    """Try the exact stroke first, then nine small, deterministic adjustments.
+
+    Every candidate still requires a closed loop at a nearby surface hit and
+    passes the usual clearance and neighboring-section checks. Geometry errors
+    caused by an excessive offset are not hidden by searching a different part.
+    """
+    normal = normal.normalized()
+    try:
+        return fitted_section(target, depsgraph, seed, normal, seed, count, offset)
+    except SectionNotFound:
+        pass
+    scale = max(float(search_scale), 1e-6)
+    axis_x = normal.orthogonal().normalized()
+    axis_y = normal.cross(axis_x).normalized()
+    # Ascending positional/angle adjustments; at most 0.5% of the stroke length
+    # in translation and 1.5 degrees in tilt.
+    candidates = [(normal, scale * .001), (normal, -scale * .001)]
+    for axis in (axis_x, axis_y):
+        for angle in (.75, -.75):
+            candidates.append((Quaternion(axis, angle * pi / 180) @ normal, 0.0))
+    candidates.extend([(normal, scale * .005), (normal, -scale * .005),
+                       (Quaternion((axis_x + axis_y).normalized(), 1.5 * pi / 180) @ normal, 0.0)])
+    evaluated = target.evaluated_get(depsgraph)
+    inverse = evaluated.matrix_world.inverted_safe()
+    for candidate_normal, shift in candidates:
+        candidate_seed = seed
+        if shift:
+            desired = seed + normal * shift
+            hit, location, _, _ = evaluated.closest_point_on_mesh(inverse @ desired)
+            if not hit:
+                continue
+            candidate_seed = evaluated.matrix_world @ location
+            # Never let nearest-surface projection jump to another distant part.
+            if (candidate_seed - seed).length > abs(shift) * 2 + scale * 1e-6:
+                continue
+        try:
+            return fitted_section(target, depsgraph, candidate_seed, candidate_normal,
+                                  candidate_seed, count, offset)
+        except SectionNotFound:
+            continue
+    raise SectionNotFound("No closed local contour found after 10 nearby attempts; move the line or repair the local opening")
 
 
 def fitted_section(target, depsgraph, origin, normal, seed, count, offset):

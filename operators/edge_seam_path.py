@@ -9,44 +9,114 @@ from .connect_vertex_seam import edit_meshes, selected_vertices, invoke_seam_cli
 TOOL_ID = "polygroups_generator.edge_seam_path_tool"
 
 
+_HOVER_TREES = {}
+
+
+def clear_hover_cache(*_args):
+    _HOVER_TREES.clear()
+
+
+def invalidate_hover_geometry(_scene, depsgraph):
+    if any(update.is_updated_geometry for update in depsgraph.updates):
+        clear_hover_cache()
+
+
+def register_hover_cache():
+    from bpy.app.handlers import persistent
+    for handlers, callback in (
+        (bpy.app.handlers.depsgraph_update_post, invalidate_hover_geometry),
+        (bpy.app.handlers.undo_post, clear_hover_cache),
+        (bpy.app.handlers.redo_post, clear_hover_cache),
+        (bpy.app.handlers.load_post, clear_hover_cache),
+    ):
+        if callback not in handlers:
+            handlers.append(persistent(callback))
+
+
+def unregister_hover_cache():
+    for handlers, callback in (
+        (bpy.app.handlers.depsgraph_update_post, invalidate_hover_geometry),
+        (bpy.app.handlers.undo_post, clear_hover_cache),
+        (bpy.app.handlers.redo_post, clear_hover_cache),
+        (bpy.app.handlers.load_post, clear_hover_cache),
+    ):
+        if callback in handlers:
+            handlers.remove(callback)
+    clear_hover_cache()
+
+
 def hovered_vertex(context, xy, radius):
-    """Read-only screen proximity, with occlusion unless X-Ray is enabled."""
-    from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
+    """Approximate hover using cached BVHs and a fixed number of local ray queries.
+
+    Never iterate an edit mesh here: this runs on every cursor redraw. Hover is
+    visual feedback only; clicks still use Blender's native vertex selection.
+    """
+    from bpy_extras.view3d_utils import (
+        region_2d_to_origin_3d, region_2d_to_vector_3d, location_3d_to_region_2d,
+    )
+    from mathutils import Vector
 
     region, view = context.region, context.region_data
-    mouse_x, mouse_y = xy[0] - region.x, xy[1] - region.y
-    candidates = []
-    for obj, bm in edit_meshes(context):
-        projection = view.perspective_matrix @ obj.matrix_world
-        for vert in bm.verts:
+    mouse = Vector((xy[0] - region.x, xy[1] - region.y))
+    from mathutils.bvhtree import BVHTree
+    surfaces = []
+    active_keys = set()
+    for obj, mesh in edit_meshes(context):
+        key = (obj.as_pointer(), obj.data.as_pointer())
+        active_keys.add(key)
+        signature = (len(mesh.verts), len(mesh.edges), len(mesh.faces))
+        cached = _HOVER_TREES.get(key)
+        if cached is None or cached[0] != signature:
+            mesh.faces.ensure_lookup_table()
+            cached = (signature, BVHTree.FromBMesh(mesh))
+            _HOVER_TREES[key] = cached
+        surfaces.append((obj, mesh, cached[1], obj.matrix_world.copy(), obj.matrix_world.inverted_safe()))
+    for key in list(_HOVER_TREES):
+        if key not in active_keys:
+            del _HOVER_TREES[key]
+    seen_faces = set()
+    best, best_distance = None, radius * radius
+    # Offset rays also catch a vertex when the cursor is just outside a silhouette.
+    for dx, dy in ((0, 0), (-radius, 0), (radius, 0), (0, -radius), (0, radius)):
+        point = mouse + Vector((dx, dy))
+        origin = region_2d_to_origin_3d(region, view, point)
+        direction = region_2d_to_vector_3d(region, view, point)
+        nearest = None
+        for obj, mesh, tree, matrix, inverse in surfaces:
+            local_direction = (inverse.to_3x3() @ direction).normalized()
+            location, _, face_index, _ = tree.ray_cast(inverse @ origin, local_direction)
+            if location is None:
+                continue
+            distance = (matrix @ location - origin).length_squared
+            if nearest is None or distance < nearest[0]:
+                nearest = (distance, obj, mesh, matrix, face_index)
+        if nearest is None:
+            continue
+        _, obj, mesh, matrix, face_index = nearest
+        key = (obj.as_pointer(), face_index)
+        if key in seen_faces:
+            continue
+        seen_faces.add(key)
+        mesh.faces.ensure_lookup_table()
+        if not 0 <= face_index < len(mesh.faces):
+            continue
+        face = mesh.faces[face_index]
+        if face.hide:
+            continue
+        # A giant n-gon must not reintroduce a full-mesh scan during drawing.
+        if len(face.verts) > 64:
+            continue
+        for vert in face.verts:
             if vert.hide:
                 continue
-            clip = projection @ vert.co.to_4d()
-            if clip.w <= 0 or abs(clip.z) > clip.w:
+            projected = location_3d_to_region_2d(region, view, matrix @ vert.co)
+            if projected is None:
                 continue
-            px = (clip.x / clip.w + 1) * region.width * 0.5
-            py = (clip.y / clip.w + 1) * region.height * 0.5
-            distance = (px - mouse_x) ** 2 + (py - mouse_y) ** 2
-            if distance <= radius * radius:
-                candidates.append((distance, obj, vert, (px, py)))
-    shading = context.space_data.shading
-    xray = (shading.show_xray_wireframe if shading.type == "WIREFRAME"
-            else shading.show_xray if shading.type == "SOLID" else False)
-    depsgraph = None
-    for _, obj, vert, point in sorted(candidates, key=lambda item: item[0]):
-        if not xray:
-            if depsgraph is None:
-                depsgraph = context.evaluated_depsgraph_get()
-            world = obj.matrix_world @ vert.co
-            origin = region_2d_to_origin_3d(region, view, point)
-            direction = region_2d_to_vector_3d(region, view, point)
-            tolerance = max(obj.dimensions.length * 1e-5, 1e-6)
-            distance = (world - origin).dot(direction) - tolerance
-            if distance > 0 and context.scene.ray_cast(
-                    depsgraph, origin, direction, distance=distance)[0]:
-                continue
-        return obj, vert
-    return None
+            distance = (projected - mouse).length_squared
+            if distance <= best_distance:
+                best_distance = distance
+                best = (obj.original, vert)
+    return best
 
 
 def draw_edge_seam_cursor(_context, _tool, xy):
