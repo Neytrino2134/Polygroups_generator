@@ -287,18 +287,18 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         preferences = get_preferences(context)
         layout = self.layout
         header = layout.row(align=True)
-        collapse_operator = header.operator(
-            "object.airetopo_set_all_section_visibility",
-            text=t(context, "hide_all_sections"),
-            icon="TRIA_RIGHT",
-        )
-        collapse_operator.visible = False
         expand_operator = header.operator(
             "object.airetopo_set_all_section_visibility",
             text=t(context, "show_all_sections"),
             icon="TRIA_DOWN",
         )
         expand_operator.visible = True
+        collapse_operator = header.operator(
+            "object.airetopo_set_all_section_visibility",
+            text=t(context, "hide_all_sections"),
+            icon="TRIA_RIGHT",
+        )
+        collapse_operator.visible = False
         header.separator()
         visibility = context.scene.airetopo_panel_visibility_settings
         header.prop(

@@ -269,10 +269,10 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     enable_section_number_hotkeys: bpy.props.BoolProperty(
-        name="Section Number Hotkeys", default=False, update=_update_hotkeys,
+        name="Section Number Hotkeys", default=True, update=_update_hotkeys,
     )
     section_digit_interval: bpy.props.FloatProperty(
-        name="Digit Interval", default=0.35, min=0.15, max=1.0, precision=2,
+        name="Digit Interval", default=0.15, min=0.15, max=1.0, precision=2,
         description="Seconds to wait for a second digit after 1", update=_update_hotkeys,
     )
     section_hotkey_scope: bpy.props.EnumProperty(

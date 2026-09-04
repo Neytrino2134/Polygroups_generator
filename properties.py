@@ -340,22 +340,22 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     single_section_mode: bpy.props.BoolProperty(
         name="Single Mode",
         description="Keep only one main toolkit section expanded at a time",
-        default=False,
+        default=True,
         update=_single_section_mode_update,
     )
     show_import_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_import_section"))
-    show_batch_import_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_batch_import_section"))
-    show_model_preparation_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_model_preparation_section"))
-    show_seam_preparation_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_seam_preparation_section"))
-    show_polygroups_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_polygroups_section"))
-    show_remesh_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_remesh_section"))
-    show_resculpting_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_resculpting_section"))
-    show_seam_finalization_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_seam_finalization_section"))
-    show_uv_preparation_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_uv_preparation_section"))
-    show_baking_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_baking_section"))
-    show_ai_generation_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_ai_generation_section"))
-    show_mesh_finalization_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_mesh_finalization_section"))
-    show_render_section: bpy.props.BoolProperty(default=True, update=_panel_visibility_update("show_render_section"))
+    show_batch_import_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_batch_import_section"))
+    show_model_preparation_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_model_preparation_section"))
+    show_seam_preparation_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_seam_preparation_section"))
+    show_polygroups_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_polygroups_section"))
+    show_remesh_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_remesh_section"))
+    show_resculpting_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_resculpting_section"))
+    show_seam_finalization_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_seam_finalization_section"))
+    show_uv_preparation_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_uv_preparation_section"))
+    show_baking_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_baking_section"))
+    show_ai_generation_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_ai_generation_section"))
+    show_mesh_finalization_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_mesh_finalization_section"))
+    show_render_section: bpy.props.BoolProperty(default=False, update=_panel_visibility_update("show_render_section"))
 
 
 class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):

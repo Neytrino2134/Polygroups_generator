@@ -35,6 +35,7 @@ def run():
     space = area.spaces.active
     space.show_region_ui = True
     preferences = context.preferences.addons[ROOT.name].preferences
+    preferences.enable_section_number_hotkeys = False
     settings = context.scene.airetopo_panel_visibility_settings
     for prop in sections:
         setattr(settings, prop, False)
