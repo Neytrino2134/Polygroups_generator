@@ -45,8 +45,11 @@ class MESH_OT_polygroups_mark_smart_angle_seams(bpy.types.Operator):
         created_uv = uv_layer is None
         if created_uv:
             uv_layer = bm.loops.layers.uv.new("Smart Angle Seam Preview")
-        snapshot = [(loop, loop[uv_layer].uv.copy(), loop[uv_layer].select,
-                     loop[uv_layer].select_edge, loop[uv_layer].pin_uv)
+        # Blender 5 stores UV selection/pin flags in separate generic layers;
+        # BMLoopUV itself only exposes coordinates. Smart Project does not need
+        # those flags here, so preserve the UV coordinates without touching the
+        # version-dependent selection layers.
+        snapshot = [(loop, loop[uv_layer].uv.copy())
                     for face in bm.faces for loop in face.loops]
 
         try:
@@ -78,13 +81,9 @@ class MESH_OT_polygroups_mark_smart_angle_seams(bpy.types.Operator):
             if created_uv:
                 bm.loops.layers.uv.remove(uv_layer)
             else:
-                for loop, uv, selected_uv, selected_edge, pinned in snapshot:
+                for loop, uv in snapshot:
                     if loop.is_valid:
-                        data = loop[uv_layer]
-                        data.uv = uv
-                        data.select = selected_uv
-                        data.select_edge = selected_edge
-                        data.pin_uv = pinned
+                        loop[uv_layer].uv = uv
             bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
 
         self.report({'INFO'}, f"Marked {marked} Smart UV island boundary seam edge(s)")
