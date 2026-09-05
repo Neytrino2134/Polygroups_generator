@@ -1155,46 +1155,66 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_generator_settings
-        column = layout.column(align=True)
-        draw_material_mode_buttons(column, context, settings)
-        column.prop(settings, "checker_scale", text=t(context, "checker_scale"))
-        column.separator()
-        column.operator(
-            "object.polygroups_checked_generate_polygroups",
-            text=t(context, "generate_polygroups"),
-            icon="MATERIAL",
-        )
-        column.operator(
-            "object.polygroups_apply_material_mode",
-            text=t(context, "apply_material_mode"),
-            icon="NODE_MATERIAL",
-        )
-        column.operator(
-            "object.polygroups_apply_checker_material",
-            text=t(context, "apply_checker_material"),
-            icon="TEXTURE",
-        )
-        column.operator(
-            "mesh.polygroups_mark_material_boundaries_seam",
-            text=t(context, "generate_seams_materials"),
-            icon="EDGE_SEAM",
-        )
-        column.operator(
-            "object.polygroups_unwrap_angle_based",
-            text=t(context, "unwrap_angle_based"),
-            icon="UV",
-        )
-        column.separator()
-        column.operator(
-            "object.face_sets_to_materials",
-            text=t(context, "face_sets_to_materials"),
-            icon="SHADING_TEXTURE",
-        )
-        column.operator(
-            "object.clear_polygroups_materials",
-            text=t(context, "clear_polygroups_materials"),
-            icon="TRASH",
-        )
+        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
+        if content is not None:
+            content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
+            content.prop(settings, "small_island_protect_sharp", text=t(context, "small_islands_sharp"))
+            content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
+            row = content.row(align=True)
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
+            if settings.small_island_status:
+                content.label(text=settings.small_island_status)
+
+        content = draw_collapsible_box(layout, settings, "show_group_generation", t(context, "generate_polygroups"), "MATERIAL")
+        if content is not None:
+            column = content.column(align=True)
+            draw_material_mode_buttons(column, context, settings)
+            column.prop(settings, "checker_scale", text=t(context, "checker_scale"))
+            column.separator()
+            column.operator(
+                "object.polygroups_checked_generate_polygroups",
+                text=t(context, "generate_polygroups"),
+                icon="MATERIAL",
+            )
+            column.operator(
+                "object.polygroups_apply_material_mode",
+                text=t(context, "apply_material_mode"),
+                icon="NODE_MATERIAL",
+            )
+            column.operator(
+                "object.polygroups_apply_checker_material",
+                text=t(context, "apply_checker_material"),
+                icon="TEXTURE",
+            )
+
+        content = draw_collapsible_box(layout, settings, "show_group_uv", t(context, "small_islands_uv"), "UV")
+        if content is not None:
+            column = content.column(align=True)
+            column.operator(
+                "mesh.polygroups_mark_material_boundaries_seam",
+                text=t(context, "generate_seams_materials"),
+                icon="EDGE_SEAM",
+            )
+            column.operator(
+                "object.polygroups_unwrap_angle_based",
+                text=t(context, "unwrap_angle_based"),
+                icon="UV",
+            )
+
+        content = draw_collapsible_box(layout, settings, "show_group_materials", t(context, "small_islands_manage"), "MATERIAL")
+        if content is not None:
+            column = content.column(align=True)
+            column.operator(
+                "object.face_sets_to_materials",
+                text=t(context, "face_sets_to_materials"),
+                icon="SHADING_TEXTURE",
+            )
+            column.operator(
+                "object.clear_polygroups_materials",
+                text=t(context, "clear_polygroups_materials"),
+                icon="TRASH",
+            )
 
 
 class VIEW3D_PT_polygroups_baking(bpy.types.Panel):

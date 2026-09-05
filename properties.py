@@ -708,6 +708,15 @@ class POLYGROUPS_PG_quick_knife_seam_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
+    show_small_islands: bpy.props.BoolProperty(name="Small Seam Islands", default=True)
+    show_group_generation: bpy.props.BoolProperty(name="Generate PolyGroups", default=True)
+    show_group_uv: bpy.props.BoolProperty(name="Seams and UV", default=True)
+    show_group_materials: bpy.props.BoolProperty(name="Material Management", default=True)
+    small_island_threshold: bpy.props.FloatProperty(name="Area Threshold (%)", default=3.0, min=1.0, max=49.0,
+        description="Percentage of the largest seam island area in each connected mesh component")
+    small_island_protect_sharp: bpy.props.BoolProperty(name="Protect Sharp Edges", default=True)
+    small_island_protect_materials: bpy.props.BoolProperty(name="Protect Material Boundaries", default=False)
+    small_island_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     material_mode: bpy.props.EnumProperty(
         name="Material Mode",
         description="How generated PolyGroup materials use the source material textures",

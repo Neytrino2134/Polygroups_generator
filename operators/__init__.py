@@ -121,7 +121,10 @@ from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
 from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
+from .small_islands import MESH_OT_polygroups_merge_small_islands
+
 CLASSES = (
+    MESH_OT_polygroups_merge_small_islands,
     OBJECT_OT_polygroups_run_remesh,
     OBJECT_OT_polygroups_cancel_remesh,
     OBJECT_OT_polygroups_apply_weld,
