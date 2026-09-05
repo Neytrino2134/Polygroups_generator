@@ -126,7 +126,11 @@ from .smart_angle_seams import MESH_OT_polygroups_mark_smart_angle_seams
 
 from .dev_restart import WM_OT_airetopo_dev_restart, WM_OT_airetopo_dev_cleanup
 
+from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
+
 CLASSES = (
+    WM_OT_airetopo_detach_group,
+    WM_OT_airetopo_group_window_control,
     WM_OT_airetopo_dev_restart,
     WM_OT_airetopo_dev_cleanup,
     MESH_OT_polygroups_merge_small_islands,
@@ -277,6 +281,8 @@ def register():
 
 
 def unregister():
+    from .detached_groups import cleanup_windows
+    cleanup_windows()
     import bpy
     from .import_queue import stop_import_queue
     from .remesh_progress import stop_remesh

@@ -176,6 +176,21 @@ def run():
     settings.single_section_mode = False
     log("Single Mode passed")
 
+    press("NUMPAD_PLUS")
+    release("NUMPAD_PLUS")
+    yield 0.2
+    assert all(getattr(settings, name) for name in sections)
+    assert not settings.single_section_mode
+    press("NUMPAD_MINUS")
+    release("NUMPAD_MINUS")
+    yield 0.2
+    assert not any(getattr(settings, name) for name in sections)
+    press("NUMPAD_ASTERIX")
+    release("NUMPAD_ASTERIX")
+    yield 0.2
+    assert settings.single_section_mode
+    log("Numpad section controls passed")
+
     bpy.types.Scene.test_section_text = bpy.props.StringProperty(default="")
     bpy.types.Scene.test_section_number = bpy.props.FloatProperty(default=0.0)
     class TestInput(bpy.types.Operator):

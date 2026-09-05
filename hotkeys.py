@@ -371,6 +371,25 @@ def register_keymaps():
                 )
                 item.properties.digit = digit
                 KEYMAP_ITEMS.append((number_map, item))
+            for key, visible in (("NUMPAD_PLUS", True), ("NUMPAD_MINUS", False)):
+                item = number_map.keymap_items.new(
+                    "object.airetopo_set_all_section_visibility",
+                    key,
+                    "PRESS",
+                    head=True,
+                    repeat=False,
+                )
+                item.properties.visible = visible
+                KEYMAP_ITEMS.append((number_map, item))
+            item = number_map.keymap_items.new(
+                "wm.context_toggle",
+                "NUMPAD_ASTERIX",
+                "PRESS",
+                head=True,
+                repeat=False,
+            )
+            item.properties.data_path = "scene.airetopo_panel_visibility_settings.single_section_mode"
+            KEYMAP_ITEMS.append((number_map, item))
 
     if _preference_value(preferences, "enable_cutter_tweak_hotkey", True):
         item = keymap.keymap_items.new(

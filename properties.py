@@ -337,6 +337,42 @@ class POLYGROUPS_PG_remesh_status(bpy.types.PropertyGroup):
 
 
 class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
+    topic_import_0: bpy.props.BoolProperty(default=False)
+    topic_import_1: bpy.props.BoolProperty(default=False)
+    topic_import_2: bpy.props.BoolProperty(default=False)
+    topic_batch_0: bpy.props.BoolProperty(default=False)
+    topic_batch_1: bpy.props.BoolProperty(default=False)
+    topic_batch_2: bpy.props.BoolProperty(default=False)
+    topic_batch_3: bpy.props.BoolProperty(default=False)
+    topic_batch_4: bpy.props.BoolProperty(default=False)
+    topic_prepare_0: bpy.props.BoolProperty(default=False)
+    topic_prepare_1: bpy.props.BoolProperty(default=False)
+    topic_prepare_2: bpy.props.BoolProperty(default=False)
+    topic_prepare_3: bpy.props.BoolProperty(default=False)
+    topic_bake_0: bpy.props.BoolProperty(default=False)
+    topic_bake_1: bpy.props.BoolProperty(default=False)
+    topic_bake_2: bpy.props.BoolProperty(default=False)
+    topic_bake_3: bpy.props.BoolProperty(default=False)
+    topic_bake_4: bpy.props.BoolProperty(default=False)
+    topic_uv_0: bpy.props.BoolProperty(default=False)
+    topic_uv_1: bpy.props.BoolProperty(default=False)
+    topic_sculpt_0: bpy.props.BoolProperty(default=False)
+    topic_sculpt_1: bpy.props.BoolProperty(default=False)
+    topic_seam_final_0: bpy.props.BoolProperty(default=False)
+    topic_seam_final_1: bpy.props.BoolProperty(default=False)
+    topic_seam_final_2: bpy.props.BoolProperty(default=False)
+    topic_seam_final_3: bpy.props.BoolProperty(default=False)
+    topic_seam_final_4: bpy.props.BoolProperty(default=False)
+    topic_render_0: bpy.props.BoolProperty(default=False)
+    topic_render_1: bpy.props.BoolProperty(default=False)
+    topic_render_2: bpy.props.BoolProperty(default=False)
+    topic_render_3: bpy.props.BoolProperty(default=False)
+    topic_render_4: bpy.props.BoolProperty(default=False)
+    topic_remesh_0: bpy.props.BoolProperty(default=False)
+    topic_remesh_1: bpy.props.BoolProperty(default=False)
+    topic_export_0: bpy.props.BoolProperty(default=False)
+    topic_export_1: bpy.props.BoolProperty(default=False)
+    topic_export_2: bpy.props.BoolProperty(default=False)
     single_section_mode: bpy.props.BoolProperty(
         name="Single Mode",
         description="Keep only one main toolkit section expanded at a time",
@@ -411,12 +447,12 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
         name="Prefer Select Linked by Seam", default=True,
         description="Use seam boundaries for L and Ctrl+L in mesh Edit Mode; disable to use normal Blender shortcuts",
     )
-    show_selection_group: bpy.props.BoolProperty(name="Selection", default=True)
-    show_mesh_edit_group: bpy.props.BoolProperty(name="Mesh Editing", default=True)
-    show_mark_clear_group: bpy.props.BoolProperty(name="Mark and Clear Seams", default=True)
-    show_mark_clear_tools_group: bpy.props.BoolProperty(name="Mark and Clear Seam Tools", default=True)
-    show_check_group: bpy.props.BoolProperty(name="Seam Checks", default=True)
-    show_cut_group: bpy.props.BoolProperty(name="Cutting", default=True)
+    show_selection_group: bpy.props.BoolProperty(name="Selection", default=False)
+    show_mesh_edit_group: bpy.props.BoolProperty(name="Mesh Editing", default=False)
+    show_mark_clear_group: bpy.props.BoolProperty(name="Mark and Clear Seams", default=False)
+    show_mark_clear_tools_group: bpy.props.BoolProperty(name="Mark and Clear Seam Tools", default=False)
+    show_check_group: bpy.props.BoolProperty(name="Seam Checks", default=False)
+    show_cut_group: bpy.props.BoolProperty(name="Cutting", default=False)
     selection_smooth_iterations: bpy.props.IntProperty(
         name="Smooth Iterations",
         description="Number of smoothing passes for the selected face region",
@@ -727,10 +763,10 @@ class POLYGROUPS_PG_quick_knife_seam_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
-    show_small_islands: bpy.props.BoolProperty(name="Small Seam Islands", default=True)
-    show_group_generation: bpy.props.BoolProperty(name="Generate PolyGroups", default=True)
-    show_group_uv: bpy.props.BoolProperty(name="Seams and UV", default=True)
-    show_group_materials: bpy.props.BoolProperty(name="Material Management", default=True)
+    show_small_islands: bpy.props.BoolProperty(name="Small Seam Islands", default=False)
+    show_group_generation: bpy.props.BoolProperty(name="Generate PolyGroups", default=False)
+    show_group_uv: bpy.props.BoolProperty(name="Seams and UV", default=False)
+    show_group_materials: bpy.props.BoolProperty(name="Material Management", default=False)
     small_island_threshold: bpy.props.FloatProperty(name="Area Threshold (%)", default=3.0, min=1.0, max=49.0,
         description="Percentage of the largest seam island area in each connected mesh component")
     small_island_protect_sharp: bpy.props.BoolProperty(name="Protect Sharp Edges", default=True)
@@ -781,7 +817,7 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
-    show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=True)
+    show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=False)
     unity_asset_name: bpy.props.StringProperty(name="Asset Name", default="Asset")
     unity_asset_index: bpy.props.StringProperty(name="Index", default="01")
     unity_auto_increment_index: bpy.props.BoolProperty(name="Auto Increment Index", default=True)
@@ -795,11 +831,11 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     )
     show_smart_decimate_settings: bpy.props.BoolProperty(
         name="Decimate",
-        default=True,
+        default=False,
     )
     show_mesh_check_settings: bpy.props.BoolProperty(
         name="Check Mesh",
-        default=True,
+        default=False,
     )
     show_all_mesh_fix_operators: bpy.props.BoolProperty(
         name="Show All Fix Operators",
@@ -808,11 +844,11 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     )
     show_fab_rename_settings: bpy.props.BoolProperty(
         name="FAB Rename",
-        default=True,
+        default=False,
     )
     show_mesh_export_settings: bpy.props.BoolProperty(
         name="Export",
-        default=True,
+        default=False,
     )
     smart_decimate_ratio: bpy.props.FloatProperty(
         name="Ratio",
@@ -1239,7 +1275,7 @@ class POLYGROUPS_PG_resculpting_settings(bpy.types.PropertyGroup):
 class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
     show_prompt_library_settings: bpy.props.BoolProperty(
         name="Prompt Library",
-        default=True,
+        default=False,
     )
     prompt_library_collection: bpy.props.EnumProperty(
         name="Collection",
@@ -1257,7 +1293,7 @@ class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):
     )
     show_openai_image_settings: bpy.props.BoolProperty(
         name="OpenAI Image",
-        default=True,
+        default=False,
     )
     show_google_image_settings: bpy.props.BoolProperty(
         name="Google Image",

@@ -71,19 +71,44 @@ def uvpackmaster_status(context):
     return installed, enabled or loaded, has_settings and has_operator
 
 
+_DRAWING_SECTION = None
+_DETACHED_TARGET = None
+_DETACHED_LAYOUT = None
+
+
+class _NullLayout:
+    """Traverse other groups without emitting controls into a detached panel."""
+    def __getattr__(self, name):
+        if name == "operator":
+            return lambda *args, **kwargs: SimpleNamespace()
+        return lambda *args, **kwargs: self
+
+
+def draw_topic(layout, context, key, label, icon):
+    return draw_collapsible_box(layout, context.scene.airetopo_panel_visibility_settings,
+                                 "topic_" + key, t(context, label), icon)
+
+
 def draw_collapsible_box(layout, settings, property_name, label, icon):
+    key = settings.path_from_id() + "." + property_name
+    if _DETACHED_TARGET is not None:
+        if key == _DETACHED_TARGET:
+            return _DETACHED_LAYOUT.column(align=True)
+        if isinstance(layout, _NullLayout):
+            return _NullLayout()
     box = layout.box()
     header = box.row(align=True)
-    header.alignment = "LEFT"
+    controls = header.row(align=True)
+    controls.alignment = "LEFT"
     is_open = getattr(settings, property_name)
-    header.prop(
+    controls.prop(
         settings,
         property_name,
         text="",
         icon="TRIA_DOWN" if is_open else "TRIA_RIGHT",
         emboss=False,
     )
-    title = header.row(align=True)
+    title = controls.row(align=True)
     title.alignment = "LEFT"
     title.prop(
         settings,
@@ -137,6 +162,8 @@ def update_panel_labels(context=None):
 
 
 def section_content_visible(panel, context):
+    if _DETACHED_TARGET is not None:
+        return True
     settings = getattr(context.scene, "airetopo_panel_visibility_settings", None)
     if settings is None:
         return True
@@ -146,6 +173,9 @@ def section_content_visible(panel, context):
 
 
 def draw_section_panel_content(panel_class, context, layout, visibility_property):
+    global _DRAWING_SECTION
+    previous_section = _DRAWING_SECTION
+    _DRAWING_SECTION = panel_class
     panel = SimpleNamespace(
         layout=layout,
         visibility_property=visibility_property,
@@ -163,6 +193,20 @@ def draw_section_panel_content(panel_class, context, layout, visibility_property
     except Exception as error:
         print(f"AI Retopo Toolkit: failed to draw {panel_class.__name__}: {error}")
         layout.label(text="Section draw error. Check console.", icon="ERROR")
+    finally:
+        _DRAWING_SECTION = previous_section
+
+
+def draw_detached_group(context, layout, section, group):
+    global _DETACHED_TARGET, _DETACHED_LAYOUT
+    panel_class = next((cls for cls in SECTION_PANEL_CLASSES if cls.__name__ == section), None)
+    if panel_class is None:
+        return
+    _DETACHED_TARGET, _DETACHED_LAYOUT = group, layout
+    try:
+        draw_section_panel_content(panel_class, context, _NullLayout(), "")
+    finally:
+        _DETACHED_TARGET, _DETACHED_LAYOUT = None, None
 
 
 def draw_material_mode_buttons(layout, context, settings):
@@ -306,7 +350,8 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         header.prop(
             visibility,
             "single_section_mode",
-            text=t(context, "single_section_mode"),
+            text="",
+            icon="SOLO_ON" if visibility.single_section_mode else "SOLO_OFF",
             toggle=True,
         )
         header.separator()
@@ -407,71 +452,75 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
         layout = self.layout.box()
         settings = context.scene.polygroups_model_preparation_settings
 
-        layout.label(text=t(context, "model_preparation_group_prepare"), icon="AUTOMERGE_ON")
-        column = layout.column(align=True)
-        column.operator(
-            "object.polygroups_rename_and_apply_weld",
-            text=t(context, "rename_apply_weld"),
-            icon="AUTOMERGE_ON",
-        )
-        column.separator()
-        column.operator(
-            "object.polygroups_rename_objects",
-            text=t(context, "rename_objects"),
-            icon="OUTLINER_COLLECTION",
-        )
-        column.prop(settings, "weld_distance", text=t(context, "weld_distance"))
-        column.operator(
-            "object.polygroups_apply_weld",
-            text=t(context, "apply_weld"),
-            icon="AUTOMERGE_ON",
-        )
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "model_preparation_group_mesh_edit"), icon="EDITMODE_HLT")
-        layout.operator(
-            "mesh.polygroups_delete_and_fill",
-            text=t(context, "delete_and_fill"),
-            icon="MESH_DATA",
-        )
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "model_preparation_group_manage"), icon="OUTLINER_COLLECTION")
-        column = layout.column(align=True)
-        for prefix, label in (("Highpoly_", "Highpoly"), ("Retopo_", "Retopo")):
+        content = draw_topic(layout, context, "prepare_0", t(context, "model_preparation_group_prepare"), "AUTOMERGE_ON")
+        if content is not None:
+            column = content.column(align=True)
+            column.operator(
+                "object.polygroups_rename_and_apply_weld",
+                text=t(context, "rename_apply_weld"),
+                icon="AUTOMERGE_ON",
+            )
+            column.separator()
+            column.operator(
+                "object.polygroups_rename_objects",
+                text=t(context, "rename_objects"),
+                icon="OUTLINER_COLLECTION",
+            )
+            column.prop(settings, "weld_distance", text=t(context, "weld_distance"))
+            column.operator(
+                "object.polygroups_apply_weld",
+                text=t(context, "apply_weld"),
+                icon="AUTOMERGE_ON",
+            )
+
+        content = draw_topic(layout, context, "prepare_1", t(context, "model_preparation_group_mesh_edit"), "EDITMODE_HLT")
+        if content is not None:
+            content.operator(
+                "mesh.polygroups_delete_and_fill",
+                text=t(context, "delete_and_fill"),
+                icon="MESH_DATA",
+            )
+
+        content = draw_topic(layout, context, "prepare_2", t(context, "model_preparation_group_manage"), "OUTLINER_COLLECTION")
+        if content is not None:
+            column = content.column(align=True)
+            for prefix, label in (("Highpoly_", "Highpoly"), ("Retopo_", "Retopo")):
+                row = column.row(align=True)
+                for hidden, key, icon in ((True, "hide_all_named", "RESTRICT_VIEW_ON"),
+                                          (False, "show_all_named", "RESTRICT_VIEW_OFF")):
+                    operator = row.operator("object.polygroups_object_visibility",
+                                            text=t(context, key, value=label), icon=icon)
+                    operator.prefix = prefix
+                    operator.hidden = hidden
+            column.operator("object.polygroups_generated_collection",
+                            text=t(context, "isolate_generated_collections"),
+                            icon="OUTLINER_COLLECTION").action = "ISOLATE"
             row = column.row(align=True)
-            for hidden, key, icon in ((True, "hide_all_named", "RESTRICT_VIEW_ON"),
-                                      (False, "show_all_named", "RESTRICT_VIEW_OFF")):
-                operator = row.operator("object.polygroups_object_visibility",
-                                        text=t(context, key, value=label), icon=icon)
-                operator.prefix = prefix
-                operator.hidden = hidden
-        column.operator("object.polygroups_generated_collection",
-                        text=t(context, "isolate_generated_collections"),
-                        icon="OUTLINER_COLLECTION").action = "ISOLATE"
-        row = column.row(align=True)
-        row.operator("object.polygroups_generated_collection",
-                     text=t(context, "previous_generated_collection"), icon="TRIA_LEFT").action = "PREVIOUS"
-        row.operator("object.polygroups_generated_collection",
-                     text=t(context, "next_generated_collection"), icon="TRIA_RIGHT").action = "NEXT"
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "model_preparation_group_seams"), icon="EDGE_SEAM")
-        column = layout.column(align=True)
-        column.operator(
-            "mesh.polygroups_mark_material_boundaries_seam",
-            text=t(context, "generate_seams_materials"),
-            icon="EDGE_SEAM",
-        )
-        column.prop(context.scene.polygroups_generator_settings, "checker_scale",
-                    text=t(context, "checker_scale"))
-        column.operator(
-            "object.polygroups_apply_checker_material",
-            text=t(context, "apply_checker_material"),
-            icon="TEXTURE",
-        )
-        column.operator(
-            "object.polygroups_unwrap_angle_based",
-            text=t(context, "unwrap_angle_based"),
-            icon="UV",
-        )
+            row.operator("object.polygroups_generated_collection",
+                         text=t(context, "previous_generated_collection"), icon="TRIA_LEFT").action = "PREVIOUS"
+            row.operator("object.polygroups_generated_collection",
+                         text=t(context, "next_generated_collection"), icon="TRIA_RIGHT").action = "NEXT"
+
+        content = draw_topic(layout, context, "prepare_3", t(context, "model_preparation_group_seams"), "EDGE_SEAM")
+        if content is not None:
+            column = content.column(align=True)
+            column.operator(
+                "mesh.polygroups_mark_material_boundaries_seam",
+                text=t(context, "generate_seams_materials"),
+                icon="EDGE_SEAM",
+            )
+            column.prop(context.scene.polygroups_generator_settings, "checker_scale",
+                        text=t(context, "checker_scale"))
+            column.operator(
+                "object.polygroups_apply_checker_material",
+                text=t(context, "apply_checker_material"),
+                icon="TEXTURE",
+            )
+            column.operator(
+                "object.polygroups_unwrap_angle_based",
+                text=t(context, "unwrap_angle_based"),
+                icon="UV",
+            )
 
 
 def draw_import_remesh_options(layout, context, settings, prefix):
@@ -548,31 +597,33 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
         layout = self.layout
         settings = context.scene.polygroups_model_preparation_settings
 
-        layout.label(text=t(context, "import_group_source"), icon="FILE_FOLDER")
-        files_box = layout.column(align=True)
-        files_box.prop(settings, "batch_import_format", text=t(context, "format"))
-        files_row = files_box.row(align=True)
-        files_row.enabled = not settings.batch_is_running
-        file_operator = files_row.operator(
-            "object.polygroups_batch_import",
-            text=t(context, "import_files"),
-            icon="FILE_FOLDER",
-        )
-        file_operator.use_file_selection = True
+        content = draw_topic(layout, context, "import_0", t(context, "import_group_source"), "FILE_FOLDER")
+        if content is not None:
+            files_box = content.column(align=True)
+            files_box.prop(settings, "batch_import_format", text=t(context, "format"))
+            files_row = files_box.row(align=True)
+            files_row.enabled = not settings.batch_is_running
+            file_operator = files_row.operator(
+                "object.polygroups_batch_import",
+                text=t(context, "import_files"),
+                icon="FILE_FOLDER",
+            )
+            file_operator.use_file_selection = True
 
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "import_group_processing"), icon="MODIFIER")
-        files_box = layout.column(align=True)
-        files_box.prop(
-            settings,
-            "file_import_auto_rename_objects",
-            text=t(context, "auto_rename_objects"),
-        )
-        files_box.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
-        draw_import_remesh_options(files_box, context, settings, "file_import")
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "import_group_progress"), icon="INFO")
-        draw_import_progress(layout, context, settings)
+        content = draw_topic(layout, context, "import_1", t(context, "import_group_processing"), "MODIFIER")
+        if content is not None:
+            files_box = content.column(align=True)
+            files_box.prop(
+                settings,
+                "file_import_auto_rename_objects",
+                text=t(context, "auto_rename_objects"),
+            )
+            files_box.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
+            draw_import_remesh_options(files_box, context, settings, "file_import")
+
+        content = draw_topic(layout, context, "import_2", t(context, "import_group_progress"), "INFO")
+        if content is not None:
+            draw_import_progress(content, context, settings)
 
 
 class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
@@ -594,61 +645,64 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         layout = self.layout
         settings = context.scene.polygroups_model_preparation_settings
 
-        layout.label(text=t(context, "import_group_source"), icon="FILE_FOLDER")
-        folder_row = layout.row(align=True)
-        folder_row.label(text=t(context, "folder"))
-        folder_row.operator("object.polygroups_select_import_folder", text="", icon="FILE_FOLDER")
+        content = draw_topic(layout, context, "batch_0", t(context, "import_group_source"), "FILE_FOLDER")
+        if content is not None:
+            folder_row = content.row(align=True)
+            folder_row.label(text=t(context, "folder"))
+            folder_row.operator("object.polygroups_select_import_folder", text="", icon="FILE_FOLDER")
 
-        folder_path = settings.batch_import_directory or t(context, "no_folder_selected")
-        layout.label(text=folder_path, icon="FILE_FOLDER")
-        layout.prop(settings, "batch_import_format", text=t(context, "format"))
-        subfolders_row = layout.row()
-        subfolders_row.enabled = not settings.batch_is_running
-        subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
-        scan_row = layout.row(align=True)
-        scan_row.enabled = not settings.batch_is_running
-        scan_row.operator(
-            "object.polygroups_scan_import_folder",
-            text=t(context, "scan_folder"),
-            icon="VIEWZOOM",
-        )
+            folder_path = settings.batch_import_directory or t(context, "no_folder_selected")
+            content.label(text=folder_path, icon="FILE_FOLDER")
+            content.prop(settings, "batch_import_format", text=t(context, "format"))
+            subfolders_row = content.row()
+            subfolders_row.enabled = not settings.batch_is_running
+            subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
+            scan_row = content.row(align=True)
+            scan_row.enabled = not settings.batch_is_running
+            scan_row.operator(
+                "object.polygroups_scan_import_folder",
+                text=t(context, "scan_folder"),
+                icon="VIEWZOOM",
+            )
 
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "import_group_processing"), icon="MODIFIER")
-        layout.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
-        layout.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
-        draw_import_remesh_options(layout, context, settings, "batch")
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "arrange_objects"), icon="SNAP_EDGE")
-        arrange_box = layout.column(align=True)
-        arrange_box.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
-        arrange_box.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing"))
-        arrange_box.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
-        rows_row = arrange_box.row(align=True)
-        rows_row.enabled = settings.batch_arrange_mode == "GRID"
-        rows_row.prop(settings, "batch_arrange_rows", text=t(context, "arrange_rows"))
-        arrange_row = arrange_box.row(align=True)
-        arrange_row.enabled = not settings.batch_is_running
-        arrange_row.operator(
-            "object.polygroups_arrange_batch_objects",
-            text=t(context, "arrange_selected"),
-            icon="ALIGN_CENTER",
-        )
+        content = draw_topic(layout, context, "batch_1", t(context, "import_group_processing"), "MODIFIER")
+        if content is not None:
+            content.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
+            content.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
+            draw_import_remesh_options(content, context, settings, "batch")
 
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "import_group_run"), icon="PLAY")
-        operator_row = layout.row(align=True)
-        operator_row.enabled = not settings.batch_is_running
-        operator_row.operator_context = "EXEC_DEFAULT"
-        start_import = operator_row.operator(
-            "object.polygroups_batch_import",
-            text=t(context, "import_folder"),
-            icon="PLAY",
-        )
-        start_import.use_file_selection = False
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "import_group_progress"), icon="INFO")
-        draw_import_progress(layout, context, settings)
+        content = draw_topic(layout, context, "batch_2", t(context, "arrange_objects"), "SNAP_EDGE")
+        if content is not None:
+            arrange_box = content.column(align=True)
+            arrange_box.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
+            arrange_box.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing"))
+            arrange_box.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
+            rows_row = arrange_box.row(align=True)
+            rows_row.enabled = settings.batch_arrange_mode == "GRID"
+            rows_row.prop(settings, "batch_arrange_rows", text=t(context, "arrange_rows"))
+            arrange_row = arrange_box.row(align=True)
+            arrange_row.enabled = not settings.batch_is_running
+            arrange_row.operator(
+                "object.polygroups_arrange_batch_objects",
+                text=t(context, "arrange_selected"),
+                icon="ALIGN_CENTER",
+            )
+
+        content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
+        if content is not None:
+            operator_row = content.row(align=True)
+            operator_row.enabled = not settings.batch_is_running
+            operator_row.operator_context = "EXEC_DEFAULT"
+            start_import = operator_row.operator(
+                "object.polygroups_batch_import",
+                text=t(context, "import_folder"),
+                icon="PLAY",
+            )
+            start_import.use_file_selection = False
+
+        content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
+        if content is not None:
+            draw_import_progress(content, context, settings)
 
 
 class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
@@ -668,6 +722,14 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
             return
 
         layout = self.layout.box()
+        content = draw_topic(layout, context, "remesh_0", 'Remesh Controls', "MOD_REMESH")
+        if content is not None:
+            self.draw_remesh_controls(context, content)
+        content = draw_topic(layout, context, "remesh_1", 'Remesh Progress', "INFO")
+        if content is not None:
+            self.draw_remesh_progress(context, content)
+
+    def draw_remesh_controls(self, context, layout):
         installed, enabled, available = quad_remesher_status(context)
 
         if not installed:
@@ -682,54 +744,55 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
 
         qremesher = context.scene.qremesher
 
-        section_layout = layout
-        section_layout.label(text=t(context, "remesh_group_controls"), icon="MOD_REMESH")
         status = context.scene.polygroups_remesh_status
-        layout = layout.column()
-        layout.enabled = not status.is_running and not context.scene.polygroups_model_preparation_settings.batch_is_running
-        layout.operator(
-            "object.polygroups_checked_quad_remesh",
-            text=t(context, "remesh_it"),
-            icon="MOD_REMESH",
-        )
-
-        preset_row = layout.row(align=True)
-        remesh_row = layout.row(align=True)
-        for label, quad_count in get_remesh_preset_counts(context):
-            preset = preset_row.operator(
-                "object.polygroups_set_quad_count_preset", text=label,
+        content = layout
+        if content is not None:
+            content = content.column()
+            content.enabled = not status.is_running and not context.scene.polygroups_model_preparation_settings.batch_is_running
+            content.operator(
+                "object.polygroups_checked_quad_remesh",
+                text=t(context, "remesh_it"),
+                icon="MOD_REMESH",
             )
-            preset.quad_count = quad_count
-            remesh = remesh_row.operator(
-                "object.polygroups_checked_quad_remesh", text=f"Remesh {label}",
-            )
-            remesh.quad_count = quad_count
 
-        layout.prop(qremesher, "target_count", text=t(context, "quad_count"))
-        layout.prop(qremesher, "use_materials", text=t(context, "use_materials"))
+            preset_row = content.row(align=True)
+            remesh_row = content.row(align=True)
+            for label, quad_count in get_remesh_preset_counts(context):
+                preset = preset_row.operator(
+                    "object.polygroups_set_quad_count_preset", text=label,
+                )
+                preset.quad_count = quad_count
+                remesh = remesh_row.operator(
+                    "object.polygroups_checked_quad_remesh", text=f"Remesh {label}",
+                )
+                remesh.quad_count = quad_count
 
-        symmetry_row = layout.row(align=True)
-        symmetry_row.label(text=t(context, "symmetry"))
-        symmetry_row.prop(qremesher, "symmetry_x")
+            content.prop(qremesher, "target_count", text=t(context, "quad_count"))
+            content.prop(qremesher, "use_materials", text=t(context, "use_materials"))
 
-        if status.is_running:
-            section_layout.operator("object.polygroups_cancel_remesh", text=t(context, "import_cancel"), icon="CANCEL")
+            symmetry_row = content.row(align=True)
+            symmetry_row.label(text=t(context, "symmetry"))
+            symmetry_row.prop(qremesher, "symmetry_x")
 
-        section_layout.separator(type="LINE")
-        section_layout.label(text=t(context, "remesh_group_status"), icon="INFO")
-        progress_box = section_layout.column(align=True)
-        if status.stage:
-            progress_box.label(text=t(context, "remesh_stage_" + status.stage))
-            progress_box.label(text=t(context, "remesh_source", value=status.source_name))
-            progress_box.progress(factor=status.progress / 100, type="BAR", text=f"{status.progress:.1f}%")
-            progress_box.label(text=t(context, "remesh_elapsed", value=format_duration(status.elapsed_seconds)))
-            if status.stage == "DONE":
-                progress_box.label(text=t(context, "remesh_completed_polygons", value=f"{status.polygon_count:,}"), icon="CHECKMARK")
-                progress_box.label(text=status.result_name)
-            elif status.message:
-                progress_box.label(text=status.message, icon="ERROR" if status.stage == "FAILED" else "INFO")
-        else:
-            progress_box.label(text=t(context, "quad_available"), icon="CHECKMARK")
+            if status.is_running:
+                content.operator("object.polygroups_cancel_remesh", text=t(context, "import_cancel"), icon="CANCEL")
+
+    def draw_remesh_progress(self, context, content):
+        status = context.scene.polygroups_remesh_status
+        if content is not None:
+            progress_box = content.column(align=True)
+            if status.stage:
+                progress_box.label(text=t(context, "remesh_stage_" + status.stage))
+                progress_box.label(text=t(context, "remesh_source", value=status.source_name))
+                progress_box.progress(factor=status.progress / 100, type="BAR", text=f"{status.progress:.1f}%")
+                progress_box.label(text=t(context, "remesh_elapsed", value=format_duration(status.elapsed_seconds)))
+                if status.stage == "DONE":
+                    progress_box.label(text=t(context, "remesh_completed_polygons", value=f"{status.polygon_count:,}"), icon="CHECKMARK")
+                    progress_box.label(text=status.result_name)
+                elif status.message:
+                    progress_box.label(text=status.message, icon="ERROR" if status.stage == "FAILED" else "INFO")
+            else:
+                progress_box.label(text=t(context, "import_group_progress"), icon="INFO")
 
 
 class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
@@ -1252,95 +1315,111 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         layout = self.layout.box()
         settings = context.scene.polygroups_baking_settings
 
-        column = layout.column(align=True)
-        column.label(text=t(context, "baking_save_blend_reminder"), icon="INFO")
-        save_row = column.row(align=True)
-        save_row.operator(
-            "object.polygroups_save_blend_file",
-            text=t(context, "save_blend_file"),
-            icon="FILE_BLEND",
-        )
-        save_row.operator(
-            "object.polygroups_save_blend_file_as",
-            text=t(context, "save_blend_file_as"),
-            icon="FILE_FOLDER",
-        )
-        column.separator()
+        content = draw_topic(layout, context, "bake_0", 'Save Project', "FILE_BLEND")
+        if content is not None:
+            column = content.column(align=True)
+            column.label(text=t(context, "baking_save_blend_reminder"), icon="INFO")
+            save_row = column.row(align=True)
+            save_row.operator(
+                "object.polygroups_save_blend_file",
+                text=t(context, "save_blend_file"),
+                icon="FILE_BLEND",
+            )
+            save_row.operator(
+                "object.polygroups_save_blend_file_as",
+                text=t(context, "save_blend_file_as"),
+                icon="FILE_FOLDER",
+            )
+            column.separator()
 
-        column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
-        column.prop(settings, "bake_margin", text=t(context, "bake_margin"))
-        column.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
-        auto_cage_box = column.box()
-        auto_cage_box.prop(settings, "use_auto_cage", text=t(context, "auto_cage"))
-        auto_cage_column = auto_cage_box.column(align=True)
-        auto_cage_column.prop(settings, "auto_cage_coverage", text=t(context, "auto_cage_coverage"), slider=True)
-        auto_cage_column.prop(settings, "auto_cage_margin", text=t(context, "auto_cage_margin"))
-        auto_cage_column.prop(settings, "auto_cage_margin_percent", text=t(context, "auto_cage_margin_percent"), slider=True)
-        auto_cage_column.prop(settings, "auto_cage_safe_zone", text=t(context, "auto_cage_safe_zone"), slider=True)
-        auto_cage_column.prop(settings, "auto_cage_max", text=t(context, "auto_cage_max"))
-        auto_cage_column.prop(settings, "auto_cage_sample_limit", text=t(context, "auto_cage_samples"))
-        auto_cage_column.operator(
-            "object.polygroups_calculate_auto_cage",
-            text=t(context, "calculate_auto_cage"),
-            icon="MOD_SHRINKWRAP",
-        )
-        auto_cage_box.label(text=t(context, "auto_cage_status", value=settings.auto_cage_status), icon="INFO")
-        column.prop(settings, "ray_distance", text=t(context, "ray_distance"))
-        column.prop(settings, "image_prefix", text=t(context, "image_prefix"))
-        column.prop(settings, "use_selected_to_active", text=t(context, "selected_to_active"))
+        content = draw_topic(layout, context, "bake_1", 'Bake Settings and Cage', "MOD_SHRINKWRAP")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
+            column.prop(settings, "bake_margin", text=t(context, "bake_margin"))
+            column.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
+            auto_cage_box = column.box()
+            auto_cage_box.prop(settings, "use_auto_cage", text=t(context, "auto_cage"))
+            auto_cage_column = auto_cage_box.column(align=True)
+            auto_cage_column.prop(settings, "auto_cage_coverage", text=t(context, "auto_cage_coverage"), slider=True)
+            auto_cage_column.prop(settings, "auto_cage_margin", text=t(context, "auto_cage_margin"))
+            auto_cage_column.prop(settings, "auto_cage_margin_percent", text=t(context, "auto_cage_margin_percent"), slider=True)
+            auto_cage_column.prop(settings, "auto_cage_safe_zone", text=t(context, "auto_cage_safe_zone"), slider=True)
+            auto_cage_column.prop(settings, "auto_cage_max", text=t(context, "auto_cage_max"))
+            auto_cage_column.prop(settings, "auto_cage_sample_limit", text=t(context, "auto_cage_samples"))
+            auto_cage_column.operator(
+                "object.polygroups_calculate_auto_cage",
+                text=t(context, "calculate_auto_cage"),
+                icon="MOD_SHRINKWRAP",
+            )
+            auto_cage_box.label(text=t(context, "auto_cage_status", value=settings.auto_cage_status), icon="INFO")
+            column.prop(settings, "ray_distance", text=t(context, "ray_distance"))
+            column.prop(settings, "image_prefix", text=t(context, "image_prefix"))
+            column.prop(settings, "use_selected_to_active", text=t(context, "selected_to_active"))
 
-        pass_row = column.row(align=True)
-        pass_row.prop(settings, "bake_base_color", text=t(context, "base_color"))
-        pass_row.prop(settings, "bake_normal", text=t(context, "normal"))
-        column.prop(
-            settings,
-            "auto_save_textures_after_bake",
-            text=t(context, "auto_save_textures_after_bake"),
-        )
+            pass_row = column.row(align=True)
+            pass_row.prop(settings, "bake_base_color", text=t(context, "base_color"))
+            pass_row.prop(settings, "bake_normal", text=t(context, "normal"))
+            column.prop(
+                settings,
+                "auto_save_textures_after_bake",
+                text=t(context, "auto_save_textures_after_bake"),
+            )
 
-        column.separator()
-        column.operator(
-            "object.polygroups_check_material_textures",
-            text=t(context, "check_material_textures"),
-            icon="NODE_MATERIAL",
-        )
-        column.operator(
-            "object.polygroups_prepare_highpoly_bake_materials",
-            text=t(context, "prepare_highpoly_texture_only"),
-            icon="MATERIAL",
-        )
-        column.operator(
-            "object.polygroups_checked_prepare_lowpoly_bake_material",
-            text=t(context, "prepare_lowpoly_bake_material"),
-            icon="TEXTURE",
-        )
-        column.operator(
-            "object.polygroups_bake_selected_to_active",
-            text=t(context, "bake_selected_to_active"),
-            icon="RENDER_STILL",
-        )
-        column.separator()
-        column.operator(
-            "object.polygroups_checked_prepare_and_bake",
-            text=t(context, "prepare_and_bake"),
-            icon="RENDER_RESULT",
-        )
-        column.operator(
-            "object.polygroups_save_bake_textures",
-            text=t(context, "save_textures"),
-            icon="FILE_FOLDER",
-        )
-        column.operator(
-            "object.polygroups_merge_bake_textures",
-            text=t(context, "merge_materials_textures"),
-            icon="NODE_COMPOSITING",
-        )
-        column.separator()
-        column.operator(
-            "object.polygroups_clear_bake_temp_images",
-            text=t(context, "clear_all_bake_images"),
-            icon="TRASH",
-        )
+        content = draw_topic(layout, context, "bake_2", 'Prepare Materials and Bake', "MATERIAL")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.operator(
+                "object.polygroups_check_material_textures",
+                text=t(context, "check_material_textures"),
+                icon="NODE_MATERIAL",
+            )
+            column.operator(
+                "object.polygroups_prepare_highpoly_bake_materials",
+                text=t(context, "prepare_highpoly_texture_only"),
+                icon="MATERIAL",
+            )
+            column.operator(
+                "object.polygroups_checked_prepare_lowpoly_bake_material",
+                text=t(context, "prepare_lowpoly_bake_material"),
+                icon="TEXTURE",
+            )
+            column.operator(
+                "object.polygroups_bake_selected_to_active",
+                text=t(context, "bake_selected_to_active"),
+                icon="RENDER_STILL",
+            )
+
+        content = draw_topic(layout, context, "bake_3", 'Bake and Export Textures', "RENDER_STILL")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.operator(
+                "object.polygroups_checked_prepare_and_bake",
+                text=t(context, "prepare_and_bake"),
+                icon="RENDER_RESULT",
+            )
+            column.operator(
+                "object.polygroups_save_bake_textures",
+                text=t(context, "save_textures"),
+                icon="FILE_FOLDER",
+            )
+            column.operator(
+                "object.polygroups_merge_bake_textures",
+                text=t(context, "merge_materials_textures"),
+                icon="NODE_COMPOSITING",
+            )
+
+        content = draw_topic(layout, context, "bake_4", 'Cleanup', "TRASH")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.operator(
+                "object.polygroups_clear_bake_temp_images",
+                text=t(context, "clear_all_bake_images"),
+                icon="TRASH",
+            )
 
 
 class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
@@ -1361,71 +1440,75 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
 
         layout = self.layout.box()
 
-        layout.operator(
-            "object.polygroups_unwrap_angle_based",
-            text=t(context, "unwrap_angle_based"),
-            icon="UV",
-        )
-        layout.separator()
+        content = draw_topic(layout, context, "uv_0", 'UV Unwrap', "UV")
+        if content is not None:
+            content.operator(
+                "object.polygroups_unwrap_angle_based",
+                text=t(context, "unwrap_angle_based"),
+                icon="UV",
+            )
+            content.separator()
 
-        installed, enabled, available = uvpackmaster_status(context)
+        content = draw_topic(layout, context, "uv_1", 'UVPackmaster Packing', "UV_SYNC_SELECT")
+        if content is not None:
+            installed, enabled, available = uvpackmaster_status(context)
 
-        if not installed:
-            layout.label(text=t(context, "uvpackmaster_not_installed"), icon="ERROR")
-            layout.label(text=t(context, "uvpackmaster_install_hint"))
-            return
+            if not installed:
+                content.label(text=t(context, "uvpackmaster_not_installed"), icon="ERROR")
+                content.label(text=t(context, "uvpackmaster_install_hint"))
+                return
 
-        if not enabled or not available:
-            layout.label(text=t(context, "uvpackmaster_not_enabled"), icon="ERROR")
-            layout.label(text=t(context, "uvpackmaster_enable_hint"))
-            return
+            if not enabled or not available:
+                content.label(text=t(context, "uvpackmaster_not_enabled"), icon="ERROR")
+                content.label(text=t(context, "uvpackmaster_enable_hint"))
+                return
 
-        main_props = context.scene.uvpm4_props.default_main_props
-        layout.label(text=t(context, "uvpackmaster_available"), icon="CHECKMARK")
+            main_props = context.scene.uvpm4_props.default_main_props
+            content.label(text=t(context, "uvpackmaster_available"), icon="CHECKMARK")
 
-        pack_row = layout.row(align=True)
-        pack_row.scale_y = 1.3
-        pack_row.operator(
-            "object.polygroups_uvpackmaster_pack",
-            text=t(context, "uvpackmaster_pack"),
-            icon="UV",
-        )
+            pack_row = content.row(align=True)
+            pack_row.scale_y = 1.3
+            pack_row.operator(
+                "object.polygroups_uvpackmaster_pack",
+                text=t(context, "uvpackmaster_pack"),
+                icon="UV",
+            )
 
-        layout.separator()
-        draw_optional_prop(
-            layout,
-            main_props,
-            "rotation_enable",
-            text=t(context, "uvpackmaster_rotation_enable"),
-        )
-        draw_optional_prop(
-            layout,
-            main_props,
-            "margin",
-            text=t(context, "uvpackmaster_margin"),
-        )
+            content.separator()
+            draw_optional_prop(
+                content,
+                main_props,
+                "rotation_enable",
+                text=t(context, "uvpackmaster_rotation_enable"),
+            )
+            draw_optional_prop(
+                content,
+                main_props,
+                "margin",
+                text=t(context, "uvpackmaster_margin"),
+            )
 
-        rotation_row = layout.row(align=True)
-        rotation_row.enabled = bool(getattr(main_props, "rotation_enable", True))
-        draw_optional_prop(
-            rotation_row,
-            main_props,
-            "rotation_step",
-            text=t(context, "uvpackmaster_rotation_step"),
-        )
+            rotation_row = content.row(align=True)
+            rotation_row.enabled = bool(getattr(main_props, "rotation_enable", True))
+            draw_optional_prop(
+                rotation_row,
+                main_props,
+                "rotation_step",
+                text=t(context, "uvpackmaster_rotation_step"),
+            )
 
-        draw_optional_prop(
-            layout,
-            main_props,
-            "heuristic_enable",
-            text=t(context, "uvpackmaster_heuristic_search"),
-        )
-        draw_optional_prop(
-            layout,
-            main_props,
-            "heuristic_max_wait_time",
-            text=t(context, "uvpackmaster_max_wait_time"),
-        )
+            draw_optional_prop(
+                content,
+                main_props,
+                "heuristic_enable",
+                text=t(context, "uvpackmaster_heuristic_search"),
+            )
+            draw_optional_prop(
+                content,
+                main_props,
+                "heuristic_max_wait_time",
+                text=t(context, "uvpackmaster_max_wait_time"),
+            )
 
 
 class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
@@ -1658,29 +1741,34 @@ class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
         layout = self.layout.box()
         settings = context.scene.polygroups_resculpting_settings
 
-        column = layout.column(align=True)
-        column.prop(settings, "multires_levels", text=t(context, "multires_levels"))
-        column.prop(settings, "shrinkwrap_limit", text=t(context, "shrinkwrap_limit"))
-        column.prop(settings, "shrinkwrap_offset", text=t(context, "shrinkwrap_offset"))
+        content = draw_topic(layout, context, "sculpt_0", 'Multires and Shrinkwrap Settings', "MOD_MULTIRES")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(settings, "multires_levels", text=t(context, "multires_levels"))
+            column.prop(settings, "shrinkwrap_limit", text=t(context, "shrinkwrap_limit"))
+            column.prop(settings, "shrinkwrap_offset", text=t(context, "shrinkwrap_offset"))
 
-        column.separator()
-        column.operator(
-            "object.polygroups_setup_resculpting",
-            text=t(context, "setup_resculpting"),
-            icon="MOD_MULTIRES",
-        )
+        content = draw_topic(layout, context, "sculpt_1", 'Prepare Sculpting', "SCULPTMODE_HLT")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.operator(
+                "object.polygroups_setup_resculpting",
+                text=t(context, "setup_resculpting"),
+                icon="MOD_MULTIRES",
+            )
 
-        row = column.row(align=True)
-        row.operator(
-            "object.polygroups_add_multires",
-            text=t(context, "multires"),
-            icon="MOD_MULTIRES",
-        )
-        row.operator(
-            "object.polygroups_add_shrinkwrap_to_highpoly",
-            text=t(context, "shrinkwrap"),
-            icon="MOD_SHRINKWRAP",
-        )
+            row = column.row(align=True)
+            row.operator(
+                "object.polygroups_add_multires",
+                text=t(context, "multires"),
+                icon="MOD_MULTIRES",
+            )
+            row.operator(
+                "object.polygroups_add_shrinkwrap_to_highpoly",
+                text=t(context, "shrinkwrap"),
+                icon="MOD_SHRINKWRAP",
+            )
 
 
 class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
@@ -1702,70 +1790,87 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         layout = self.layout.box()
         settings = context.scene.polygroups_generator_settings
         seam_settings = context.scene.polygroups_seam_finalization_settings
-        column = layout.column(align=True)
-        column.prop(seam_settings, "auto_unwrap_after_seam", text=t(context, "auto_unwrap"))
-        column.prop(
-            seam_settings,
-            "auto_average_islands_scale_after_unwrap",
-            text=t(context, "auto_average_islands_scale"),
-        )
-        column.prop(
-            seam_settings,
-            "prefer_backside_longitudinal_seam",
-            text=t(context, "prefer_backside_longitudinal_seam"),
-        )
-        column.prop(seam_settings, "double_longitudinal_seam", text=t(context, "double_longitudinal_seam"))
-        column.separator()
-        column.operator(
-            "mesh.polygroups_mark_selected_edges_seam",
-            text=t(context, "mark_selected_edges_seam"),
-            icon="EDGESEL",
-        )
-        column.operator(
-            "mesh.polygroups_mark_selection_boundary_seam",
-            text=t(context, "mark_selection_boundary_seam"),
-            icon="EDGESEL",
-        )
-        column.operator(
-            "mesh.polygroups_mark_material_boundaries_seam",
-            text=t(context, "generate_seams_materials"),
-            icon="EDGE_SEAM",
-        )
-        column.operator(
-            "mesh.polygroups_mark_longitudinal_seam",
-            text=t(context, "create_longitudinal_seam"),
-            icon="EDGESEL",
-        )
-        column.operator(
-            "mesh.polygroups_mark_boundary_and_longitudinal_seam",
-            text=t(context, "boundary_longitudinal_seam"),
-            icon="EDGE_SEAM",
-        )
-        draw_seam_gap_controls(column, context, context.scene.polygroups_seam_preparation_settings)
+        content = draw_topic(layout, context, "seam_final_0", 'Seam Settings', "PREFERENCES")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(seam_settings, "auto_unwrap_after_seam", text=t(context, "auto_unwrap"))
+            column.prop(
+                seam_settings,
+                "auto_average_islands_scale_after_unwrap",
+                text=t(context, "auto_average_islands_scale"),
+            )
+            column.prop(
+                seam_settings,
+                "prefer_backside_longitudinal_seam",
+                text=t(context, "prefer_backside_longitudinal_seam"),
+            )
+            column.prop(seam_settings, "double_longitudinal_seam", text=t(context, "double_longitudinal_seam"))
 
-        column.separator()
-        column.prop(settings, "checker_scale", text=t(context, "checker_scale"))
-        column.operator(
-            "object.polygroups_apply_checker_material",
-            text=t(context, "apply_checker_material"),
-            icon="TEXTURE",
-        )
-        column.separator()
-        column.operator(
-            "object.polygroups_unwrap_angle_based",
-            text=t(context, "unwrap_angle_based"),
-            icon="UV",
-        )
-        column.operator(
-            "object.polygroups_smart_uv_project",
-            text=t(context, "smart_uv_project"),
-            icon="UV",
-        )
-        column.operator(
-            "object.polygroups_average_islands_scale",
-            text=t(context, "average_islands_scale"),
-            icon="UV_SYNC_SELECT",
-        )
+        content = draw_topic(layout, context, "seam_final_1", 'Mark Seams', "EDGE_SEAM")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.operator(
+                "mesh.polygroups_mark_selected_edges_seam",
+                text=t(context, "mark_selected_edges_seam"),
+                icon="EDGESEL",
+            )
+            column.operator(
+                "mesh.polygroups_mark_selection_boundary_seam",
+                text=t(context, "mark_selection_boundary_seam"),
+                icon="EDGESEL",
+            )
+            column.operator(
+                "mesh.polygroups_mark_material_boundaries_seam",
+                text=t(context, "generate_seams_materials"),
+                icon="EDGE_SEAM",
+            )
+            column.operator(
+                "mesh.polygroups_mark_longitudinal_seam",
+                text=t(context, "create_longitudinal_seam"),
+                icon="EDGESEL",
+            )
+            column.operator(
+                "mesh.polygroups_mark_boundary_and_longitudinal_seam",
+                text=t(context, "boundary_longitudinal_seam"),
+                icon="EDGE_SEAM",
+            )
+
+        content = draw_topic(layout, context, "seam_final_2", 'Seam Gap Check', "VIEWZOOM")
+        if content is not None:
+            column = content.column(align=True)
+            draw_seam_gap_controls(column, context, context.scene.polygroups_seam_preparation_settings)
+
+        content = draw_topic(layout, context, "seam_final_3", 'Checker Preview', "TEXTURE")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.prop(settings, "checker_scale", text=t(context, "checker_scale"))
+            column.operator(
+                "object.polygroups_apply_checker_material",
+                text=t(context, "apply_checker_material"),
+                icon="TEXTURE",
+            )
+
+        content = draw_topic(layout, context, "seam_final_4", 'UV Unwrap', "UV")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.operator(
+                "object.polygroups_unwrap_angle_based",
+                text=t(context, "unwrap_angle_based"),
+                icon="UV",
+            )
+            column.operator(
+                "object.polygroups_smart_uv_project",
+                text=t(context, "smart_uv_project"),
+                icon="UV",
+            )
+            column.operator(
+                "object.polygroups_average_islands_scale",
+                text=t(context, "average_islands_scale"),
+                icon="UV_SYNC_SELECT",
+            )
 
 
 class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
@@ -2084,92 +2189,94 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
 
     def draw_mesh_export(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
-        column = layout.column(align=True)
-        column.label(text="Fab Export", icon="EXPORT")
-        column.separator()
-        column.prop(
-            settings,
-            "mesh_export_format",
-            text=t(context, "mesh_export_format"),
-        )
-        column.operator(
-            "object.polygroups_export_selected_meshes",
-            text=t(context, "export_selected_meshes"),
-            icon="EXPORT",
-        )
+        content = draw_topic(layout, context, "export_0", 'Fab Export', "EXPORT")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(
+                settings,
+                "mesh_export_format",
+                text=t(context, "mesh_export_format"),
+            )
+            column.operator(
+                "object.polygroups_export_selected_meshes",
+                text=t(context, "export_selected_meshes"),
+                icon="EXPORT",
+            )
 
-        column.separator()
-        column.label(text="UNITY Export", icon="EXPORT")
-        column.separator()
-        column.prop(settings, "unity_export_directory")
-        column.prop(settings, "unity_export_overwrite")
-        column.prop(settings, "unity_use_auto_rig_pro")
-        column.operator("object.polygroups_export_unity", icon="EXPORT")
-        column.separator()
-        blend_box = column.box()
-        blend_box.label(text="Export Blend Assets", icon="FILE_BLEND")
-        blend_box.separator()
-        blend_column = blend_box.column(align=True)
-        blend_column.prop(settings, "blend_export_directory", text=t(context, "blend_export_directory"))
-        picker_row = blend_column.row(align=True)
-        picker_row.prop(
-            settings,
-            "blend_export_static_collection_picker",
-            text=t(context, "blend_export_static_collection_picker"),
-        )
-        picker_row.operator(
-            "object.polygroups_add_blend_static_collection",
-            text="",
-            icon="ADD",
-        )
-        picker_row.operator(
-            "object.polygroups_clear_blend_static_collections",
-            text="",
-            icon="TRASH",
-        )
-        blend_column.prop(
-            settings,
-            "blend_export_static_collections",
-            text=t(context, "blend_export_static_collections"),
-        )
-        option_column = blend_column.column(align=True)
-        option_column.prop(
-            settings,
-            "blend_export_individual_assets",
-            text=t(context, "blend_export_individual_assets"),
-        )
-        option_column.prop(settings, "blend_export_all_low", text=t(context, "blend_export_all_low"))
-        option_column.prop(settings, "blend_export_all_mid", text=t(context, "blend_export_all_mid"))
-        option_column.prop(
-            settings,
-            "blend_export_include_render_settings",
-            text=t(context, "blend_export_include_render_settings"),
-        )
-        option_column.prop(
-            settings,
-            "blend_export_overwrite_existing",
-            text=t(context, "blend_export_overwrite_existing"),
-        )
+        content = draw_topic(layout, context, "export_1", 'Unity Export', "EXPORT")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(settings, "unity_export_directory")
+            column.prop(settings, "unity_export_overwrite")
+            column.prop(settings, "unity_use_auto_rig_pro")
+            column.operator("object.polygroups_export_unity", icon="EXPORT")
 
-        action_row = blend_column.row(align=True)
-        action_row.operator(
-            "object.polygroups_scan_blend_assets",
-            text=t(context, "blend_export_scan"),
-            icon="VIEWZOOM",
-        )
-        action_row.operator(
-            "object.polygroups_export_blend_assets",
-            text=t(context, "blend_export_start"),
-            icon="FILE_BLEND",
-        )
+        content = draw_topic(layout, context, "export_2", 'Export Blend Assets', "FILE_BLEND")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            blend_box = column.box()
+            blend_column = blend_box.column(align=True)
+            blend_column.prop(settings, "blend_export_directory", text=t(context, "blend_export_directory"))
+            picker_row = blend_column.row(align=True)
+            picker_row.prop(
+                settings,
+                "blend_export_static_collection_picker",
+                text=t(context, "blend_export_static_collection_picker"),
+            )
+            picker_row.operator(
+                "object.polygroups_add_blend_static_collection",
+                text="",
+                icon="ADD",
+            )
+            picker_row.operator(
+                "object.polygroups_clear_blend_static_collections",
+                text="",
+                icon="TRASH",
+            )
+            blend_column.prop(
+                settings,
+                "blend_export_static_collections",
+                text=t(context, "blend_export_static_collections"),
+            )
+            option_column = blend_column.column(align=True)
+            option_column.prop(
+                settings,
+                "blend_export_individual_assets",
+                text=t(context, "blend_export_individual_assets"),
+            )
+            option_column.prop(settings, "blend_export_all_low", text=t(context, "blend_export_all_low"))
+            option_column.prop(settings, "blend_export_all_mid", text=t(context, "blend_export_all_mid"))
+            option_column.prop(
+                settings,
+                "blend_export_include_render_settings",
+                text=t(context, "blend_export_include_render_settings"),
+            )
+            option_column.prop(
+                settings,
+                "blend_export_overwrite_existing",
+                text=t(context, "blend_export_overwrite_existing"),
+            )
 
-        blend_column.label(text=t(context, "blend_export_status", value=settings.blend_export_status))
-        stats_row = blend_column.row(align=True)
-        stats_row.label(text=t(context, "blend_export_collections", value=settings.blend_export_collection_count))
-        stats_row.label(text=t(context, "blend_export_files", value=settings.blend_export_file_count))
-        stats_row = blend_column.row(align=True)
-        stats_row.label(text=t(context, "blend_export_low", value=settings.blend_export_low_count))
-        stats_row.label(text=t(context, "blend_export_mid", value=settings.blend_export_mid_count))
+            action_row = blend_column.row(align=True)
+            action_row.operator(
+                "object.polygroups_scan_blend_assets",
+                text=t(context, "blend_export_scan"),
+                icon="VIEWZOOM",
+            )
+            action_row.operator(
+                "object.polygroups_export_blend_assets",
+                text=t(context, "blend_export_start"),
+                icon="FILE_BLEND",
+            )
+
+            blend_column.label(text=t(context, "blend_export_status", value=settings.blend_export_status))
+            stats_row = blend_column.row(align=True)
+            stats_row.label(text=t(context, "blend_export_collections", value=settings.blend_export_collection_count))
+            stats_row.label(text=t(context, "blend_export_files", value=settings.blend_export_file_count))
+            stats_row = blend_column.row(align=True)
+            stats_row.label(text=t(context, "blend_export_low", value=settings.blend_export_low_count))
+            stats_row.label(text=t(context, "blend_export_mid", value=settings.blend_export_mid_count))
 
 
 class VIEW3D_PT_polygroups_render(bpy.types.Panel):
@@ -2190,113 +2297,127 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_render_settings
-        column = layout.column(align=True)
+        content = draw_topic(layout, context, "render_0", 'Render Queue', "RENDER_STILL")
+        if content is not None:
+            column = content.column(align=True)
 
-        row = column.row(align=True)
-        row.enabled = not settings.is_running
-        row.operator(
-            "object.polygroups_scan_render_queue",
-            text=t(context, "render_scan_queue"),
-            icon="VIEWZOOM",
-        )
-        row.operator(
-            "object.polygroups_start_render_queue",
-            text=t(context, "render_start"),
-            icon="RENDER_STILL",
-        )
-
-        current_row = column.row(align=True)
-        current_row.enabled = not settings.is_running
-        current_row.operator(
-            "object.polygroups_render_current_state",
-            text=t(context, "render_current_state"),
-            icon="RENDER_RESULT",
-        )
-
-        row = column.row(align=True)
-        row.operator(
-            "object.polygroups_continue_render_queue",
-            text=t(context, "render_continue"),
-            icon="PLAY",
-        )
-        row.enabled = not settings.is_running and settings.total_count > 0
-        stop_row = column.row(align=True)
-        stop_row.enabled = settings.is_running
-        stop_row.operator(
-            "object.polygroups_stop_render_queue",
-            text=t(context, "render_stop"),
-            icon="CANCEL",
-        )
-
-        column.separator()
-        column.prop(settings, "render_engine", text=t(context, "render_engine"))
-        column.prop(settings, "max_samples", text=t(context, "render_max_samples"))
-        resolution_row = column.row(align=True)
-        resolution_row.prop(settings, "resolution_x", text=t(context, "render_resolution_x"))
-        resolution_row.prop(settings, "resolution_y", text=t(context, "render_resolution_y"))
-        column.prop(settings, "resolution_scale", text=t(context, "render_resolution_scale"))
-        column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
-
-        options_row = column.row(align=True)
-        options_row.prop(settings, "render_low", text=t(context, "render_low"))
-        options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
-        column.prop(settings, "transparent_background", text=t(context, "render_transparent_background"))
-        scene_row = column.row(align=True)
-        scene_row.enabled = settings.transparent_background
-        scene_row.prop(settings, "scene_collection_prefix", text=t(context, "render_scene_collection_prefix"))
-        column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
-        column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
-
-        column.separator()
-        column.prop(settings, "multiview_render", text=t(context, "render_multiview"))
-        multiview_row = column.row(align=True)
-        multiview_row.enabled = settings.multiview_render
-        multiview_row.prop(settings, "multiview_offset", text=t(context, "render_multiview_offset"))
-        clear_row = column.row(align=True)
-        clear_row.enabled = not settings.is_running
-        clear_row.operator(
-            "object.polygroups_clear_multiview_render",
-            text=t(context, "render_clear_multiview"),
-            icon="TRASH",
-        )
-
-        column.separator()
-        column.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
-        freestyle_column = column.column(align=True)
-        freestyle_column.enabled = settings.freestyle_edges
-        freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
-        freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
-        freestyle_column.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
-        freestyle_row = column.row(align=True)
-        freestyle_row.enabled = not settings.is_running
-        freestyle_row.operator(
-            "object.polygroups_mark_freestyle_edges",
-            text=t(context, "render_mark_freestyle"),
-            icon="EDGESEL",
-        )
-        freestyle_row.operator(
-            "object.polygroups_clear_freestyle_edges",
-            text=t(context, "render_clear_freestyle"),
-            icon="TRASH",
-        )
-
-        column.separator()
-        column.label(text=t(context, "render_status", value=settings.status))
-        column.label(text=t(context, "render_collections", value=settings.collection_count))
-        column.label(text=t(context, "render_queued", value=settings.total_count))
-        column.label(text=t(context, "render_rendered", value=settings.rendered_count))
-        column.label(text=t(context, "render_remaining", value=settings.remaining_count))
-        if settings.current_collection or settings.current_object:
-            column.label(
-                text=t(
-                    context,
-                    "render_current",
-                    collection=settings.current_collection or "-",
-                    object=settings.current_object or "-",
-                ),
+            row = column.row(align=True)
+            row.enabled = not settings.is_running
+            row.operator(
+                "object.polygroups_scan_render_queue",
+                text=t(context, "render_scan_queue"),
+                icon="VIEWZOOM",
             )
-        if settings.last_output_path:
-            column.label(text=t(context, "render_last_output", value=settings.last_output_path), icon="FILE_IMAGE")
+            row.operator(
+                "object.polygroups_start_render_queue",
+                text=t(context, "render_start"),
+                icon="RENDER_STILL",
+            )
+
+            current_row = column.row(align=True)
+            current_row.enabled = not settings.is_running
+            current_row.operator(
+                "object.polygroups_render_current_state",
+                text=t(context, "render_current_state"),
+                icon="RENDER_RESULT",
+            )
+
+            row = column.row(align=True)
+            row.operator(
+                "object.polygroups_continue_render_queue",
+                text=t(context, "render_continue"),
+                icon="PLAY",
+            )
+            row.enabled = not settings.is_running and settings.total_count > 0
+            stop_row = column.row(align=True)
+            stop_row.enabled = settings.is_running
+            stop_row.operator(
+                "object.polygroups_stop_render_queue",
+                text=t(context, "render_stop"),
+                icon="CANCEL",
+            )
+
+        content = draw_topic(layout, context, "render_1", 'Quality and Output', "PREFERENCES")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.prop(settings, "render_engine", text=t(context, "render_engine"))
+            column.prop(settings, "max_samples", text=t(context, "render_max_samples"))
+            resolution_row = column.row(align=True)
+            resolution_row.prop(settings, "resolution_x", text=t(context, "render_resolution_x"))
+            resolution_row.prop(settings, "resolution_y", text=t(context, "render_resolution_y"))
+            column.prop(settings, "resolution_scale", text=t(context, "render_resolution_scale"))
+            column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
+
+            options_row = column.row(align=True)
+            options_row.prop(settings, "render_low", text=t(context, "render_low"))
+            options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
+            column.prop(settings, "transparent_background", text=t(context, "render_transparent_background"))
+            scene_row = column.row(align=True)
+            scene_row.enabled = settings.transparent_background
+            scene_row.prop(settings, "scene_collection_prefix", text=t(context, "render_scene_collection_prefix"))
+            column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
+            column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
+
+        content = draw_topic(layout, context, "render_2", 'Multiple Views', "CAMERA_DATA")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.prop(settings, "multiview_render", text=t(context, "render_multiview"))
+            multiview_row = column.row(align=True)
+            multiview_row.enabled = settings.multiview_render
+            multiview_row.prop(settings, "multiview_offset", text=t(context, "render_multiview_offset"))
+            clear_row = column.row(align=True)
+            clear_row.enabled = not settings.is_running
+            clear_row.operator(
+                "object.polygroups_clear_multiview_render",
+                text=t(context, "render_clear_multiview"),
+                icon="TRASH",
+            )
+
+        content = draw_topic(layout, context, "render_3", 'Freestyle Edges', "EDGE_SEAM")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
+            freestyle_column = column.column(align=True)
+            freestyle_column.enabled = settings.freestyle_edges
+            freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
+            freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
+            freestyle_column.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+            freestyle_row = column.row(align=True)
+            freestyle_row.enabled = not settings.is_running
+            freestyle_row.operator(
+                "object.polygroups_mark_freestyle_edges",
+                text=t(context, "render_mark_freestyle"),
+                icon="EDGESEL",
+            )
+            freestyle_row.operator(
+                "object.polygroups_clear_freestyle_edges",
+                text=t(context, "render_clear_freestyle"),
+                icon="TRASH",
+            )
+
+        content = draw_topic(layout, context, "render_4", 'Progress', "INFO")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.label(text=t(context, "render_status", value=settings.status))
+            column.label(text=t(context, "render_collections", value=settings.collection_count))
+            column.label(text=t(context, "render_queued", value=settings.total_count))
+            column.label(text=t(context, "render_rendered", value=settings.rendered_count))
+            column.label(text=t(context, "render_remaining", value=settings.remaining_count))
+            if settings.current_collection or settings.current_object:
+                column.label(
+                    text=t(
+                        context,
+                        "render_current",
+                        collection=settings.current_collection or "-",
+                        object=settings.current_object or "-",
+                    ),
+                )
+            if settings.last_output_path:
+                column.label(text=t(context, "render_last_output", value=settings.last_output_path), icon="FILE_IMAGE")
 
 
 SECTION_PANEL_CLASSES = (
