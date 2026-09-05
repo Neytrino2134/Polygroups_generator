@@ -123,7 +123,11 @@ from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
 from .small_islands import MESH_OT_polygroups_merge_small_islands
 
+from .dev_restart import WM_OT_airetopo_dev_restart, WM_OT_airetopo_dev_cleanup
+
 CLASSES = (
+    WM_OT_airetopo_dev_restart,
+    WM_OT_airetopo_dev_cleanup,
     MESH_OT_polygroups_merge_small_islands,
     OBJECT_OT_polygroups_run_remesh,
     OBJECT_OT_polygroups_cancel_remesh,

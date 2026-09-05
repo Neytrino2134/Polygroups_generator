@@ -299,6 +299,26 @@ class AIRETOPO_OT_select_cutter_tweak(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class MESH_OT_airetopo_linked_seam(bpy.types.Operator):
+    bl_idname = "mesh.airetopo_linked_seam"
+    bl_label = "Select Linked by Seam"
+    bl_description = "Select linked geometry without crossing seams"
+
+    pick: bpy.props.BoolProperty(default=False)
+
+    @classmethod
+    def poll(cls, context):
+        settings = getattr(context.scene, "polygroups_seam_preparation_settings", None)
+        return (context.mode == "EDIT_MESH" and context.area is not None
+                and context.area.type == "VIEW_3D" and settings is not None
+                and settings.prefer_linked_seam)
+
+    def invoke(self, context, event):
+        if self.pick:
+            return bpy.ops.mesh.select_linked_pick("INVOKE_DEFAULT", delimit={"SEAM"}, deselect=False)
+        return bpy.ops.mesh.select_linked("INVOKE_DEFAULT", delimit={"SEAM"})
+
+
 class VIEW3D_MT_airetopo_pie(bpy.types.Menu):
     bl_idname = "VIEW3D_MT_airetopo_pie"
     bl_label = "AI Retopo Pie"
@@ -313,6 +333,7 @@ class VIEW3D_MT_airetopo_pie(bpy.types.Menu):
 
 
 CLASSES = (
+    MESH_OT_airetopo_linked_seam,
     AIRETOPO_OT_section_number,
     AIRETOPO_OT_select_cutter_tweak,
     VIEW3D_MT_airetopo_pie,
@@ -327,6 +348,13 @@ def register_keymaps():
         return
 
     keymap = keyconfig.keymaps.new(name="3D View", space_type="VIEW_3D")
+    mesh_keymap = keyconfig.keymaps.new(name="Mesh", space_type="EMPTY")
+    for ctrl, pick in ((False, True), (True, False)):
+        item = mesh_keymap.keymap_items.new(
+            MESH_OT_airetopo_linked_seam.bl_idname, "L", "PRESS", ctrl=ctrl, head=True,
+        )
+        item.properties.pick = pick
+        KEYMAP_ITEMS.append((mesh_keymap, item))
 
     if _preference_value(preferences, "enable_section_number_hotkeys", False):
         maps = [("User Interface", "EMPTY"), ("View2D Buttons List", "EMPTY")]

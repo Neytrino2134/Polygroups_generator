@@ -16,10 +16,12 @@ def _seam_endpoints(bm):
     ]
 
 
-def _find_gap_paths(bm, max_edges, max_distance):
+def _find_gap_paths(bm, max_edges, max_distance, include_junctions=False):
+    bm.verts.index_update()
     endpoints = _seam_endpoints(bm)
     endpoint_set = set(endpoints)
-    if len(endpoints) < 2:
+    targets = {v for v in bm.verts if _seam_degree(v) > 0} if include_junctions else endpoint_set
+    if not endpoints:
         return []
 
     max_edges = max(1, int(max_edges))
@@ -46,7 +48,14 @@ def _find_gap_paths(bm, max_edges, max_distance):
                     continue
 
                 next_path = path_edges + [edge]
-                if next_vertex in endpoint_set and next_vertex != start:
+                if next_vertex in targets and next_vertex != start:
+                    if next_vertex not in endpoint_set:
+                        # A junction must lie ahead of the open seam, not back along it.
+                        seam = next(e for e in start.link_edges if e.seam)
+                        forward = (start.co - seam.other_vert(start).co).normalized()
+                        direction = (next_vertex.co - start.co).normalized()
+                        if forward.dot(direction) < 0.5:
+                            continue
                     pair_key = tuple(sorted((start.index, next_vertex.index)))
                     if pair_key in seen_pairs:
                         continue
@@ -164,6 +173,7 @@ class MESH_OT_polygroups_check_seam_gaps(bpy.types.Operator):
             bm,
             settings.seam_gap_max_edges,
             settings.seam_gap_max_distance,
+            settings.seam_gap_include_junctions,
         )
         for edge in bm.edges:
             edge.select_set(False)

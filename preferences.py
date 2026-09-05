@@ -493,6 +493,10 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         self.draw_api(context, layout.box())
         self.draw_hotkeys(context, layout.box())
         self.draw_pie_menu(context, layout.box())
+        dev = layout.box()
+        dev.label(text="Dev", icon="CONSOLE")
+        dev.label(text=t(context, "dev_restart_hint"))
+        dev.operator("wm.airetopo_dev_cleanup", text=t(context, "dev_cleanup"), icon="TRASH")
 
     def draw_info(self, context, layout):
         addon_name, version = _addon_info()

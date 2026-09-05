@@ -402,6 +402,15 @@ class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
+    prefer_linked_seam: bpy.props.BoolProperty(
+        name="Prefer Select Linked by Seam", default=True,
+        description="Use seam boundaries for L and Ctrl+L in mesh Edit Mode; disable to use normal Blender shortcuts",
+    )
+    show_selection_group: bpy.props.BoolProperty(name="Selection", default=True)
+    show_mesh_edit_group: bpy.props.BoolProperty(name="Mesh Editing", default=True)
+    show_mark_clear_group: bpy.props.BoolProperty(name="Mark and Clear Seams", default=True)
+    show_check_group: bpy.props.BoolProperty(name="Seam Checks", default=True)
+    show_cut_group: bpy.props.BoolProperty(name="Cutting", default=True)
     selection_smooth_iterations: bpy.props.IntProperty(
         name="Smooth Iterations",
         description="Number of smoothing passes for the selected face region",
@@ -421,11 +430,15 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
     seam_gap_max_distance: bpy.props.FloatProperty(
         name="Max Gap Distance",
         description="Maximum distance allowed when matching seam endpoints or short gap paths",
-        default=0.02,
-        min=0.0,
-        soft_max=0.2,
+        default=0.1,
+        min=0.1,
+        max=1.0,
         precision=4,
         unit="LENGTH",
+    )
+    seam_gap_include_junctions: bpy.props.BoolProperty(
+        name="Include Corners and T-Junctions", default=True,
+        description="Also find gaps from an open seam end to an existing seam corner or junction ahead of it",
     )
     seam_gap_status: bpy.props.StringProperty(
         name="Seam Gap Status",

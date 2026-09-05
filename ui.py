@@ -255,6 +255,7 @@ def draw_seam_gap_controls(layout, context, settings):
     gap_column = gap_box.column(align=True)
     gap_column.prop(settings, "seam_gap_max_edges", text=t(context, "seam_gap_max_edges"))
     gap_column.prop(settings, "seam_gap_max_distance", text=t(context, "seam_gap_max_distance"))
+    gap_column.prop(settings, "seam_gap_include_junctions", text=t(context, "seam_gap_include_junctions"))
     action_row = gap_column.row(align=True)
     check_operator = action_row.operator(
         "mesh.polygroups_check_seam_gaps",
@@ -286,6 +287,7 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     def draw(self, context):
         preferences = get_preferences(context)
         layout = self.layout
+        layout.operator("wm.airetopo_dev_restart", text=t(context, "dev_restart"), icon="FILE_REFRESH")
         header = layout.row(align=True)
         expand_operator = header.operator(
             "object.airetopo_set_all_section_visibility",
@@ -749,125 +751,139 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout = self.layout
         seam_settings = context.scene.polygroups_seam_preparation_settings
 
-        layout.label(text=t(context, "seam_group_selection"), icon="FACESEL")
-        tools_column = layout.column(align=True)
-        selection_row = tools_column.row(align=True)
-        selection_row.operator("mesh.select_more", text=t(context, "select_more"), icon="ADD")
-        selection_row.operator("mesh.select_less", text=t(context, "select_less"), icon="REMOVE")
-        linked_operator = tools_column.operator(
-            "mesh.select_linked", text=t(context, "select_linked_seam"), icon="LINKED",
-        )
-        linked_operator.delimit = {"SEAM"}
-        tools_column.separator()
-        tools_column.prop(
-            seam_settings,
-            "selection_smooth_iterations",
-            text=t(context, "smooth_iterations"),
-        )
+        content = draw_collapsible_box(layout, seam_settings, "show_selection_group", t(context, "seam_group_selection"), "FACESEL")
+        if content is not None:
+            tools_column = content.column(align=True)
+            tools_column.prop(seam_settings, "prefer_linked_seam", text=t(context, "prefer_linked_seam"))
+            selection_row = tools_column.row(align=True)
+            selection_row.operator("mesh.select_more", text=t(context, "select_more"), icon="ADD")
+            selection_row.operator("mesh.select_less", text=t(context, "select_less"), icon="REMOVE")
+            linked_operator = tools_column.operator(
+                "mesh.select_linked", text=t(context, "select_linked_seam"), icon="LINKED",
+            )
+            linked_operator.delimit = {"SEAM"}
+            tools_column.separator()
+            tools_column.prop(
+                seam_settings,
+                "selection_smooth_iterations",
+                text=t(context, "smooth_iterations"),
+            )
 
-        smooth_operator = tools_column.operator(
-            "mesh.polygroups_smooth_face_selection",
-            text=t(context, "smooth_face_selection"),
-            icon="MOD_SMOOTH",
-        )
-        smooth_operator.iterations = seam_settings.selection_smooth_iterations
+            smooth_operator = tools_column.operator(
+                "mesh.polygroups_smooth_face_selection",
+                text=t(context, "smooth_face_selection"),
+                icon="MOD_SMOOTH",
+            )
+            smooth_operator.iterations = seam_settings.selection_smooth_iterations
 
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "model_preparation_group_mesh_edit"), icon="EDITMODE_HLT")
-        layout.operator(
-            "mesh.polygroups_delete_and_fill",
-            text=t(context, "delete_and_fill"),
-            icon="MESH_DATA",
-        )
+        content = draw_collapsible_box(layout, seam_settings, "show_mesh_edit_group", t(context, "model_preparation_group_mesh_edit"), "EDITMODE_HLT")
+        if content is not None:
+            content.operator(
+                "mesh.polygroups_delete_and_fill",
+                text=t(context, "delete_and_fill"),
+                icon="MESH_DATA",
+            )
 
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "seam_group_mark_clear"), icon="EDGE_SEAM")
-        tools_column = layout.column(align=True)
-        tools_column.operator(
-            "mesh.polygroups_mark_selected_edges_seam",
-            text=t(context, "mark_selected_edges_seam"),
-            icon="EDGESEL",
-        )
-        tools_column.operator(
-            "mesh.polygroups_mark_selection_boundary_seam",
-            text=t(context, "mark_selection_boundary_seam"),
-            icon="EDGESEL",
-        )
-        tools_column.operator(
-            "mesh.polygroups_clear_selected_edges_seam",
-            text=t(context, "clear_selected_edges_seam"),
-            icon="X",
-        )
-        tools_column.operator(
-            "mesh.polygroups_clear_inside_edges_seam",
-            text=t(context, "clear_inside_edges_seam"),
-            icon="X",
-        )
+        content = draw_collapsible_box(layout, seam_settings, "show_mark_clear_group", t(context, "seam_group_mark_clear"), "EDGE_SEAM")
+        if content is not None:
+            tools_column = content.column(align=True)
+            tools_column.operator(
+                "mesh.polygroups_mark_selected_edges_seam",
+                text=t(context, "mark_selected_edges_seam"),
+                icon="EDGESEL",
+            )
+            tools_column.operator(
+                "mesh.polygroups_mark_selection_boundary_seam",
+                text=t(context, "mark_selection_boundary_seam"),
+                icon="EDGESEL",
+            )
+            tools_column.operator(
+                "mesh.polygroups_clear_selected_edges_seam",
+                text=t(context, "clear_selected_edges_seam"),
+                icon="X",
+            )
+            tools_column.operator(
+                "mesh.polygroups_clear_inside_edges_seam",
+                text=t(context, "clear_inside_edges_seam"),
+                icon="X",
+            )
 
-        tools_column.operator(
-            "mesh.polygroups_edge_seam_path",
-            text=t(context, "edge_seam_path"),
-            icon="EDGE_SEAM",
-        )
-        edge_tool = tools_column.operator(
-            "mesh.polygroups_select_seam_tool",
-            text=t(context, "select_edge_seam_tool"),
-            icon="VERTEXSEL",
-        )
-        edge_tool.tool_id = "polygroups_generator.edge_seam_path_tool"
-        for key, tool_id in (("seam_eraser", "polygroups_generator.seam_eraser_tool"),
-                             ("edge_seam_eraser", "polygroups_generator.edge_seam_eraser_tool")):
-            button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), icon="X")
-            button.tool_id = tool_id
+            tools_column.operator(
+                "mesh.polygroups_edge_seam_path",
+                text=t(context, "edge_seam_path"),
+                icon="EDGE_SEAM",
+            )
+            edge_tool = tools_column.operator(
+                "mesh.polygroups_select_seam_tool",
+                text=t(context, "select_edge_seam_tool"),
+                icon="VERTEXSEL",
+            )
+            edge_tool.tool_id = "polygroups_generator.edge_seam_path_tool"
+            for key, tool_id in (("seam_eraser", "polygroups_generator.seam_eraser_tool"),
+                                 ("edge_seam_eraser", "polygroups_generator.edge_seam_eraser_tool")):
+                button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), icon="X")
+                button.tool_id = tool_id
 
+        content = draw_collapsible_box(layout, seam_settings, "show_check_group", t(context, "seam_group_check"), "VIEWZOOM")
+        if content is not None:
+            draw_seam_gap_controls(content, context, seam_settings)
 
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "seam_group_check"), icon="VIEWZOOM")
-        draw_seam_gap_controls(layout, context, seam_settings)
+        content = draw_collapsible_box(layout, seam_settings, "show_cut_group", t(context, "seam_group_cut"), "MOD_BEVEL")
+        if content is not None:
+            connect_column = content.column(align=True)
+            connect_column.operator(
+                "mesh.polygroups_connect_vertex_seam",
+                text=t(context, "connect_vertices_seam"),
+                icon="EDGE_SEAM",
+            )
+            connect_tool = connect_column.operator(
+                "mesh.polygroups_select_seam_tool",
+                text=t(context, "select_vertex_seam_tool"),
+                icon="VERTEXSEL",
+            )
+            connect_tool.tool_id = "polygroups_generator.connect_vertex_seam_tool"
+            knife_content = draw_collapsible_box(
+                content,
+                seam_settings,
+                "show_knife_seam_settings",
+                t(context, "knife_seam"),
+                "MOD_BEVEL",
+            )
+            if knife_content is not None:
+                self.draw_knife_seam(context, knife_content)
 
-        layout.separator(type="LINE")
-        layout.label(text=t(context, "seam_group_cut"), icon="MOD_BEVEL")
-        connect_column = layout.column(align=True)
-        connect_column.operator(
-            "mesh.polygroups_connect_vertex_seam",
-            text=t(context, "connect_vertices_seam"),
-            icon="EDGE_SEAM",
-        )
-        connect_tool = connect_column.operator(
-            "mesh.polygroups_select_seam_tool",
-            text=t(context, "select_vertex_seam_tool"),
-            icon="VERTEXSEL",
-        )
-        connect_tool.tool_id = "polygroups_generator.connect_vertex_seam_tool"
-        knife_content = draw_collapsible_box(
-            layout,
-            seam_settings,
-            "show_knife_seam_settings",
-            t(context, "knife_seam"),
-            "MOD_BEVEL",
-        )
-        if knife_content is not None:
-            self.draw_knife_seam(context, knife_content)
+            quick_knife_content = draw_collapsible_box(
+                content,
+                seam_settings,
+                "show_quick_knife_seam_settings",
+                t(context, "quick_knife_seam"),
+                "MOD_BEVEL",
+            )
+            if quick_knife_content is not None:
+                self.draw_quick_knife_seam(context, quick_knife_content)
 
-        quick_knife_content = draw_collapsible_box(
-            layout,
-            seam_settings,
-            "show_quick_knife_seam_settings",
-            t(context, "quick_knife_seam"),
-            "MOD_BEVEL",
-        )
-        if quick_knife_content is not None:
-            self.draw_quick_knife_seam(context, quick_knife_content)
+            object_cutter_content = draw_collapsible_box(
+                content,
+                seam_settings,
+                "show_object_seam_cutter_settings",
+                t(context, "object_seam_cutter"),
+                "MESH_PLANE",
+            )
+            if object_cutter_content is not None:
+                self.draw_object_seam_cutter(context, object_cutter_content)
 
-        object_cutter_content = draw_collapsible_box(
-            layout,
-            seam_settings,
-            "show_object_seam_cutter_settings",
-            t(context, "object_seam_cutter"),
-            "MESH_PLANE",
-        )
-        if object_cutter_content is not None:
-            self.draw_object_seam_cutter(context, object_cutter_content)
+        settings = context.scene.polygroups_generator_settings
+        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
+        if content is not None:
+            content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
+            content.prop(settings, "small_island_protect_sharp", text=t(context, "small_islands_sharp"))
+            content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
+            row = content.row(align=True)
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
+            if settings.small_island_status:
+                content.label(text=settings.small_island_status)
+
 
     def draw_knife_seam(self, context, layout):
         settings = context.scene.polygroups_knife_seam_settings
@@ -1155,17 +1171,6 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_generator_settings
-        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
-        if content is not None:
-            content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
-            content.prop(settings, "small_island_protect_sharp", text=t(context, "small_islands_sharp"))
-            content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
-            row = content.row(align=True)
-            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
-            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
-            if settings.small_island_status:
-                content.label(text=settings.small_island_status)
-
         content = draw_collapsible_box(layout, settings, "show_group_generation", t(context, "generate_polygroups"), "MATERIAL")
         if content is not None:
             column = content.column(align=True)
