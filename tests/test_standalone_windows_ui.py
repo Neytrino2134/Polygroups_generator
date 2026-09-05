@@ -44,6 +44,15 @@ def run():
     assert len(SESSIONS) == 1
     session = SESSIONS[0]
     assert session.authenticated and session.process.poll() is None
+    original_process = session.process
+    added_group = next(g for g in groups if g['group'] != session.group)
+    with session.context():
+        assert bpy.ops.wm.airetopo_detach_group(**added_group) == {'FINISHED'}
+    assert len(SESSIONS) == 1 and SESSIONS[0].process is original_process
+    assert session.group == added_group['group']
+    with session.context():
+        assert bpy.ops.wm.airetopo_detach_group(**group) == {'FINISHED'}
+    assert len(SESSIONS) == 1 and session.group == group['group']
     if os.name == 'nt':
         assert Path(session.command[0]).name == 'airetopo_panel.exe', session.command
     assert len(bpy.context.window_manager.windows) == 1, 'Must not duplicate a 3D window'

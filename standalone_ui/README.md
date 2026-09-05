@@ -1,8 +1,9 @@
 # Floating tool windows
 
 Click the duplicate icon on an N-panel group header. It opens an independent
-system window, with no new Blender editor. You may open several windows or use
-**+ Group** to add group tabs to one window.
+system window, with no new Blender editor. The add-on keeps one floating window:
+clicking the icon on another group brings that window forward and opens the group
+as a new tab. **+ Group** provides the same choice from inside the window.
 
 Tabs switch only the tool content. The window shell is kept alive, so its screen
 position and dimensions do not jump or reload. Each tab also remembers its own
@@ -58,7 +59,7 @@ Blender's own viewport, file browser, undo history or operator dialogs.
 ## Bridge and lifecycle
 
 `operators/detached_groups.py` starts a loopback listener on an ephemeral port
-and a client process with a per-window random authentication token. Client
+and one client process with a random authentication token. Client
 messages reference server-generated control IDs and revisions. Arbitrary RNA
 paths, operators or Python expressions are not accepted from the client.
 

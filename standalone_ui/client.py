@@ -219,6 +219,7 @@ class PanelApp:
         self.catalog, self.tabs, self.fields = [], [], {}
         self.buttons = {}
         self.tab_widgets = {}
+        self.tabs_signature = None
         self.style = dict(DEFAULT_STYLE)
         self.hidden, self.order = [], []
         self.window_key = None
@@ -256,6 +257,7 @@ class PanelApp:
     def build_shell(self):
         for child in self.root.winfo_children():
             child.destroy()
+        self.tabs_signature = None
         s = self.style
         self.root.configure(bg=s['background'])
         ttk_style = ttk.Style(self.root)
@@ -475,6 +477,12 @@ class PanelApp:
         self.root.after_idle(restore)
 
     def draw_tabs(self, active_group):
+        signature = (active_group, tuple(
+            (tab['section'], tab['group'], tab['title']) for tab in self.tabs
+        ))
+        if signature == self.tabs_signature:
+            return
+        self.tabs_signature = signature
         for child in self.tabs_host.winfo_children():
             child.destroy()
         self.tab_widgets = {}
@@ -529,6 +537,7 @@ class PanelApp:
             return
         was_active = tab['group'] in {self.loaded_group, self.pending_group}
         self.tabs.pop(index)
+        self.tabs_signature = None
         if not self.tabs:
             self.close()
             return
@@ -673,6 +682,10 @@ class PanelApp:
                     self.catalog = message['groups']
                 elif message['type'] == 'model':
                     self.render(message)
+                elif message['type'] == 'activate':
+                    self.root.deiconify()
+                    self.root.lift()
+                    self.root.focus_force()
                 elif message['type'] == 'result':
                     self.status.configure(text=message['text'])
         except (OSError, ValueError) as error:

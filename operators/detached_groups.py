@@ -115,6 +115,15 @@ class Session:
         if len(self.outgoing) > MAX_MESSAGE * 2:
             raise RuntimeError('Panel client is not responding')
 
+    def open_group(self, context, section, group, title):
+        """Reuse this client window and open the requested group as a tab."""
+        self.window, self.area = context.window.as_pointer(), context.area.as_pointer()
+        self.section, self.group, self.title = section, group, title
+        self.last_model = None
+        self.next_refresh = 0
+        if self.authenticated:
+            self.send(dict(type='activate'))
+
     def context(self):
         window = next((w for w in bpy.context.window_manager.windows if w.as_pointer() == self.window), None)
         if window is None:
@@ -262,7 +271,11 @@ class WM_OT_airetopo_detach_group(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            SESSIONS.append(Session(context, self.section, self.group, self.title, client_command(context)))
+            session = next((item for item in SESSIONS if item.process.poll() is None), None)
+            if session is None:
+                SESSIONS.append(Session(context, self.section, self.group, self.title, client_command(context)))
+            else:
+                session.open_group(context, self.section, self.group, self.title)
             if not bpy.app.timers.is_registered(pump):
                 bpy.app.timers.register(pump, first_interval=.05)
         except Exception as error:

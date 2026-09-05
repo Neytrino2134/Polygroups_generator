@@ -83,7 +83,10 @@ def round_widget(widget, radius=8, *, window=False):
         if not region:
             return
         # Windows takes ownership after a successful SetWindowRgn.
-        if user.SetWindowRgn(handle, region, True):
+        # Tk already schedules a paint for Configure/Map. Asking SetWindowRgn to
+        # synchronously redraw the whole native window here makes live resizing
+        # flash, especially on high-DPI displays.
+        if user.SetWindowRgn(handle, region, False):
             previous = (handle, width, height)
         else:
             gdi.DeleteObject(region)

@@ -31,6 +31,10 @@ def run():
         # Return/Apply sends a typed value, not executable Python.
         app.render(dict(type='model', **schemas[5]['group'], items=schemas[5]['items'], revision='demo', context='OBJECT · Cube'))
         root.update()
+        stable_tab = app.tab_widgets[app.loaded_group]
+        app.render(app.model)
+        root.update()
+        assert app.tab_widgets[app.loaded_group] is stable_tab
         shell = app.body
         geometry = root.geometry()
         config_path = app.config_path()
