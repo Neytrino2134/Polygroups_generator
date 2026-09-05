@@ -248,7 +248,7 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
     stable_view_cut: bpy.props.BoolProperty(
         name="Stable View Cut",
         description="Use a continuous viewport-plane cut instead of Blender's screen Knife Tool",
-        default=True,
+        default=False,
     )
     use_occlude_geometry: bpy.props.BoolProperty(
         name="Occlude Geometry",
@@ -340,6 +340,14 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
                 raise
             return {"RUNNING_MODAL"}
 
+        # Override native NEW_CUT only during this seam knife session.
+        self._right_mouse_bindings = []
+        keymap = context.window_manager.keyconfigs.user.keymaps.get("Knife Tool Modal Map")
+        if keymap is not None:
+            for item in keymap.keymap_items:
+                if item.type == "RIGHTMOUSE" and item.value == "PRESS":
+                    self._right_mouse_bindings.append((item.id, item.propvalue))
+                    item.propvalue = "CANCEL"
         self._native_selection = []
         for edit_obj in context.objects_in_mode_unique_data:
             if edit_obj.type != "MESH":
@@ -395,7 +403,7 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
                 self.report({"ERROR"}, f"Knife Seam: {error}")
                 return {"CANCELLED"}
 
-        if event.type == "ESC" and event.value == "PRESS":
+        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
             # Let Knife consume its cancel event, then remove this observer on timer.
             self._cancel_requested = True
             return {"PASS_THROUGH"}
@@ -410,7 +418,7 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
             return {"PASS_THROUGH"}
 
         # Wait until Knife has actually committed/cancelled before touching its
-        # BMesh. Right-click is NEW_CUT in native Knife, not cancellation.
+        # BMesh. The temporary modal binding makes right-click cancel.
         modal_operators = getattr(self._window, "modal_operators", None)
         if modal_operators is not None and any(
             operator.bl_idname in {"MESH_OT_knife_tool", "MESH_OT_polygroups_native_knife_seam"}
@@ -424,6 +432,10 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
             return {"CANCELLED"}
 
         if not self._confirmation_requested:
+            if modal_operators is not None:
+                self._restore_native_selection()
+                self._finish(context)
+                return {"CANCELLED"}
             return {"PASS_THROUGH"}
 
         if self._confirmation_delay < 2:
@@ -520,6 +532,15 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
         self._finish(context)
 
     def _finish(self, context):
+        bindings = getattr(self, "_right_mouse_bindings", [])
+        if bindings:
+            keymap = self._window_manager.keyconfigs.user.keymaps.get("Knife Tool Modal Map")
+            if keymap is not None:
+                for item_id, value in bindings:
+                    item = keymap.keymap_items.from_id(item_id)
+                    if item is not None:
+                        item.propvalue = value
+        self._right_mouse_bindings = []
         if self._finished:
             return
 

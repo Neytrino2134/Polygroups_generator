@@ -58,6 +58,7 @@ class ImportQueue:
         self.owned_objects = set()
         self.owned_collections = set()
         self.owned_meshes = set()
+        self.owned_gray_materials = set()
         self.groups = []
         self.original_selection = list(context.selected_objects)
         self.original_active = context.view_layer.objects.active
@@ -67,6 +68,7 @@ class ImportQueue:
         self.rename = getattr(settings, prefix + "_auto_rename_objects")
         self.weld = getattr(settings, prefix + "_apply_weld")
         self.auto_remesh = getattr(settings, prefix + "_auto_remesh")
+        self.clear_material = getattr(settings, prefix + "_clear_material")
         self.separate = getattr(settings, prefix + "_separate_collections")
         self.quad_count = dict(get_remesh_preset_counts(context))[
             getattr(settings, prefix + "_remesh_preset")
@@ -233,6 +235,10 @@ class ImportQueue:
             outputs = list(self.owned_objects - before)
             if not any(obj.type == "MESH" for obj in outputs):
                 raise RuntimeError("Quad Remesher did not create a mesh")
+            if self.clear_material:
+                for obj in outputs:
+                    if obj.type == "MESH":
+                        self.replace_remesh_material(obj)
             self.file_objects.extend(outputs)
             if self.collection:
                 move_to_collection(outputs, self.collection)
@@ -245,6 +251,26 @@ class ImportQueue:
                 self.arrange_groups()
             self.complete_file(success=True)
         settings.batch_stage = self.stage
+
+    def replace_remesh_material(self, obj):
+        # Only change the generated result, including when a backend shares data.
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+            self.owned_meshes.add(obj.data)
+        material = bpy.data.materials.new(name="Remesh Gray")
+        self.owned_gray_materials.add(material)
+        material.use_nodes = True
+        gray = (0.5, 0.5, 0.5, 1.0)
+        material.diffuse_color = gray
+        bsdf = material.node_tree.nodes.get("Principled BSDF")
+        bsdf.inputs["Base Color"].default_value = gray
+        bsdf.inputs["Roughness"].default_value = 0.5
+        obj.data.materials.clear()
+        obj.data.materials.append(material)
+        obj.material_slots[0].link = "DATA"
+        obj.active_material_index = 0
+        for polygon in obj.data.polygons:
+            polygon.material_index = 0
 
     def arrange_groups(self):
         from .batch_import import arrange_objects_zx
@@ -311,6 +337,9 @@ class ImportQueue:
             for mesh in self.owned_meshes & set(bpy.data.meshes):
                 if mesh.users == 0:
                     bpy.data.meshes.remove(mesh)
+            for material in self.owned_gray_materials & set(bpy.data.materials):
+                if material.users == 0:
+                    bpy.data.materials.remove(material)
             for collection in self.owned_collections & set(bpy.data.collections):
                 if not collection.objects and not collection.children:
                     bpy.data.collections.remove(collection)

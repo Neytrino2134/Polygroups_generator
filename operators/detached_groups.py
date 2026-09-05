@@ -26,7 +26,28 @@ def blender_owner_handle():
     handle = user.GetForegroundWindow()
     process = wintypes.DWORD()
     user.GetWindowThreadProcessId(handle, ctypes.byref(process))
-    return int(handle) if process.value == os.getpid() else 0
+    if process.value == os.getpid():
+        return int(handle)
+
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user.IsWindowVisible.argtypes = [wintypes.HWND]
+    user.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    candidates = []
+
+    @callback_type
+    def visit(hwnd, _):
+        candidate_process = wintypes.DWORD()
+        user.GetWindowThreadProcessId(hwnd, ctypes.byref(candidate_process))
+        if candidate_process.value == os.getpid() and user.IsWindowVisible(hwnd):
+            rect = wintypes.RECT()
+            if user.GetWindowRect(hwnd, ctypes.byref(rect)):
+                area = max(0, rect.right-rect.left) * max(0, rect.bottom-rect.top)
+                candidates.append((area, int(hwnd)))
+        return True
+
+    user.EnumWindows(visit, 0)
+    return max(candidates, default=(0, 0))[1]
 
 
 def python_runtime(context):
@@ -42,11 +63,19 @@ def python_runtime(context):
                 return path
         except (OSError, subprocess.TimeoutExpired):
             continue
-    raise RuntimeError('Set Python with Tkinter in add-on preferences → Floating Windows.')
+    raise RuntimeError('Bundled panel client is missing, and no development Python with Tkinter was found.')
+
+
+def client_command(context):
+    root = Path(__file__).resolve().parents[1]
+    bundled = root / 'standalone_ui' / 'bin' / 'airetopo_panel.exe'
+    if os.name == 'nt' and bundled.is_file():
+        return [str(bundled)]
+    return [python_runtime(context), str(root / 'standalone_ui' / 'client.py')]
 
 
 class Session:
-    def __init__(self, context, section, group, title, runtime):
+    def __init__(self, context, section, group, title, command):
         self.window, self.area = context.window.as_pointer(), context.area.as_pointer()
         self.section, self.group, self.title = section, group, title
         self.token = secrets.token_hex(32)
@@ -60,15 +89,15 @@ class Session:
         self.bindings, self.revision = {}, ''
         self.last_model, self.next_refresh = None, 0
         self.created = time.monotonic()
+        self.command = list(command)
         self.owner_handle = blender_owner_handle()
         env = os.environ.copy()
         env['AIRETOPO_PANEL_PORT'] = str(self.listener.getsockname()[1])
         env['AIRETOPO_PANEL_TOKEN'] = self.token
         env['AIRETOPO_PANEL_CONFIG'] = str(Path(bpy.utils.user_resource('CONFIG')) / 'airetopo_windows')
         env['AIRETOPO_BLENDER_OWNER'] = str(self.owner_handle)
-        client = Path(__file__).resolve().parents[1] / 'standalone_ui' / 'client.py'
         try:
-            self.process = subprocess.Popen([runtime, str(client)], env=env,
+            self.process = subprocess.Popen(self.command, env=env,
                                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         except Exception:
             self.listener.close()
@@ -233,8 +262,7 @@ class WM_OT_airetopo_detach_group(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            runtime = python_runtime(context)
-            SESSIONS.append(Session(context, self.section, self.group, self.title, runtime))
+            SESSIONS.append(Session(context, self.section, self.group, self.title, client_command(context)))
             if not bpy.app.timers.is_registered(pump):
                 bpy.app.timers.register(pump, first_interval=.05)
         except Exception as error:

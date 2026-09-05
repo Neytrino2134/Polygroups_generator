@@ -553,6 +553,7 @@ def draw_import_remesh_options(layout, context, settings, prefix):
     presets.enabled = getattr(settings, prefix + "_auto_remesh")
     presets.prop(settings, prefix + "_remesh_preset", expand=True)
     if getattr(settings, prefix + "_auto_remesh"):
+        column.prop(settings, prefix + "_clear_material", text="Clear Material")
         count = dict(get_remesh_preset_counts(context))[getattr(settings, prefix + "_remesh_preset")]
         column.label(text=f'{t(context, "quad_count")}: {count:,}')
     column.prop(settings, prefix + "_separate_collections", text=t(context, "import_separate_collections"))
@@ -791,6 +792,8 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
 
             content.prop(qremesher, "target_count", text=t(context, "quad_count"))
             content.prop(qremesher, "use_materials", text=t(context, "use_materials"))
+            content.prop(context.scene.polygroups_model_preparation_settings,
+                         "remesh_auto_generate_seams", text="Auto Generate Seams")
 
             symmetry_row = content.row(align=True)
             symmetry_row.label(text=t(context, "symmetry"))

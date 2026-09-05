@@ -267,8 +267,8 @@ def _addon_info():
 
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     panel_python_executable: bpy.props.StringProperty(
-        name="Panel Python", subtype='FILE_PATH', default='',
-        description="Python executable with Tkinter for independent tool windows; blank searches automatically",
+        name="Development Python Fallback", subtype='FILE_PATH', default='',
+        description="Optional Python with Tkinter, used only when the bundled window client is missing",
     )
     bl_idname = __package__
 
@@ -499,7 +499,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         self.draw_pie_menu(context, layout.box())
         windows = layout.box()
         windows.label(text="Floating Windows", icon='WINDOW')
-        windows.prop(self, 'panel_python_executable')
+        windows.label(text="The standalone client is included with the add-on.", icon="CHECKMARK")
         windows.label(text="Drag the title to move; use the bottom-right grip to resize.")
         windows.operator('wm.airetopo_group_window_control')
         dev = layout.box()

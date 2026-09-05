@@ -31,6 +31,7 @@ def run():
     region = next(region for region in area.regions if region.type == "WINDOW")
     obj = context.active_object
     with context.temp_override(window=window, area=area, region=region):
+        context.scene.polygroups_knife_seam_settings.stable_view_cut = True
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.select_all(action="DESELECT")
         bpy.ops.view3d.view_axis(type="FRONT")

@@ -33,7 +33,7 @@ def run():
         bpy.ops.mesh.select_all(action="SELECT")
         bpy.ops.view3d.view_axis(type="TOP")
         settings = context.scene.polygroups_knife_seam_settings
-        assert settings.cut_mode == "PLANE"
+        assert settings.cut_mode == "POLYLINE"
         settings.cut_mode = "POLYLINE"
         assert not settings.stable_view_cut
         settings.mark_seam = True
@@ -57,6 +57,9 @@ def run():
     def bm():
         return bmesh.from_edit_mesh(context.active_object.data)
 
+    def right_bindings():
+        return [(i.id, i.propvalue) for i in context.window_manager.keyconfigs.user.keymaps["Knife Tool Modal Map"].keymap_items if i.type == "RIGHTMOUSE"]
+    original_bindings = right_bindings()
     points = [position(-2, -2), position(-1, -0.5), position(0.5, -1), position(2, 0)]
     for pos in points:
         click(pos)
@@ -64,21 +67,14 @@ def run():
     assert knife.ACTIVE_KNIFE_OPERATORS
     with context.temp_override(window=window):
         bpy.ops.screen.screenshot(filepath=str(LOG.with_suffix(".png")))
-    # Native RMB starts another line, keeping all previous pending cuts.
-    event("RIGHTMOUSE", "PRESS", points[-1])
-    event("RIGHTMOUSE", "RELEASE", points[-1])
-    yield 0.3
-    assert knife.ACTIVE_KNIFE_OPERATORS
-    for pos in [position(-2, 1), position(-0.5, 0.5), position(2, 1)]:
-        click(pos)
-        yield 0.3
     event("SPACE", "PRESS", pos)
     event("SPACE", "RELEASE", pos)
     yield 0.9
     assert not knife.ACTIVE_KNIFE_OPERATORS, [op.bl_idname for op in window.modal_operators]
+    assert right_bindings() == original_bindings
     assert not context.screen.is_animation_playing
     seams = [e for e in bm().edges if e.seam]
-    assert len(seams) == 5, [(tuple(e.verts[0].co), tuple(e.verts[1].co)) for e in seams]
+    assert len(seams) == 3, [(tuple(e.verts[0].co), tuple(e.verts[1].co)) for e in seams]
     assert not any(e.seam for e in bm().edges if e.is_boundary), "Old selection became seams"
     with context.temp_override(window=window, area=area, region=region):
         bpy.ops.ed.undo()
@@ -89,7 +85,7 @@ def run():
     with context.temp_override(window=window, area=area, region=region):
         bpy.ops.ed.redo()
     yield 0.3
-    assert sum(e.seam for e in bm().edges) == 5
+    assert sum(e.seam for e in bm().edges) == 3
 
     # Cancelling must restore selection and leave geometry/seams unchanged.
     with context.temp_override(window=window, area=area, region=region):
@@ -99,12 +95,18 @@ def run():
     yield 0.3
     click(position(0, 1.5))
     yield 0.3
-    event("ESC", "PRESS", pos)
-    event("ESC", "RELEASE", pos)
+    event("RIGHTMOUSE", "PRESS", pos)
+    event("RIGHTMOUSE", "RELEASE", pos)
     yield 0.6
-    assert not knife.ACTIVE_KNIFE_OPERATORS
+    assert not knife.ACTIVE_KNIFE_OPERATORS, ([o.bl_idname for o in window.modal_operators], [(i.type, i.value, i.propvalue) for i in context.window_manager.keyconfigs.user.keymaps["Knife Tool Modal Map"].keymap_items if i.type == "RIGHTMOUSE"])
     assert before == (len(bm().edges), sum(e.seam for e in bm().edges))
     assert all(e.select for e in bm().edges)
+    assert right_bindings() == original_bindings
+    assert context.workspace.tools.from_space_view3d_mode("EDIT_MESH").idname == "polygroups_generator.knife_seam_tool"
+    event("RIGHTMOUSE", "PRESS", pos)
+    event("RIGHTMOUSE", "RELEASE", pos)
+    yield 0.3
+    assert context.workspace.tools.from_space_view3d_mode("EDIT_MESH").idname == "builtin.select"
     addon_utils.disable(ROOT.name, default_set=True)
     LOG.write_text("KNIFE_POLYLINE_UI_TESTS_PASSED\n")
 

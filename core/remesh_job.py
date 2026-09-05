@@ -9,6 +9,8 @@ from types import SimpleNamespace
 
 import bpy
 
+from .material_seams import mark_material_boundary_seams
+
 
 def next_retopo_name(source_name, result=None):
     match = re.fullmatch(r"Retopo_(?:(\d+)_)?(.+)", source_name)
@@ -50,6 +52,7 @@ class RemeshJob:
         self.message = ""
 
     def start(self, context):
+        self.auto_generate_seams = context.scene.polygroups_model_preparation_settings.remesh_auto_generate_seams
         self.source_name = context.active_object.name
         self.source_collections = tuple(context.active_object.users_collection)
         # Every add-on Remesh entry point, including import queues, starts here.
@@ -95,6 +98,10 @@ class RemeshJob:
             raise RuntimeError("Quad Remesher did not create a mesh")
         for obj in meshes:
             obj.name = next_retopo_name(self.source_name, obj)
+            if getattr(self, "auto_generate_seams", False):
+                if obj.data.users > 1:
+                    obj.data = obj.data.copy()
+                mark_material_boundary_seams(obj)
         collections = [collection for collection in self.source_collections
                        if collection in set(bpy.data.collections)]
         if not collections:

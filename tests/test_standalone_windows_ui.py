@@ -44,6 +44,8 @@ def run():
     assert len(SESSIONS) == 1
     session = SESSIONS[0]
     assert session.authenticated and session.process.poll() is None
+    if os.name == 'nt':
+        assert Path(session.command[0]).name == 'airetopo_panel.exe', session.command
     assert len(bpy.context.window_manager.windows) == 1, 'Must not duplicate a 3D window'
     if os.name == 'nt':
         assert session.owner_handle, 'Blender owner window was not detected'
@@ -54,9 +56,10 @@ def run():
         handles = []
         @callback_type
         def visit(hwnd, _):
-            process = wintypes.DWORD()
-            user.GetWindowThreadProcessId(hwnd, ctypes.byref(process))
-            if process.value == session.process.pid and user.IsWindowVisible(hwnd):
+            # PyInstaller one-file starts a short-lived bootloader process and a
+            # child process for the actual Tk window, so ownership is the stable
+            # relationship to verify instead of the launcher's PID.
+            if user.GetWindow(hwnd, 4) == session.owner_handle and user.IsWindowVisible(hwnd):
                 handles.append(hwnd)
             return True
         user.EnumWindows(visit, 0)

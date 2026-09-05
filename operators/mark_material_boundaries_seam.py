@@ -1,5 +1,6 @@
-import bmesh
 import bpy
+
+from ..core.material_seams import mark_material_boundary_seams
 
 
 class MESH_OT_polygroups_mark_material_boundaries_seam(bpy.types.Operator):
@@ -14,38 +15,7 @@ class MESH_OT_polygroups_mark_material_boundaries_seam(bpy.types.Operator):
         return obj is not None and obj.type == "MESH"
 
     def execute(self, context):
-        obj = context.active_object
-        marked_count = 0
-
-        if context.mode == "EDIT_MESH":
-            bm = bmesh.from_edit_mesh(obj.data)
-            bm.edges.ensure_lookup_table()
-            bm.faces.ensure_lookup_table()
-
-            for edge in bm.edges:
-                material_indices = {face.material_index for face in edge.link_faces}
-                if len(material_indices) > 1:
-                    if not edge.seam:
-                        marked_count += 1
-                    edge.seam = True
-
-            bmesh.update_edit_mesh(obj.data)
-        else:
-            bm = bmesh.new()
-            bm.from_mesh(obj.data)
-            bm.edges.ensure_lookup_table()
-            bm.faces.ensure_lookup_table()
-
-            for edge in bm.edges:
-                material_indices = {face.material_index for face in edge.link_faces}
-                if len(material_indices) > 1:
-                    if not edge.seam:
-                        marked_count += 1
-                    edge.seam = True
-
-            bm.to_mesh(obj.data)
-            bm.free()
-            obj.data.update()
+        marked_count = mark_material_boundary_seams(context.active_object)
 
         self.report({"INFO"}, f"Marked {marked_count} material boundary seam edge(s)")
         return {"FINISHED"}

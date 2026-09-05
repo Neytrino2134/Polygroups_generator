@@ -35,10 +35,10 @@ closing the last tab closes the floating window.
 
 ## Runtime
 
-The client uses Python's standard-library Tkinter, in a separate process. No
-third-party Python packages are installed. Set **Add-on Preferences → Floating
-Windows → Panel Python** if automatic discovery cannot find a Python installation
-with Tkinter. This is separate from Blender's Python, which may omit Tkinter.
+The release includes `bin/airetopo_panel.exe`, a Windows x64 client containing
+its own Python and Tkinter runtime. Users do not need to install Python or set a
+path. **Development Python Fallback** is used only when that executable is absent.
+The source client still uses only Python's standard library.
 **Close All Floating Windows** closes the add-on's clients. Loading another
 blend file or disabling the add-on closes them to avoid stale scene bindings.
 
@@ -84,3 +84,9 @@ python tests/test_window_client.py
 The Blender test writes its result and captured factory-state group schemas to
 the system temp directory. Tests cover all 13 sections, RNA changes, operator
 dispatch, stale request rejection, child cleanup, client widgets and appearance.
+
+Build the bundled Windows x64 client with `standalone_ui/build_client.ps1`.
+PyInstaller is a build dependency only; it is not required on user devices. The
+script writes the executable and its SHA-256 file into `standalone_ui/bin`.
+It also copies the redistribution notices for Python, Tcl and Tk
+into `standalone_ui/bin/licenses` so the binary can be shipped with the add-on.

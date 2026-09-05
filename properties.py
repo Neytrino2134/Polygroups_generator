@@ -267,10 +267,25 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=False,
         options={"SKIP_SAVE"},
     )
+    remesh_auto_generate_seams: bpy.props.BoolProperty(
+        name="Auto Generate Seams",
+        description="Generate seams along material boundaries on each remeshed result",
+        default=False,
+    )
     file_import_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=False)
+    file_import_clear_material: bpy.props.BoolProperty(
+        name="Clear Material",
+        description="Replace transferred materials on the remeshed result with a plain gray material",
+        default=False,
+    )
     file_import_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
     file_import_separate_collections: bpy.props.BoolProperty(default=False)
     batch_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=False)
+    batch_clear_material: bpy.props.BoolProperty(
+        name="Clear Material",
+        description="Replace transferred materials on the remeshed result with a plain gray material",
+        default=False,
+    )
     batch_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
     batch_separate_collections: bpy.props.BoolProperty(default=False)
     batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
@@ -408,7 +423,7 @@ class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
     stable_view_cut: bpy.props.BoolProperty(
         name="Stable View Cut",
         description="Use a viewport-plane cut that stays continuous on dense meshes when zoomed out",
-        default=True,
+        default=False,
     )
     use_occlude_geometry: bpy.props.BoolProperty(
         name="Occlude Geometry",

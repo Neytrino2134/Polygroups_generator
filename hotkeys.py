@@ -286,6 +286,10 @@ class AIRETOPO_OT_select_cutter_tweak(bpy.types.Operator):
     bl_description = "Cycle through Cutter Tweak Plane, Arc, and Path workspace tools"
     bl_options = {"REGISTER"}
 
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "OBJECT" and context.area is not None and context.area.type == "VIEW_3D"
+
     def execute(self, context):
         preferences = get_preferences(context)
         tool_id = _next_cutter_tool_id(context, preferences)
@@ -297,6 +301,29 @@ class AIRETOPO_OT_select_cutter_tweak(bpy.types.Operator):
 
         self.report({"INFO"}, "Cutter Tweak tool selected")
         return {"FINISHED"}
+
+
+SEAM_TOOL_GROUPS = {
+    "DRAW": ("polygroups_generator.connect_vertex_seam_tool", "polygroups_generator.edge_seam_path_tool"),
+    "ERASE": ("polygroups_generator.seam_eraser_tool", "polygroups_generator.edge_seam_eraser_tool"),
+    "KNIFE": ("polygroups_generator.knife_seam_tool", "polygroups_generator.quick_knife_seam_tool"),
+}
+
+
+class MESH_OT_airetopo_cycle_seam_tool(bpy.types.Operator):
+    bl_idname = "mesh.airetopo_cycle_seam_tool"
+    bl_label = "Cycle Seam Tools"
+    group: bpy.props.EnumProperty(items=[(key, key.title(), "") for key in SEAM_TOOL_GROUPS])
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "EDIT_MESH" and context.area is not None and context.area.type == "VIEW_3D"
+
+    def execute(self, context):
+        order = SEAM_TOOL_GROUPS[self.group]
+        active = _active_workspace_tool_id(context)
+        tool_id = order[(order.index(active) + 1) % len(order)] if active in order else order[0]
+        return bpy.ops.mesh.polygroups_select_seam_tool(tool_id=tool_id)
 
 
 class MESH_OT_airetopo_linked_seam(bpy.types.Operator):
@@ -335,6 +362,7 @@ class VIEW3D_MT_airetopo_pie(bpy.types.Menu):
 
 
 CLASSES = (
+    MESH_OT_airetopo_cycle_seam_tool,
     MESH_OT_airetopo_linked_seam,
     AIRETOPO_OT_section_number,
     AIRETOPO_OT_select_cutter_tweak,
@@ -351,6 +379,12 @@ def register_keymaps():
 
     keymap = keyconfig.keymaps.new(name="3D View", space_type="VIEW_3D")
     mesh_keymap = keyconfig.keymaps.new(name="Mesh", space_type="EMPTY")
+    for key, ctrl, group in (("D", False, "DRAW"), ("D", True, "ERASE"), ("K", False, "KNIFE")):
+        item = mesh_keymap.keymap_items.new(
+            MESH_OT_airetopo_cycle_seam_tool.bl_idname, key, "PRESS", ctrl=ctrl, head=True,
+        )
+        item.properties.group = group
+        KEYMAP_ITEMS.append((mesh_keymap, item))
     for ctrl, pick in ((False, True), (True, False)):
         item = mesh_keymap.keymap_items.new(
             MESH_OT_airetopo_linked_seam.bl_idname, "L", "PRESS", ctrl=ctrl, head=True,

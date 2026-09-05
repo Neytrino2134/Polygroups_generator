@@ -28,6 +28,11 @@ settings.batch_remesh_preset = "LOW"
 context.preferences.addons[ROOT.name].preferences.remesh_low_count = 1234
 existing = set(bpy.data.objects)
 events = []
+source_material = bpy.data.materials.new("Imported Textured Material")
+source_material.use_nodes = True
+source_material.node_tree.nodes.new("ShaderNodeTexImage")
+assert not settings.batch_clear_material and not settings.file_import_clear_material
+settings.batch_clear_material = True
 
 # Exercise the modal entry point with Blender's Event shape (no timer field).
 modal_queue = SimpleNamespace(
@@ -58,6 +63,7 @@ class FakeJob:
         assert self.source.name.startswith("Highpoly_Generated.")
         assert not self.source.modifiers
         assert context.scene.qremesher.target_count == 1234
+        self.source.data.materials.append(source_material)
         events.append("start")
     def poll(self):
         self.ticks += 1
@@ -125,6 +131,15 @@ with tempfile.TemporaryDirectory() as directory:
         assert len([c for c in queue.owned_collections if c.name.startswith("Generated.")]) == 2
         for anchor, objects in queue.groups:
             assert len(objects) == 2
+            result = next(obj for obj in objects if obj != anchor)
+            assert list(anchor.data.materials) == [source_material]
+            assert len(result.data.materials) == 1
+            gray = result.active_material
+            assert gray != source_material and gray.name.startswith("Remesh Gray")
+            assert tuple(gray.diffuse_color) == (0.5, 0.5, 0.5, 1.0)
+            assert len(gray.node_tree.nodes) == 2
+            assert tuple(gray.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value) == (0.5, 0.5, 0.5, 1.0)
+            assert all(face.material_index == 0 for face in result.data.polygons)
             assert objects[0].users_collection == objects[1].users_collection
             assert objects[0].users_collection[0].name.startswith("Generated.")
             assert (objects[0].matrix_world.translation - objects[1].matrix_world.translation).length < 1e-6
@@ -133,6 +148,8 @@ with tempfile.TemporaryDirectory() as directory:
         queue.finish(context, "CANCELLED", rollback=True)
         assert set(bpy.data.objects) == existing
 
+        assert not any(mat.name.startswith("Remesh Gray") for mat in bpy.data.materials)
+        settings.batch_clear_material = False
         events.clear()
         queue = queue_module.ImportQueue(context, paths, False, report)
         queue.begin()
@@ -141,6 +158,7 @@ with tempfile.TemporaryDirectory() as directory:
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_imported_count == 1 and queue.index == 1
         assert settings.batch_remaining_count == 1 and settings.batch_stage == "STOPPED"
+        assert all(list(obj.data.materials) == [source_material] for obj in queue.groups[0][1])
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)
 
@@ -187,6 +205,7 @@ with tempfile.TemporaryDirectory() as directory:
         queue.finish(context, "CANCELLED", rollback=True)
 
         # Import-tab settings are independent of Batch Import settings.
+        settings.file_import_clear_material = True
         settings.file_import_auto_remesh = False
         settings.file_import_separate_collections = True
         queue = queue_module.ImportQueue(context, paths[:1], True, report)
@@ -194,6 +213,7 @@ with tempfile.TemporaryDirectory() as directory:
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_imported_count == 1
         assert len(queue.groups[0][1]) == 1
+        assert not queue.groups[0][0].data.materials
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)
 

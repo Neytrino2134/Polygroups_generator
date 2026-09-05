@@ -130,6 +130,9 @@ def invoke_seam_click(self, context, event, connect, failure_key):
     update_cursor_ctrl(context, event)
     meshes = edit_meshes(context)
     if self.reset:
+        if event.type == "RIGHTMOUSE" and len(selected_vertices(meshes)) != 1:
+            bpy.ops.wm.tool_set_by_id(name="builtin.select")
+            return {"FINISHED"}
         select_vertices(meshes, [])
         context.area.tag_redraw()
         return {"FINISHED"}
