@@ -546,7 +546,9 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
         layout = self.layout
         settings = context.scene.polygroups_model_preparation_settings
 
-        files_box = layout.box()
+        layout.label(text=t(context, "import_group_source"), icon="FILE_FOLDER")
+        files_box = layout.column(align=True)
+        files_box.prop(settings, "batch_import_format", text=t(context, "format"))
         files_row = files_box.row(align=True)
         files_row.enabled = not settings.batch_is_running
         file_operator = files_row.operator(
@@ -556,8 +558,9 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
         )
         file_operator.use_file_selection = True
 
-        files_box.separator()
-        files_box.prop(settings, "batch_import_format", text=t(context, "format"))
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "import_group_processing"), icon="MODIFIER")
+        files_box = layout.column(align=True)
         files_box.prop(
             settings,
             "file_import_auto_rename_objects",
@@ -565,6 +568,8 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
         )
         files_box.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
         draw_import_remesh_options(files_box, context, settings, "file_import")
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "import_group_progress"), icon="INFO")
         draw_import_progress(layout, context, settings)
 
 
@@ -584,9 +589,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         if not section_content_visible(self, context):
             return
 
-        layout = self.layout.box()
+        layout = self.layout
         settings = context.scene.polygroups_model_preparation_settings
 
+        layout.label(text=t(context, "import_group_source"), icon="FILE_FOLDER")
         folder_row = layout.row(align=True)
         folder_row.label(text=t(context, "folder"))
         folder_row.operator("object.polygroups_select_import_folder", text="", icon="FILE_FOLDER")
@@ -594,13 +600,26 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         folder_path = settings.batch_import_directory or t(context, "no_folder_selected")
         layout.label(text=folder_path, icon="FILE_FOLDER")
         layout.prop(settings, "batch_import_format", text=t(context, "format"))
+        subfolders_row = layout.row()
+        subfolders_row.enabled = not settings.batch_is_running
+        subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
+        scan_row = layout.row(align=True)
+        scan_row.enabled = not settings.batch_is_running
+        scan_row.operator(
+            "object.polygroups_scan_import_folder",
+            text=t(context, "scan_folder"),
+            icon="VIEWZOOM",
+        )
+
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "import_group_processing"), icon="MODIFIER")
         layout.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
         layout.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
         draw_import_remesh_options(layout, context, settings, "batch")
-        layout.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
-
-        arrange_box = layout.box()
-        arrange_box.label(text=t(context, "arrange_objects"), icon="SNAP_EDGE")
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "arrange_objects"), icon="SNAP_EDGE")
+        arrange_box = layout.column(align=True)
+        arrange_box.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
         arrange_box.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing"))
         arrange_box.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
         rows_row = arrange_box.row(align=True)
@@ -614,19 +633,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             icon="ALIGN_CENTER",
         )
 
-        draw_import_progress(layout, context, settings)
-
-        subfolders_row = layout.row()
-        subfolders_row.enabled = not settings.batch_is_running
-        subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
-        scan_row = layout.row(align=True)
-        scan_row.enabled = not settings.batch_is_running
-        scan_row.operator(
-            "object.polygroups_scan_import_folder",
-            text=t(context, "scan_folder"),
-            icon="VIEWZOOM",
-        )
-
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "import_group_run"), icon="PLAY")
         operator_row = layout.row(align=True)
         operator_row.enabled = not settings.batch_is_running
         operator_row.operator_context = "EXEC_DEFAULT"
@@ -636,6 +644,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             icon="PLAY",
         )
         start_import.use_file_selection = False
+        layout.separator(type="LINE")
+        layout.label(text=t(context, "import_group_progress"), icon="INFO")
+        draw_import_progress(layout, context, settings)
 
 
 class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
@@ -1770,6 +1781,23 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         if fab_content is not None:
             self.draw_fab_rename(context, fab_content)
 
+        unity_content = draw_collapsible_box(
+            layout, settings, "show_unity_rename_settings", "Unity Rename", icon="OUTLINER_OB_MESH",
+        )
+        if unity_content is not None:
+            unity_content.label(text="Unity Prepare")
+            unity_content.prop(settings, "unity_asset_name", text=t(context, "fab_asset_name"))
+            row = unity_content.row(align=True)
+            row.prop(settings, "unity_asset_index", text=t(context, "fab_asset_index"))
+            row.prop(settings, "unity_auto_increment_index", text="", icon="ADD")
+            unity_content.prop(settings, "unity_copy_textures", text=t(context, "copy_textures"))
+            row = unity_content.row(align=True)
+            for lod in range(6):
+                row.operator("object.polygroups_prepare_unity", text=f"LOD{lod}").lod = f"LOD{lod}"
+            unity_content.operator(
+                "object.polygroups_prepare_unity", text="Prepare Meshes (Auto LOD)", icon="SORTSIZE",
+            ).auto_lods = True
+
         export_content = draw_collapsible_box(
             layout,
             settings,
@@ -2021,6 +2049,8 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
     def draw_mesh_export(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
         column = layout.column(align=True)
+        column.label(text="Fab Export", icon="EXPORT")
+        column.separator()
         column.prop(
             settings,
             "mesh_export_format",
@@ -2033,8 +2063,16 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         )
 
         column.separator()
+        column.label(text="UNITY Export", icon="EXPORT")
+        column.separator()
+        column.prop(settings, "unity_export_directory")
+        column.prop(settings, "unity_export_overwrite")
+        column.prop(settings, "unity_use_auto_rig_pro")
+        column.operator("object.polygroups_export_unity", icon="EXPORT")
+        column.separator()
         blend_box = column.box()
-        blend_box.label(text=t(context, "blend_asset_export"), icon="FILE_BLEND")
+        blend_box.label(text="Export Blend Assets", icon="FILE_BLEND")
+        blend_box.separator()
         blend_column = blend_box.column(align=True)
         blend_column.prop(settings, "blend_export_directory", text=t(context, "blend_export_directory"))
         picker_row = blend_column.row(align=True)

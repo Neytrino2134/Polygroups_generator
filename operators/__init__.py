@@ -40,6 +40,7 @@ from .edge_seam_path import MESH_OT_polygroups_edge_seam_path, MESH_OT_polygroup
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_fab_selection
 from .fab_preparation import OBJECT_OT_polygroups_prepare_fab_variant
+from .unity_preparation import OBJECT_OT_polygroups_prepare_unity, OBJECT_OT_polygroups_export_unity
 from .generate_polygroups import OBJECT_OT_generate_polygroups
 from .generate_polygroups import OBJECT_OT_polygroups_apply_checker_material
 from .generate_polygroups import OBJECT_OT_polygroups_apply_material_mode
@@ -186,6 +187,8 @@ CLASSES = (
     OBJECT_OT_face_sets_to_materials,
     OBJECT_OT_clear_polygroups_materials,
     OBJECT_OT_polygroups_prepare_fab_variant,
+    OBJECT_OT_polygroups_prepare_unity,
+    OBJECT_OT_polygroups_export_unity,
     OBJECT_OT_polygroups_auto_prepare_fab_selection,
     MESH_OT_polygroups_mark_boundary_and_longitudinal_seam,
     MESH_OT_polygroups_mark_longitudinal_seam,

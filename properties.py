@@ -753,6 +753,18 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
+    show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=True)
+    unity_asset_name: bpy.props.StringProperty(name="Asset Name", default="Asset")
+    unity_asset_index: bpy.props.StringProperty(name="Index", default="01")
+    unity_auto_increment_index: bpy.props.BoolProperty(name="Auto Increment Index", default=True)
+    unity_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
+    unity_export_directory: bpy.props.StringProperty(name="Directory", subtype="DIR_PATH", default="//!Unity")
+    unity_export_overwrite: bpy.props.BoolProperty(name="Overwrite Existing", default=False)
+    unity_use_auto_rig_pro: bpy.props.BoolProperty(
+        name="Auto-Rig Pro Export",
+        description="Export LOD0 together with the selected rig using the saved Auto-Rig Pro export settings",
+        default=False,
+    )
     show_smart_decimate_settings: bpy.props.BoolProperty(
         name="Decimate",
         default=True,
