@@ -1,3 +1,4 @@
+from .custom_icons import icon_kwargs, tool_icon
 from .operators.seam_eraser import AREA_TOOL_ID, PATH_TOOL_ID, draw_eraser_cursor, stop_erasers
 import bpy
 from bpy.types import WorkSpaceTool
@@ -279,7 +280,7 @@ class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
             operator = layout.operator(
                 "wm.tool_set_by_id",
                 text=t(context, text_key),
-                icon=icon,
+                **icon_kwargs(text_key, icon),
             )
             operator.name = tool_id
 
@@ -630,6 +631,19 @@ def draw_seam_status(self, context):
 
 
 def register():
+    VIEW3D_WST_polygroups_draw_cutter_plane.bl_icon = tool_icon("draw_cutter_plane", "ops.mesh.primitive_grid_add_gizmo")
+    VIEW3D_WST_polygroups_draw_cutter_grid.bl_icon = tool_icon("draw_cutter_grid", "ops.mesh.primitive_cube_add_gizmo")
+    VIEW3D_WST_polygroups_draw_cutter_arc.bl_icon = tool_icon("draw_cutter_arc", "ops.gpencil.primitive_arc")
+    VIEW3D_WST_polygroups_draw_cutter_local_ring.bl_icon = tool_icon("draw_cutter_local_ring", "ops.mesh.primitive_cylinder_add_gizmo")
+    VIEW3D_WST_polygroups_draw_cutter_local_contour.bl_icon = tool_icon("draw_cutter_local_contour", "ops.mesh.primitive_cylinder_add_gizmo")
+    VIEW3D_WST_polygroups_draw_cutter_path.bl_icon = tool_icon("draw_cutter_path", "ops.curve.draw")
+    VIEW3D_WST_polygroups_draw_cutter_draw.bl_icon = tool_icon("draw_cutter_draw", "ops.curve.draw")
+    VIEW3D_WST_polygroups_knife_seam.bl_icon = tool_icon("knife_seam", "ops.mesh.knife_tool")
+    VIEW3D_WST_polygroups_quick_knife_seam.bl_icon = tool_icon("quick_knife_seam", "ops.mesh.bisect")
+    VIEW3D_WST_polygroups_connect_vertex_seam.bl_icon = tool_icon("connect_vertex_seam", "ops.mesh.dupli_extrude_cursor")
+    VIEW3D_WST_polygroups_edge_seam_path.bl_icon = tool_icon("edge_seam_path", "ops.mesh.dupli_extrude_cursor")
+    VIEW3D_WST_polygroups_seam_eraser.bl_icon = tool_icon("seam_eraser", "ops.generic.select_circle")
+    VIEW3D_WST_polygroups_edge_seam_eraser.bl_icon = tool_icon("edge_seam_eraser", "ops.mesh.dupli_extrude_cursor")
     bpy.types.STATUSBAR_HT_header.prepend(draw_seam_status)
     register_hover_cache()
     bpy.utils.register_class(VIEW3D_MT_polygroups_cutter_tool_type)

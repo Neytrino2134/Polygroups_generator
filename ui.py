@@ -1,3 +1,4 @@
+from .custom_icons import icon_kwargs
 import os
 import sys
 from types import SimpleNamespace
@@ -899,7 +900,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             tools_column.operator(
                 "mesh.polygroups_edge_seam_path",
                 text=t(context, "edge_seam_path"),
-                icon="EDGE_SEAM",
+                **icon_kwargs("edge_seam_path", "EDGE_SEAM"),
             )
             tools_column.separator()
             tools_column.prop(seam_settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
@@ -915,12 +916,12 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             edge_tool = tools_column.operator(
                 "mesh.polygroups_select_seam_tool",
                 text=t(context, "select_edge_seam_tool"),
-                icon="VERTEXSEL",
+                **icon_kwargs("edge_seam_path", "VERTEXSEL"),
             )
             edge_tool.tool_id = "polygroups_generator.edge_seam_path_tool"
             for key, tool_id in (("seam_eraser", "polygroups_generator.seam_eraser_tool"),
                                  ("edge_seam_eraser", "polygroups_generator.edge_seam_eraser_tool")):
-                button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), icon="X")
+                button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), **icon_kwargs(key, "X"))
                 button.tool_id = tool_id
 
         content = draw_collapsible_box(layout, seam_settings, "show_check_group", t(context, "seam_group_check"), "VIEWZOOM")
@@ -938,7 +939,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             connect_tool = connect_column.operator(
                 "mesh.polygroups_select_seam_tool",
                 text=t(context, "select_vertex_seam_tool"),
-                icon="VERTEXSEL",
+                **icon_kwargs("connect_vertex_seam", "VERTEXSEL"),
             )
             connect_tool.tool_id = "polygroups_generator.connect_vertex_seam_tool"
             knife_content = draw_collapsible_box(
@@ -1003,7 +1004,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         tool_operator = layout.operator(
             "mesh.polygroups_select_seam_tool",
             text=t(context, "select_knife_tool"),
-            icon="SCULPTMODE_HLT",
+            **icon_kwargs("knife_seam", "SCULPTMODE_HLT"),
         )
         tool_operator.tool_id = "polygroups_generator.knife_seam_tool"
 
@@ -1022,7 +1023,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         tool_operator = layout.operator(
             "mesh.polygroups_select_seam_tool",
             text=t(context, "select_quick_knife_tool"),
-            icon="MOD_BEVEL",
+            **icon_kwargs("quick_knife_seam", "MOD_BEVEL"),
         )
         tool_operator.tool_id = "polygroups_generator.quick_knife_seam_tool"
 
@@ -1117,64 +1118,64 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_plane"),
-            icon="MESH_PLANE",
+            **icon_kwargs("draw_cutter_plane", "MESH_PLANE"),
         )
         tool_operator.name = "polygroups_generator.draw_cutter_plane_tool"
         layout.operator(
             "object.polygroups_draw_cutter_plane",
             text=t(context, "draw_cutter_plane"),
-            icon="MESH_PLANE",
+            **icon_kwargs("draw_cutter_plane", "MESH_PLANE"),
         )
         grid_box = layout.box()
-        grid_box.label(text=t(context, "draw_cutter_grid"), icon="MESH_CUBE")
+        grid_box.label(text=t(context, "draw_cutter_grid"), **icon_kwargs("draw_cutter_grid", "MESH_CUBE"))
         from .tools import draw_grid_settings
         draw_grid_settings(context, grid_box)
         grid_box.operator("wm.tool_set_by_id", text=t(context, "select_draw_cutter_grid"),
-                          icon="MESH_CUBE").name = "polygroups_generator.draw_cutter_grid_tool"
-        grid_box.operator("object.polygroups_draw_cutter_grid", text=t(context, "draw_cutter_grid"), icon="MESH_CUBE")
+                          **icon_kwargs("draw_cutter_grid", "MESH_CUBE")).name = "polygroups_generator.draw_cutter_grid_tool"
+        grid_box.operator("object.polygroups_draw_cutter_grid", text=t(context, "draw_cutter_grid"), **icon_kwargs("draw_cutter_grid", "MESH_CUBE"))
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_arc"),
-            icon="CURVE_BEZCURVE",
+            **icon_kwargs("draw_cutter_arc", "CURVE_BEZCURVE"),
         )
         tool_operator.name = "polygroups_generator.draw_cutter_arc_tool"
         layout.operator(
             "object.polygroups_draw_cutter_arc",
             text=t(context, "draw_cutter_arc"),
-            icon="CURVE_BEZCURVE",
+            **icon_kwargs("draw_cutter_arc", "CURVE_BEZCURVE"),
         )
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_local_ring"),
-            icon="MESH_CIRCLE",
+            **icon_kwargs("draw_cutter_local_ring", "MESH_CIRCLE"),
         )
         tool_operator.name = "polygroups_generator.draw_cutter_local_ring_tool"
         layout.operator(
             "object.polygroups_draw_cutter_local_ring",
             text=t(context, "draw_cutter_local_ring"),
-            icon="MESH_CIRCLE",
+            **icon_kwargs("draw_cutter_local_ring", "MESH_CIRCLE"),
         )
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_local_contour"),
-            icon="MESH_CIRCLE",
+            **icon_kwargs("draw_cutter_local_contour", "MESH_CIRCLE"),
         )
         tool_operator.name = "polygroups_generator.draw_cutter_local_contour_tool"
         layout.operator(
             "object.polygroups_draw_cutter_local_contour",
             text=t(context, "draw_cutter_local_contour"),
-            icon="MESH_CIRCLE",
+            **icon_kwargs("draw_cutter_local_contour", "MESH_CIRCLE"),
         )
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_path"),
-            icon="CURVE_PATH",
+            **icon_kwargs("draw_cutter_path", "CURVE_PATH"),
         )
         tool_operator.name = "polygroups_generator.draw_cutter_path_tool"
         layout.operator(
             "object.polygroups_draw_cutter_path",
             text=t(context, "draw_cutter_path"),
-            icon="CURVE_PATH",
+            **icon_kwargs("draw_cutter_path", "CURVE_PATH"),
         )
         layout.operator(
             "object.polygroups_join_cutter_paths",
@@ -1184,13 +1185,13 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_draw"),
-            icon="GREASEPENCIL",
+            **icon_kwargs("draw_cutter_draw", "GREASEPENCIL"),
         )
         tool_operator.name = "polygroups_generator.draw_cutter_draw_tool"
         layout.operator(
             "object.polygroups_draw_cutter_draw",
             text=t(context, "draw_cutter_draw"),
-            icon="GREASEPENCIL",
+            **icon_kwargs("draw_cutter_draw", "GREASEPENCIL"),
         )
         layout.operator(
             "object.polygroups_join_draw_strokes",

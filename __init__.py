@@ -8,6 +8,9 @@ bl_info = {
     "category": "Mesh",
 }
 
+from .custom_icons import register as register_icons
+from .custom_icons import unregister as unregister_icons
+
 from .preferences import register as register_preferences
 from .preferences import unregister as unregister_preferences
 from .core.remesh_defaults import register_remesh_defaults_timer
@@ -25,6 +28,7 @@ from .ui import unregister as unregister_ui
 
 
 def register():
+    register_icons()
     register_preferences()
     register_properties()
     register_operators()
@@ -45,3 +49,4 @@ def unregister():
     unregister_operators()
     unregister_properties()
     unregister_preferences()
+    unregister_icons()

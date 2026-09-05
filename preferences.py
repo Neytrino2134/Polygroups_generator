@@ -491,6 +491,9 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         layout = self.layout
         self.draw_info(context, layout.box())
         self.draw_updates(context, layout.box())
+        icons = layout.box()
+        icons.label(text="Custom Icons", icon="IMAGE_DATA")
+        icons.operator("wm.airetopo_update_icons", text="Update icons", icon="FILE_REFRESH")
         self.draw_language(context, layout.box())
         self.draw_operations(context, layout.box())
         self.draw_remesh(context, layout.box())
@@ -640,6 +643,22 @@ class AIRETOPO_OT_toggle_panel_settings(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIRETOPO_OT_update_icons(bpy.types.Operator):
+    bl_idname = "wm.airetopo_update_icons"
+    bl_label = "Update icons"
+    bl_description = "Rebuild icons from the PNG files in the add-on icons folder and refresh the interface"
+
+    def execute(self, context):
+        from .custom_icons import update_icons
+        try:
+            count = update_icons(context)
+        except Exception as error:
+            self.report({"ERROR"}, f"Could not update icons: {error}")
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"Updated {count} icons")
+        return {"FINISHED"}
+
+
 class AIRETOPO_OT_check_updates(bpy.types.Operator):
     bl_idname = "wm.airetopo_check_updates"
     bl_label = "Check Updates"
@@ -722,6 +741,7 @@ CLASSES = (
     AIRETOPO_Preferences,
     AIRETOPO_OT_toggle_panel_settings,
     AIRETOPO_OT_check_updates,
+    AIRETOPO_OT_update_icons,
     AIRETOPO_OT_update_addon,
 )
 
