@@ -74,6 +74,7 @@ def uvpackmaster_status(context):
 _DRAWING_SECTION = None
 _DETACHED_TARGET = None
 _DETACHED_LAYOUT = None
+_GROUP_DISCOVERY = None
 
 
 class _NullLayout:
@@ -91,6 +92,9 @@ def draw_topic(layout, context, key, label, icon):
 
 def draw_collapsible_box(layout, settings, property_name, label, icon):
     key = settings.path_from_id() + "." + property_name
+    if _GROUP_DISCOVERY is not None:
+        _GROUP_DISCOVERY.append(dict(section=_DRAWING_SECTION.__name__, group=key, title=label))
+        return _NullLayout()
     if _DETACHED_TARGET is not None:
         if key == _DETACHED_TARGET:
             return _DETACHED_LAYOUT.column(align=True)
@@ -117,6 +121,13 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
         icon=icon,
         emboss=False,
     )
+    if _DRAWING_SECTION is not None and _DETACHED_TARGET is None:
+        actions = header.row(align=True)
+        actions.alignment = "RIGHT"
+        detach = actions.operator("wm.airetopo_detach_group", text="", icon="DUPLICATE", emboss=False)
+        detach.section = _DRAWING_SECTION.__name__
+        detach.group = key
+        detach.title = label
 
     if not is_open:
         return None
@@ -207,6 +218,17 @@ def draw_detached_group(context, layout, section, group):
         draw_section_panel_content(panel_class, context, _NullLayout(), "")
     finally:
         _DETACHED_TARGET, _DETACHED_LAYOUT = None, None
+
+
+def collect_window_groups(context):
+    global _GROUP_DISCOVERY
+    _GROUP_DISCOVERY = []
+    try:
+        for panel_class in SECTION_PANEL_CLASSES:
+            draw_section_panel_content(panel_class, context, _NullLayout(), "")
+        return list(_GROUP_DISCOVERY)
+    finally:
+        _GROUP_DISCOVERY = None
 
 
 def draw_material_mode_buttons(layout, context, settings):

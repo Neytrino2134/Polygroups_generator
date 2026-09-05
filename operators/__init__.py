@@ -278,12 +278,16 @@ def register():
     bpy.app.handlers.load_pre.append(stop_import_queue)
     bpy.app.handlers.load_pre.append(stop_remesh)
     bpy.app.handlers.load_pre.append(stop_knife_seams)
+    from .detached_groups import cleanup_windows
+    bpy.app.handlers.load_pre.append(cleanup_windows)
 
 
 def unregister():
     from .detached_groups import cleanup_windows
     cleanup_windows()
     import bpy
+    if cleanup_windows in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(cleanup_windows)
     from .import_queue import stop_import_queue
     from .remesh_progress import stop_remesh
     from .knife_seam_tool import stop_knife_seams

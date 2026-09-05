@@ -266,6 +266,10 @@ def _addon_info():
 
 
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
+    panel_python_executable: bpy.props.StringProperty(
+        name="Panel Python", subtype='FILE_PATH', default='',
+        description="Python executable with Tkinter for independent tool windows; blank searches automatically",
+    )
     bl_idname = __package__
 
     enable_section_number_hotkeys: bpy.props.BoolProperty(
@@ -493,6 +497,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         self.draw_api(context, layout.box())
         self.draw_hotkeys(context, layout.box())
         self.draw_pie_menu(context, layout.box())
+        windows = layout.box()
+        windows.label(text="Floating Windows", icon='WINDOW')
+        windows.prop(self, 'panel_python_executable')
+        windows.label(text="Drag the title to move; use the bottom-right grip to resize.")
+        windows.operator('wm.airetopo_group_window_control')
         dev = layout.box()
         dev.label(text="Dev", icon="CONSOLE")
         dev.label(text=t(context, "dev_restart_hint"))
