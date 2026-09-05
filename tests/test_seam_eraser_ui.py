@@ -66,22 +66,22 @@ def run():
 
     left = position(0,0.5)
     event("MOUSEMOVE", "NOTHING", left)
-    event("WHEELUPMOUSE", "PRESS", left)
+    event("WHEELUPMOUSE", "PRESS", left, ctrl=True)
     yield 0.2
     assert props.radius > 15, props.radius
     enlarged = props.radius
-    event("WHEELDOWNMOUSE", "PRESS", left)
+    event("WHEELDOWNMOUSE", "PRESS", left, ctrl=True)
     yield 0.2
     assert props.radius < enlarged, props.radius
     assert state()[0] == 7
     event("LEFTMOUSE", "PRESS", left)
     yield 0.3
     before = props.radius
-    event("WHEELUPMOUSE", "PRESS", left)
+    event("WHEELUPMOUSE", "PRESS", left, ctrl=True)
     yield 0.2
     active = next(iter(eraser.MESH_OT_polygroups_seam_eraser._active))
     assert props.radius == active.radius and active.radius > before
-    event("WHEELDOWNMOUSE", "PRESS", left)
+    event("WHEELDOWNMOUSE", "PRESS", left, ctrl=True)
     yield 0.2
     assert props.radius == active.radius and active.radius < before + 2
 

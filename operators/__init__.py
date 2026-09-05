@@ -122,6 +122,7 @@ from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
 from .small_islands import MESH_OT_polygroups_merge_small_islands
+from .smart_angle_seams import MESH_OT_polygroups_mark_smart_angle_seams
 
 from .dev_restart import WM_OT_airetopo_dev_restart, WM_OT_airetopo_dev_cleanup
 
@@ -129,6 +130,7 @@ CLASSES = (
     WM_OT_airetopo_dev_restart,
     WM_OT_airetopo_dev_cleanup,
     MESH_OT_polygroups_merge_small_islands,
+    MESH_OT_polygroups_mark_smart_angle_seams,
     OBJECT_OT_polygroups_run_remesh,
     OBJECT_OT_polygroups_cancel_remesh,
     OBJECT_OT_polygroups_apply_weld,

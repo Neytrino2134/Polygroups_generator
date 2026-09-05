@@ -813,6 +813,17 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 text=t(context, "edge_seam_path"),
                 icon="EDGE_SEAM",
             )
+            tools_column.separator()
+            tools_column.prop(seam_settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
+            tools_column.operator(
+                "mesh.polygroups_mark_smart_angle_seams",
+                text=t(context, "mark_smart_angle_seams"),
+                icon="UV",
+            )
+
+        content = draw_collapsible_box(layout, seam_settings, "show_mark_clear_tools_group", t(context, "seam_group_mark_clear_tools"), "TOOL_SETTINGS")
+        if content is not None:
+            tools_column = content.column(align=True)
             edge_tool = tools_column.operator(
                 "mesh.polygroups_select_seam_tool",
                 text=t(context, "select_edge_seam_tool"),

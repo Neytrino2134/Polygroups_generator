@@ -314,9 +314,11 @@ class MESH_OT_airetopo_linked_seam(bpy.types.Operator):
                 and settings.prefer_linked_seam)
 
     def invoke(self, context, event):
+        # Run the native operator with its own undo/redo entry so Blender shows
+        # its Adjust Last Operation panel, including the Seam delimiter.
         if self.pick:
-            return bpy.ops.mesh.select_linked_pick("INVOKE_DEFAULT", delimit={"SEAM"}, deselect=False)
-        return bpy.ops.mesh.select_linked("INVOKE_DEFAULT", delimit={"SEAM"})
+            return bpy.ops.mesh.select_linked_pick("INVOKE_DEFAULT", True, delimit={"SEAM"}, deselect=False)
+        return bpy.ops.mesh.select_linked("INVOKE_DEFAULT", True, delimit={"SEAM"})
 
 
 class VIEW3D_MT_airetopo_pie(bpy.types.Menu):

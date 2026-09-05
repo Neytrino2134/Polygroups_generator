@@ -194,7 +194,8 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
             self._finish(context, cancel=True)
             return {"CANCELLED"}
         try:
-            if event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"} and self.shape == "CIRCLE":
+            if (event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"}
+                    and event.ctrl and self.shape == "CIRCLE"):
                 self.radius = resize_circle(context, self.radius, event)
             elif event.type == "MOUSEMOVE":
                 point = (event.mouse_region_x, event.mouse_region_y)

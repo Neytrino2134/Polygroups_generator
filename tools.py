@@ -577,8 +577,8 @@ class VIEW3D_WST_polygroups_seam_eraser(WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("mesh.polygroups_seam_eraser", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
-        ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELUPMOUSE", "value": "PRESS"}, None),
-        ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELDOWNMOUSE", "value": "PRESS"}, None),
+        ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELUPMOUSE", "value": "PRESS", "ctrl": True}, None),
+        ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELDOWNMOUSE", "value": "PRESS", "ctrl": True}, None),
     )
     draw_cursor = staticmethod(draw_eraser_cursor)
 

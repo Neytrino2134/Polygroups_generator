@@ -402,6 +402,11 @@ class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
+    smart_seam_angle_limit: bpy.props.FloatProperty(
+        name="Smart Angle Limit", default=1.1519173063162575,
+        min=0.017453292519943295, max=1.5533430342749532, subtype="ANGLE",
+        description="Angle Limit passed to Smart UV Project when deriving seams",
+    )
     prefer_linked_seam: bpy.props.BoolProperty(
         name="Prefer Select Linked by Seam", default=True,
         description="Use seam boundaries for L and Ctrl+L in mesh Edit Mode; disable to use normal Blender shortcuts",
@@ -409,6 +414,7 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
     show_selection_group: bpy.props.BoolProperty(name="Selection", default=True)
     show_mesh_edit_group: bpy.props.BoolProperty(name="Mesh Editing", default=True)
     show_mark_clear_group: bpy.props.BoolProperty(name="Mark and Clear Seams", default=True)
+    show_mark_clear_tools_group: bpy.props.BoolProperty(name="Mark and Clear Seam Tools", default=True)
     show_check_group: bpy.props.BoolProperty(name="Seam Checks", default=True)
     show_cut_group: bpy.props.BoolProperty(name="Cutting", default=True)
     selection_smooth_iterations: bpy.props.IntProperty(
