@@ -9,12 +9,15 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from standalone_ui.client import PanelApp, DEFAULT_STYLE, DarkDropdown, DarkScrollbar
+from standalone_ui.rounded import native_handle, owner_handle
 
 def run():
-    root = tk.Tk()
+    blender_window = tk.Tk()
+    blender_window.geometry('600x500+20+20')
+    root = tk.Toplevel(blender_window)
     connection, peer = socket.socketpair()
     with tempfile.TemporaryDirectory() as config:
-        app = PanelApp(root, connection, config)
+        app = PanelApp(root, connection, config, native_handle(blender_window))
         errors = []
         root.report_callback_exception = lambda *args: errors.append(args)
         schemas = json.loads((Path(tempfile.gettempdir())/'airetopo_schemas.json').read_text(encoding='utf8'))
@@ -68,6 +71,7 @@ def run():
         app.save()
         assert 'style' not in json.loads(app.config_path().read_text())
         assert root.overrideredirect()
+        assert app.attached_to_blender and owner_handle(root) == native_handle(blender_window)
         assert isinstance(app.scroll, DarkScrollbar)
         saved = json.loads(app.config_path().read_text())
         saved.update(style={'accent':'#ffffff'}, hidden=['obsolete'], order=['obsolete'])
@@ -99,10 +103,13 @@ def run():
         assert str(app.buttons[item['id']]['state']) == 'disabled'
         item['enabled'] = True
         app.render(app.model)
-        app.pin()
         assert not root.attributes('-topmost')
         app.pin()
         assert root.attributes('-topmost')
+        assert owner_handle(root) == native_handle(blender_window)
+        app.pin()
+        assert not root.attributes('-topmost')
+        assert owner_handle(root) == native_handle(blender_window)
         app.collapse()
         root.update()
         assert not app.body.winfo_ismapped()
@@ -132,8 +139,9 @@ def run():
         app.close = real_close
         assert not errors, errors
         app.close()
+        blender_window.destroy()
     peer.close()
-    print(f'PASSED: {len(schemas)} groups, closable in-place tabs, geometry persistence, editing, custom dropdown, borderless window, resize, dark scroll, pin, collapse')
+    print(f'PASSED: {len(schemas)} groups, Blender ownership, relative/global z-order, closable tabs, geometry persistence, editing, custom dropdown, resize, dark scroll, collapse')
 
 if __name__=='__main__':
     run()

@@ -9,9 +9,9 @@ import tkinter.font as tkfont
 from tkinter import ttk, colorchooser, filedialog
 
 if __package__:
-    from .rounded import round_widget
+    from .rounded import attach_to_owner, round_widget
 else:
-    from rounded import round_widget
+    from rounded import attach_to_owner, round_widget
 
 DEFAULT_STYLE = dict(background='#171b24', surface='#232a37', foreground='#e5eaf3',
                      accent='#65c7b7', font_size=11, compact=False)
@@ -210,7 +210,7 @@ class DarkDropdown(tk.Frame):
 
 
 class PanelApp:
-    def __init__(self, root, connection, config_dir):
+    def __init__(self, root, connection, config_dir, owner=0):
         self.root, self.connection = root, connection
         self.connection.setblocking(False)
         self.incoming, self.outgoing = b'', b''
@@ -225,7 +225,7 @@ class PanelApp:
         self.loaded_group = None
         self.pending_group = None
         self.scroll_positions = {}
-        self.collapsed, self.pinned = False, True
+        self.collapsed, self.pinned = False, False
         self.last_signature = None
         self.connected = True
         root.title('AI Retopo · Tools')
@@ -233,9 +233,11 @@ class PanelApp:
         root.overrideredirect(True)
         round_widget(root, 16, window=True)
         root.minsize(300, 180)
-        root.attributes('-topmost', True)
+        root.attributes('-topmost', False)
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.build_shell()
+        self.root.update_idletasks()
+        self.attached_to_blender = attach_to_owner(self.root, owner)
         root.after(30, self.poll)
 
     def send(self, message):
@@ -360,7 +362,7 @@ class PanelApp:
             self.config_dir.mkdir(parents=True, exist_ok=True)
             path = self.config_path()
             temporary = path.with_suffix(f'.{os.getpid()}.tmp')
-            temporary.write_text(json.dumps(dict(tabs=self.tabs, pinned=self.pinned,
+            temporary.write_text(json.dumps(dict(z_order_version=2, tabs=self.tabs, pinned=self.pinned,
                 geometry=self.expanded_geometry if self.collapsed else self.root.geometry())), encoding='utf8')
             temporary.replace(path)
         except OSError as error:
@@ -379,7 +381,7 @@ class PanelApp:
         self.hidden, self.order = [], []
         if not self.tabs:
             self.tabs = config.get('tabs', [])
-            self.pinned = bool(config.get('pinned', True))
+            self.pinned = bool(config.get('pinned', False)) if config.get('z_order_version') == 2 else False
             self.root.attributes('-topmost', self.pinned)
         self.build_shell()
         if config.get('geometry') and not self.collapsed:
@@ -688,7 +690,8 @@ class PanelApp:
 def main():
     connection = socket.create_connection(('127.0.0.1', int(os.environ['AIRETOPO_PANEL_PORT'])), timeout=10)
     root = tk.Tk()
-    app = PanelApp(root, connection, os.environ['AIRETOPO_PANEL_CONFIG'])
+    app = PanelApp(root, connection, os.environ['AIRETOPO_PANEL_CONFIG'],
+                   int(os.environ.get('AIRETOPO_BLENDER_OWNER', '0')))
     app.send(dict(token=os.environ.pop('AIRETOPO_PANEL_TOKEN')))
     root.mainloop()
 

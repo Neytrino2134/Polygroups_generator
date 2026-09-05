@@ -15,6 +15,20 @@ SESSIONS = []
 MAX_MESSAGE = 1024 * 1024
 
 
+def blender_owner_handle():
+    if os.name != 'nt':
+        return 0
+    import ctypes
+    from ctypes import wintypes
+    user = ctypes.WinDLL('user32', use_last_error=True)
+    user.GetForegroundWindow.restype = wintypes.HWND
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    handle = user.GetForegroundWindow()
+    process = wintypes.DWORD()
+    user.GetWindowThreadProcessId(handle, ctypes.byref(process))
+    return int(handle) if process.value == os.getpid() else 0
+
+
 def python_runtime(context):
     prefs = context.preferences.addons[__package__.split('.')[0]].preferences
     configured = getattr(prefs, 'panel_python_executable', '')
@@ -46,10 +60,12 @@ class Session:
         self.bindings, self.revision = {}, ''
         self.last_model, self.next_refresh = None, 0
         self.created = time.monotonic()
+        self.owner_handle = blender_owner_handle()
         env = os.environ.copy()
         env['AIRETOPO_PANEL_PORT'] = str(self.listener.getsockname()[1])
         env['AIRETOPO_PANEL_TOKEN'] = self.token
         env['AIRETOPO_PANEL_CONFIG'] = str(Path(bpy.utils.user_resource('CONFIG')) / 'airetopo_windows')
+        env['AIRETOPO_BLENDER_OWNER'] = str(self.owner_handle)
         client = Path(__file__).resolve().parents[1] / 'standalone_ui' / 'client.py'
         try:
             self.process = subprocess.Popen([runtime, str(client)], env=env,

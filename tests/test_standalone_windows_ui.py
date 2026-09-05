@@ -6,6 +6,7 @@ import sys
 import tempfile
 import traceback
 from unittest.mock import patch
+import os
 from pathlib import Path
 import bpy
 import addon_utils
@@ -44,6 +45,25 @@ def run():
     session = SESSIONS[0]
     assert session.authenticated and session.process.poll() is None
     assert len(bpy.context.window_manager.windows) == 1, 'Must not duplicate a 3D window'
+    if os.name == 'nt':
+        assert session.owner_handle, 'Blender owner window was not detected'
+        import ctypes
+        from ctypes import wintypes
+        user = ctypes.WinDLL('user32', use_last_error=True)
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        handles = []
+        @callback_type
+        def visit(hwnd, _):
+            process = wintypes.DWORD()
+            user.GetWindowThreadProcessId(hwnd, ctypes.byref(process))
+            if process.value == session.process.pid and user.IsWindowVisible(hwnd):
+                handles.append(hwnd)
+            return True
+        user.EnumWindows(visit, 0)
+        assert handles, 'Standalone client window not found'
+        assert any(user.GetWindow(hwnd, 4) == session.owner_handle for hwnd in handles), (
+            'Standalone panel is not owned by Blender'
+        )
     with session.context():
         model = session.model()
         item = next(i for i in model['items'] if i.get('type') == 'BOOLEAN')

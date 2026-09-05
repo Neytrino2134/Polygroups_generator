@@ -18,6 +18,9 @@ closing the last tab closes the floating window.
   the window is collapsed or expanded. Corner radii are defined in `client.py`;
   `rounded.py` applies the clipping without adding another window frame.
 - **−** collapses/restores the window. **◆ / ◇** toggles always-on-top.
+- The panel is owned by the Blender window that opened it. With **◇** it stays
+  above Blender while other Windows applications can cover it. **◆** additionally
+  enables system-wide always-on-top. New and migrated windows start with **◇**.
 - **×** closes the window. Clicking outside never closes it.
 - The palette, fonts, spacing and control order are defined in code. There is no
   appearance customization dialog; older saved appearance overrides are ignored.
