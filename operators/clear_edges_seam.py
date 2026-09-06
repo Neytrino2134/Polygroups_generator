@@ -2,6 +2,7 @@ import bmesh
 import bpy
 
 from ..localization import t
+from ..pin_edges import pin_layer
 
 
 def editable_meshes(context):
@@ -26,11 +27,14 @@ class MESH_OT_polygroups_clear_selected_edges_seam(bpy.types.Operator):
     def execute(self, context):
         selected_count = cleared_count = 0
         for mesh, bm in editable_meshes(context):
+            pins = pin_layer(bm)
             selected_edges = [edge for edge in bm.edges if edge.select and not edge.hide]
             selected_count += len(selected_edges)
             for edge in selected_edges:
                 cleared_count += int(edge.seam)
                 edge.seam = False
+                if pins is not None:
+                    edge[pins] = 0
             if selected_edges:
                 bmesh.update_edit_mesh(mesh, loop_triangles=False, destructive=False)
         if not selected_count:
@@ -54,6 +58,7 @@ class MESH_OT_polygroups_clear_inside_edges_seam(bpy.types.Operator):
     def execute(self, context):
         selected_count = cleared_count = boundary_count = 0
         for mesh, bm in editable_meshes(context):
+            pins = pin_layer(bm)
             selected_faces = {face for face in bm.faces if face.select and not face.hide}
             selected_count += len(selected_faces)
             if not selected_faces:
@@ -69,6 +74,8 @@ class MESH_OT_polygroups_clear_inside_edges_seam(bpy.types.Operator):
                 else:
                     cleared_count += int(edge.seam)
                     edge.seam = False
+                    if pins is not None:
+                        edge[pins] = 0
             bmesh.update_edit_mesh(mesh, loop_triangles=False, destructive=False)
         if not selected_count:
             self.report({"WARNING"}, t(context, "seam_select_faces"))

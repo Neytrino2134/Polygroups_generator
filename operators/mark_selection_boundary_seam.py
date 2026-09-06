@@ -2,6 +2,7 @@ import bmesh
 import bpy
 
 from .unwrap_angle_based import unwrap_selected_angle_based
+from ..pin_edges import pin_layer, set_pinned
 
 
 class MESH_OT_polygroups_mark_selection_boundary_seam(bpy.types.Operator):
@@ -19,6 +20,8 @@ class MESH_OT_polygroups_mark_selection_boundary_seam(bpy.types.Operator):
         obj = context.active_object
         mesh = obj.data
         bm = bmesh.from_edit_mesh(mesh)
+        mark_pinned = context.scene.polygroups_seam_preparation_settings.seam_path_pin
+        pins = pin_layer(bm, True) if mark_pinned else None
 
         selected_faces = {face for face in bm.faces if face.select}
         if not selected_faces:
@@ -26,6 +29,7 @@ class MESH_OT_polygroups_mark_selection_boundary_seam(bpy.types.Operator):
             return {"CANCELLED"}
 
         marked_count = 0
+        boundary_edges = []
         for edge in bm.edges:
             linked_faces = set(edge.link_faces)
             selected_linked_faces = linked_faces & selected_faces
@@ -36,11 +40,18 @@ class MESH_OT_polygroups_mark_selection_boundary_seam(bpy.types.Operator):
             if linked_faces - selected_faces and not edge.seam:
                 edge.seam = True
                 marked_count += 1
+                boundary_edges.append(edge)
                 continue
 
             if len(linked_faces) == 1 and not edge.seam:
                 edge.seam = True
                 marked_count += 1
+                boundary_edges.append(edge)
+            elif linked_faces - selected_faces or len(linked_faces) == 1:
+                boundary_edges.append(edge)
+
+        if pins is not None:
+            set_pinned(boundary_edges, pins)
 
         bmesh.update_edit_mesh(mesh)
 

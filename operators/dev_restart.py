@@ -7,6 +7,8 @@ import uuid
 
 import bpy
 
+_restart_pending = False
+
 
 def restart_directory():
     return Path(tempfile.gettempdir()) / "airetopo_dev_restart"
@@ -46,38 +48,36 @@ class WM_OT_airetopo_dev_cleanup(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class WM_OT_airetopo_dev_restart(bpy.types.Operator):
-    bl_idname = "wm.airetopo_dev_restart"
-    bl_label = "Restart Blender (Temp Copy)"
-    bl_description = "Save the current state to a new temporary blend copy and restart Blender with that copy"
-    _pending = False
-    save_current = False
+def _restart_poll():
+    return not _restart_pending and not bpy.app.background
 
-    @classmethod
-    def poll(cls, context):
-        return not WM_OT_airetopo_dev_restart._pending and not bpy.app.background
 
-    def execute(self, context):
-        if self.save_current and not bpy.data.filepath:
-            self.report({'ERROR'}, "Save the file with Save As before restarting")
+def _execute_restart(operator, context, save_current, use_saved_current=False):
+        global _restart_pending
+        if (save_current or use_saved_current) and not bpy.data.filepath:
+            operator.report({'ERROR'}, "Save the file with Save As before restarting")
             return {'CANCELLED'}
         if any(bpy.app.is_job_running(job) for job in ('RENDER', 'OBJECT_BAKE')):
-            self.report({'ERROR'}, "Wait for rendering or baking to finish before restarting")
+            operator.report({'ERROR'}, "Wait for rendering or baking to finish before restarting")
             return {'CANCELLED'}
         settings = context.scene.polygroups_model_preparation_settings
         if settings.batch_is_running or context.scene.polygroups_remesh_status.is_running:
-            self.report({'ERROR'}, "Wait for import or remesh to finish before restarting")
+            operator.report({'ERROR'}, "Wait for import or remesh to finish before restarting")
             return {'CANCELLED'}
         root = restart_directory()
         token = 'restart_' + time.strftime('%Y%m%d_%H%M%S_') + uuid.uuid4().hex
-        copy = Path(bpy.data.filepath) if self.save_current else root / (token + '.blend')
+        copy = Path(bpy.data.filepath) if (save_current or use_saved_current) else root / (token + '.blend')
         ready = root / (token + '.ready')
         try:
             root.mkdir(parents=True, exist_ok=True)
-            if context.object and context.object.mode == 'EDIT':
+            if not use_saved_current and context.object and context.object.mode == 'EDIT':
                 for obj in context.objects_in_mode:
                     obj.update_from_editmode()
-            if self.save_current:
+            if use_saved_current:
+                if not copy.is_file():
+                    raise RuntimeError("The current blend file no longer exists")
+                result = {'FINISHED'}
+            elif save_current:
                 result = bpy.ops.wm.save_as_mainfile(
                     filepath=str(copy), copy=False, check_existing=False)
             else:
@@ -93,32 +93,66 @@ class WM_OT_airetopo_dev_restart(bpy.types.Operator):
             )
             child = subprocess.Popen([bpy.app.binary_path, str(copy), '--python-expr', expression])
         except (OSError, RuntimeError) as error:
-            self.report({'ERROR'}, f"Restart failed; current Blender remains open: {error}")
+            operator.report({'ERROR'}, f"Restart failed; current Blender remains open: {error}")
             return {'CANCELLED'}
-        cls = WM_OT_airetopo_dev_restart
-        cls._pending = True
+        _restart_pending = True
         deadline = time.monotonic() + 120
         def wait_for_child():
+            global _restart_pending
             if ready.exists():
                 try:
                     ready.unlink()
                 except OSError:
                     pass
-                cls._pending = False
+                _restart_pending = False
                 bpy.ops.wm.quit_blender('EXEC_DEFAULT')
                 return None
             if child.poll() is not None or time.monotonic() > deadline:
-                cls._pending = False
+                _restart_pending = False
                 print(f"New Blender did not confirm startup; current session retained. Copy: {copy}")
                 return None
             return 0.5
         bpy.app.timers.register(wait_for_child, first_interval=0.5)
-        self.report({'INFO'}, f"Saved: {copy}. Waiting for new Blender")
+        action = "Opening saved file" if use_saved_current else "Saved"
+        operator.report({'INFO'}, f"{action}: {copy}. Waiting for new Blender")
         return {'FINISHED'}
 
 
-class WM_OT_airetopo_dev_restart_current(WM_OT_airetopo_dev_restart):
+class WM_OT_airetopo_dev_restart(bpy.types.Operator):
+    bl_idname = "wm.airetopo_dev_restart"
+    bl_label = "Restart Blender (Temp Copy)"
+    bl_description = "Save the current state to a new temporary blend copy and restart Blender with that copy"
+    save_current = False
+
+    @classmethod
+    def poll(cls, context):
+        return _restart_poll()
+
+    def execute(self, context):
+        return _execute_restart(self, context, bool(getattr(self, "save_current", False)))
+
+
+class WM_OT_airetopo_dev_restart_current(bpy.types.Operator):
     bl_idname = "wm.airetopo_dev_restart_current"
     bl_label = "Restart Blender — Save and Use This File"
     bl_description = "Overwrite the current blend file and restart Blender with that file"
-    save_current = True
+
+    @classmethod
+    def poll(cls, context):
+        return _restart_poll()
+
+    def execute(self, context):
+        return _execute_restart(self, context, True)
+
+
+class WM_OT_airetopo_dev_restart_without_saving(bpy.types.Operator):
+    bl_idname = "wm.airetopo_dev_restart_without_saving"
+    bl_label = "Restart Without Saving — Use This File"
+    bl_description = "Discard unsaved changes and restart Blender with the last saved version of the current file"
+
+    @classmethod
+    def poll(cls, context):
+        return _restart_poll()
+
+    def execute(self, context):
+        return _execute_restart(self, context, False, use_saved_current=True)

@@ -48,9 +48,9 @@ def run():
             assert active() == "polygroups_generator." + name + "_tool", (key, active())
         event("RIGHTMOUSE")
         yield 0.3
-        assert active() == "builtin.select", active()
+        assert active() == "builtin.select_box", active()
 
-    # A selected anchor is the pending continuation for each path tool.
+    # Right-click exits every path tool immediately, even with a pending anchor.
     for name in ("connect_vertex_seam", "edge_seam_path", "edge_seam_eraser"):
         with context.temp_override(window=window, area=area, region=region):
             bpy.ops.mesh.polygroups_select_seam_tool(tool_id="polygroups_generator." + name + "_tool")
@@ -61,11 +61,8 @@ def run():
             bmesh.update_edit_mesh(context.active_object.data)
         event("RIGHTMOUSE")
         yield 0.3
-        assert active() == "polygroups_generator." + name + "_tool"
+        assert active() == "builtin.select_box"
         assert not any(v.select for v in bm.verts)
-        event("RIGHTMOUSE")
-        yield 0.3
-        assert active() == "builtin.select"
     addon_utils.disable(ROOT.name, default_set=True)
     LOG.write_text("SEAM_HOTKEYS_UI_TESTS_PASSED\n")
 

@@ -478,7 +478,7 @@ class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
-         {"properties": [("name", "builtin.select")]}),
+         {"properties": [("name", "builtin.select_box")]}),
         (
             "mesh.polygroups_knife_seam",
             {"type": "LEFTMOUSE", "value": "PRESS"},
@@ -513,7 +513,7 @@ class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
-         {"properties": [("name", "builtin.select")]}),
+         {"properties": [("name", "builtin.select_box")]}),
         (
             "mesh.polygroups_quick_knife_seam",
             {"type": "LEFTMOUSE", "value": "PRESS"},
@@ -605,7 +605,7 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
-         {"properties": [("name", "builtin.select")]}),
+         {"properties": [("name", "builtin.select_box")]}),
         ("mesh.polygroups_smart_seams_generator_click",
          {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -637,7 +637,7 @@ class VIEW3D_WST_polygroups_seam_eraser(WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
-         {"properties": [("name", "builtin.select")]}),
+         {"properties": [("name", "builtin.select_box")]}),
         ("mesh.polygroups_seam_eraser", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
         ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELUPMOUSE", "value": "PRESS", "ctrl": True}, None),
         ("mesh.polygroups_seam_eraser_resize", {"type": "WHEELDOWNMOUSE", "value": "PRESS", "ctrl": True}, None),

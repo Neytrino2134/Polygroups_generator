@@ -62,11 +62,15 @@ def select_vertices(meshes, vertices):
 
 def connect_pair(context, obj, bm, start, end):
     """Only the two endpoints are selected when calling Blender's J operator."""
+    # Creating a BMesh custom-data layer can invalidate existing BMEdge Python
+    # wrappers. Create it before finding/creating the path, then collect edges.
+    pins = (pin_layer(bm, True)
+            if context.scene.polygroups_seam_preparation_settings.seam_path_pin else None)
     direct_edge = bm.edges.get((start, end))
     if direct_edge is not None:
         direct_edge.seam = True
-        if context.scene.polygroups_seam_preparation_settings.seam_path_pin:
-            set_pinned((direct_edge,), pin_layer(bm, True))
+        if pins is not None:
+            set_pinned((direct_edge,), pins)
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
         return 1
     result = bpy.ops.mesh.vert_connect_path()
@@ -77,8 +81,8 @@ def connect_pair(context, obj, bm, start, end):
     path = [edge for edge in bm.edges if edge.select and not edge.hide]
     for edge in path:
         edge.seam = True
-    if path and context.scene.polygroups_seam_preparation_settings.seam_path_pin:
-        set_pinned(path, pin_layer(bm, True))
+    if path and pins is not None:
+        set_pinned(path, pins)
     bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
     return len(path)
 
@@ -135,8 +139,9 @@ def invoke_seam_click(self, context, event, connect, failure_key):
     update_cursor_ctrl(context, event)
     meshes = edit_meshes(context)
     if self.reset:
-        if event.type == "RIGHTMOUSE" and len(selected_vertices(meshes)) != 1:
-            bpy.ops.wm.tool_set_by_id(name="builtin.select")
+        if event.type == "RIGHTMOUSE":
+            select_vertices(meshes, [])
+            bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {"FINISHED"}
         select_vertices(meshes, [])
         context.area.tag_redraw()

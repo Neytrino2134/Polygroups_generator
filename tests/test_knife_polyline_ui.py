@@ -102,11 +102,7 @@ def run():
     assert before == (len(bm().edges), sum(e.seam for e in bm().edges))
     assert all(e.select for e in bm().edges)
     assert right_bindings() == original_bindings
-    assert context.workspace.tools.from_space_view3d_mode("EDIT_MESH").idname == "polygroups_generator.knife_seam_tool"
-    event("RIGHTMOUSE", "PRESS", pos)
-    event("RIGHTMOUSE", "RELEASE", pos)
-    yield 0.3
-    assert context.workspace.tools.from_space_view3d_mode("EDIT_MESH").idname == "builtin.select"
+    assert context.workspace.tools.from_space_view3d_mode("EDIT_MESH").idname == "builtin.select_box"
     addon_utils.disable(ROOT.name, default_set=True)
     LOG.write_text("KNIFE_POLYLINE_UI_TESTS_PASSED\n")
 

@@ -359,8 +359,14 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     def draw(self, context):
         preferences = get_preferences(context)
         layout = self.layout
-        layout.operator("wm.airetopo_dev_restart", text=t(context, "dev_restart"), icon="FILE_REFRESH")
-        layout.operator("wm.airetopo_dev_restart_current", text=t(context, "dev_restart_current"), icon="FILE_TICK")
+        if preferences and preferences.enable_dev_mode:
+            layout.operator("wm.airetopo_dev_restart", text=t(context, "dev_restart"), icon="FILE_REFRESH")
+            layout.operator("wm.airetopo_dev_restart_current", text=t(context, "dev_restart_current"), icon="FILE_TICK")
+            layout.operator(
+                "wm.airetopo_dev_restart_without_saving",
+                text=t(context, "dev_restart_without_saving"),
+                icon="LOOP_BACK",
+            )
         header = layout.row(align=True)
         expand_operator = header.operator(
             "object.airetopo_set_all_section_visibility",
@@ -907,6 +913,12 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 icon="X",
             )
 
+            tools_column.operator(
+                "mesh.polygroups_edge_seam_path",
+                text=t(context, "connect_vertices_edge_seam_path"),
+                **icon_kwargs("edge_seam_path", "EDGE_SEAM"),
+            )
+
             tools_column.separator()
             tools_column.label(text=t(context, "pin_edges"))
             pin_row = tools_column.row(align=True)
@@ -914,26 +926,6 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             pin_row.operator("mesh.polygroups_unpin_selected_edges", text=t(context, "unpin_selected"), icon="UNPINNED")
             tools_column.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), icon="X")
             tools_column.prop(seam_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
-
-            tools_column.operator(
-                "mesh.polygroups_edge_seam_path",
-                text=t(context, "edge_seam_path"),
-                **icon_kwargs("edge_seam_path", "EDGE_SEAM"),
-            )
-
-        settings = context.scene.polygroups_generator_settings
-        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
-        if content is not None:
-            content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
-            content.prop(settings, "small_island_selected_area", text=t(context, "small_islands_selected"))
-            content.prop(settings, "small_island_protect_pinned", text=t(context, "small_islands_pinned"))
-            content.prop(settings, "small_island_protect_sharp", text=t(context, "small_islands_sharp"))
-            content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
-            row = content.row(align=True)
-            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
-            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
-            if settings.small_island_status:
-                content.label(text=settings.small_island_status)
 
         content = draw_collapsible_box(layout, seam_settings, "show_smart_mark_seams_group", t(context, "seam_group_smart_mark"), "EDGE_SEAM")
         if content is not None:
@@ -954,6 +946,20 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 text=t(context, "mark_smart_angle_seams"),
                 icon="UV",
             )
+
+        settings = context.scene.polygroups_generator_settings
+        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
+        if content is not None:
+            content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
+            content.prop(settings, "small_island_selected_area", text=t(context, "small_islands_selected"))
+            content.prop(settings, "small_island_protect_pinned", text=t(context, "small_islands_pinned"))
+            content.prop(settings, "small_island_protect_sharp", text=t(context, "small_islands_sharp"))
+            content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
+            row = content.row(align=True)
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
+            if settings.small_island_status:
+                content.label(text=settings.small_island_status)
 
         content = draw_collapsible_box(layout, seam_settings, "show_mark_clear_tools_group", t(context, "seam_group_mark_clear_tools"), "TOOL_SETTINGS")
         if content is not None:
@@ -2584,12 +2590,50 @@ for section_class, visibility_property in SECTION_PANEL_VISIBILITY:
     section_class.visibility_property = visibility_property
 
 
+def draw_edge_menu(self, context):
+    """AI Retopo seam and pinned-edge commands in Edge (Ctrl+E)."""
+    layout = self.layout
+    layout.separator()
+    layout.label(text=t(context, "edge_menu_group"), icon="EDGE_SEAM")
+    layout.prop(
+        context.scene.polygroups_seam_preparation_settings,
+        "seam_path_pin",
+        text=t(context, "mark_as_pinned"),
+    )
+    layout.operator(
+        "mesh.polygroups_mark_selected_edges_seam",
+        text=t(context, "mark_selected_edges_seam"),
+        icon="EDGESEL",
+    )
+    layout.operator(
+        "mesh.polygroups_mark_selection_boundary_seam",
+        text=t(context, "mark_selection_boundary_seam"),
+        icon="FACESEL",
+    )
+    layout.operator(
+        "mesh.polygroups_clear_selected_edges_seam",
+        text=t(context, "clear_selected_edges_seam"),
+        icon="X",
+    )
+    layout.operator(
+        "mesh.polygroups_clear_inside_edges_seam",
+        text=t(context, "clear_inside_edges_seam"),
+        icon="X",
+    )
+    layout.separator()
+    layout.operator("mesh.polygroups_pin_selected_seams", text=t(context, "pin_selected_seams"), icon="PINNED")
+    layout.operator("mesh.polygroups_unpin_selected_edges", text=t(context, "unpin_selected"), icon="UNPINNED")
+    layout.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), icon="X")
+
+
 def register():
     update_panel_labels(bpy.context)
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+    bpy.types.VIEW3D_MT_edit_mesh_edges.append(draw_edge_menu)
 
 
 def unregister():
+    bpy.types.VIEW3D_MT_edit_mesh_edges.remove(draw_edge_menu)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

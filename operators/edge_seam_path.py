@@ -152,6 +152,8 @@ def draw_edge_seam_cursor(_context, _tool, xy):
 
 
 def mark_pair(context, obj, bm, start, end):
+    pins = (pin_layer(bm, True)
+            if context.scene.polygroups_seam_preparation_settings.seam_path_pin else None)
     path = find_edge_path(bm, start, end, obj.matrix_world)
     if not path:
         return 0
@@ -168,8 +170,8 @@ def mark_pair(context, obj, bm, start, end):
             for edge in path:
                 edge.seam = True
                 edge.select_set(True)
-            if context.scene.polygroups_seam_preparation_settings.seam_path_pin:
-                set_pinned(path, pin_layer(mesh, True))
+            if pins is not None:
+                set_pinned(path, pins)
             mesh.select_history.add(path[-1])
         bmesh.update_edit_mesh(owner.data, loop_triangles=False, destructive=False)
     return len(path)
@@ -202,11 +204,13 @@ class MESH_OT_polygroups_edge_seam_path(bpy.types.Operator):
 def mark_click_pair(context, obj, bm, start, end):
     # Interactive chaining stays in vertex mode. Avoid changing selection until
     # routing succeeds; the shared click handler restores it on failure.
+    pins = (pin_layer(bm, True)
+            if context.scene.polygroups_seam_preparation_settings.seam_path_pin else None)
     path = find_edge_path(bm, start, end, obj.matrix_world)
     for edge in path:
         edge.seam = True
-    if path and context.scene.polygroups_seam_preparation_settings.seam_path_pin:
-        set_pinned(path, pin_layer(bm, True))
+    if path and pins is not None:
+        set_pinned(path, pins)
     if path:
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
     return len(path)

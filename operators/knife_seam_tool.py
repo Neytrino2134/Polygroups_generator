@@ -406,6 +406,7 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
         if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
             # Let Knife consume its cancel event, then remove this observer on timer.
             self._cancel_requested = True
+            self._select_box_on_cancel = event.type == "RIGHTMOUSE"
             return {"PASS_THROUGH"}
 
         if event.type in {"SPACE", "RET", "NUMPAD_ENTER"} and event.value == "PRESS":
@@ -429,6 +430,8 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
         if self._cancel_requested:
             self._restore_native_selection()
             self._finish(context)
+            if getattr(self, "_select_box_on_cancel", False):
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {"CANCELLED"}
 
         if not self._confirmation_requested:
@@ -474,6 +477,8 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
     def _modal_stable_view_cut(self, context, event):
         if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
             self._finish(context)
+            if event.type == "RIGHTMOUSE":
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {"CANCELLED"}
 
         position = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)

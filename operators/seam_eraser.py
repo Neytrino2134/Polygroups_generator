@@ -217,6 +217,8 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
             return {"CANCELLED"}
         if event.type in {"ESC", "RIGHTMOUSE", "WINDOW_DEACTIVATE"} or context.mode != "EDIT_MESH":
             self._finish(context, cancel=True)
+            if event.type == "RIGHTMOUSE" and context.mode == "EDIT_MESH":
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {"CANCELLED"}
         try:
             if (event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"}

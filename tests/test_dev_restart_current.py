@@ -26,6 +26,16 @@ with tempfile.TemporaryDirectory() as directory:
     dev_restart.WM_OT_airetopo_dev_restart._pending = False
     bpy.ops.wm.open_mainfile(filepath=str(source))
     assert bpy.context.active_object.location.x == 123
+    saved_bytes = source.read_bytes()
+    bpy.context.active_object.location.x = 456
+    with patch.object(dev_restart.subprocess, 'Popen') as launch, patch.object(bpy.app.timers, 'register'), patch.object(dev_restart, 'restart_directory', return_value=Path(directory)):
+        result = dev_restart.WM_OT_airetopo_dev_restart_without_saving.execute(Runner(), bpy.context)
+        assert result == {'FINISHED'}
+        assert launch.call_args.args[0][1] == str(source)
+        assert source.read_bytes() == saved_bytes
+    bpy.ops.wm.open_mainfile(filepath=str(source))
+    assert bpy.context.active_object.location.x == 123
 bpy.ops.wm.read_factory_settings(use_empty=True)
 assert dev_restart.WM_OT_airetopo_dev_restart.execute(Runner(), bpy.context) == {'CANCELLED'}
+assert dev_restart.WM_OT_airetopo_dev_restart_without_saving.execute(Runner(), bpy.context) == {'CANCELLED'}
 print('CURRENT FILE RESTART PASSED')

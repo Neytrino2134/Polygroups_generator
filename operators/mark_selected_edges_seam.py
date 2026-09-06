@@ -1,5 +1,6 @@
 import bmesh
 import bpy
+from ..pin_edges import pin_layer, set_pinned
 
 
 class MESH_OT_polygroups_mark_selected_edges_seam(bpy.types.Operator):
@@ -17,6 +18,8 @@ class MESH_OT_polygroups_mark_selected_edges_seam(bpy.types.Operator):
         obj = context.active_object
         mesh = obj.data
         bm = bmesh.from_edit_mesh(mesh)
+        mark_pinned = context.scene.polygroups_seam_preparation_settings.seam_path_pin
+        pins = pin_layer(bm, True) if mark_pinned else None
 
         selected_edges = [edge for edge in bm.edges if edge.select]
         if not selected_edges:
@@ -28,6 +31,8 @@ class MESH_OT_polygroups_mark_selected_edges_seam(bpy.types.Operator):
             if not edge.seam:
                 edge.seam = True
                 marked_count += 1
+        if pins is not None:
+            set_pinned(selected_edges, pins)
 
         bmesh.update_edit_mesh(mesh)
         self.report({"INFO"}, f"Marked {marked_count} selected edge seam(s)")

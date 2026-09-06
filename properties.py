@@ -858,7 +858,7 @@ class POLYGROUPS_PG_quick_knife_seam_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
-    show_small_islands: bpy.props.BoolProperty(name="Small Seam Islands", default=False)
+    show_small_islands: bpy.props.BoolProperty(name="Islands Analyzer", default=False)
     show_group_generation: bpy.props.BoolProperty(name="Generate PolyGroups", default=False)
     show_group_uv: bpy.props.BoolProperty(name="Seams and UV", default=False)
     show_group_materials: bpy.props.BoolProperty(name="Material Management", default=False)

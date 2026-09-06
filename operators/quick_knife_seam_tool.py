@@ -104,6 +104,7 @@ class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
     def modal(self, context, event):
         if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
             self._cancel_requested = True
+            self._select_box_on_cancel = event.type == "RIGHTMOUSE"
             return {"PASS_THROUGH"}
 
         if event.value == "PRESS" and event.type in {"SPACE", "RET", "NUMPAD_ENTER"}:
@@ -123,6 +124,8 @@ class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
 
         if self._cancel_requested:
             self._finish(context)
+            if getattr(self, "_select_box_on_cancel", False):
+                bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
             return {"CANCELLED"}
 
         if not self._confirmation_requested:

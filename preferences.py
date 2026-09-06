@@ -283,6 +283,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     show_preferences_pie_menu: bpy.props.BoolProperty(default=False)
     show_preferences_windows: bpy.props.BoolProperty(default=False)
     show_preferences_dev: bpy.props.BoolProperty(default=False)
+    enable_dev_mode: bpy.props.BoolProperty(
+        name="Enable Dev Mode",
+        description="Show developer restart controls in the AI Retopo N-panel",
+        default=True,
+    )
 
     enable_section_number_hotkeys: bpy.props.BoolProperty(
         name="Section Number Hotkeys", default=True, update=_update_hotkeys,
@@ -546,6 +551,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         layout.operator('wm.airetopo_group_window_control')
 
     def draw_dev(self, context, layout):
+        layout.prop(self, "enable_dev_mode", text=t(context, "enable_dev_mode"))
         layout.label(text=t(context, "dev_restart_hint"))
         layout.operator("wm.airetopo_dev_cleanup", text=t(context, "dev_cleanup"), icon="TRASH")
 
