@@ -469,6 +469,19 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         default=0,
         update=pie_presets.preset_updated,
     )
+    use_edit_mode_preset: bpy.props.BoolProperty(
+        name="Use Edit Mode Preset in Edit Mode",
+        description="Use a separate Pie Menu layout while the active object is in Edit Mode",
+        default=True,
+    )
+    edit_pie_current_slots: bpy.props.StringProperty(options={"HIDDEN"})
+    active_edit_pie_preset: bpy.props.EnumProperty(
+        name="Active Edit Mode Preset",
+        description="Choose and load the Pie Menu layout used in Edit Mode",
+        items=pie_presets.preset_items,
+        default=1000000,
+        update=pie_presets.edit_preset_updated,
+    )
 
     pie_slot_1: bpy.props.EnumProperty(
         name="Slot 1",
@@ -517,6 +530,38 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         items=PIE_COMMAND_ITEMS,
         update=pie_presets.slot_updated,
         default="PREPARE_BAKE",
+    )
+    edit_pie_slot_1: bpy.props.EnumProperty(
+        name="Edit Slot 1", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="SELECT_LESS",
+    )
+    edit_pie_slot_2: bpy.props.EnumProperty(
+        name="Edit Slot 2", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="SELECT_MORE",
+    )
+    edit_pie_slot_3: bpy.props.EnumProperty(
+        name="Edit Slot 3", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="DELETE_FILL",
+    )
+    edit_pie_slot_4: bpy.props.EnumProperty(
+        name="Edit Slot 4", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="SELECT_LINKED_SEAM",
+    )
+    edit_pie_slot_5: bpy.props.EnumProperty(
+        name="Edit Slot 5", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="MARK_SEAM",
+    )
+    edit_pie_slot_6: bpy.props.EnumProperty(
+        name="Edit Slot 6", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="CLEAR_SELECTED_SEAMS",
+    )
+    edit_pie_slot_7: bpy.props.EnumProperty(
+        name="Edit Slot 7", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="EDGE_SEAM_TOOL",
+    )
+    edit_pie_slot_8: bpy.props.EnumProperty(
+        name="Edit Slot 8", items=PIE_COMMAND_ITEMS, update=pie_presets.edit_slot_updated,
+        default="KNIFE_SEAM_TOOL",
     )
 
     def draw(self, context):

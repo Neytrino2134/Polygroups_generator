@@ -48,6 +48,17 @@ with patch.object(c, "fitted_section", wraps=c.fitted_section) as fitting:
     assert fitting.call_count == 1
 assert all(abs(p.z - .5) < 1e-6 for p in points)
 
+# A detailed contour that cannot be offset at this resolution gets all ten
+# attempts, then falls back to the tolerant circular Local Ring fit.
+fallback = (Vector((.25, .5, 0)), Vector((1, 0, 0)), Vector((0, 1, 0)), 1.5)
+with patch.object(c, "fitted_section", side_effect=c.ContourFitError("cannot fit")) as fitting, \
+        patch.object(c, "fitted_ring_section", return_value=fallback) as ring_fitting:
+    points, fill = c.fitted_section_with_retries(obj, dg, seed, normal, 32, .01, 2)
+assert fitting.call_count == 10
+ring_fitting.assert_called_once()
+assert len(points) == 32 and fill == [tuple(range(32))]
+assert max((point - fallback[0]).length for point in points) <= fallback[3] + 1e-6
+
 # A genuinely open surface is not filled or accepted after retry exhaustion.
 open_mesh = bpy.data.meshes.new("Open surface")
 open_mesh.from_pydata([(-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)], [], [(0, 1, 2, 3)])

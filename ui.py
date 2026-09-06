@@ -916,15 +916,15 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             tools_column.operator(
                 "mesh.polygroups_edge_seam_path",
                 text=t(context, "connect_vertices_edge_seam_path"),
-                **icon_kwargs("edge_seam_path", "EDGE_SEAM"),
+                **icon_kwargs("edge_seam_path_pin" if seam_settings.seam_path_pin else "edge_seam_path", "EDGE_SEAM"),
             )
 
             tools_column.separator()
             tools_column.label(text=t(context, "pin_edges"))
             pin_row = tools_column.row(align=True)
-            pin_row.operator("mesh.polygroups_pin_selected_seams", text=t(context, "pin_selected_seams"), icon="PINNED")
-            pin_row.operator("mesh.polygroups_unpin_selected_edges", text=t(context, "unpin_selected"), icon="UNPINNED")
-            tools_column.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), icon="X")
+            pin_row.operator("mesh.polygroups_pin_selected_seams", text=t(context, "pin_selected_seams"), **icon_kwargs("pin_vertices", "PINNED"))
+            pin_row.operator("mesh.polygroups_unpin_selected_edges", text=t(context, "unpin_selected"), **icon_kwargs("unpin_vertices", "UNPINNED"))
+            tools_column.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), **icon_kwargs("unpin_vertices", "X"))
             tools_column.prop(seam_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
 
         content = draw_collapsible_box(layout, seam_settings, "show_smart_mark_seams_group", t(context, "seam_group_smart_mark"), "EDGE_SEAM")
@@ -944,7 +944,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             tools_column.operator(
                 "mesh.polygroups_mark_smart_angle_seams",
                 text=t(context, "mark_smart_angle_seams"),
-                icon="UV",
+                **icon_kwargs("smart_seams_generator_pin" if seam_settings.smart_seam_pin_generated else "smart_seams_generator", "UV"),
             )
 
         settings = context.scene.polygroups_generator_settings
@@ -968,12 +968,13 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             edge_tool = tools_column.operator(
                 "mesh.polygroups_select_seam_tool",
                 text=t(context, "select_edge_seam_tool"),
-                **icon_kwargs("edge_seam_path", "VERTEXSEL"),
+                **icon_kwargs("edge_seam_path_pin" if seam_settings.seam_path_pin else "edge_seam_path", "VERTEXSEL"),
             )
             edge_tool.tool_id = "polygroups_generator.edge_seam_path_tool"
             for key, tool_id in (("seam_eraser", "polygroups_generator.seam_eraser_tool"),
                                  ("edge_seam_eraser", "polygroups_generator.edge_seam_eraser_tool")):
-                button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), **icon_kwargs(key, "X"))
+                icon_key = key + ("_pin" if seam_settings.seam_eraser_clear_mode == "PINNED" else "")
+                button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), **icon_kwargs(icon_key, "X"))
                 button.tool_id = tool_id
 
         content = draw_collapsible_box(layout, seam_settings, "show_check_group", t(context, "seam_group_check"), "VIEWZOOM")
@@ -992,7 +993,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             connect_tool = connect_column.operator(
                 "mesh.polygroups_select_seam_tool",
                 text=t(context, "select_vertex_seam_tool"),
-                **icon_kwargs("connect_vertex_seam", "VERTEXSEL"),
+                **icon_kwargs("connect_vertex_seam_pin" if seam_settings.seam_path_pin else "connect_vertex_seam", "VERTEXSEL"),
             )
             connect_tool.tool_id = "polygroups_generator.connect_vertex_seam_tool"
             knife_content = draw_collapsible_box(
@@ -2621,9 +2622,9 @@ def draw_edge_menu(self, context):
         icon="X",
     )
     layout.separator()
-    layout.operator("mesh.polygroups_pin_selected_seams", text=t(context, "pin_selected_seams"), icon="PINNED")
-    layout.operator("mesh.polygroups_unpin_selected_edges", text=t(context, "unpin_selected"), icon="UNPINNED")
-    layout.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), icon="X")
+    layout.operator("mesh.polygroups_pin_selected_seams", text=t(context, "pin_selected_seams"), **icon_kwargs("pin_vertices", "PINNED"))
+    layout.operator("mesh.polygroups_unpin_selected_edges", text=t(context, "unpin_selected"), **icon_kwargs("unpin_vertices", "UNPINNED"))
+    layout.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), **icon_kwargs("unpin_vertices", "X"))
 
 
 def register():

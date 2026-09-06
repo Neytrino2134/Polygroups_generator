@@ -1,13 +1,17 @@
 """Build a local filled cutter from one closed planar mesh cross-section."""
 from collections import defaultdict
 from itertools import product
-from math import floor, cos, pi
+from math import floor, cos, pi, sin
 from mathutils import Vector, Quaternion
 from mathutils.geometry import intersect_line_line_2d, tessellate_polygon
 
 
 class SectionNotFound(ValueError):
     """A nearby plane may resolve an open or ambiguous surface intersection."""
+
+
+class ContourFitError(ValueError):
+    """The section exists, but its detailed offset outline cannot be fitted safely."""
 
 
 def _distance_to_segment(point, start, end):
@@ -250,14 +254,18 @@ def fitted_section_with_retries(target, depsgraph, seed, normal, count, offset, 
     """Try the exact stroke first, then nine small, deterministic adjustments.
 
     Every candidate still requires a closed loop at a nearby surface hit and
-    passes the usual clearance and neighboring-section checks. Geometry errors
-    caused by an excessive offset are not hidden by searching a different part.
+    passes the usual clearance and neighboring-section checks. If all ten
+    candidates find a section but its detailed offset outline cannot be fitted,
+    finish with the same tolerant circular approximation used by Local Ring.
     """
     normal = normal.normalized()
+    fit_failed = False
     try:
         return fitted_section(target, depsgraph, seed, normal, seed, count, offset)
     except SectionNotFound:
         pass
+    except ContourFitError:
+        fit_failed = True
     scale = max(float(search_scale), 1e-6)
     axis_x = normal.orthogonal().normalized()
     axis_y = normal.cross(axis_x).normalized()
@@ -287,6 +295,18 @@ def fitted_section_with_retries(target, depsgraph, seed, normal, count, offset, 
                                   candidate_seed, count, offset)
         except SectionNotFound:
             continue
+        except ContourFitError:
+            fit_failed = True
+            continue
+    if fit_failed:
+        center, axis_x, axis_y, radius = fitted_ring_section(
+            target, depsgraph, seed, normal, seed, max(8, int(count)), offset,
+            radius_hint=max(0.0, float(search_scale) * .5),
+        )
+        vertices = [center + axis_x * (radius * cos(2 * pi * i / max(8, int(count))))
+                    + axis_y * (radius * sin(2 * pi * i / max(8, int(count))))
+                    for i in range(max(8, int(count)))]
+        return vertices, [tuple(range(len(vertices)))]
     raise SectionNotFound("No closed local contour found after 10 nearby attempts; move the line or repair the local opening")
 
 
@@ -308,7 +328,7 @@ def fitted_section(target, depsgraph, origin, normal, seed, count, offset):
     fitted = sampled if offset <= 0 else _offset(sampled, offset + error + epsilon * 4)
     if _self_crosses(fitted) or (offset > 0 and (
             _crosses(outline, fitted) or not all(_inside(p, fitted) for p in outline))):
-        raise ValueError("Cannot fit this contour at the current resolution; increase Contour Points or reduce Contour Offset")
+        raise ContourFitError("Cannot fit this contour at the current resolution; increase Contour Points or reduce Contour Offset")
     for other_index, other in enumerate(loops):
         if other_index == index:
             continue

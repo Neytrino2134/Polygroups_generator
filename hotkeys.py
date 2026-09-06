@@ -185,7 +185,7 @@ def _operator_exists(operator_id):
     module_name, operator_name = operator_id.split(".", 1)
     try:
         getattr(getattr(bpy.ops, module_name), operator_name).get_rna_type()
-    except (AttributeError, RuntimeError):
+    except (AttributeError, KeyError, RuntimeError):
         return False
     return True
 
@@ -355,8 +355,14 @@ class VIEW3D_MT_airetopo_pie(bpy.types.Menu):
     def draw(self, context):
         preferences = get_preferences(context)
         pie = self.layout.menu_pie()
+        use_edit = (
+            preferences is not None
+            and context.mode == "EDIT_MESH"
+            and preferences.use_edit_mode_preset
+        )
+        prefix = "edit_pie_slot" if use_edit else "pie_slot"
         for index in PIE_SLOT_DRAW_ORDER:
-            slot = f"pie_slot_{index}"
+            slot = f"{prefix}_{index}"
             command_id = getattr(preferences, slot, "NONE") if preferences is not None else "NONE"
             _draw_pie_command(pie, context, command_id)
 

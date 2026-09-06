@@ -10,6 +10,7 @@ sys.path.insert(0, str(ADDONS))
 import polygroups_generator as addon
 from polygroups_generator.pin_edges import pin_layer
 from polygroups_generator.operators.connect_vertex_seam import connect_pair
+from polygroups_generator.operators.seam_eraser import erase_pair
 
 addon.register()
 # Regression: the first pinned Vertex Seam Path must create its custom layer
@@ -65,8 +66,17 @@ layer = pin_layer(bm)
 assert layer is not None and bm.edges[0][layer]
 
 settings.seam_eraser_clear_mode = "PINNED"
-assert bpy.ops.mesh.polygroups_unpin_selected_edges() == {"FINISHED"}
+# Pinned Only removes the custom mark but preserves the seam.
+assert erase_pair(bpy.context, bpy.context.active_object, bm,
+                  bm.edges[0].verts[0], bm.edges[0].verts[1]) == 1
 assert not bm.edges[0][layer] and bm.edges[0].seam
+
+# Clear Seams and Pinned removes both marks.
+assert bpy.ops.mesh.polygroups_pin_selected_seams() == {"FINISHED"}
+settings.seam_eraser_clear_mode = "SEAMS"
+assert erase_pair(bpy.context, bpy.context.active_object, bm,
+                  bm.edges[0].verts[0], bm.edges[0].verts[1]) == 1
+assert not bm.edges[0][layer] and not bm.edges[0].seam
 
 addon.unregister()
 print("PIN EDGES REGISTRATION AND OPERATORS PASSED")

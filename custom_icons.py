@@ -12,9 +12,17 @@ _FILES = {
     "knife_seam": "Knife_Seam_tool.png",
     "quick_knife_seam": "QuckKnife_Seam_tool.png",
     "connect_vertex_seam": "Vertex_Seam_Path.png",
+    "connect_vertex_seam_pin": "Vertex_Seam_Path_PIN.png",
     "edge_seam_path": "Edge_Seam_Path.png",
+    "edge_seam_path_pin": "Edge_Seam_Path_PIN.png",
+    "smart_seams_generator": "Smart_Seam_Generator.png",
+    "smart_seams_generator_pin": "Smart_Seam_Generator_PIN.png",
     "seam_eraser": "Seam_Eraser.png",
+    "seam_eraser_pin": "Seam_Eraser_PIN.png",
     "edge_seam_eraser": "Edge_seam_Eraser.png",
+    "edge_seam_eraser_pin": "Edge_seam_Eraser_PIN.png",
+    "pin_vertices": "Pin_Vertices.png",
+    "unpin_vertices": "Unpin_Clear_Pin_Vertices.png",
 }
 _previews = None
 _handles = {}
@@ -107,6 +115,10 @@ def update_icons(context):
     for window in context.window_manager.windows:
         for area in window.screen.areas:
             area.tag_redraw()
+    scene = getattr(context, "scene", None)
+    if scene is not None:
+        from .tools import update_dynamic_seam_tool_icons
+        update_dynamic_seam_tool_icons(scene.polygroups_seam_preparation_settings, context)
     return len(geometry_ids)
 
 

@@ -30,6 +30,51 @@ CUTTER_TOOL_ORDER = (
 )
 
 
+def _replace_registered_tool_icon(tool_cls, icon):
+    """Replace the immutable ToolDef stored in Blender's toolbar lists."""
+    tool_cls.bl_icon = icon
+    old = getattr(tool_cls, "_bl_tool", None)
+    if old is None or old.icon == icon:
+        return
+    new = old._replace(icon=icon)
+    tool_cls._bl_tool = new
+    from bl_ui.space_toolsystem_toolbar import VIEW3D_PT_tools_active
+
+    def replace(items):
+        for index, item in enumerate(items):
+            if getattr(item, "idname", None) == old.idname:
+                items[index] = new
+                return True
+            if isinstance(item, tuple):
+                group = list(item)
+                if replace(group):
+                    items[index] = tuple(group)
+                    return True
+        return False
+
+    replace(VIEW3D_PT_tools_active._tools.get("EDIT_MESH", []))
+
+
+def update_dynamic_seam_tool_icons(settings, context=None):
+    """Refresh toolbar icons immediately when a pin-mode option changes."""
+    path_suffix = "_pin" if settings.seam_path_pin else ""
+    eraser_suffix = "_pin" if settings.seam_eraser_clear_mode == "PINNED" else ""
+    smart_suffix = "_pin" if settings.smart_seam_pin_generated else ""
+    for cls, key, fallback in (
+        (VIEW3D_WST_polygroups_connect_vertex_seam, "connect_vertex_seam" + path_suffix, "ops.mesh.dupli_extrude_cursor"),
+        (VIEW3D_WST_polygroups_edge_seam_path, "edge_seam_path" + path_suffix, "ops.mesh.dupli_extrude_cursor"),
+        (VIEW3D_WST_polygroups_seam_eraser, "seam_eraser" + eraser_suffix, "ops.generic.select_circle"),
+        (VIEW3D_WST_polygroups_edge_seam_eraser, "edge_seam_eraser" + eraser_suffix, "ops.mesh.dupli_extrude_cursor"),
+        (VIEW3D_WST_polygroups_smart_seams_generator, "smart_seams_generator" + smart_suffix, "ops.mesh.mark_seam"),
+    ):
+        _replace_registered_tool_icon(cls, tool_icon(key, fallback))
+    if context is not None:
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type in {"VIEW_3D", "PROPERTIES"}:
+                    area.tag_redraw()
+
+
 def _tool_id(item):
     return getattr(item, "idname", None)
 
@@ -701,7 +746,7 @@ def register():
     VIEW3D_WST_polygroups_quick_knife_seam.bl_icon = tool_icon("quick_knife_seam", "ops.mesh.bisect")
     VIEW3D_WST_polygroups_connect_vertex_seam.bl_icon = tool_icon("connect_vertex_seam", "ops.mesh.dupli_extrude_cursor")
     VIEW3D_WST_polygroups_edge_seam_path.bl_icon = tool_icon("edge_seam_path", "ops.mesh.dupli_extrude_cursor")
-    VIEW3D_WST_polygroups_smart_seams_generator.bl_icon = tool_icon("edge_seam_path", "ops.mesh.dupli_extrude_cursor")
+    VIEW3D_WST_polygroups_smart_seams_generator.bl_icon = tool_icon("smart_seams_generator", "ops.mesh.mark_seam")
     VIEW3D_WST_polygroups_seam_eraser.bl_icon = tool_icon("seam_eraser", "ops.generic.select_circle")
     VIEW3D_WST_polygroups_edge_seam_eraser.bl_icon = tool_icon("edge_seam_eraser", "ops.mesh.dupli_extrude_cursor")
     bpy.types.STATUSBAR_HT_header.prepend(draw_seam_status)
@@ -781,6 +826,9 @@ def register():
 
     bpy.utils.register_tool(VIEW3D_WST_polygroups_seam_eraser, after={SMART_SEAMS_TOOL_ID}, separator=True)
     bpy.utils.register_tool(VIEW3D_WST_polygroups_edge_seam_eraser, after={AREA_TOOL_ID})
+    scene = getattr(bpy.context, "scene", None)
+    if scene is not None:
+        update_dynamic_seam_tool_icons(scene.polygroups_seam_preparation_settings, bpy.context)
 
 def unregister():
     stop_erasers()

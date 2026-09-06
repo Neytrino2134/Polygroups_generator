@@ -18,6 +18,15 @@ context = bpy.context
 prefs = context.preferences.addons[ROOT.name].preferences
 assert pie.current_slots(prefs) == pie.BUILTIN_PRESETS['GENERAL']
 assert prefs.active_pie_preset == 'CURRENT'
+assert prefs.use_edit_mode_preset
+assert prefs.active_edit_pie_preset == 'EDIT_MODE'
+assert pie.current_slots(prefs, 'EDIT') == pie.BUILTIN_PRESETS['EDIT_MODE']
+# Object and Edit Mode selections and slots stay independent.
+object_slots = pie.current_slots(prefs)
+prefs.active_edit_pie_preset = 'SEAMS'
+assert pie.current_slots(prefs, 'EDIT') == pie.BUILTIN_PRESETS['SEAMS']
+assert pie.current_slots(prefs) == object_slots
+prefs.active_edit_pie_preset = 'EDIT_MODE'
 # Original enum indices must not move when new commands are appended.
 assert [item[0] for item in hotkeys.PIE_COMMAND_ITEMS[:12]] == [
     'NONE', 'IMPORT_FILES', 'APPLY_CUTTER_SEAMS', 'GENERATE_POLYGROUPS',
@@ -104,6 +113,8 @@ class Layout:
         self.commands = []
     def menu_pie(self):
         return self
+    def box(self):
+        return self
     def row(self, **kwargs):
         return self
     def column(self, **kwargs):
@@ -128,9 +139,29 @@ for direction, command in zip(('N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'), pie.
     assert directions[direction][0] == hotkeys.PIE_COMMANDS[command]['operator']
 linked = next(props for name, props in layout.commands if name == 'mesh.select_linked')
 assert linked.delimit == {'SEAM'}
+
+# Runtime menu chooses the Edit Mode slots only while that option is enabled.
+prefs.active_pie_preset = 'GENERAL'
+prefs.active_edit_pie_preset = 'EDIT_MODE'
+bpy.ops.object.mode_set(mode='EDIT')
+captured = []
+original_draw_command = hotkeys._draw_pie_command
+hotkeys._draw_pie_command = lambda layout, ctx, command: captured.append(command)
+hotkeys.VIEW3D_MT_airetopo_pie.draw(SimpleNamespace(layout=Layout()), context)
+assert captured == [pie.BUILTIN_PRESETS['EDIT_MODE'][index - 1] for index in hotkeys.PIE_SLOT_DRAW_ORDER]
+prefs.use_edit_mode_preset = False
+captured.clear()
+hotkeys.VIEW3D_MT_airetopo_pie.draw(SimpleNamespace(layout=Layout()), context)
+assert captured == [pie.BUILTIN_PRESETS['GENERAL'][index - 1] for index in hotkeys.PIE_SLOT_DRAW_ORDER]
+hotkeys._draw_pie_command = original_draw_command
+bpy.ops.object.mode_set(mode='OBJECT')
+prefs.use_edit_mode_preset = True
+
 layout = Layout()
 pie.draw_pie_settings(prefs, context, layout)
-assert [props.slot for name, props in layout.commands if name == 'wm.airetopo_search_pie_command'] == list(range(1, 9))
+pickers = [props for name, props in layout.commands if name == 'wm.airetopo_search_pie_command']
+assert [props.slot for props in pickers] == list(range(1, 9)) * 2
+assert [props.mode for props in pickers] == ['OBJECT'] * 8 + ['EDIT'] * 8
 assert context.preferences.is_dirty
 print('PIE_PRESET_TESTS_PASSED', len(hotkeys.PIE_COMMAND_ITEMS), 'commands', flush=True)
 

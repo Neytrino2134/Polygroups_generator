@@ -6,7 +6,7 @@ from math import ceil, hypot
 from ..core.edge_seam_path import find_edge_path
 from ..localization import t
 from .connect_vertex_seam import edit_meshes, invoke_seam_click
-from ..pin_edges import pin_layer, is_pinned
+from ..pin_edges import pin_layer
 
 AREA_TOOL_ID = "polygroups_generator.seam_eraser_tool"
 PATH_TOOL_ID = "polygroups_generator.edge_seam_eraser_tool"
@@ -18,14 +18,13 @@ def erase_pair(context, obj, bm, start, end):
         layer = pin_layer(bm)
         if layer is not None:
             for edge in path:
-                if is_pinned(edge, layer):
-                    edge.seam = False
-                    edge[layer] = 0
+                edge[layer] = 0
     else:
         layer = pin_layer(bm)
         for edge in path:
-            if not is_pinned(edge, layer):
-                edge.seam = False
+            edge.seam = False
+            if layer is not None:
+                edge[layer] = 0
     if path:
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
     return len(path)
@@ -148,12 +147,12 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
             for edge in bm.edges:
                 if edge.select and not edge.hide:
                     if clear_pins:
-                        if layer is not None and is_pinned(edge, layer):
-                            edge.seam = False
+                        if layer is not None:
                             edge[layer] = 0
                     else:
-                        if not is_pinned(edge, layer):
-                            edge.seam = False
+                        edge.seam = False
+                        if layer is not None:
+                            edge[layer] = 0
         self._clear_selection()
 
     def _circle(self, point):
