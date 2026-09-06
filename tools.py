@@ -132,6 +132,16 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         text=t(context, "apply_cutter_seams"),
         icon="MOD_BOOLEAN",
     )
+    row.operator(
+        "object.polygroups_create_cutter_backup",
+        text="",
+        icon="DUPLICATE",
+    )
+    row.operator(
+        "object.polygroups_restore_cutter_backup",
+        text="",
+        icon="RECOVER_LAST",
+    )
     row.menu(
         "VIEW3D_MT_polygroups_cutter_tool_type",
         text=t(context, _active_cutter_label_key(tool.idname)),
@@ -168,6 +178,9 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         seam_toggle = row.row(align=True)
         seam_toggle.enabled = settings.cutter_auto_fix_mesh
         seam_toggle.prop(settings, "cutter_auto_fix_seam_check", text="", icon="VIEWZOOM", toggle=True)
+        islands_toggle = row.row(align=True)
+        islands_toggle.enabled = settings.cutter_auto_fix_mesh
+        islands_toggle.prop(settings, "cutter_auto_fix_small_islands", text="", icon="AUTOMERGE_ON", toggle=True)
     row.label(text=t(context, "ctrl_draw_hint"))
     axis_row = row.row(align=True)
     for axis in ("X", "Y", "Z"):

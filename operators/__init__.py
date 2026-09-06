@@ -67,6 +67,8 @@ from .mesh_export import OBJECT_OT_polygroups_add_blend_static_collection
 from .mesh_export import OBJECT_OT_polygroups_clear_blend_static_collections
 from .mesh_export import OBJECT_OT_polygroups_scan_blend_assets
 from .object_seam_cutter import OBJECT_OT_polygroups_apply_cutter_seams
+from .object_seam_cutter import OBJECT_OT_polygroups_create_cutter_backup
+from .object_seam_cutter import OBJECT_OT_polygroups_restore_cutter_backup
 from .object_seam_cutter import OBJECT_OT_polygroups_auto_fix_after_cutter
 from .object_seam_cutter import OBJECT_OT_polygroups_bezier_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_clear_cutter_planes
@@ -260,6 +262,8 @@ CLASSES = (
     OBJECT_OT_polygroups_tilt_cutter_path,
     OBJECT_OT_polygroups_copy_mirror_cutters,
     OBJECT_OT_polygroups_auto_fix_after_cutter,
+    OBJECT_OT_polygroups_create_cutter_backup,
+    OBJECT_OT_polygroups_restore_cutter_backup,
     OBJECT_OT_polygroups_apply_cutter_seams,
     OBJECT_OT_polygroups_split_object_by_cutters,
     OBJECT_OT_polygroups_select_cutter_planes,
@@ -272,6 +276,7 @@ def register():
     from .import_queue import stop_import_queue
     from .remesh_progress import stop_remesh
     from .knife_seam_tool import stop_knife_seams
+    from .object_seam_cutter import stop_cutter_apply
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
@@ -280,6 +285,7 @@ def register():
     bpy.app.handlers.load_pre.append(stop_import_queue)
     bpy.app.handlers.load_pre.append(stop_remesh)
     bpy.app.handlers.load_pre.append(stop_knife_seams)
+    bpy.app.handlers.load_pre.append(stop_cutter_apply)
     from .detached_groups import cleanup_windows
     bpy.app.handlers.load_pre.append(cleanup_windows)
 
@@ -293,10 +299,14 @@ def unregister():
     from .import_queue import stop_import_queue
     from .remesh_progress import stop_remesh
     from .knife_seam_tool import stop_knife_seams
+    from .object_seam_cutter import stop_cutter_apply
 
     stop_import_queue()
     stop_remesh()
     stop_knife_seams()
+    stop_cutter_apply()
+    if stop_cutter_apply in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(stop_cutter_apply)
     if stop_knife_seams in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_knife_seams)
     if stop_remesh in bpy.app.handlers.load_pre:

@@ -88,6 +88,8 @@ settings = bpy.context.scene.polygroups_object_seam_cutter_settings
 settings.cutter_auto_fix_mesh = True
 settings.cutter_auto_fix_fin_faces = True
 settings.cutter_auto_fix_seam_check = True
+settings.cutter_auto_fix_small_islands = True
+settings.cutter_auto_fix_small_islands_threshold = 0.5
 settings.hide_cutters_after_apply = False
 settings.delete_cutters_after_apply = False
 with (
@@ -113,6 +115,7 @@ assert [call.args[0] for call in fill.call_args_list] == [target, target]
 assert triangulate.call_count == 2
 assert [call.args[0] for call in triangulate.call_args_list] == [target, target]
 assert bpy.context.scene.polygroups_seam_preparation_settings.seam_gap_status == "No seam gaps found"
+assert bpy.context.scene.polygroups_generator_settings.small_island_status
 
 addon_utils.disable(ROOT.name, default_set=True)
 print("CUTTER_AUTOFIX_TESTS_PASSED")

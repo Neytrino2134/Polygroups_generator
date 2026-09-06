@@ -15,8 +15,9 @@ def update_remesh_cursor(context, event):
 
 
 class RemeshCursor:
-    def __init__(self, context):
+    def __init__(self, context, label="Remesh"):
         self.percent = 0.0
+        self.label = label
         self.window = context.window
         self.handle = None
         if not bpy.app.background and self.window is not None:
@@ -35,7 +36,7 @@ class RemeshCursor:
             return
         scale = context.preferences.system.ui_scale
         blf.size(0, 14 * scale)
-        text = f"Remesh {self.percent:.0f}%"
+        text = f"{self.label} {self.percent:.0f}%"
         width, height = blf.dimensions(0, text)
         x = max(4, min(x + 20 * scale, region.width - width - 4))
         y = max(4, min(y - 24 * scale, region.height - height - 4))

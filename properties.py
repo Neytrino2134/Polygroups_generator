@@ -526,6 +526,12 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
+    cutter_apply_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    cutter_apply_stage: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    cutter_apply_message: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    cutter_apply_progress: bpy.props.FloatProperty(
+        default=0.0, min=0.0, max=100.0, subtype="PERCENTAGE", options={"SKIP_SAVE"},
+    )
     cutter_grid_auto_rotate: bpy.props.BoolProperty(
         name="Auto Rotate", description="Switch to a side view after the second base click to draw depth directly",
         default=True,
@@ -667,6 +673,19 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         name="Check and Close Seam Gaps",
         description="After cutter Autofix, check and close seam gaps using the current N-panel settings",
         default=False,
+    )
+    cutter_auto_fix_small_islands: bpy.props.BoolProperty(
+        name="Check and Merge Small Islands",
+        description="After cutter Autofix, merge small seam islands using the dedicated threshold",
+        default=False,
+    )
+    cutter_auto_fix_small_islands_threshold: bpy.props.FloatProperty(
+        name="Small Islands Threshold (%)",
+        description="Maximum relative island area merged after applying cutter seams",
+        default=0.5,
+        min=0.1,
+        max=1.0,
+        precision=2,
     )
     cutter_mirror_axis: bpy.props.EnumProperty(
         name="Mirror Axis",

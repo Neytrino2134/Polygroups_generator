@@ -1093,6 +1093,36 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             icon="VIEWZOOM",
             toggle=True,
         )
+        islands_toggle = autofix_row.row(align=True)
+        islands_toggle.enabled = settings.cutter_auto_fix_mesh
+        islands_toggle.prop(
+            settings,
+            "cutter_auto_fix_small_islands",
+            text="",
+            icon="AUTOMERGE_ON",
+            toggle=True,
+        )
+        if settings.cutter_auto_fix_small_islands:
+            threshold_row = layout.row(align=True)
+            threshold_row.enabled = settings.cutter_auto_fix_mesh
+            threshold_row.prop(
+                settings,
+                "cutter_auto_fix_small_islands_threshold",
+                text="Small Islands Threshold (%)",
+            )
+        status_box = layout.box()
+        status_box.label(text="Apply Cutter Seams Status", icon="MOD_BOOLEAN")
+        if settings.cutter_apply_stage:
+            status_box.label(text=settings.cutter_apply_message)
+            status_box.progress(
+                factor=settings.cutter_apply_progress / 100,
+                type="BAR",
+                text=f"{settings.cutter_apply_progress:.0f}%",
+            )
+            if settings.cutter_apply_is_running:
+                status_box.label(text="Press Esc to cancel", icon="INFO")
+        else:
+            status_box.label(text="Ready")
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
         layout.prop(settings, "cutter_thickness", text=t(context, "cutter_thickness"))
@@ -1252,11 +1282,26 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             obj.type in {"MESH", "CURVE"}
             and obj.get("polygroups_object_seam_cutter")
             for obj in context.selected_objects
-        )
+        ) and not settings.cutter_apply_is_running
         apply_row.operator(
             "object.polygroups_apply_cutter_seams",
             text=t(context, "apply_cutter_seams"),
             icon="MOD_BOOLEAN",
+        )
+        apply_row.operator(
+            "object.polygroups_create_cutter_backup",
+            text="",
+            icon="DUPLICATE",
+        )
+        apply_row.operator(
+            "object.polygroups_restore_cutter_backup",
+            text="",
+            icon="RECOVER_LAST",
+        )
+        layout.operator(
+            "object.polygroups_restore_cutter_backup",
+            text="Restore Backup",
+            icon="RECOVER_LAST",
         )
         layout.operator(
             "object.polygroups_split_object_by_cutters",

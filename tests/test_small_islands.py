@@ -54,16 +54,25 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root.parent))
 addon_utils.enable(root.name, default_set=True)
 obj = bpy.context.active_object
-bm = strip([10, .1, 10])
+settings = bpy.context.scene.polygroups_generator_settings
+cutter_settings = bpy.context.scene.polygroups_object_seam_cutter_settings
+assert not cutter_settings.cutter_auto_fix_small_islands
+assert abs(cutter_settings.cutter_auto_fix_small_islands_threshold - 0.5) < 1e-7
+settings.small_island_threshold = 0.1
+bm = strip([10, .04, 10])
 bm.to_mesh(obj.data)
 bm.free()
 before = sum(edge.use_seam for edge in obj.data.edges)
-assert bpy.ops.mesh.polygroups_merge_small_islands(preview=True) == {'FINISHED'}
+assert bpy.ops.mesh.polygroups_merge_small_islands(
+    preview=True, threshold_override=0.5,
+) == {'FINISHED'}
 assert obj.mode == 'EDIT'
 live = bmesh.from_edit_mesh(obj.data)
 assert sum(edge.select for edge in live.edges) == 1
 assert sum(edge.seam for edge in live.edges) == before
-assert bpy.ops.mesh.polygroups_merge_small_islands(preview=False) == {'FINISHED'}
+assert bpy.ops.mesh.polygroups_merge_small_islands(
+    preview=False, threshold_override=0.5,
+) == {'FINISHED'}
 assert sum(edge.seam for edge in live.edges) == before - 1
 bpy.ops.object.mode_set(mode='OBJECT')
 print('SMALL ISLAND PREVIEW AND APPLY PASSED')

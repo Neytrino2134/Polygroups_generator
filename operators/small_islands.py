@@ -111,6 +111,10 @@ class MESH_OT_polygroups_merge_small_islands(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     preview: bpy.props.BoolProperty(default=True, options={"SKIP_SAVE"})
+    threshold_override: bpy.props.FloatProperty(
+        default=-1.0, min=-1.0, max=100.0,
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
 
     @classmethod
     def poll(cls, context):
@@ -127,8 +131,13 @@ class MESH_OT_polygroups_merge_small_islands(bpy.types.Operator):
         bm = bmesh.new()
         try:
             bm.from_mesh(obj.data)
+            threshold = (
+                self.threshold_override
+                if self.threshold_override >= 0.0
+                else settings.small_island_threshold
+            )
             removed, total, small, merged = plan_merge(
-                bm, settings.small_island_threshold,
+                bm, threshold,
                 settings.small_island_protect_sharp, settings.small_island_protect_materials)
         finally:
             bm.free()

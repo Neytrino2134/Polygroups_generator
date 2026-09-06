@@ -1,4 +1,5 @@
 import json
+import time
 import bpy
 from math import atan2
 from math import cos
@@ -32,6 +33,7 @@ CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_PATH_DATA_PROP = "polygroups_object_seam_cutter_path_data"
 CUTTER_DRAW_DATA_PROP = "polygroups_object_seam_cutter_draw_data"
+CUTTER_BACKUP_PREFIX = "Backup_"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
@@ -42,6 +44,7 @@ AUTOFIX_MAX_PROTRUSION_FACES = 2000
 AUTOFIX_MAX_LOOSE_GEOMETRY = 10000
 AUTOFIX_MAX_HOLE_EDGE_COUNT = 128
 AUTOFIX_MAX_HOLE_LOOPS = 16
+ACTIVE_CUTTER_APPLY = None
 
 
 def _view3d_under_mouse(context, event):
@@ -1803,10 +1806,9 @@ def _apply_plane_cutters_to_mesh(target, cutters):
     return marked_edges
 
 
-def _apply_cutters_to_mesh(context, target, cutters):
+def _prepare_cutters_for_apply(context, cutters):
     settings = context.scene.polygroups_object_seam_cutter_settings
     if settings.auto_convert_draw_strokes_on_apply:
-        original_cutters = cutters
         converted_cutters = []
         for stroke in _draw_strokes_from_cutters(cutters):
             cutter = _convert_draw_stroke_to_cutter_path(context, stroke)
@@ -1817,8 +1819,12 @@ def _apply_cutters_to_mesh(context, target, cutters):
             for cutter in cutters
             if cutter.get(CUTTER_TYPE_PROP) != "DRAW_STROKE"
         ] + converted_cutters
-        if isinstance(original_cutters, list):
-            original_cutters[:] = cutters
+    return cutters
+
+
+def _apply_cutters_to_mesh(context, target, cutters):
+    settings = context.scene.polygroups_object_seam_cutter_settings
+    cutters = _prepare_cutters_for_apply(context, cutters)
 
     grid_cutters = [cutter for cutter in cutters if cutter.get(CUTTER_TYPE_PROP) == "GRID_PLANE"]
     grid_method = getattr(settings, "cutter_grid_apply_method", "BISECT")
@@ -3500,6 +3506,256 @@ class OBJECT_OT_polygroups_auto_fix_after_cutter(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _redraw_cutter_apply(context):
+    for window in context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
+
+
+def _cutter_backup_for(target):
+    backup = bpy.data.objects.get(CUTTER_BACKUP_PREFIX + target.name)
+    return backup if backup is not None and backup.type == "MESH" else None
+
+
+def _ensure_cutter_backup(context, target):
+    backup = _cutter_backup_for(target)
+    if backup is not None:
+        return backup, False
+    backup = target.copy()
+    backup.data = target.data.copy()
+    backup.animation_data_clear()
+    backup.name = CUTTER_BACKUP_PREFIX + target.name
+    backup.data.name = CUTTER_BACKUP_PREFIX + target.data.name
+    for collection in target.users_collection or (context.scene.collection,):
+        collection.objects.link(backup)
+    backup.hide_viewport = True
+    backup.hide_render = True
+    try:
+        backup.hide_set(True)
+    except RuntimeError:
+        pass
+    return backup, True
+
+
+class OBJECT_OT_polygroups_create_cutter_backup(bpy.types.Operator):
+    bl_idname = "object.polygroups_create_cutter_backup"
+    bl_label = "Create Cutter Backup"
+    bl_description = "Create a hidden Backup_ copy unless one already exists"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return _find_cutter_target(context) is not None
+
+    def execute(self, context):
+        target = _find_cutter_target(context)
+        if target is None:
+            return {"CANCELLED"}
+        backup, created = _ensure_cutter_backup(context, target)
+        message = f"Created hidden backup: {backup.name}" if created else f"Backup already exists: {backup.name}"
+        self.report({"INFO"}, message)
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_restore_cutter_backup(bpy.types.Operator):
+    bl_idname = "object.polygroups_restore_cutter_backup"
+    bl_label = "Restore Cutter Backup"
+    bl_description = "Restore a copy of the hidden Backup_ object"
+    bl_options = {"REGISTER", "UNDO"}
+
+    current_action: bpy.props.EnumProperty(
+        name="Current Mesh",
+        items=(
+            ("DELETE", "Delete Current Mesh", "Delete the selected current mesh before restoring"),
+            ("KEEP", "Keep Current Mesh", "Keep the selected mesh under a Current_ name"),
+        ),
+        default="DELETE",
+    )
+
+    @classmethod
+    def poll(cls, context):
+        target = context.active_object
+        return target is not None and target.type == "MESH" and _cutter_backup_for(target) is not None
+
+    def invoke(self, context, event):
+        del event
+        return context.window_manager.invoke_props_dialog(
+            self, width=420, confirm_text="Restore Backup",
+        )
+
+    def draw(self, context):
+        self.layout.label(text="What should happen to the selected current mesh?", icon="QUESTION")
+        self.layout.prop(self, "current_action", expand=True)
+
+    def execute(self, context):
+        target = context.active_object
+        backup = _cutter_backup_for(target)
+        if backup is None:
+            self.report({"WARNING"}, f"No {CUTTER_BACKUP_PREFIX}{target.name} found")
+            return {"CANCELLED"}
+        source_name = backup.name[len(CUTTER_BACKUP_PREFIX):]
+        collections = tuple(target.users_collection) or tuple(backup.users_collection) or (context.scene.collection,)
+        if self.current_action == "DELETE":
+            bpy.data.objects.remove(target, do_unlink=True)
+        else:
+            target.name = "Current_" + source_name
+        restored = backup.copy()
+        restored.data = backup.data.copy()
+        restored.animation_data_clear()
+        restored.name = source_name
+        restored.data.name = source_name
+        for collection in collections:
+            collection.objects.link(restored)
+        restored.hide_viewport = False
+        restored.hide_render = False
+        restored.hide_set(False)
+        for obj in context.selected_objects:
+            obj.select_set(False)
+        restored.select_set(True)
+        context.view_layer.objects.active = restored
+        self.report({"INFO"}, f"Restored {restored.name} from {backup.name}")
+        return {"FINISHED"}
+
+
+class CutterApplySession:
+    def __init__(self, context, target, cutters, report):
+        from ..core.remesh_cursor import RemeshCursor
+
+        self.context_scene = context.scene
+        self.target = target
+        self.cutters = list(cutters)
+        self.report = report
+        self.settings = context.scene.polygroups_object_seam_cutter_settings
+        self.status = self.settings
+        self.index = 0
+        self.marked_edges = 0
+        self.filled_before = self.filled_after = 0
+        self.triangulated_before = self.triangulated_after = 0
+        self.removed_fins_before = self.removed_fins_after = 0
+        self.removed_loose_before = self.removed_loose_after = 0
+        self.done = False
+        self.timer = None
+        self.cursor = RemeshCursor(context, label="Cutter")
+        self.status.cutter_apply_is_running = True
+        self.status.cutter_apply_stage = "BACKUP"
+        self.status.cutter_apply_message = "Creating or checking backup"
+        self.status.cutter_apply_progress = 0
+
+    def set_stage(self, stage, progress, message):
+        self.status.cutter_apply_stage = stage
+        self.status.cutter_apply_progress = progress
+        self.status.cutter_apply_message = message
+        self.cursor.percent = progress
+
+    def _autofix(self, context, suffix):
+        removed_fins = removed_loose = 0
+        if self.settings.cutter_auto_fix_fin_faces:
+            removed_fins = _remove_fin_faces_for_autofix(context, self.target)
+            removed_loose = _delete_loose_geometry_for_autofix(context, self.target)
+        filled = _fill_open_nonmanifold_boundaries(self.target)
+        triangulated = _triangulate_ngons_for_autofix(self.target)
+        setattr(self, f"removed_fins_{suffix}", removed_fins)
+        setattr(self, f"removed_loose_{suffix}", removed_loose)
+        setattr(self, f"filled_{suffix}", filled)
+        setattr(self, f"triangulated_{suffix}", triangulated)
+
+    def finish(self, context, stage, message=""):
+        if self.done:
+            return
+        self.done = True
+        self.status.cutter_apply_is_running = False
+        self.status.cutter_apply_stage = stage
+        self.status.cutter_apply_progress = 100 if stage == "DONE" else self.status.cutter_apply_progress
+        self.status.cutter_apply_message = message
+        self.cursor.percent = self.status.cutter_apply_progress
+        self.cursor.close()
+        _redraw_cutter_apply(context)
+
+    def step(self, context):
+        if self.done:
+            return
+        try:
+            stage = self.status.cutter_apply_stage
+            if stage == "BACKUP":
+                backup, created = _ensure_cutter_backup(context, self.target)
+                message = f"Created {backup.name}" if created else f"Using existing {backup.name}"
+                self.set_stage("PREPARING", 4, message)
+            elif stage == "PREPARING":
+                _apply_object_scale(context, self.target)
+                self.cutters = _prepare_cutters_for_apply(context, self.cutters)
+                _clear_mesh_component_selection(self.target.data)
+                self.set_stage("AUTOFIX_BEFORE", 8, "Autofixing before cutting")
+            elif stage == "AUTOFIX_BEFORE":
+                if self.settings.cutter_auto_fix_mesh:
+                    self._autofix(context, "before")
+                self.set_stage("CUTTING", 18, "Cutting 0 / %d" % len(self.cutters))
+            elif stage == "CUTTING":
+                if self.index < len(self.cutters):
+                    cutter = self.cutters[self.index]
+                    self.marked_edges += _apply_cutters_to_mesh(context, self.target, [cutter])
+                    self.index += 1
+                    progress = 18 + 52 * self.index / max(1, len(self.cutters))
+                    self.set_stage(
+                        "CUTTING", progress,
+                        f"Cutting {self.index} / {len(self.cutters)}: {cutter.name}",
+                    )
+                else:
+                    self.set_stage("AUTOFIX_AFTER", 74, "Autofixing after cutting")
+            elif stage == "AUTOFIX_AFTER":
+                if self.settings.cutter_auto_fix_mesh:
+                    self._autofix(context, "after")
+                self.set_stage("FINDING_GAPS", 88, "Finding and closing seam gaps")
+            elif stage == "FINDING_GAPS":
+                if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_seam_check:
+                    _prepare_target_for_autofix(context, self.target)
+                    bpy.ops.mesh.polygroups_check_and_close_seam_gaps()
+                self.set_stage("MERGING_ISLANDS", 92, "Checking and merging small islands")
+            elif stage == "MERGING_ISLANDS":
+                if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_small_islands:
+                    _prepare_target_for_autofix(context, self.target)
+                    bpy.ops.mesh.polygroups_merge_small_islands(
+                        preview=False,
+                        threshold_override=self.settings.cutter_auto_fix_small_islands_threshold,
+                    )
+                self.set_stage("FINALIZING", 97, "Finalizing cutter operation")
+            elif stage == "FINALIZING":
+                self.settings.last_cutter_count = len(self.cutters)
+                self.settings.last_marked_edge_count = self.marked_edges
+                if self.settings.delete_cutters_after_apply:
+                    for cutter in self.cutters:
+                        if cutter in set(bpy.data.objects):
+                            bpy.data.objects.remove(cutter, do_unlink=True)
+                elif self.settings.hide_cutters_after_apply:
+                    for cutter in self.cutters:
+                        if cutter in set(bpy.data.objects):
+                            cutter.hide_set(True)
+                            cutter.hide_viewport = True
+                message = (
+                    f"Applied {len(self.cutters)} cutter object(s), "
+                    f"marked {self.marked_edges} seam edge(s)"
+                )
+                self.report({"INFO"}, message)
+                play_operation_done_sound(context)
+                self.finish(context, "DONE", message)
+        except Exception as error:
+            self.report({"ERROR"}, f"Apply Cutter Seams failed: {error}")
+            self.finish(context, "FAILED", str(error))
+
+
+def stop_cutter_apply(*_args):
+    global ACTIVE_CUTTER_APPLY
+    if ACTIVE_CUTTER_APPLY is not None:
+        ACTIVE_CUTTER_APPLY.finish(bpy.context, "CANCELLED", "Cutter operation cancelled")
+        if ACTIVE_CUTTER_APPLY.timer is not None:
+            try:
+                bpy.context.window_manager.event_timer_remove(ACTIVE_CUTTER_APPLY.timer)
+            except Exception:
+                pass
+            ACTIVE_CUTTER_APPLY.timer = None
+        ACTIVE_CUTTER_APPLY = None
+
+
 class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
     bl_idname = "object.polygroups_apply_cutter_seams"
     bl_label = "Apply Cutter Seams To Active"
@@ -3509,12 +3765,15 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return (
+            ACTIVE_CUTTER_APPLY is None
+            and
             context.mode == "OBJECT"
             and _find_cutter_target(context) is not None
             and _has_selected_cutters_for_apply(context)
         )
 
     def execute(self, context):
+        global ACTIVE_CUTTER_APPLY
         target = _find_cutter_target(context)
         if target is None:
             self.report({"WARNING"}, "No active mesh target found")
@@ -3526,56 +3785,47 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             self.report({"WARNING"}, "Select at least one cutter object")
             return {"CANCELLED"}
 
-        _apply_object_scale(context, target)
-        removed_fins_before = 0
-        removed_loose_before = 0
-        filled_before = 0
-        triangulated_before = 0
-        if settings.cutter_auto_fix_mesh:
-            if settings.cutter_auto_fix_fin_faces:
-                removed_fins_before = _remove_fin_faces_for_autofix(context, target)
-                removed_loose_before = _delete_loose_geometry_for_autofix(context, target)
-            filled_before = _fill_open_nonmanifold_boundaries(target)
-            triangulated_before = _triangulate_ngons_for_autofix(target)
-        _clear_mesh_component_selection(target.data)
-        marked_edges = _apply_cutters_to_mesh(context, target, cutters)
-        removed_fins_after = 0
-        removed_loose_after = 0
-        filled_after = 0
-        triangulated_after = 0
-        if settings.cutter_auto_fix_mesh:
-            if settings.cutter_auto_fix_fin_faces:
-                removed_fins_after = _remove_fin_faces_for_autofix(context, target)
-                removed_loose_after = _delete_loose_geometry_for_autofix(context, target)
-            filled_after = _fill_open_nonmanifold_boundaries(target)
-            triangulated_after = _triangulate_ngons_for_autofix(target)
-            if settings.cutter_auto_fix_seam_check:
-                _prepare_target_for_autofix(context, target)
-                bpy.ops.mesh.polygroups_check_and_close_seam_gaps()
+        self._session = CutterApplySession(context, target, cutters, self.report)
+        ACTIVE_CUTTER_APPLY = self._session
+        if bpy.app.background:
+            while not self._session.done:
+                self._session.step(context)
+            ACTIVE_CUTTER_APPLY = None
+            return {"FINISHED"} if self._session.status.cutter_apply_stage == "DONE" else {"CANCELLED"}
 
-        settings.last_cutter_count = len(cutters)
-        settings.last_marked_edge_count = marked_edges
+        self._next_tick = time.monotonic()
+        self._session.timer = context.window_manager.event_timer_add(0.05, window=context.window)
+        context.window_manager.modal_handler_add(self)
+        _redraw_cutter_apply(context)
+        return {"RUNNING_MODAL"}
 
-        if settings.delete_cutters_after_apply:
-            for cutter in cutters:
-                bpy.data.objects.remove(cutter, do_unlink=True)
-        elif settings.hide_cutters_after_apply:
-            for cutter in cutters:
-                cutter.hide_set(True)
-                cutter.hide_viewport = True
+    def _cleanup(self, context):
+        global ACTIVE_CUTTER_APPLY
+        if self._session.timer is not None:
+            context.window_manager.event_timer_remove(self._session.timer)
+            self._session.timer = None
+        if ACTIVE_CUTTER_APPLY is self._session:
+            ACTIVE_CUTTER_APPLY = None
 
-        report_message = f"Applied {len(cutters)} cutter object(s), marked {marked_edges} seam edge(s)"
-        if settings.cutter_auto_fix_mesh:
-            report_message += (
-                f", Autofix removed {removed_fins_before}/{removed_fins_after} fin face(s), "
-                f"removed {removed_loose_before}/{removed_loose_after} loose item(s), "
-                f"filled {filled_before}/{filled_after} polygon(s) and "
-                f"triangulated {triangulated_before}/{triangulated_after} n-gon(s) "
-                f"before/after"
-            )
-        self.report({"INFO"}, report_message)
-        play_operation_done_sound(context)
-        return {"FINISHED"}
+    def modal(self, context, event):
+        from ..core.remesh_cursor import update_remesh_cursor
+        update_remesh_cursor(context, event)
+        if event.type == "ESC":
+            self._session.finish(context, "CANCELLED", "Cutter operation cancelled")
+        elif event.type != "TIMER" or time.monotonic() < self._next_tick:
+            return {"PASS_THROUGH"}
+        else:
+            self._next_tick = time.monotonic() + 0.05
+            self._session.step(context)
+        _redraw_cutter_apply(context)
+        if self._session.done:
+            self._cleanup(context)
+            return {"FINISHED" if self._session.status.cutter_apply_stage == "DONE" else "CANCELLED"}
+        return {"RUNNING_MODAL"}
+
+    def cancel(self, context):
+        self._session.finish(context, "CANCELLED", "Cutter operation cancelled")
+        self._cleanup(context)
 
 
 class OBJECT_OT_polygroups_split_object_by_cutters(bpy.types.Operator):
