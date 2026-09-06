@@ -4,17 +4,32 @@ import heapq
 import bpy
 import bmesh
 
+PIN_LAYER = "polygroups_pin_edge"
 
-def plan_merge(bm, threshold, protect_sharp=True, protect_materials=False):
+
+def _pin_layer(bm):
+    layers = getattr(bm.edges, "layers", None)
+    return layers.int.get(PIN_LAYER) if layers is not None else None
+
+
+def _is_pinned(edge, layer):
+    return bool(layer is not None and edge[layer])
+
+
+def plan_merge(bm, threshold, protect_sharp=True, protect_materials=False,
+               selected_only=False, protect_pinned=True):
     bm.faces.ensure_lookup_table()
     bm.edges.ensure_lookup_table()
     bm.faces.index_update()
     bm.edges.index_update()
     # Physical components and seam islands are independent partitions.
+    included = {face for face in bm.faces if not selected_only or face.select}
+    pins = _pin_layer(bm)
+
     def partition(cross_seams):
         labels = {}
         regions = []
-        for face in bm.faces:
+        for face in included:
             if face.index in labels:
                 continue
             label = len(regions)
@@ -28,7 +43,7 @@ def plan_merge(bm, threshold, protect_sharp=True, protect_materials=False):
                     if not edge.is_manifold or (edge.seam and not cross_seams):
                         continue
                     for neighbor in edge.link_faces:
-                        if neighbor.index not in labels:
+                        if neighbor in included and neighbor.index not in labels:
                             labels[neighbor.index] = label
                             stack.append(neighbor)
             regions.append(region)
@@ -47,12 +62,12 @@ def plan_merge(bm, threshold, protect_sharp=True, protect_materials=False):
     anchors = [None if i in small else i for i in range(len(regions))]
     adjacency = [dict() for _ in regions]
     for edge in bm.edges:
-        if not edge.is_manifold or not edge.seam:
+        if not edge.is_manifold or not edge.seam or any(face not in included for face in edge.link_faces):
             continue
         a, b = (labels[face.index] for face in edge.link_faces)
         if a == b:
             continue
-        blocked = (protect_sharp and not edge.smooth) or (
+        blocked = (protect_pinned and _is_pinned(edge, pins)) or (protect_sharp and not edge.smooth) or (
             protect_materials and edge.link_faces[0].material_index != edge.link_faces[1].material_index)
         data = adjacency[a].setdefault(b, [0.0, set(), False])
         data[0] += edge.calc_length()
@@ -138,7 +153,9 @@ class MESH_OT_polygroups_merge_small_islands(bpy.types.Operator):
             )
             removed, total, small, merged = plan_merge(
                 bm, threshold,
-                settings.small_island_protect_sharp, settings.small_island_protect_materials)
+                settings.small_island_protect_sharp, settings.small_island_protect_materials,
+                settings.small_island_selected_area and obj.mode == 'EDIT',
+                settings.small_island_protect_pinned)
         finally:
             bm.free()
         settings.small_island_status = f"{total} → {total - merged} | Small: {small} | Merged: {merged} | Remaining: {small - merged}"

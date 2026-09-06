@@ -125,9 +125,11 @@ from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
 from .small_islands import MESH_OT_polygroups_merge_small_islands
+from .pin_edges import MESH_OT_polygroups_pin_selected_seams, MESH_OT_polygroups_unpin_selected_edges, MESH_OT_polygroups_clear_all_pins
 from .smart_angle_seams import MESH_OT_polygroups_mark_smart_angle_seams
+from .smart_angle_seams import MESH_OT_polygroups_smart_seams_generator_click
 
-from .dev_restart import WM_OT_airetopo_dev_restart, WM_OT_airetopo_dev_cleanup
+from .dev_restart import WM_OT_airetopo_dev_restart, WM_OT_airetopo_dev_restart_current, WM_OT_airetopo_dev_cleanup
 
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
@@ -135,9 +137,14 @@ CLASSES = (
     WM_OT_airetopo_detach_group,
     WM_OT_airetopo_group_window_control,
     WM_OT_airetopo_dev_restart,
+    WM_OT_airetopo_dev_restart_current,
     WM_OT_airetopo_dev_cleanup,
     MESH_OT_polygroups_merge_small_islands,
+    MESH_OT_polygroups_pin_selected_seams,
+    MESH_OT_polygroups_unpin_selected_edges,
+    MESH_OT_polygroups_clear_all_pins,
     MESH_OT_polygroups_mark_smart_angle_seams,
+    MESH_OT_polygroups_smart_seams_generator_click,
     OBJECT_OT_polygroups_run_remesh,
     OBJECT_OT_polygroups_cancel_remesh,
     OBJECT_OT_polygroups_apply_weld,

@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 import bpy
 from math import atan2
 from math import cos
@@ -34,6 +35,11 @@ CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_PATH_DATA_PROP = "polygroups_object_seam_cutter_path_data"
 CUTTER_DRAW_DATA_PROP = "polygroups_object_seam_cutter_draw_data"
 CUTTER_BACKUP_PREFIX = "Backup_"
+CUTTER_BACKUP_COLLECTION_NAME = "Cutter Backups"
+CUTTER_BACKUP_OWNER_PROP = "polygroups_cutter_backup_owner"
+CUTTER_BACKUP_SNAPSHOT_PROP = "polygroups_cutter_backup_snapshot"
+CUTTER_INSTANCE_ID_PROP = "polygroups_cutter_instance_id"
+CUTTER_ORIGINAL_NAME_PROP = "polygroups_cutter_original_name"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
@@ -3538,6 +3544,80 @@ def _ensure_cutter_backup(context, target):
     return backup, True
 
 
+def _cutter_backup_collection(context):
+    collection = bpy.data.collections.get(CUTTER_BACKUP_COLLECTION_NAME)
+    if collection is None:
+        collection = bpy.data.collections.new(CUTTER_BACKUP_COLLECTION_NAME)
+        context.scene.collection.children.link(collection)
+    collection.hide_viewport = True
+    collection.hide_render = True
+    return collection
+
+
+def _remember_applied_cutters(context, target, cutters):
+    backup, _created = _ensure_cutter_backup(context, target)
+    owner = backup.name
+    collection = _cutter_backup_collection(context)
+    remembered = []
+    for cutter in cutters:
+        instance_id = cutter.get(CUTTER_INSTANCE_ID_PROP)
+        if not instance_id:
+            instance_id = uuid.uuid4().hex
+            cutter[CUTTER_INSTANCE_ID_PROP] = instance_id
+        for existing in list(collection.objects):
+            if (existing.get(CUTTER_BACKUP_OWNER_PROP) == owner
+                    and existing.get(CUTTER_INSTANCE_ID_PROP) == instance_id):
+                bpy.data.objects.remove(existing, do_unlink=True)
+        snapshot = cutter.copy()
+        snapshot.data = cutter.data.copy()
+        snapshot.animation_data_clear()
+        snapshot.name = f"BackupCutter_{target.name}_{cutter.name}"
+        snapshot[CUTTER_BACKUP_OWNER_PROP] = owner
+        snapshot[CUTTER_BACKUP_SNAPSHOT_PROP] = True
+        snapshot[CUTTER_ORIGINAL_NAME_PROP] = cutter.name
+        collection.objects.link(snapshot)
+        snapshot.hide_viewport = True
+        snapshot.hide_render = True
+        try:
+            snapshot.hide_set(True)
+        except RuntimeError:
+            pass
+        remembered.append(snapshot)
+    return remembered
+
+
+def _restore_applied_cutters(context, backup):
+    snapshots = [
+        obj for obj in bpy.data.objects
+        if obj.get(CUTTER_BACKUP_SNAPSHOT_PROP)
+        and obj.get(CUTTER_BACKUP_OWNER_PROP) == backup.name
+    ]
+    restored = []
+    for snapshot in snapshots:
+        instance_id = snapshot.get(CUTTER_INSTANCE_ID_PROP)
+        for current in list(bpy.data.objects):
+            if current == snapshot or current.get(CUTTER_BACKUP_SNAPSHOT_PROP):
+                continue
+            if current.get(CUTTER_INSTANCE_ID_PROP) == instance_id:
+                bpy.data.objects.remove(current, do_unlink=True)
+        cutter = snapshot.copy()
+        cutter.data = snapshot.data.copy()
+        cutter.animation_data_clear()
+        cutter.name = snapshot.get(CUTTER_ORIGINAL_NAME_PROP, snapshot.name)
+        cutter.hide_viewport = False
+        cutter.hide_render = False
+        for key in (CUTTER_BACKUP_OWNER_PROP, CUTTER_BACKUP_SNAPSHOT_PROP):
+            if key in cutter:
+                del cutter[key]
+        _tool_collection(_tool_collection_type_for_cutter(cutter)).objects.link(cutter)
+        try:
+            cutter.hide_set(False)
+        except RuntimeError:
+            pass
+        restored.append(cutter)
+    return restored
+
+
 class OBJECT_OT_polygroups_create_cutter_backup(bpy.types.Operator):
     bl_idname = "object.polygroups_create_cutter_backup"
     bl_label = "Create Cutter Backup"
@@ -3572,6 +3652,11 @@ class OBJECT_OT_polygroups_restore_cutter_backup(bpy.types.Operator):
         ),
         default="DELETE",
     )
+    restore_cutters: bpy.props.BoolProperty(
+        name="Restore Cutters",
+        description="Restore all cutters remembered across Apply Cutter Seams iterations",
+        default=True,
+    )
 
     @classmethod
     def poll(cls, context):
@@ -3587,6 +3672,7 @@ class OBJECT_OT_polygroups_restore_cutter_backup(bpy.types.Operator):
     def draw(self, context):
         self.layout.label(text="What should happen to the selected current mesh?", icon="QUESTION")
         self.layout.prop(self, "current_action", expand=True)
+        self.layout.prop(self, "restore_cutters", icon="MOD_BOOLEAN")
 
     def execute(self, context):
         target = context.active_object
@@ -3610,11 +3696,15 @@ class OBJECT_OT_polygroups_restore_cutter_backup(bpy.types.Operator):
         restored.hide_viewport = False
         restored.hide_render = False
         restored.hide_set(False)
+        restored_cutters = _restore_applied_cutters(context, backup) if self.restore_cutters else []
         for obj in context.selected_objects:
             obj.select_set(False)
         restored.select_set(True)
         context.view_layer.objects.active = restored
-        self.report({"INFO"}, f"Restored {restored.name} from {backup.name}")
+        self.report(
+            {"INFO"},
+            f"Restored {restored.name} from {backup.name}; restored {len(restored_cutters)} cutter(s)",
+        )
         return {"FINISHED"}
 
 
@@ -3684,6 +3774,7 @@ class CutterApplySession:
             elif stage == "PREPARING":
                 _apply_object_scale(context, self.target)
                 self.cutters = _prepare_cutters_for_apply(context, self.cutters)
+                _remember_applied_cutters(context, self.target, self.cutters)
                 _clear_mesh_component_selection(self.target.data)
                 self.set_stage("AUTOFIX_BEFORE", 8, "Autofixing before cutting")
             elif stage == "AUTOFIX_BEFORE":

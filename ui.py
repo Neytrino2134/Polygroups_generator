@@ -360,6 +360,7 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         preferences = get_preferences(context)
         layout = self.layout
         layout.operator("wm.airetopo_dev_restart", text=t(context, "dev_restart"), icon="FILE_REFRESH")
+        layout.operator("wm.airetopo_dev_restart_current", text=t(context, "dev_restart_current"), icon="FILE_TICK")
         header = layout.row(align=True)
         expand_operator = header.operator(
             "object.airetopo_set_all_section_visibility",
@@ -906,13 +907,48 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 icon="X",
             )
 
+            tools_column.separator()
+            tools_column.label(text=t(context, "pin_edges"))
+            pin_row = tools_column.row(align=True)
+            pin_row.operator("mesh.polygroups_pin_selected_seams", text=t(context, "pin_selected_seams"), icon="PINNED")
+            pin_row.operator("mesh.polygroups_unpin_selected_edges", text=t(context, "unpin_selected"), icon="UNPINNED")
+            tools_column.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), icon="X")
+            tools_column.prop(seam_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
+
             tools_column.operator(
                 "mesh.polygroups_edge_seam_path",
                 text=t(context, "edge_seam_path"),
                 **icon_kwargs("edge_seam_path", "EDGE_SEAM"),
             )
-            tools_column.separator()
+
+        settings = context.scene.polygroups_generator_settings
+        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
+        if content is not None:
+            content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
+            content.prop(settings, "small_island_selected_area", text=t(context, "small_islands_selected"))
+            content.prop(settings, "small_island_protect_pinned", text=t(context, "small_islands_pinned"))
+            content.prop(settings, "small_island_protect_sharp", text=t(context, "small_islands_sharp"))
+            content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
+            row = content.row(align=True)
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
+            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
+            if settings.small_island_status:
+                content.label(text=settings.small_island_status)
+
+        content = draw_collapsible_box(layout, seam_settings, "show_smart_mark_seams_group", t(context, "seam_group_smart_mark"), "EDGE_SEAM")
+        if content is not None:
+            tools_column = content.column(align=True)
             tools_column.prop(seam_settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
+            tools_column.prop(seam_settings, "smart_seam_filter_iterations")
+            tools_column.prop(seam_settings, "smart_seam_min_area")
+            tools_column.prop(seam_settings, "smart_seam_smoothness")
+            tools_column.prop(seam_settings, "smart_seam_replace")
+            tools_column.prop(seam_settings, "smart_seam_pin_generated", text=t(context, "pin_generated"))
+            tools_column.prop(seam_settings, "smart_seam_path_turn")
+            tools_column.prop(seam_settings, "smart_seam_path_corridor")
+            tools_column.prop(seam_settings, "smart_seam_create_edges")
+            if seam_settings.smart_seam_create_edges:
+                tools_column.prop(seam_settings, "smart_seam_edge_preference")
             tools_column.operator(
                 "mesh.polygroups_mark_smart_angle_seams",
                 text=t(context, "mark_smart_angle_seams"),
@@ -922,6 +958,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         content = draw_collapsible_box(layout, seam_settings, "show_mark_clear_tools_group", t(context, "seam_group_mark_clear_tools"), "TOOL_SETTINGS")
         if content is not None:
             tools_column = content.column(align=True)
+            tools_column.prop(seam_settings, "seam_eraser_clear_mode", expand=True)
             edge_tool = tools_column.operator(
                 "mesh.polygroups_select_seam_tool",
                 text=t(context, "select_edge_seam_tool"),
@@ -940,6 +977,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         content = draw_collapsible_box(layout, seam_settings, "show_cut_group", t(context, "seam_group_cut"), "MOD_BEVEL")
         if content is not None:
             connect_column = content.column(align=True)
+            connect_column.prop(seam_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
             connect_column.operator(
                 "mesh.polygroups_connect_vertex_seam",
                 text=t(context, "connect_vertices_seam"),
@@ -980,19 +1018,6 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             )
             if object_cutter_content is not None:
                 self.draw_object_seam_cutter(context, object_cutter_content)
-
-        settings = context.scene.polygroups_generator_settings
-        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
-        if content is not None:
-            content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
-            content.prop(settings, "small_island_protect_sharp", text=t(context, "small_islands_sharp"))
-            content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
-            row = content.row(align=True)
-            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
-            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
-            if settings.small_island_status:
-                content.label(text=settings.small_island_status)
-
 
     def draw_knife_seam(self, context, layout):
         settings = context.scene.polygroups_knife_seam_settings

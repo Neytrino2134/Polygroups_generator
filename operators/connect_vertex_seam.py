@@ -4,6 +4,7 @@ import bpy
 from bpy_extras.view3d_utils import location_3d_to_region_2d
 
 from ..localization import t
+from ..pin_edges import pin_layer, set_pinned
 
 TOOL_ID = "polygroups_generator.connect_vertex_seam_tool"
 
@@ -64,6 +65,8 @@ def connect_pair(context, obj, bm, start, end):
     direct_edge = bm.edges.get((start, end))
     if direct_edge is not None:
         direct_edge.seam = True
+        if context.scene.polygroups_seam_preparation_settings.seam_path_pin:
+            set_pinned((direct_edge,), pin_layer(bm, True))
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
         return 1
     result = bpy.ops.mesh.vert_connect_path()
@@ -74,6 +77,8 @@ def connect_pair(context, obj, bm, start, end):
     path = [edge for edge in bm.edges if edge.select and not edge.hide]
     for edge in path:
         edge.seam = True
+    if path and context.scene.polygroups_seam_preparation_settings.seam_path_pin:
+        set_pinned(path, pin_layer(bm, True))
     bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
     return len(path)
 

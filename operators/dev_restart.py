@@ -1,4 +1,4 @@
-"""Restart Blender from an isolated recovery copy without overwriting the source."""
+"""Restart Blender from a recovery copy or the saved current file."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -51,12 +51,16 @@ class WM_OT_airetopo_dev_restart(bpy.types.Operator):
     bl_label = "Restart Blender (Temp Copy)"
     bl_description = "Save the current state to a new temporary blend copy and restart Blender with that copy"
     _pending = False
+    save_current = False
 
     @classmethod
     def poll(cls, context):
-        return not cls._pending and not bpy.app.background
+        return not WM_OT_airetopo_dev_restart._pending and not bpy.app.background
 
     def execute(self, context):
+        if self.save_current and not bpy.data.filepath:
+            self.report({'ERROR'}, "Save the file with Save As before restarting")
+            return {'CANCELLED'}
         if any(bpy.app.is_job_running(job) for job in ('RENDER', 'OBJECT_BAKE')):
             self.report({'ERROR'}, "Wait for rendering or baking to finish before restarting")
             return {'CANCELLED'}
@@ -66,17 +70,21 @@ class WM_OT_airetopo_dev_restart(bpy.types.Operator):
             return {'CANCELLED'}
         root = restart_directory()
         token = 'restart_' + time.strftime('%Y%m%d_%H%M%S_') + uuid.uuid4().hex
-        copy = root / (token + '.blend')
+        copy = Path(bpy.data.filepath) if self.save_current else root / (token + '.blend')
         ready = root / (token + '.ready')
         try:
             root.mkdir(parents=True, exist_ok=True)
             if context.object and context.object.mode == 'EDIT':
                 for obj in context.objects_in_mode:
                     obj.update_from_editmode()
-            result = bpy.ops.wm.save_as_mainfile(
-                filepath=str(copy), copy=True, relative_remap=True, check_existing=False)
+            if self.save_current:
+                result = bpy.ops.wm.save_as_mainfile(
+                    filepath=str(copy), copy=False, check_existing=False)
+            else:
+                result = bpy.ops.wm.save_as_mainfile(
+                    filepath=str(copy), copy=True, relative_remap=True, check_existing=False)
             if 'FINISHED' not in result or not copy.is_file():
-                raise RuntimeError("Could not save the temporary restart copy")
+                raise RuntimeError("Could not save the restart file")
             # Only quit this process after the replacement has loaded this exact copy.
             expression = (
                 "import bpy; from pathlib import Path; "
@@ -87,11 +95,15 @@ class WM_OT_airetopo_dev_restart(bpy.types.Operator):
         except (OSError, RuntimeError) as error:
             self.report({'ERROR'}, f"Restart failed; current Blender remains open: {error}")
             return {'CANCELLED'}
-        cls = type(self)
+        cls = WM_OT_airetopo_dev_restart
         cls._pending = True
         deadline = time.monotonic() + 120
         def wait_for_child():
             if ready.exists():
+                try:
+                    ready.unlink()
+                except OSError:
+                    pass
                 cls._pending = False
                 bpy.ops.wm.quit_blender('EXEC_DEFAULT')
                 return None
@@ -101,5 +113,12 @@ class WM_OT_airetopo_dev_restart(bpy.types.Operator):
                 return None
             return 0.5
         bpy.app.timers.register(wait_for_child, first_interval=0.5)
-        self.report({'INFO'}, f"Saved recovery copy: {copy}. Waiting for new Blender")
+        self.report({'INFO'}, f"Saved: {copy}. Waiting for new Blender")
         return {'FINISHED'}
+
+
+class WM_OT_airetopo_dev_restart_current(WM_OT_airetopo_dev_restart):
+    bl_idname = "wm.airetopo_dev_restart_current"
+    bl_label = "Restart Blender — Save and Use This File"
+    bl_description = "Overwrite the current blend file and restart Blender with that file"
+    save_current = True

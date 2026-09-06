@@ -272,6 +272,18 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     )
     bl_idname = __package__
 
+    show_preferences_info: bpy.props.BoolProperty(default=True)
+    show_preferences_updates: bpy.props.BoolProperty(default=False)
+    show_preferences_icons: bpy.props.BoolProperty(default=False)
+    show_preferences_language: bpy.props.BoolProperty(default=True)
+    show_preferences_operations: bpy.props.BoolProperty(default=False)
+    show_preferences_remesh: bpy.props.BoolProperty(default=False)
+    show_preferences_api: bpy.props.BoolProperty(default=False)
+    show_preferences_hotkeys: bpy.props.BoolProperty(default=True)
+    show_preferences_pie_menu: bpy.props.BoolProperty(default=False)
+    show_preferences_windows: bpy.props.BoolProperty(default=False)
+    show_preferences_dev: bpy.props.BoolProperty(default=False)
+
     enable_section_number_hotkeys: bpy.props.BoolProperty(
         name="Section Number Hotkeys", default=True, update=_update_hotkeys,
     )
@@ -386,7 +398,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     )
     cutter_tweak_ctrl: bpy.props.BoolProperty(
         name="Ctrl",
-        default=False,
+        default=True,
         update=_update_hotkeys,
     )
     cutter_tweak_shift: bpy.props.BoolProperty(
@@ -426,6 +438,21 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         name="Alt",
         default=False,
         update=_update_hotkeys,
+    )
+    enable_cutter_tweak_pie_hotkey: bpy.props.BoolProperty(
+        name="Enable Cutter Tweak Pie Hotkey", default=True, update=_update_hotkeys,
+    )
+    cutter_tweak_pie_key: bpy.props.EnumProperty(
+        name="Key", items=KEY_ITEMS, default="D", update=_update_hotkeys,
+    )
+    cutter_tweak_pie_ctrl: bpy.props.BoolProperty(
+        name="Ctrl", default=False, update=_update_hotkeys,
+    )
+    cutter_tweak_pie_shift: bpy.props.BoolProperty(
+        name="Shift", default=False, update=_update_hotkeys,
+    )
+    cutter_tweak_pie_alt: bpy.props.BoolProperty(
+        name="Alt", default=False, update=_update_hotkeys,
     )
     pie_presets: bpy.props.CollectionProperty(type=pie_presets.AIRETOPO_PG_pie_preset)
     pie_current_slots: bpy.props.StringProperty(options={"HIDDEN"})
@@ -489,30 +516,41 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        self.draw_info(context, layout.box())
-        self.draw_updates(context, layout.box())
-        icons = layout.box()
-        icons.label(text="Custom Icons", icon="IMAGE_DATA")
-        icons.operator("wm.airetopo_update_icons", text="Update icons", icon="FILE_REFRESH")
-        self.draw_language(context, layout.box())
-        self.draw_operations(context, layout.box())
-        self.draw_remesh(context, layout.box())
-        self.draw_api(context, layout.box())
-        self.draw_hotkeys(context, layout.box())
-        self.draw_pie_menu(context, layout.box())
-        windows = layout.box()
-        windows.label(text="Floating Windows", icon='WINDOW')
-        windows.label(text="The standalone client is included with the add-on.", icon="CHECKMARK")
-        windows.label(text="Drag the title to move; use the bottom-right grip to resize.")
-        windows.operator('wm.airetopo_group_window_control')
-        dev = layout.box()
-        dev.label(text="Dev", icon="CONSOLE")
-        dev.label(text=t(context, "dev_restart_hint"))
-        dev.operator("wm.airetopo_dev_cleanup", text=t(context, "dev_cleanup"), icon="TRASH")
+        sections = (
+            ("show_preferences_info", t(context, "preferences_info"), self.draw_info),
+            ("show_preferences_updates", t(context, "updates"), self.draw_updates),
+            ("show_preferences_icons", "Custom Icons", self.draw_icons),
+            ("show_preferences_language", t(context, "preferences_language"), self.draw_language),
+            ("show_preferences_operations", t(context, "preferences_operations"), self.draw_operations),
+            ("show_preferences_remesh", t(context, "preferences_remesh"), self.draw_remesh),
+            ("show_preferences_api", t(context, "preferences_api"), self.draw_api),
+            ("show_preferences_hotkeys", t(context, "hotkeys"), self.draw_hotkeys),
+            ("show_preferences_pie_menu", t(context, "preferences_pie_menu"), self.draw_pie_menu),
+            ("show_preferences_windows", "Floating Windows", self.draw_windows),
+            ("show_preferences_dev", "Dev", self.draw_dev),
+        )
+        for property_name, label, draw_content in sections:
+            box = layout.box()
+            header = box.row(align=True)
+            expanded = getattr(self, property_name)
+            header.prop(self, property_name, text=label, icon="TRIA_DOWN" if expanded else "TRIA_RIGHT", emboss=False)
+            if expanded:
+                draw_content(context, box.column())
+
+    def draw_icons(self, context, layout):
+        layout.operator("wm.airetopo_update_icons", text="Update icons", icon="FILE_REFRESH")
+
+    def draw_windows(self, context, layout):
+        layout.label(text="The standalone client is included with the add-on.", icon="CHECKMARK")
+        layout.label(text="Drag the title to move; use the bottom-right grip to resize.")
+        layout.operator('wm.airetopo_group_window_control')
+
+    def draw_dev(self, context, layout):
+        layout.label(text=t(context, "dev_restart_hint"))
+        layout.operator("wm.airetopo_dev_cleanup", text=t(context, "dev_cleanup"), icon="TRASH")
 
     def draw_info(self, context, layout):
         addon_name, version = _addon_info()
-        layout.label(text=t(context, "preferences_info"), icon="INFO")
         column = layout.column(align=True)
         column.label(text=t(context, "addon_name", value=addon_name))
         column.label(text=t(context, "addon_version", value=version))
@@ -528,13 +566,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         github_operator.url = ADDON_GITHUB_URL
 
     def draw_language(self, context, layout):
-        layout.label(text=t(context, "preferences_language"), icon="WORLD")
         column = layout.column(align=True)
         column.prop(self, "interface_language", text=t(context, "language"))
         column.prop(self, "show_panel_settings", text=t(context, "show_panel_settings"))
 
     def draw_operations(self, context, layout):
-        layout.label(text=t(context, "preferences_operations"), icon="SOUND")
         column = layout.column(align=True)
         column.prop(
             self,
@@ -543,14 +579,12 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         )
 
     def draw_remesh(self, context, layout):
-        layout.label(text=t(context, "preferences_remesh"), icon="MOD_REMESH")
         column = layout.column(align=True)
         column.prop(self, "remesh_low_count")
         column.prop(self, "remesh_mid_count")
         column.prop(self, "remesh_high_count")
 
     def draw_api(self, context, layout):
-        layout.label(text=t(context, "preferences_api"), icon="KEYINGSET")
         column = layout.column(align=True)
         column.prop(self, "use_env_openai_api_key", text=t(context, "use_env_openai_api_key"))
         column.prop(self, "openai_api_key", text=t(context, "openai_api_key"))
@@ -559,7 +593,6 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         column.prop(self, "gemini_api_key", text=t(context, "gemini_api_key"))
 
     def draw_hotkeys(self, context, layout):
-        layout.label(text=t(context, "hotkeys"), icon="KEYINGSET")
         section_box = layout.box()
         section_box.prop(self, "enable_section_number_hotkeys", text=t(context, "section_number_hotkeys"))
         section_options = section_box.column(align=True)
@@ -595,11 +628,19 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         pie_row.prop(self, "pie_menu_shift", text="Shift")
         pie_row.prop(self, "pie_menu_alt", text="Alt")
 
+        cutter_pie_box = column.box()
+        cutter_pie_box.prop(self, "enable_cutter_tweak_pie_hotkey", text=t(context, "enable_cutter_tweak_pie_hotkey"))
+        cutter_pie_row = cutter_pie_box.row(align=True)
+        cutter_pie_row.enabled = self.enable_cutter_tweak_pie_hotkey
+        cutter_pie_row.prop(self, "cutter_tweak_pie_key", text=t(context, "hotkey_key"))
+        cutter_pie_row.prop(self, "cutter_tweak_pie_ctrl", text="Ctrl")
+        cutter_pie_row.prop(self, "cutter_tweak_pie_shift", text="Shift")
+        cutter_pie_row.prop(self, "cutter_tweak_pie_alt", text="Alt")
+
     def draw_pie_menu(self, context, layout):
         pie_presets.draw_pie_settings(self, context, layout)
 
     def draw_updates(self, context, layout):
-        layout.label(text=t(context, "updates"), icon="FILE_REFRESH")
         update_row = layout.row(align=True)
         update_row.operator(
             "wm.airetopo_check_updates",

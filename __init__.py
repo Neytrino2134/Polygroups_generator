@@ -1,7 +1,7 @@
 bl_info = {
     "name": "AI Retopo Toolkit",
     "author": "Meowmaster",
-    "version": (0, 2, 38),
+    "version": (0, 2, 39),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > AI Retopo",
     "description": "Semi-automatic retopology toolkit for generated AI meshes",
@@ -25,6 +25,8 @@ from .tools import register as register_tools
 from .tools import unregister as unregister_tools
 from .ui import register as register_ui
 from .ui import unregister as unregister_ui
+from .pin_edges import register as register_pin_edges
+from .pin_edges import unregister as unregister_pin_edges
 
 
 def register():
@@ -34,6 +36,7 @@ def register():
     register_operators()
     register_tools()
     register_ui()
+    register_pin_edges()
     register_hotkeys()
     register_remesh_defaults_timer()
 
@@ -45,6 +48,7 @@ def unregister():
     unregister_remesh_defaults_timer()
     unregister_hotkeys()
     unregister_ui()
+    unregister_pin_edges()
     unregister_tools()
     unregister_operators()
     unregister_properties()

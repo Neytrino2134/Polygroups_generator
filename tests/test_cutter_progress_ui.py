@@ -84,7 +84,15 @@ def run():
     assert progress == sorted(progress)
     assert settings.cutter_apply_progress == 100
     assert settings.last_marked_edge_count == 7
-    assert bpy.data.objects.get("Backup_" + target.name) is not None
+    backup = bpy.data.objects.get("Backup_" + target.name)
+    assert backup is not None
+    snapshots = [
+        obj for obj in bpy.data.objects
+        if obj.get(cutter.CUTTER_BACKUP_SNAPSHOT_PROP)
+        and obj.get(cutter.CUTTER_BACKUP_OWNER_PROP) == backup.name
+    ]
+    assert len(snapshots) == 1
+    assert snapshots[0].get(cutter.CUTTER_ORIGINAL_NAME_PROP) == cutter_object.name
     assert draws and all(label == "Cutter" for label, _value in draws)
     addon_utils.disable(ROOT.name, default_set=True)
     LOG.write_text("CUTTER_PROGRESS_UI_TESTS_PASSED\n")

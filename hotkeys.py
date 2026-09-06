@@ -361,12 +361,38 @@ class VIEW3D_MT_airetopo_pie(bpy.types.Menu):
             _draw_pie_command(pie, context, command_id)
 
 
+class VIEW3D_MT_airetopo_cutter_tweak_pie(bpy.types.Menu):
+    bl_idname = "VIEW3D_MT_airetopo_cutter_tweak_pie"
+    bl_label = "Cutter Tweak Pie"
+
+    def draw(self, context):
+        pie = self.layout.menu_pie()
+        # Blender pie order: W, E, S, N, NW, NE, SW, SE.
+        for label, tool_id, icon in (
+            ("Local Ring", DRAW_CUTTER_LOCAL_RING_TOOL_ID, "MESH_CIRCLE"),
+            ("Cutter Arc", DRAW_CUTTER_ARC_TOOL_ID, "CURVE_BEZCURVE"),
+            ("Freehand Draw", DRAW_CUTTER_DRAW_TOOL_ID, "GREASEPENCIL"),
+            ("Cutter Plane", DRAW_CUTTER_TOOL_ID, "MESH_PLANE"),
+            ("Local Contour", DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID, "MOD_CURVE"),
+            ("Cutter Path", DRAW_CUTTER_PATH_TOOL_ID, "CURVE_PATH"),
+            ("Volume Grid", DRAW_CUTTER_GRID_TOOL_ID, "MESH_CUBE"),
+        ):
+            item_layout = pie
+            if context.mode != "OBJECT":
+                item_layout = pie.row()
+                item_layout.enabled = False
+            operator = item_layout.operator("wm.tool_set_by_id", text=label, icon=icon)
+            operator.name = tool_id
+        pie.separator()
+
+
 CLASSES = (
     MESH_OT_airetopo_cycle_seam_tool,
     MESH_OT_airetopo_linked_seam,
     AIRETOPO_OT_section_number,
     AIRETOPO_OT_select_cutter_tweak,
     VIEW3D_MT_airetopo_pie,
+    VIEW3D_MT_airetopo_cutter_tweak_pie,
 )
 
 
@@ -430,7 +456,7 @@ def register_keymaps():
             AIRETOPO_OT_select_cutter_tweak.bl_idname,
             **_event_kwargs(
                 _preference_value(preferences, "cutter_tweak_key", "D"),
-                _preference_value(preferences, "cutter_tweak_ctrl", False),
+                _preference_value(preferences, "cutter_tweak_ctrl", True),
                 _preference_value(preferences, "cutter_tweak_shift", False),
                 _preference_value(preferences, "cutter_tweak_alt", False),
             ),
@@ -448,6 +474,19 @@ def register_keymaps():
             ),
         )
         item.properties.name = VIEW3D_MT_airetopo_pie.bl_idname
+        KEYMAP_ITEMS.append((keymap, item))
+
+    if _preference_value(preferences, "enable_cutter_tweak_pie_hotkey", True):
+        item = keymap.keymap_items.new(
+            "wm.call_menu_pie",
+            **_event_kwargs(
+                _preference_value(preferences, "cutter_tweak_pie_key", "D"),
+                _preference_value(preferences, "cutter_tweak_pie_ctrl", False),
+                _preference_value(preferences, "cutter_tweak_pie_shift", False),
+                _preference_value(preferences, "cutter_tweak_pie_alt", False),
+            ),
+        )
+        item.properties.name = VIEW3D_MT_airetopo_cutter_tweak_pie.bl_idname
         KEYMAP_ITEMS.append((keymap, item))
 
 

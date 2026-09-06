@@ -8,6 +8,7 @@ from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
 from .operators.connect_vertex_seam import draw_vertex_seam_cursor, _cursor_ctrl
 from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
 from .operators.edge_seam_path import draw_edge_seam_cursor, register_hover_cache, unregister_hover_cache
+from .operators.smart_angle_seams import TOOL_ID as SMART_SEAMS_TOOL_ID
 
 
 DRAW_CUTTER_GRID_TOOL_ID = "polygroups_generator.draw_cutter_grid_tool"
@@ -561,6 +562,7 @@ class VIEW3D_WST_polygroups_connect_vertex_seam(WorkSpaceTool):
 
     @staticmethod
     def draw_settings(context, layout, tool):
+        layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
         layout.label(text=t(context, "connect_seam_hint_next"))
 
 
@@ -587,7 +589,41 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
 
     @staticmethod
     def draw_settings(context, layout, tool):
+        layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
         layout.label(text=t(context, "connect_seam_hint_next"))
+
+
+class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "EDIT_MESH"
+    bl_idname = SMART_SEAMS_TOOL_ID
+    bl_label = "Smart Seams Generator"
+    bl_description = "Click a vertex to select its seam-bounded island and generate smart seams"
+    bl_icon = "ops.mesh.mark_seam"
+    bl_cursor = "CROSSHAIR"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
+         {"properties": [("name", "builtin.select")]}),
+        ("mesh.polygroups_smart_seams_generator_click",
+         {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+    )
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        settings = context.scene.polygroups_seam_preparation_settings
+        layout.prop(settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
+        layout.prop(settings, "smart_seam_filter_iterations")
+        layout.prop(settings, "smart_seam_min_area")
+        layout.prop(settings, "smart_seam_smoothness")
+        layout.prop(settings, "smart_seam_path_turn")
+        layout.prop(settings, "smart_seam_path_corridor")
+        layout.prop(settings, "smart_seam_create_edges")
+        if settings.smart_seam_create_edges:
+            layout.prop(settings, "smart_seam_edge_preference")
+        layout.prop(settings, "smart_seam_replace")
+        layout.prop(settings, "smart_seam_pin_generated", text=t(context, "pin_generated"))
 
 
 class VIEW3D_WST_polygroups_seam_eraser(WorkSpaceTool):
@@ -611,6 +647,7 @@ class VIEW3D_WST_polygroups_seam_eraser(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         props = tool.operator_properties("mesh.polygroups_seam_eraser")
+        layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_eraser_clear_mode", expand=True)
         layout.prop(props, "shape", expand=True)
         if props.shape == "CIRCLE":
             layout.prop(props, "radius")
@@ -636,6 +673,7 @@ class VIEW3D_WST_polygroups_edge_seam_eraser(WorkSpaceTool):
 
     @staticmethod
     def draw_settings(context, layout, tool):
+        layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_eraser_clear_mode", expand=True)
         layout.label(text=t(context, "seam_erase_path_hint"))
 
 
@@ -645,6 +683,8 @@ def draw_seam_status(self, context):
     tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
     if tool is not None and tool.idname in {AREA_TOOL_ID, PATH_TOOL_ID}:
         self.layout.label(text=t(context, "seam_erase_drag_hint" if tool.idname == AREA_TOOL_ID else "seam_erase_path_hint"))
+    elif tool is not None and tool.idname == SMART_SEAMS_TOOL_ID:
+        self.layout.label(text="LMB: select seam island and generate smart seams")
     elif tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
         self.layout.label(text=t(context, "seam_ctrl_status"))
 
@@ -661,6 +701,7 @@ def register():
     VIEW3D_WST_polygroups_quick_knife_seam.bl_icon = tool_icon("quick_knife_seam", "ops.mesh.bisect")
     VIEW3D_WST_polygroups_connect_vertex_seam.bl_icon = tool_icon("connect_vertex_seam", "ops.mesh.dupli_extrude_cursor")
     VIEW3D_WST_polygroups_edge_seam_path.bl_icon = tool_icon("edge_seam_path", "ops.mesh.dupli_extrude_cursor")
+    VIEW3D_WST_polygroups_smart_seams_generator.bl_icon = tool_icon("edge_seam_path", "ops.mesh.dupli_extrude_cursor")
     VIEW3D_WST_polygroups_seam_eraser.bl_icon = tool_icon("seam_eraser", "ops.generic.select_circle")
     VIEW3D_WST_polygroups_edge_seam_eraser.bl_icon = tool_icon("edge_seam_eraser", "ops.mesh.dupli_extrude_cursor")
     bpy.types.STATUSBAR_HT_header.prepend(draw_seam_status)
@@ -731,8 +772,14 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_smart_seams_generator,
+        after={EDGE_SEAM_TOOL_ID},
+        separator=False,
+        group=False,
+    )
 
-    bpy.utils.register_tool(VIEW3D_WST_polygroups_seam_eraser, after={EDGE_SEAM_TOOL_ID}, separator=True)
+    bpy.utils.register_tool(VIEW3D_WST_polygroups_seam_eraser, after={SMART_SEAMS_TOOL_ID}, separator=True)
     bpy.utils.register_tool(VIEW3D_WST_polygroups_edge_seam_eraser, after={AREA_TOOL_ID})
 
 def unregister():
@@ -753,10 +800,11 @@ def unregister():
                 if bpy.context.mode != "EDIT_MESH":
                     continue
                 tool = window.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
-                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID, AREA_TOOL_ID, PATH_TOOL_ID}:
+                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID, SMART_SEAMS_TOOL_ID, AREA_TOOL_ID, PATH_TOOL_ID}:
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_eraser)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_seam_eraser)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_smart_seams_generator)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_connect_vertex_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_quick_knife_seam)

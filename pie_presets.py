@@ -299,7 +299,6 @@ class AIRETOPO_OT_import_pie_preset(bpy.types.Operator, ImportHelper):
 
 def draw_pie_settings(preferences, context, layout):
     layout.operator_context = 'INVOKE_DEFAULT'
-    layout.label(text=t(context, 'preferences_pie_menu'), icon='MENU_PANEL')
     row = layout.row(align=True)
     row.prop(preferences, 'active_pie_preset', text=t(context, 'pie_active_preset'))
     row.operator('wm.airetopo_load_pie_preset', text='', icon='FILE_REFRESH')

@@ -6,6 +6,7 @@ from math import ceil, hypot
 from ..core.edge_seam_path import find_edge_path
 from ..localization import t
 from .connect_vertex_seam import edit_meshes, invoke_seam_click
+from ..pin_edges import pin_layer, is_pinned
 
 AREA_TOOL_ID = "polygroups_generator.seam_eraser_tool"
 PATH_TOOL_ID = "polygroups_generator.edge_seam_eraser_tool"
@@ -13,8 +14,18 @@ PATH_TOOL_ID = "polygroups_generator.edge_seam_eraser_tool"
 
 def erase_pair(context, obj, bm, start, end):
     path = find_edge_path(bm, start, end, obj.matrix_world)
-    for edge in path:
-        edge.seam = False
+    if context.scene.polygroups_seam_preparation_settings.seam_eraser_clear_mode == "PINNED":
+        layer = pin_layer(bm)
+        if layer is not None:
+            for edge in path:
+                if is_pinned(edge, layer):
+                    edge.seam = False
+                    edge[layer] = 0
+    else:
+        layer = pin_layer(bm)
+        for edge in path:
+            if not is_pinned(edge, layer):
+                edge.seam = False
     if path:
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
     return len(path)
@@ -101,7 +112,8 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
         self._workspace = context.workspace
         self._mode = tuple(context.tool_settings.mesh_select_mode)
         self._saved = [(obj, bm, [(el, el.select) for seq in (bm.verts, bm.edges, bm.faces) for el in seq],
-                        list(bm.select_history), [(e, e.seam) for e in bm.edges])
+                        list(bm.select_history), [(e, e.seam) for e in bm.edges],
+                        [(e, e[pin_layer(bm)]) for e in bm.edges] if pin_layer(bm) else [])
                        for obj, bm in edit_meshes(context)]
         self._points = [(event.mouse_region_x, event.mouse_region_y)]
         self._handle = None
@@ -122,7 +134,7 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
             raise
 
     def _clear_selection(self):
-        for obj, bm, _flags, _history, _seams in self._saved:
+        for obj, bm, _flags, _history, _seams, _pins in self._saved:
             for seq in (bm.faces, bm.edges, bm.verts):
                 for el in seq:
                     el.select = False
@@ -130,10 +142,18 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
             bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
 
     def _erase_selected(self):
-        for obj, bm, _flags, _history, _seams in self._saved:
+        clear_pins = bpy.context.scene.polygroups_seam_preparation_settings.seam_eraser_clear_mode == "PINNED"
+        for obj, bm, _flags, _history, _seams, _pins in self._saved:
+            layer = pin_layer(bm)
             for edge in bm.edges:
                 if edge.select and not edge.hide:
-                    edge.seam = False
+                    if clear_pins:
+                        if layer is not None and is_pinned(edge, layer):
+                            edge.seam = False
+                            edge[layer] = 0
+                    else:
+                        if not is_pinned(edge, layer):
+                            edge.seam = False
         self._clear_selection()
 
     def _circle(self, point):
@@ -165,7 +185,7 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
         if context.mode == "EDIT_MESH":
             bpy.ops.mesh.select_mode(type=("VERT", "EDGE", "FACE")[self._mode.index(True)])
         context.tool_settings.mesh_select_mode = self._mode
-        for obj, bm, flags, history, seams in self._saved:
+        for obj, bm, flags, history, seams, pins in self._saved:
             if not bm.is_valid:
                 continue
             for el, selected in flags:
@@ -184,6 +204,11 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
                 for edge, seam in seams:
                     if edge.is_valid:
                         edge.seam = seam
+                layer = pin_layer(bm)
+                if layer is not None:
+                    for edge, value in pins:
+                        if edge.is_valid:
+                            edge[layer] = value
             bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
         self._area.tag_redraw()
 
