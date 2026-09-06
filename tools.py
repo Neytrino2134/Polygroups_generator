@@ -162,6 +162,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
             ),
         )
         row.prop(settings, "cutter_auto_fix_mesh", text=t(context, "cutter_auto_fix_mesh"), toggle=True)
+        fin_toggle = row.row(align=True)
+        fin_toggle.enabled = settings.cutter_auto_fix_mesh
+        fin_toggle.prop(settings, "cutter_auto_fix_fin_faces", text="", icon="FACESEL", toggle=True)
+        seam_toggle = row.row(align=True)
+        seam_toggle.enabled = settings.cutter_auto_fix_mesh
+        seam_toggle.prop(settings, "cutter_auto_fix_seam_check", text="", icon="VIEWZOOM", toggle=True)
     row.label(text=t(context, "ctrl_draw_hint"))
     axis_row = row.row(align=True)
     for axis in ("X", "Y", "Z"):

@@ -206,8 +206,37 @@ class MESH_OT_polygroups_check_seam_gaps(bpy.types.Operator):
             self.report({"INFO"}, status)
             return {"FINISHED"}
 
-        self.report({"INFO"}, "No seam gaps found")
+        settings.seam_gap_status = "No seam gaps found"
+        self.report({"INFO"}, settings.seam_gap_status)
         return {"FINISHED"}
+
+
+class MESH_OT_polygroups_check_and_close_seam_gaps(bpy.types.Operator):
+    bl_idname = "mesh.polygroups_check_and_close_seam_gaps"
+    bl_label = "Check and Close Seam Gaps"
+    bl_description = "Check seam gaps, then close them using the current Seam Gap Check settings"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (
+            obj is not None
+            and obj.type == "MESH"
+            and context.mode in {"OBJECT", "EDIT_MESH"}
+        )
+
+    def execute(self, context):
+        original_mode = context.active_object.mode
+        if original_mode != "EDIT":
+            bpy.ops.object.mode_set(mode="EDIT")
+        try:
+            bpy.ops.mesh.polygroups_check_seam_gaps(mode="SELECT")
+            result = bpy.ops.mesh.polygroups_check_seam_gaps(mode="MARK")
+        finally:
+            if original_mode != "EDIT" and context.active_object.mode == "EDIT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+        return {"FINISHED"} if "FINISHED" in result else result
 
 
 class MESH_OT_polygroups_connect_seam_gap_pairs(bpy.types.Operator):

@@ -33,16 +33,25 @@ class Backend:
         context.scene.collection.objects.link(result)
 
 settings = context.scene.polygroups_model_preparation_settings
-assert not settings.remesh_auto_generate_seams
+assert settings.remesh_auto_generate_seams
+assert settings.remesh_pregenerate_polygroups
+assert not settings.remesh_auto_unwrap_checker
+settings.remesh_pregenerate_polygroups = False
 for enabled in (False, True):
     context.view_layer.objects.active = source
     settings.remesh_auto_generate_seams = enabled
+    settings.remesh_auto_unwrap_checker = enabled
     job = RemeshJob(Backend, lambda *args: None)
     job.start(context)
     result, = job.finish(context)
     assert sum(edge.use_seam for edge in result.data.edges) == int(enabled)
     assert not any(edge.use_seam for edge in source.data.edges)
     if enabled:
+        assert result.data.uv_layers.active is not None
+        assert all(material is not None for material in result.data.materials)
+        assert all(any(node.bl_idname == "ShaderNodeTexChecker"
+                       for node in material.node_tree.nodes)
+                   for material in result.data.materials)
         shared = next(edge for edge in result.data.edges if set(edge.vertices) == {1,4})
         assert shared.use_seam
         assert mark_material_boundary_seams(result) == 0

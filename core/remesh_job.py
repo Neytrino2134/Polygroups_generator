@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import bpy
 
+from .remesh_cursor import RemeshCursor
 from .material_seams import mark_material_boundary_seams
 
 
@@ -50,15 +51,22 @@ class RemeshJob:
         self.started = time.monotonic()
         self.exited = None
         self.message = ""
+        self.cursor = None
 
     def start(self, context):
-        self.auto_generate_seams = context.scene.polygroups_model_preparation_settings.remesh_auto_generate_seams
+        preparation = context.scene.polygroups_model_preparation_settings
+        self.auto_generate_seams = preparation.remesh_auto_generate_seams
+        self.auto_unwrap_checker = preparation.remesh_auto_unwrap_checker
         self.source_name = context.active_object.name
         self.source_collections = tuple(context.active_object.users_collection)
         # Every add-on Remesh entry point, including import queues, starts here.
         # Enforce this for each job even if defaults were already applied or the
         # user enabled angle detection in Quad Remesher between runs.
         context.scene.qremesher.autodetect_hard_edges = False
+        if preparation.remesh_pregenerate_polygroups:
+            if "FINISHED" not in bpy.ops.object.generate_polygroups():
+                raise RuntimeError("Generate PolyGroups did not finish")
+        self.cursor = RemeshCursor(context)
         self.backend.doRemeshing_Start(self.state, context)
         if not self.state.IsRemeshing:
             raise RuntimeError("Quad Remesher could not start; check its installation and license")
@@ -75,6 +83,8 @@ class RemeshJob:
                 value = None
         except (OSError, ValueError, IndexError, TypeError):
             pass  # The engine may be in the middle of writing the file.
+        if self.cursor is not None and value is not None and value >= 0:
+            self.cursor.percent = max(self.cursor.percent, min(99.0, value * 100))
         if value == 2:
             return True, 1.0
         if value is not None and value < 0:
@@ -119,6 +129,14 @@ class RemeshJob:
         for obj in meshes:
             obj.select_set(True)
         context.view_layer.objects.active = meshes[0]
+        if getattr(self, "auto_unwrap_checker", False):
+            for obj in meshes:
+                context.view_layer.objects.active = obj
+                if "FINISHED" not in bpy.ops.object.polygroups_unwrap_angle_based():
+                    raise RuntimeError(f"Angle Based unwrap failed for {obj.name}")
+                if "FINISHED" not in bpy.ops.object.polygroups_apply_checker_material():
+                    raise RuntimeError(f"Applying checker material failed for {obj.name}")
+            context.view_layer.objects.active = meshes[0]
         match = re.fullmatch(r"Retopo_(?:(\d+)_)?(.+)", self.source_name)
         if match and match.group(1) is None:
             source = self.state.the_input_object
@@ -128,9 +146,13 @@ class RemeshJob:
                 source.name = first_name
             else:
                 self.state.report({"WARNING"}, f"Source name kept: {first_name} already exists")
+        if self.cursor is not None:
+            self.cursor.close()
         return outputs
 
     def abort(self):
+        if self.cursor is not None:
+            self.cursor.close()
         process = self.state.remeshProcess
         if process is not None and process.poll() is None:
             process.terminate()

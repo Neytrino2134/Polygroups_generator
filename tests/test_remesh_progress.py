@@ -30,6 +30,7 @@ for old in list(source.users_collection):
     if old != collection:
         old.objects.unlink(source)
 context.scene.qremesher.target_count = 100
+bpy.ops.ed.undo_push(message="Remesh test baseline")
 
 
 def run_remesh(obj, expected, expected_source_name=None):

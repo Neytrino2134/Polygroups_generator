@@ -316,6 +316,8 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
         return self.execute(context)
 
     def modal(self, context, event):
+        from ..core.remesh_cursor import update_remesh_cursor
+        update_remesh_cursor(context, event)
         from . import import_queue
 
         if self._queue.finished:

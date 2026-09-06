@@ -28,6 +28,9 @@ assert scene[DEFAULTS_APPLIED_KEY]
 settings.target_count = 1234
 settings.use_materials = False
 settings.symmetry_x = True
+# This test isolates engine dispatch defaults. PolyGroup generation is covered
+# by test_remesh_progress and requires an initialized undo stack.
+scene.polygroups_model_preparation_settings.remesh_pregenerate_polygroups = False
 calls = []
 
 

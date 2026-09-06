@@ -337,6 +337,11 @@ def draw_seam_gap_controls(layout, context, settings):
     )
     close_operator.mode = "MARK"
     gap_column.operator(
+        "mesh.polygroups_check_and_close_seam_gaps",
+        text=t(context, "check_and_close_seam_gaps"),
+        icon="CHECKMARK",
+    )
+    gap_column.operator(
         "mesh.polygroups_connect_seam_gap_pairs",
         text=t(context, "connect_seam_gap_pairs"),
         icon="AUTOMERGE_ON",
@@ -794,7 +799,11 @@ class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
             content.prop(qremesher, "target_count", text=t(context, "quad_count"))
             content.prop(qremesher, "use_materials", text=t(context, "use_materials"))
             content.prop(context.scene.polygroups_model_preparation_settings,
+                         "remesh_pregenerate_polygroups", text="Pregenerate Poly Groups")
+            content.prop(context.scene.polygroups_model_preparation_settings,
                          "remesh_auto_generate_seams", text="Auto Generate Seams")
+            content.prop(context.scene.polygroups_model_preparation_settings,
+                         "remesh_auto_unwrap_checker", text="Auto Unwrap and Apply Checker")
 
             symmetry_row = content.row(align=True)
             symmetry_row.label(text=t(context, "symmetry"))
@@ -1059,10 +1068,29 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 ("EXACT", "Exact", "CHECKMARK"),
             ),
         )
-        layout.prop(
+        autofix_row = layout.row(align=True)
+        autofix_row.prop(
             settings,
             "cutter_auto_fix_mesh",
             text=t(context, "cutter_auto_fix_mesh"),
+            toggle=True,
+        )
+        fin_toggle = autofix_row.row(align=True)
+        fin_toggle.enabled = settings.cutter_auto_fix_mesh
+        fin_toggle.prop(
+            settings,
+            "cutter_auto_fix_fin_faces",
+            text="",
+            icon="FACESEL",
+            toggle=True,
+        )
+        seam_toggle = autofix_row.row(align=True)
+        seam_toggle.enabled = settings.cutter_auto_fix_mesh
+        seam_toggle.prop(
+            settings,
+            "cutter_auto_fix_seam_check",
+            text="",
+            icon="VIEWZOOM",
             toggle=True,
         )
         layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))

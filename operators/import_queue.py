@@ -239,6 +239,12 @@ class ImportQueue:
                 for obj in outputs:
                     if obj.type == "MESH":
                         self.replace_remesh_material(obj)
+                        # Clear Material runs after the shared remesh post-process.
+                        # Reapply Checker so both enabled options have visible results.
+                        if getattr(self.job, "auto_unwrap_checker", False):
+                            self.select_source(context, obj)
+                            if "FINISHED" not in bpy.ops.object.polygroups_apply_checker_material():
+                                raise RuntimeError(f"Applying checker material failed for {obj.name}")
             self.file_objects.extend(outputs)
             if self.collection:
                 move_to_collection(outputs, self.collection)

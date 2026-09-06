@@ -104,6 +104,7 @@ from .resculpting import OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly
 from .resculpting import OBJECT_OT_polygroups_setup_resculpting
 from .select_seam_tool import MESH_OT_polygroups_select_seam_tool
 from .seam_gap_detection import MESH_OT_polygroups_check_seam_gaps
+from .seam_gap_detection import MESH_OT_polygroups_check_and_close_seam_gaps
 from .seam_gap_detection import MESH_OT_polygroups_connect_seam_gap_pairs
 from .safety_checks import OBJECT_OT_polygroups_checked_quad_remesh
 from .safety_checks import OBJECT_OT_polygroups_checked_generate_polygroups
@@ -218,6 +219,7 @@ CLASSES = (
     MESH_OT_polygroups_edge_seam_path_click,
     MESH_OT_polygroups_mark_selection_boundary_seam,
     MESH_OT_polygroups_check_seam_gaps,
+    MESH_OT_polygroups_check_and_close_seam_gaps,
     MESH_OT_polygroups_connect_seam_gap_pairs,
     MESH_OT_polygroups_smooth_face_selection,
     OBJECT_OT_polygroups_check_mesh,

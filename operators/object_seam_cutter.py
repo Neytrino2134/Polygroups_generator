@@ -1688,6 +1688,56 @@ def _prepare_target_for_autofix(context, target):
     context.view_layer.objects.active = target
 
 
+def _fill_open_nonmanifold_boundaries(target):
+    """Fill boundary loops only; leave loose and other damaged geometry intact."""
+    import bmesh
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(target.data)
+        boundary_edges = [edge for edge in bm.edges if len(edge.link_faces) == 1]
+        if not boundary_edges:
+            return 0
+        result = bmesh.ops.holes_fill(bm, edges=boundary_edges, sides=0)
+        filled_faces = len(result.get("faces", ()))
+        if filled_faces:
+            bm.normal_update()
+            bm.to_mesh(target.data)
+            target.data.update()
+        return filled_faces
+    finally:
+        bm.free()
+
+
+def _remove_fin_faces_for_autofix(context, target):
+    """Remove detected dangling fin faces without running the full mesh check."""
+    edge_to_faces, _edge_directions = _edge_face_data(target.data)
+    fin_faces = sorted(_thin_protrusion_faces(target.data, edge_to_faces))
+    if not fin_faces or len(fin_faces) > AUTOFIX_MAX_PROTRUSION_FACES:
+        return 0
+    return _delete_faces_by_indices(context, target, fin_faces)
+
+
+def _triangulate_ngons_for_autofix(target):
+    """Triangulate only faces with more than four sides, without mesh analysis."""
+    import bmesh
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(target.data)
+        ngons = [face for face in bm.faces if len(face.verts) > 4]
+        if not ngons:
+            return 0
+        count = len(ngons)
+        bmesh.ops.triangulate(bm, faces=ngons, quad_method="BEAUTY", ngon_method="BEAUTY")
+        bm.normal_update()
+        bm.to_mesh(target.data)
+        target.data.update()
+        return count
+    finally:
+        bm.free()
+
+
 def _apply_arc_cutters_to_mesh(context, target, cutters):
     marked_edges = 0
     _center, target_diagonal = _target_bounds(target)
@@ -3412,18 +3462,10 @@ class OBJECT_OT_polygroups_copy_mirror_cutters(bpy.types.Operator):
 class OBJECT_OT_polygroups_auto_fix_after_cutter(bpy.types.Operator):
     bl_idname = "object.polygroups_auto_fix_after_cutter"
     bl_label = "Autofix After Cutter"
-    bl_description = "Run lightweight mesh autofix after cutter seams in cancelable steps"
+    bl_description = "Fill open boundaries and triangulate n-gons without running a full mesh check"
     bl_options = {"REGISTER", "UNDO"}
 
     target_name: bpy.props.StringProperty(default="")
-
-    _timer = None
-    _stage = 0
-    _hole_loops = None
-    _before_total = 0
-    _deleted_protrusions = 0
-    _deleted_loose = 0
-    _filled_holes = 0
 
     def _target(self, context):
         target = bpy.data.objects.get(self.target_name)
@@ -3434,86 +3476,28 @@ class OBJECT_OT_polygroups_auto_fix_after_cutter(bpy.types.Operator):
             return active
         return None
 
-    def _finish(self, context, target):
-        after = _refresh_mesh_check(context, target)
-        after_total = _fixable_issue_total(after)
-        fixed_total = max(0, self._before_total - after_total)
-        message = (
-            f"Autofix finished: {fixed_total} issue(s), "
-            f"{self._deleted_protrusions} protrusion face(s), "
-            f"{self._deleted_loose} loose item(s), "
-            f"{self._filled_holes} hole loop(s)"
-        )
-        self.report({"INFO"}, message)
-        return {"FINISHED"}
-
-    def _cleanup_timer(self, context):
-        if self._timer is not None:
-            context.window_manager.event_timer_remove(self._timer)
-            self._timer = None
-
-    def invoke(self, context, event):
-        del event
+    def execute(self, context):
         target = self._target(context)
         if target is None:
             self.report({"WARNING"}, "No mesh target found for autofix")
             return {"CANCELLED"}
 
         _prepare_target_for_autofix(context, target)
-        self._stage = 0
-        self._hole_loops = None
-        self._deleted_protrusions = 0
-        self._deleted_loose = 0
-        self._filled_holes = 0
-        self._before_total = _fixable_issue_total(analyze_mesh(target))
-        self._timer = context.window_manager.event_timer_add(0.01, window=context.window)
-        context.window_manager.modal_handler_add(self)
-        self.report({"INFO"}, "Autofix started. Press ESC to cancel.")
-        return {"RUNNING_MODAL"}
-
-    def modal(self, context, event):
-        target = self._target(context)
-        if target is None:
-            self._cleanup_timer(context)
-            self.report({"WARNING"}, "Autofix cancelled: mesh target was removed")
-            return {"CANCELLED"}
-
-        if event.type == "ESC":
-            self._cleanup_timer(context)
-            _prepare_target_for_autofix(context, target)
-            _refresh_mesh_check(context, target, "Autofix cancelled")
-            self.report({"INFO"}, "Autofix cancelled")
-            return {"CANCELLED"}
-
-        if event.type != "TIMER":
-            return {"RUNNING_MODAL"}
-
-        _prepare_target_for_autofix(context, target)
-        if self._stage == 0:
-            edge_to_faces, _edge_directions = _edge_face_data(target.data)
-            protrusion_faces = sorted(_thin_protrusion_faces(target.data, edge_to_faces))
-            if len(protrusion_faces) <= AUTOFIX_MAX_PROTRUSION_FACES:
-                self._deleted_protrusions = _delete_faces_by_indices(context, target, protrusion_faces)
-            self._stage = 1
-            return {"RUNNING_MODAL"}
-
-        if self._stage == 1:
-            self._deleted_loose = _delete_loose_geometry_for_autofix(context, target)
-            self._stage = 2
-            return {"RUNNING_MODAL"}
-
-        if self._stage == 2:
-            self._hole_loops = _boundary_hole_loops_for_autofix(target.data)
-            self._stage = 3
-            return {"RUNNING_MODAL"}
-
-        if self._stage == 3 and self._hole_loops:
-            edge_indices = self._hole_loops.pop(0)
-            self._filled_holes += _fill_boundary_hole_loop_for_autofix(context, target, edge_indices)
-            return {"RUNNING_MODAL"}
-
-        self._cleanup_timer(context)
-        return self._finish(context, target)
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        removed_fins = 0
+        removed_loose = 0
+        if settings.cutter_auto_fix_fin_faces:
+            removed_fins = _remove_fin_faces_for_autofix(context, target)
+            removed_loose = _delete_loose_geometry_for_autofix(context, target)
+        filled_faces = _fill_open_nonmanifold_boundaries(target)
+        triangulated_ngons = _triangulate_ngons_for_autofix(target)
+        self.report(
+            {"INFO"},
+            f"Autofix removed {removed_fins} fin face(s) and {removed_loose} loose item(s), "
+            f"filled {filled_faces} polygon(s), "
+            f"triangulated {triangulated_ngons} n-gon(s)",
+        )
+        return {"FINISHED"}
 
 
 class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
@@ -3543,8 +3527,31 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
             return {"CANCELLED"}
 
         _apply_object_scale(context, target)
+        removed_fins_before = 0
+        removed_loose_before = 0
+        filled_before = 0
+        triangulated_before = 0
+        if settings.cutter_auto_fix_mesh:
+            if settings.cutter_auto_fix_fin_faces:
+                removed_fins_before = _remove_fin_faces_for_autofix(context, target)
+                removed_loose_before = _delete_loose_geometry_for_autofix(context, target)
+            filled_before = _fill_open_nonmanifold_boundaries(target)
+            triangulated_before = _triangulate_ngons_for_autofix(target)
         _clear_mesh_component_selection(target.data)
         marked_edges = _apply_cutters_to_mesh(context, target, cutters)
+        removed_fins_after = 0
+        removed_loose_after = 0
+        filled_after = 0
+        triangulated_after = 0
+        if settings.cutter_auto_fix_mesh:
+            if settings.cutter_auto_fix_fin_faces:
+                removed_fins_after = _remove_fin_faces_for_autofix(context, target)
+                removed_loose_after = _delete_loose_geometry_for_autofix(context, target)
+            filled_after = _fill_open_nonmanifold_boundaries(target)
+            triangulated_after = _triangulate_ngons_for_autofix(target)
+            if settings.cutter_auto_fix_seam_check:
+                _prepare_target_for_autofix(context, target)
+                bpy.ops.mesh.polygroups_check_and_close_seam_gaps()
 
         settings.last_cutter_count = len(cutters)
         settings.last_marked_edge_count = marked_edges
@@ -3558,9 +3565,15 @@ class OBJECT_OT_polygroups_apply_cutter_seams(bpy.types.Operator):
                 cutter.hide_viewport = True
 
         report_message = f"Applied {len(cutters)} cutter object(s), marked {marked_edges} seam edge(s)"
+        if settings.cutter_auto_fix_mesh:
+            report_message += (
+                f", Autofix removed {removed_fins_before}/{removed_fins_after} fin face(s), "
+                f"removed {removed_loose_before}/{removed_loose_after} loose item(s), "
+                f"filled {filled_before}/{filled_after} polygon(s) and "
+                f"triangulated {triangulated_before}/{triangulated_after} n-gon(s) "
+                f"before/after"
+            )
         self.report({"INFO"}, report_message)
-        if settings.cutter_auto_fix_mesh and marked_edges:
-            bpy.ops.object.polygroups_auto_fix_after_cutter("INVOKE_DEFAULT", target_name=target.name)
         play_operation_done_sound(context)
         return {"FINISHED"}
 

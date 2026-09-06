@@ -270,6 +270,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     remesh_auto_generate_seams: bpy.props.BoolProperty(
         name="Auto Generate Seams",
         description="Generate seams along material boundaries on each remeshed result",
+        default=True,
+    )
+    remesh_pregenerate_polygroups: bpy.props.BoolProperty(
+        name="Pregenerate Poly Groups",
+        description="Run Generate PolyGroups on the source mesh before remeshing",
+        default=True,
+    )
+    remesh_auto_unwrap_checker: bpy.props.BoolProperty(
+        name="Auto Unwrap and Apply Checker",
+        description="Unwrap each remeshed result with Angle Based and apply the checker material",
         default=False,
     )
     file_import_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=False)
@@ -479,7 +489,7 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
     seam_gap_max_edges: bpy.props.IntProperty(
         name="Max Gap Edges",
         description="Maximum number of non-seam edges allowed between two seam endpoints",
-        default=3,
+        default=6,
         min=1,
         max=20,
         soft_max=8,
@@ -487,7 +497,7 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
     seam_gap_max_distance: bpy.props.FloatProperty(
         name="Max Gap Distance",
         description="Maximum distance allowed when matching seam endpoints or short gap paths",
-        default=0.1,
+        default=0.2,
         min=0.1,
         max=1.0,
         precision=4,
@@ -645,7 +655,17 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     )
     cutter_auto_fix_mesh: bpy.props.BoolProperty(
         name="Autofix",
-        description="After applying cutter seams, delete loose/protruding geometry and fill boundary holes",
+        description="Before and after cutter seams, fill open boundaries and triangulate n-gons",
+        default=False,
+    )
+    cutter_auto_fix_fin_faces: bpy.props.BoolProperty(
+        name="Remove Fin Faces and Loose Geometry",
+        description="Also remove dangling fin faces, wire edges, and loose vertices during cutter Autofix",
+        default=False,
+    )
+    cutter_auto_fix_seam_check: bpy.props.BoolProperty(
+        name="Check and Close Seam Gaps",
+        description="After cutter Autofix, check and close seam gaps using the current N-panel settings",
         default=False,
     )
     cutter_mirror_axis: bpy.props.EnumProperty(

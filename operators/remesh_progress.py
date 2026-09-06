@@ -140,6 +140,8 @@ class OBJECT_OT_polygroups_run_remesh(bpy.types.Operator):
             ACTIVE_REMESH = None
 
     def modal(self, context, event):
+        from ..core.remesh_cursor import update_remesh_cursor
+        update_remesh_cursor(context, event)
         if self._session.done:
             self.cleanup(context)
             return {"FINISHED"}
