@@ -1,6 +1,12 @@
 import bpy
 
 
+def _has_meaningful_error(error):
+    """Blender occasionally raises a placeholder RuntimeError after an operator call."""
+    message = str(error).strip()
+    return bool(message) and message.casefold() not in {"no error", "no errors"}
+
+
 def apply_weld_to_objects(context, objects, weld_distance, report=None):
     mesh_objects = [obj for obj in objects if obj.type == "MESH"]
 
@@ -37,7 +43,7 @@ def apply_weld_to_objects(context, objects, weld_distance, report=None):
         try:
             bpy.ops.object.modifier_apply(modifier=modifier.name)
         except RuntimeError as error:
-            if report:
+            if report and _has_meaningful_error(error):
                 report({"WARNING"}, f"{obj.name}: {error}")
             continue
 

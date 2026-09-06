@@ -79,7 +79,7 @@ def run():
         RemeshCursor.draw = original_draw
 
     expected = ["BACKUP", "PREPARING", "AUTOFIX_BEFORE", "CUTTING", "AUTOFIX_AFTER",
-                "FINDING_GAPS", "MERGING_ISLANDS", "FINALIZING", "DONE"]
+                "FINDING_GAPS", "MERGING_ISLANDS", "WELDING", "FINALIZING", "DONE"]
     assert stages == expected, stages
     assert progress == sorted(progress)
     assert settings.cutter_apply_progress == 100

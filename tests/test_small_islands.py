@@ -56,8 +56,13 @@ addon_utils.enable(root.name, default_set=True)
 obj = bpy.context.active_object
 settings = bpy.context.scene.polygroups_generator_settings
 cutter_settings = bpy.context.scene.polygroups_object_seam_cutter_settings
-assert not cutter_settings.cutter_auto_fix_small_islands
+assert cutter_settings.cutter_auto_fix_mesh
+assert cutter_settings.cutter_auto_fix_fin_faces
+assert cutter_settings.cutter_auto_fix_seam_check
+assert cutter_settings.cutter_auto_fix_small_islands
+assert cutter_settings.cutter_auto_fix_weld
 assert abs(cutter_settings.cutter_auto_fix_small_islands_threshold - 0.5) < 1e-7
+assert abs(cutter_settings.cutter_auto_fix_weld_distance - 0.005) < 1e-7
 settings.small_island_threshold = 0.1
 bm = strip([10, .04, 10])
 bm.to_mesh(obj.data)

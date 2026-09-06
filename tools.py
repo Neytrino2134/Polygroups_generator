@@ -154,12 +154,12 @@ def _active_cutter_label_key(tool_id):
 def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
     settings = context.scene.polygroups_object_seam_cutter_settings
 
-    def draw_enum_icon_toggle(row, property_name, items):
+    def draw_enum_icon_toggle(row, property_name, items, show_text=True):
         current_value = getattr(settings, property_name)
         for value, label, icon in items:
             operator = row.operator(
                 "wm.context_set_enum",
-                text=label,
+                text=label if show_text else "",
                 icon=icon,
                 depress=current_value == value,
             )
@@ -167,6 +167,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
             operator.value = value
 
     row = layout.row(align=True)
+    row.menu(
+        "VIEW3D_MT_polygroups_cutter_tool_type",
+        text="",
+        **icon_kwargs(_active_cutter_label_key(tool.idname), "TOOL_SETTINGS"),
+    )
+    row.separator(type="LINE")
     apply_button_row = row.row(align=True)
     apply_button_row.enabled = any(
         obj.type in {"MESH", "CURVE"}
@@ -188,11 +194,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         text="",
         icon="RECOVER_LAST",
     )
-    row.menu(
-        "VIEW3D_MT_polygroups_cutter_tool_type",
-        text=t(context, _active_cutter_label_key(tool.idname)),
-        icon="TOOL_SETTINGS",
-    )
+    row.separator(type="LINE")
     if cutter_type == "GRID_PLANE":
         draw_grid_actions(context, row)
         draw_enum_icon_toggle(
@@ -216,8 +218,13 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
                 ("FLOAT", "Float", "VIEWZOOM"),
                 ("EXACT", "Exact", "CHECKMARK"),
             ),
+            show_text=False,
         )
-        row.prop(settings, "cutter_auto_fix_mesh", text=t(context, "cutter_auto_fix_mesh"), toggle=True)
+        row.separator(type="LINE")
+        row.prop(
+            settings, "cutter_auto_fix_mesh",
+            text=t(context, "cutter_auto_fix_mesh"), toggle=True,
+        )
         fin_toggle = row.row(align=True)
         fin_toggle.enabled = settings.cutter_auto_fix_mesh
         fin_toggle.prop(settings, "cutter_auto_fix_fin_faces", text="", icon="FACESEL", toggle=True)
@@ -227,15 +234,26 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         islands_toggle = row.row(align=True)
         islands_toggle.enabled = settings.cutter_auto_fix_mesh
         islands_toggle.prop(settings, "cutter_auto_fix_small_islands", text="", icon="AUTOMERGE_ON", toggle=True)
-    row.label(text=t(context, "ctrl_draw_hint"))
-    axis_row = row.row(align=True)
-    for axis in ("X", "Y", "Z"):
-        axis_row.prop_enum(settings, "cutter_mirror_axis", axis, text=axis)
+        islands_threshold = row.row(align=True)
+        islands_threshold.enabled = settings.cutter_auto_fix_mesh and settings.cutter_auto_fix_small_islands
+        islands_threshold.ui_units_x = 3.5
+        islands_threshold.prop(settings, "cutter_auto_fix_small_islands_threshold", text="")
+        weld_toggle = row.row(align=True)
+        weld_toggle.enabled = settings.cutter_auto_fix_mesh
+        weld_toggle.prop(settings, "cutter_auto_fix_weld", text="", icon="AUTOMERGE_ON", toggle=True)
+        weld_distance = row.row(align=True)
+        weld_distance.enabled = settings.cutter_auto_fix_mesh and settings.cutter_auto_fix_weld
+        weld_distance.ui_units_x = 3.5
+        weld_distance.prop(settings, "cutter_auto_fix_weld_distance", text="")
+    row.separator(type="LINE")
     row.operator(
         "object.polygroups_copy_mirror_cutters",
         text=t(context, "copy_mirror_cutters"),
         icon="MOD_MIRROR",
     )
+    axis_row = row.row(align=True)
+    for axis in ("X", "Y", "Z"):
+        axis_row.prop_enum(settings, "cutter_mirror_axis", axis, text=axis)
 
     if cutter_type in {"PATH", "DRAW"}:
         layout.prop(settings, "cutter_extrude", text=t(context, "cutter_extrude"))
@@ -299,6 +317,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
             text=t(context, "join_cutter_paths"),
             icon="AUTOMERGE_ON",
         )
+    layout.separator(type="LINE")
     layout.prop(settings, "cutter_alpha", text=t(context, "cutter_alpha"))
     if cutter_type == "PLANE":
         layout.prop(settings, "cutter_solidify_thickness", text=t(context, "plane_thickness"))
@@ -329,6 +348,7 @@ def draw_grid_settings(context, layout, show_actions=True):
 
 class VIEW3D_MT_polygroups_cutter_tool_type(bpy.types.Menu):
     bl_label = "Cutter Type"
+    bl_description = "Choose the cutter tool; hold Ctrl and click in the viewport to draw"
 
     def draw(self, context):
         layout = self.layout

@@ -13,6 +13,7 @@ CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
+AUTOWELD_MODIFIER_NAME = "Retopo Weld"
 
 _PROMPT_COLLECTION_ITEMS = []
 _PROMPT_FILE_ITEMS = []
@@ -574,6 +575,19 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
     )
 
 
+def _sync_cutter_autoweld_distance(self, context):
+    """Update the final live AutoWeld modifier from the cutter toolbar."""
+    candidates = list(context.selected_objects)
+    if context.active_object is not None and context.active_object not in candidates:
+        candidates.append(context.active_object)
+    for obj in candidates:
+        if obj.type != "MESH":
+            continue
+        modifier = obj.modifiers.get(AUTOWELD_MODIFIER_NAME)
+        if modifier is not None and modifier.type == "WELD":
+            modifier.merge_threshold = self.cutter_auto_fix_weld_distance
+
+
 class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     cutter_apply_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     cutter_apply_stage: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
@@ -711,22 +725,22 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     cutter_auto_fix_mesh: bpy.props.BoolProperty(
         name="Autofix",
         description="Before and after cutter seams, fill open boundaries and triangulate n-gons",
-        default=False,
+        default=True,
     )
     cutter_auto_fix_fin_faces: bpy.props.BoolProperty(
         name="Remove Fin Faces and Loose Geometry",
         description="Also remove dangling fin faces, wire edges, and loose vertices during cutter Autofix",
-        default=False,
+        default=True,
     )
     cutter_auto_fix_seam_check: bpy.props.BoolProperty(
         name="Check and Close Seam Gaps",
         description="After cutter Autofix, check and close seam gaps using the current N-panel settings",
-        default=False,
+        default=True,
     )
     cutter_auto_fix_small_islands: bpy.props.BoolProperty(
         name="Check and Merge Small Islands",
         description="After cutter Autofix, merge small seam islands using the dedicated threshold",
-        default=False,
+        default=True,
     )
     cutter_auto_fix_small_islands_threshold: bpy.props.FloatProperty(
         name="Small Islands Threshold (%)",
@@ -735,6 +749,22 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         min=0.1,
         max=1.0,
         precision=2,
+    )
+    cutter_auto_fix_weld: bpy.props.BoolProperty(
+        name="Weld",
+        description="Keep an adjustable Weld modifier after all cutter Autofix operations",
+        default=True,
+    )
+    cutter_auto_fix_weld_distance: bpy.props.FloatProperty(
+        name="Weld Distance",
+        description="Merge distance of the final adjustable AutoWeld modifier",
+        default=0.005,
+        min=0.0,
+        # Blender stores number-button step in hundredths: 0.1 -> 0.001.
+        step=0.1,
+        precision=4,
+        subtype="DISTANCE",
+        update=_sync_cutter_autoweld_distance,
     )
     cutter_mirror_axis: bpy.props.EnumProperty(
         name="Mirror Axis",

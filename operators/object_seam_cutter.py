@@ -41,6 +41,7 @@ CUTTER_BACKUP_SNAPSHOT_PROP = "polygroups_cutter_backup_snapshot"
 CUTTER_INSTANCE_ID_PROP = "polygroups_cutter_instance_id"
 CUTTER_ORIGINAL_NAME_PROP = "polygroups_cutter_original_name"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
+AUTOWELD_MODIFIER_NAME = "Retopo Weld"
 BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
 DEFAULT_CUTTER_PATH_TILT = radians(90.0)
@@ -51,6 +52,18 @@ AUTOFIX_MAX_LOOSE_GEOMETRY = 10000
 AUTOFIX_MAX_HOLE_EDGE_COUNT = 128
 AUTOFIX_MAX_HOLE_LOOPS = 16
 ACTIVE_CUTTER_APPLY = None
+
+
+def _ensure_live_autoweld(target, distance):
+    """Keep AutoWeld last and unapplied so its threshold remains reversible."""
+    modifier = target.modifiers.get(AUTOWELD_MODIFIER_NAME)
+    if modifier is None or modifier.type != "WELD":
+        modifier = target.modifiers.new(AUTOWELD_MODIFIER_NAME, "WELD")
+    modifier.merge_threshold = max(0.0, float(distance))
+    modifier_index = target.modifiers.find(modifier.name)
+    if modifier_index != len(target.modifiers) - 1:
+        target.modifiers.move(modifier_index, len(target.modifiers) - 1)
+    return modifier
 
 
 def _view3d_under_mouse(context, event):
@@ -3809,7 +3822,14 @@ class CutterApplySession:
                         preview=False,
                         threshold_override=self.settings.cutter_auto_fix_small_islands_threshold,
                     )
-                self.set_stage("FINALIZING", 97, "Finalizing cutter operation")
+                self.set_stage("WELDING", 96, "Welding nearby vertices")
+            elif stage == "WELDING":
+                if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_weld:
+                    _ensure_live_autoweld(
+                        self.target,
+                        self.settings.cutter_auto_fix_weld_distance,
+                    )
+                self.set_stage("FINALIZING", 98, "Finalizing cutter operation")
             elif stage == "FINALIZING":
                 self.settings.last_cutter_count = len(self.cutters)
                 self.settings.last_marked_edge_count = self.marked_edges

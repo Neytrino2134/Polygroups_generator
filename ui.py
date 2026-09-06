@@ -1134,14 +1134,31 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             icon="AUTOMERGE_ON",
             toggle=True,
         )
-        if settings.cutter_auto_fix_small_islands:
-            threshold_row = layout.row(align=True)
-            threshold_row.enabled = settings.cutter_auto_fix_mesh
-            threshold_row.prop(
-                settings,
-                "cutter_auto_fix_small_islands_threshold",
-                text="Small Islands Threshold (%)",
-            )
+        islands_threshold = autofix_row.row(align=True)
+        islands_threshold.enabled = (
+            settings.cutter_auto_fix_mesh and settings.cutter_auto_fix_small_islands
+        )
+        islands_threshold.prop(
+            settings,
+            "cutter_auto_fix_small_islands_threshold",
+            text="Threshold",
+        )
+        weld_toggle = autofix_row.row(align=True)
+        weld_toggle.enabled = settings.cutter_auto_fix_mesh
+        weld_toggle.prop(
+            settings,
+            "cutter_auto_fix_weld",
+            text="",
+            icon="AUTOMERGE_ON",
+            toggle=True,
+        )
+        weld_distance = autofix_row.row(align=True)
+        weld_distance.enabled = settings.cutter_auto_fix_mesh and settings.cutter_auto_fix_weld
+        weld_distance.prop(
+            settings,
+            "cutter_auto_fix_weld_distance",
+            text="Weld",
+        )
         status_box = layout.box()
         status_box.label(text="Apply Cutter Seams Status", icon="MOD_BOOLEAN")
         if settings.cutter_apply_stage:

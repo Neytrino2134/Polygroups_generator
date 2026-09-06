@@ -13,6 +13,9 @@ addon_utils.enable(ROOT.name, default_set=True)
 
 from polygroups_generator.operators import object_seam_cutter as cutter
 
+settings = bpy.context.scene.polygroups_object_seam_cutter_settings
+settings.cutter_auto_fix_fin_faces = False
+
 bpy.ops.mesh.primitive_cube_add()
 target = bpy.context.active_object
 target.name = "Cutter Autofix Target"
@@ -90,6 +93,8 @@ settings.cutter_auto_fix_fin_faces = True
 settings.cutter_auto_fix_seam_check = True
 settings.cutter_auto_fix_small_islands = True
 settings.cutter_auto_fix_small_islands_threshold = 0.5
+settings.cutter_auto_fix_weld = True
+settings.cutter_auto_fix_weld_distance = 0.005
 settings.hide_cutters_after_apply = False
 settings.delete_cutters_after_apply = False
 with (
@@ -102,6 +107,7 @@ with (
     patch.object(cutter, "_triangulate_ngons_for_autofix",
                  side_effect=[3, 2]) as triangulate,
     patch.object(cutter, "_apply_cutters_to_mesh", return_value=4),
+    patch.object(cutter, "_ensure_live_autoweld", return_value=None) as weld,
     patch.object(cutter, "play_operation_done_sound"),
 ):
     result = bpy.ops.object.polygroups_apply_cutter_seams()
@@ -114,8 +120,18 @@ assert fill.call_count == 2
 assert [call.args[0] for call in fill.call_args_list] == [target, target]
 assert triangulate.call_count == 2
 assert [call.args[0] for call in triangulate.call_args_list] == [target, target]
+assert weld.call_count == 1
+assert weld.call_args.args[0] == target
+assert abs(weld.call_args.args[1] - 0.005) < 1e-7
 assert bpy.context.scene.polygroups_seam_preparation_settings.seam_gap_status == "No seam gaps found"
 assert bpy.context.scene.polygroups_generator_settings.small_island_status
+
+# AutoWeld remains the final live modifier and follows later toolbar changes.
+modifier = cutter._ensure_live_autoweld(target, 0.005)
+assert modifier == target.modifiers[-1]
+assert abs(modifier.merge_threshold - 0.005) < 1e-7
+settings.cutter_auto_fix_weld_distance = 0.006
+assert abs(modifier.merge_threshold - 0.006) < 1e-7
 
 addon_utils.disable(ROOT.name, default_set=True)
 print("CUTTER_AUTOFIX_TESTS_PASSED")
