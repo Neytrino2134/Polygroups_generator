@@ -107,7 +107,8 @@ with (
     patch.object(cutter, "_triangulate_ngons_for_autofix",
                  side_effect=[3, 2]) as triangulate,
     patch.object(cutter, "_apply_cutters_to_mesh", return_value=4),
-    patch.object(cutter, "_ensure_live_autoweld", return_value=None) as weld,
+    patch.object(cutter, "_prepare_seam_band_autoweld", return_value=None) as weld,
+    patch.object(cutter, "apply_weld_to_objects", return_value=1) as apply_weld,
     patch.object(cutter, "play_operation_done_sound"),
 ):
     result = bpy.ops.object.polygroups_apply_cutter_seams()
@@ -123,15 +124,41 @@ assert [call.args[0] for call in triangulate.call_args_list] == [target, target]
 assert weld.call_count == 1
 assert weld.call_args.args[0] == target
 assert abs(weld.call_args.args[1] - 0.005) < 1e-7
+assert apply_weld.call_count == 1
+assert apply_weld.call_args.args[1] == [target]
+assert abs(apply_weld.call_args.args[2] - 0.005) < 1e-7
 assert bpy.context.scene.polygroups_seam_preparation_settings.seam_gap_status == "No seam gaps found"
 assert bpy.context.scene.polygroups_generator_settings.small_island_status
 
-# AutoWeld remains the final live modifier and follows later toolbar changes.
-modifier = cutter._ensure_live_autoweld(target, 0.005)
+# A disabled Weld stage must not create a modifier/group or apply Weld.
+settings.cutter_auto_fix_weld = False
+session = cutter.CutterApplySession(bpy.context, target, [], lambda *_args: None)
+session.status.cutter_apply_stage = "WELDING"
+with (
+    patch.object(cutter, "_prepare_seam_band_autoweld") as prepare_disabled,
+    patch.object(cutter, "apply_weld_to_objects") as apply_disabled,
+):
+    session.step(bpy.context)
+assert prepare_disabled.call_count == 0
+assert apply_disabled.call_count == 0
+session.finish(bpy.context, "CANCELLED")
+settings.cutter_auto_fix_weld = True
+
+# AutoWeld is prepared last, restricted to seam vertices, then applied.
+modifier = cutter._prepare_seam_band_autoweld(target, 0.005)
 assert modifier == target.modifiers[-1]
 assert abs(modifier.merge_threshold - 0.005) < 1e-7
+assert modifier.vertex_group == cutter.AUTOWELD_VERTEX_GROUP_NAME
+group = target.vertex_groups[modifier.vertex_group]
+grouped = {vertex.index for vertex in target.data.vertices
+           if any(item.group == group.index for item in vertex.groups)}
+seam = {index for edge in target.data.edges if edge.use_seam for index in edge.vertices}
+assert grouped == seam
 settings.cutter_auto_fix_weld_distance = 0.006
 assert abs(modifier.merge_threshold - 0.006) < 1e-7
+assert cutter.apply_weld_to_objects(bpy.context, [target], 0.006) == 1
+assert target.modifiers.get(cutter.AUTOWELD_MODIFIER_NAME) is None
+assert target.vertex_groups.get(cutter.AUTOWELD_VERTEX_GROUP_NAME) is not None
 
 addon_utils.disable(ROOT.name, default_set=True)
 print("CUTTER_AUTOFIX_TESTS_PASSED")

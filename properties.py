@@ -8,6 +8,11 @@ REMESH_PRESET_ITEMS = (
     ("HIGH", "HIGH", "Use the HIGH quad count from add-on preferences"),
 )
 
+IMPORT_REMESH_METHOD_ITEMS = (
+    ("QUAD", "Quad", "Use the Quad Remesher add-on and the selected target count"),
+    ("VOXEL", "Voxel", "Use Blender's native Remesh modifier in Voxel mode"),
+)
+
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
@@ -288,21 +293,35 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Unwrap each remeshed result with Angle Based and apply the checker material",
         default=False,
     )
-    file_import_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=False)
+    file_import_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
     file_import_clear_material: bpy.props.BoolProperty(
         name="Clear Material",
         description="Replace transferred materials on the remeshed result with a plain gray material",
-        default=False,
+        default=True,
     )
-    file_import_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
+    file_import_remesh_method: bpy.props.EnumProperty(
+        name="Remesh Type", items=IMPORT_REMESH_METHOD_ITEMS, default="QUAD",
+    )
+    file_import_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="HIGH")
+    file_import_voxel_size: bpy.props.FloatProperty(
+        name="Voxel Size", description="Voxel size used by Blender's native Remesh modifier",
+        default=0.003, min=0.000001, soft_max=1.0, precision=4, unit="LENGTH",
+    )
     file_import_separate_collections: bpy.props.BoolProperty(default=False)
-    batch_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=False)
+    batch_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
     batch_clear_material: bpy.props.BoolProperty(
         name="Clear Material",
         description="Replace transferred materials on the remeshed result with a plain gray material",
-        default=False,
+        default=True,
     )
-    batch_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
+    batch_remesh_method: bpy.props.EnumProperty(
+        name="Remesh Type", items=IMPORT_REMESH_METHOD_ITEMS, default="QUAD",
+    )
+    batch_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="HIGH")
+    batch_voxel_size: bpy.props.FloatProperty(
+        name="Voxel Size", description="Voxel size used by Blender's native Remesh modifier",
+        default=0.003, min=0.000001, soft_max=1.0, precision=4, unit="LENGTH",
+    )
     batch_separate_collections: bpy.props.BoolProperty(default=False)
     batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     batch_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
@@ -650,7 +669,7 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     cutter_extrude: bpy.props.FloatProperty(
         name="Curve Extrude",
         description="Height of the cutter curve surface, independent of Solidify thickness",
-        default=0.1,
+        default=0.01,
         min=0.0,
         soft_max=1.0,
         precision=5,
@@ -752,16 +771,16 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     )
     cutter_auto_fix_weld: bpy.props.BoolProperty(
         name="Weld",
-        description="Keep an adjustable Weld modifier after all cutter Autofix operations",
+        description="Weld vertices belonging to seam edges after all earlier Autofix operations",
         default=True,
     )
     cutter_auto_fix_weld_distance: bpy.props.FloatProperty(
         name="Weld Distance",
-        description="Merge distance of the final adjustable AutoWeld modifier",
+        description="Merge distance of the final seam-only AutoWeld operation",
         default=0.005,
         min=0.0,
-        # Blender stores number-button step in hundredths: 0.1 -> 0.001.
-        step=0.1,
+        # Blender's distance widget scales this to a visible 0.001 arrow step.
+        step=0.01,
         precision=4,
         subtype="DISTANCE",
         update=_sync_cutter_autoweld_distance,

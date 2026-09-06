@@ -6,6 +6,12 @@ The add-on currently targets Blender 5.0-5.2 and adds an `AI Retopo` tab to the 
 The interface can be switched between English and Russian in the add-on preferences or directly in the main panel.
 Add-on preferences include Git-based update checks and fast-forward updates from the configured `origin` remote.
 
+## Custom Autosave
+
+Add-on preferences include a **Custom Autosave** section. Choose **Native** to use Blender's normal temporary-file autosave, or **Custom** to keep rotating copies beside a saved project (`file.blendAutosave1`, `file.blendAutosave2`, and so on). Unsaved projects are written to a session-specific folder under the system temp directory; that session folder is removed after the first regular save. The interval and retained version count are configurable, and only projects with unsaved changes are written by the timer.
+
+The top of the AI Retopo N-panel shows the latest save result plus separate times for the most recent custom autosave and regular project save. Existing timestamps are restored from file modification times when a project is opened.
+
 ## Current Tools
 
 - `Model Preparation`
@@ -40,7 +46,7 @@ Add-on preferences include Git-based update checks and fast-forward updates from
   - `Import Files`: imports several selected files one by one through Blender's file browser, with its own auto rename and Weld options.
   - `Batch Import`: imports supported mesh files from a folder one by one, with separate auto rename and Weld options.
   - `Scan Folder`: counts supported mesh files in the selected batch folder without importing them.
-  - `Auto Remesh`: independently available in Import and Batch Import with LOW/MID/HIGH counts from add-on preferences. Each file completes Import → Rename → Weld → Remesh before the next file starts; Rename and Weld follow their checkboxes.
+  - `Auto Remesh`: enabled by default in Import and Batch Import with HIGH and Clear Material selected. Choose the mutually exclusive Quad backend (LOW/MID/HIGH counts from add-on preferences) or Blender's native Voxel Remesh modifier (default voxel size `0.003`). Each file completes Import → Rename → Weld → Remesh before the next file starts; Rename and Weld follow their checkboxes.
   - The panel shows the file count, completed/failed/remaining counts, current file, processing stage, and overall progress.
   - Timers show total active time, current file time, and approximate remaining time based on the average of successfully completed files. Pauses are excluded; the estimate appears after the first completed file.
   - `Pause` waits until the current file finishes; `Resume` continues. `Stop` finishes the current file and keeps results. `Cancel` (or Esc) aborts remeshing and removes objects created by the current import run.

@@ -6,7 +6,7 @@ import bpy
 from bpy.app.handlers import persistent
 
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once, get_remesh_preset_counts
-from ..core.remesh_job import RemeshJob, remesh_backend
+from ..core.remesh_job import RemeshJob, VoxelRemeshJob, remesh_backend
 from ..core.import_timing import ImportTiming
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import get_next_object_index, rename_and_move_objects
@@ -68,12 +68,18 @@ class ImportQueue:
         self.rename = getattr(settings, prefix + "_auto_rename_objects")
         self.weld = getattr(settings, prefix + "_apply_weld")
         self.auto_remesh = getattr(settings, prefix + "_auto_remesh")
+        self.remesh_method = getattr(settings, prefix + "_remesh_method")
+        self.voxel_size = getattr(settings, prefix + "_voxel_size")
         self.clear_material = getattr(settings, prefix + "_clear_material")
         self.separate = getattr(settings, prefix + "_separate_collections")
         self.quad_count = dict(get_remesh_preset_counts(context))[
             getattr(settings, prefix + "_remesh_preset")
         ]
-        self.backend = remesh_backend(context) if self.auto_remesh else None
+        self.backend = (
+            remesh_backend(context)
+            if self.auto_remesh and self.remesh_method == "QUAD"
+            else None
+        )
         self.weld_distance = settings.weld_distance
         self.arrange = settings.batch_auto_arrange_objects
         self.arrange_options = (settings.batch_arrange_spacing,
@@ -218,9 +224,12 @@ class ImportQueue:
         elif self.stage == "REMESH":
             source = self.meshes[self.mesh_index]
             self.select_source(context, source)
-            apply_quad_remesher_defaults_once(self.scene)
-            self.scene.qremesher.target_count = self.quad_count
-            self.job = RemeshJob(self.backend, self.report)
+            if self.remesh_method == "QUAD":
+                apply_quad_remesher_defaults_once(self.scene)
+                self.scene.qremesher.target_count = self.quad_count
+                self.job = RemeshJob(self.backend, self.report)
+            else:
+                self.job = VoxelRemeshJob(self.voxel_size, self.report)
             self.job.start(context)
             self.stage = "WAIT_REMESH"
         elif self.stage == "WAIT_REMESH":
@@ -234,7 +243,7 @@ class ImportQueue:
             self.tracked(lambda: self.job.finish(context))
             outputs = list(self.owned_objects - before)
             if not any(obj.type == "MESH" for obj in outputs):
-                raise RuntimeError("Quad Remesher did not create a mesh")
+                raise RuntimeError(f"{self.remesh_method.title()} Remesh did not create a mesh")
             if self.clear_material:
                 for obj in outputs:
                     if obj.type == "MESH":

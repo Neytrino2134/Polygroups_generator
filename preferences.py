@@ -48,6 +48,15 @@ def _update_hotkeys(self, context):
         pass
 
 
+def _update_custom_autosave(self, context):
+    try:
+        from . import custom_autosave
+
+        custom_autosave.configure(context)
+    except Exception:
+        pass
+
+
 NUMBER_KEY_ITEMS = (
     ("ZERO", "0", "0 key"),
     ("ONE", "1", "1 key"),
@@ -277,12 +286,18 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     show_preferences_icons: bpy.props.BoolProperty(default=False)
     show_preferences_language: bpy.props.BoolProperty(default=True)
     show_preferences_operations: bpy.props.BoolProperty(default=False)
+    show_preferences_autosave: bpy.props.BoolProperty(default=False)
     show_preferences_remesh: bpy.props.BoolProperty(default=False)
     show_preferences_api: bpy.props.BoolProperty(default=False)
     show_preferences_hotkeys: bpy.props.BoolProperty(default=True)
     show_preferences_pie_menu: bpy.props.BoolProperty(default=False)
     show_preferences_windows: bpy.props.BoolProperty(default=False)
     show_preferences_dev: bpy.props.BoolProperty(default=False)
+    show_panel_session_status: bpy.props.BoolProperty(
+        name="Session and Autosave",
+        description="Show autosave status and Blender restart controls in the N-panel",
+        default=True,
+    )
     enable_dev_mode: bpy.props.BoolProperty(
         name="Enable Dev Mode",
         description="Show developer restart controls in the AI Retopo N-panel",
@@ -474,6 +489,33 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         description="Use a separate Pie Menu layout while the active object is in Edit Mode",
         default=True,
     )
+    autosave_mode: bpy.props.EnumProperty(
+        name="Autosave System",
+        description="Choose Blender's temporary autosave or versioned copies beside the blend file",
+        items=(
+            ("NATIVE", "Native", "Use Blender's standard temporary-file autosave"),
+            ("CUSTOM", "Custom", "Store rotating autosave copies beside the saved blend file"),
+        ),
+        default="NATIVE",
+        update=_update_custom_autosave,
+    )
+    autosave_interval_minutes: bpy.props.FloatProperty(
+        name="Interval (Minutes)",
+        description="Minutes between custom autosave checks",
+        default=2.0,
+        min=1.0,
+        max=120.0,
+        step=60,
+        precision=1,
+        update=_update_custom_autosave,
+    )
+    autosave_versions: bpy.props.IntProperty(
+        name="Autosave Versions",
+        description="Number of rotating custom autosave copies to keep",
+        default=3,
+        min=1,
+        max=20,
+    )
     edit_pie_current_slots: bpy.props.StringProperty(options={"HIDDEN"})
     active_edit_pie_preset: bpy.props.EnumProperty(
         name="Active Edit Mode Preset",
@@ -572,6 +614,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
             ("show_preferences_icons", "Custom Icons", self.draw_icons),
             ("show_preferences_language", t(context, "preferences_language"), self.draw_language),
             ("show_preferences_operations", t(context, "preferences_operations"), self.draw_operations),
+            ("show_preferences_autosave", t(context, "preferences_autosave"), self.draw_autosave),
             ("show_preferences_remesh", t(context, "preferences_remesh"), self.draw_remesh),
             ("show_preferences_api", t(context, "preferences_api"), self.draw_api),
             ("show_preferences_hotkeys", t(context, "hotkeys"), self.draw_hotkeys),
@@ -628,6 +671,24 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
             "play_sound_after_operations",
             text=t(context, "play_sound_after_operations"),
         )
+
+    def draw_autosave(self, context, layout):
+        column = layout.column(align=True)
+        column.prop(self, "autosave_mode", text=t(context, "autosave_system"))
+        if self.autosave_mode == "CUSTOM":
+            column.prop(self, "autosave_interval_minutes", text=t(context, "autosave_interval"))
+            column.prop(self, "autosave_versions", text=t(context, "autosave_versions"))
+            column.separator()
+            column.label(text=t(context, "autosave_custom_description_1"), icon="INFO")
+            column.label(text=t(context, "autosave_custom_description_2"))
+            column.label(text=t(context, "autosave_custom_description_3"))
+            column.operator(
+                "wm.airetopo_custom_autosave_now",
+                text=t(context, "autosave_now"),
+                icon="FILE_TICK",
+            )
+        else:
+            column.label(text=t(context, "autosave_native_description"), icon="INFO")
 
     def draw_remesh(self, context, layout):
         column = layout.column(align=True)

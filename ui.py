@@ -359,14 +359,65 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     def draw(self, context):
         preferences = get_preferences(context)
         layout = self.layout
-        if preferences and preferences.enable_dev_mode:
-            layout.operator("wm.airetopo_dev_restart", text=t(context, "dev_restart"), icon="FILE_REFRESH")
-            layout.operator("wm.airetopo_dev_restart_current", text=t(context, "dev_restart_current"), icon="FILE_TICK")
-            layout.operator(
-                "wm.airetopo_dev_restart_without_saving",
-                text=t(context, "dev_restart_without_saving"),
-                icon="LOOP_BACK",
+        from . import custom_autosave
+
+        session_box = layout.box()
+        session_expanded = bool(
+            preferences is None or preferences.show_panel_session_status
+        )
+        session_header = session_box.row(align=True)
+        if preferences is not None:
+            session_header.prop(
+                preferences,
+                "show_panel_session_status",
+                text=t(context, "panel_session_status"),
+                icon="TRIA_DOWN" if session_expanded else "TRIA_RIGHT",
+                emboss=False,
             )
+        else:
+            session_header.label(text=t(context, "panel_session_status"), icon="TRIA_DOWN")
+
+        if session_expanded:
+            save_status = custom_autosave.status_snapshot()
+            status_row = session_box.row(align=True)
+            event = save_status["event"]
+            if event == "CUSTOM":
+                status_row.label(text=t(context, "autosave_status_success"), icon="CHECKMARK")
+            elif event == "REGULAR":
+                status_row.label(text=t(context, "regular_save_status_success"), icon="CHECKMARK")
+            elif event == "ERROR":
+                status_row.alert = True
+                status_row.label(text=t(context, "autosave_status_error"), icon="ERROR")
+            else:
+                status_row.label(text=t(context, "save_status_waiting"), icon="TIME")
+            time_row = session_box.row(align=True)
+            time_row.label(
+                text=t(context, "last_autosave_time", value=save_status["autosave_time"]),
+                icon="RECOVER_LAST",
+            )
+            time_row.label(
+                text=t(context, "last_regular_save_time", value=save_status["regular_save_time"]),
+                icon="FILE_TICK",
+            )
+            if preferences and preferences.enable_dev_mode:
+                session_box.separator()
+                restart_column = session_box.column(align=True)
+                restart_column.operator(
+                    "wm.airetopo_dev_restart",
+                    text=t(context, "dev_restart"),
+                    icon="FILE_REFRESH",
+                )
+                restart_column.operator(
+                    "wm.airetopo_dev_restart_current",
+                    text=t(context, "dev_restart_current"),
+                    icon="FILE_TICK",
+                )
+                restart_column.operator(
+                    "wm.airetopo_dev_restart_without_saving",
+                    text=t(context, "dev_restart_without_saving"),
+                    icon="LOOP_BACK",
+                )
+
         header = layout.row(align=True)
         expand_operator = header.operator(
             "object.airetopo_set_all_section_visibility",
@@ -562,13 +613,26 @@ def draw_import_remesh_options(layout, context, settings, prefix):
     column = layout.column(align=True)
     column.enabled = not settings.batch_is_running
     column.prop(settings, prefix + "_auto_remesh", text="Auto Remesh")
-    presets = column.row(align=True)
-    presets.enabled = getattr(settings, prefix + "_auto_remesh")
-    presets.prop(settings, prefix + "_remesh_preset", expand=True)
-    if getattr(settings, prefix + "_auto_remesh"):
+    enabled = getattr(settings, prefix + "_auto_remesh")
+    method_row = column.row(align=True)
+    method_row.enabled = enabled
+    method_row.prop(settings, prefix + "_remesh_method", expand=True)
+    if enabled:
+        method = getattr(settings, prefix + "_remesh_method")
+        if method == "QUAD":
+            presets = column.row(align=True)
+            presets.prop(settings, prefix + "_remesh_preset", expand=True)
+            count = dict(get_remesh_preset_counts(context))[
+                getattr(settings, prefix + "_remesh_preset")
+            ]
+            column.label(text=f'{t(context, "quad_count")}: {count:,}')
+        else:
+            column.prop(
+                settings,
+                prefix + "_voxel_size",
+                text=t(context, "voxel_size"),
+            )
         column.prop(settings, prefix + "_clear_material", text="Clear Material")
-        count = dict(get_remesh_preset_counts(context))[getattr(settings, prefix + "_remesh_preset")]
-        column.label(text=f'{t(context, "quad_count")}: {count:,}')
     column.prop(settings, prefix + "_separate_collections", text=t(context, "import_separate_collections"))
 
 

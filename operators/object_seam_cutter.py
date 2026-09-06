@@ -11,6 +11,7 @@ from mathutils import Matrix
 from mathutils import Vector
 
 from ..sound import play_operation_done_sound
+from .apply_weld import apply_weld_to_objects
 from .mesh_checks import _delete_faces_by_indices
 from .mesh_checks import _edge_face_data
 from .mesh_checks import _fixable_issue_total
@@ -42,6 +43,7 @@ CUTTER_INSTANCE_ID_PROP = "polygroups_cutter_instance_id"
 CUTTER_ORIGINAL_NAME_PROP = "polygroups_cutter_original_name"
 CUTTER_SOLIDIFY_MODIFIER_NAME = "Cutter Plane Thickness"
 AUTOWELD_MODIFIER_NAME = "Retopo Weld"
+AUTOWELD_VERTEX_GROUP_NAME = "Cutter Seam Weld"
 BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
 DEFAULT_CUTTER_PATH_TILT = radians(90.0)
@@ -54,12 +56,29 @@ AUTOFIX_MAX_HOLE_LOOPS = 16
 ACTIVE_CUTTER_APPLY = None
 
 
-def _ensure_live_autoweld(target, distance):
-    """Keep AutoWeld last and unapplied so its threshold remains reversible."""
+def _sync_autoweld_vertex_group(target):
+    """Put only vertices belonging directly to seam edges in the AutoWeld group."""
+    group = target.vertex_groups.get(AUTOWELD_VERTEX_GROUP_NAME)
+    if group is None:
+        group = target.vertex_groups.new(name=AUTOWELD_VERTEX_GROUP_NAME)
+    all_indices = list(range(len(target.data.vertices)))
+    if all_indices:
+        group.remove(all_indices)
+    seam_indices = {index for edge in target.data.edges if edge.use_seam
+                    for index in edge.vertices}
+    if seam_indices:
+        group.add(sorted(seam_indices), 1.0, "REPLACE")
+    return group
+
+
+def _prepare_seam_band_autoweld(target, distance):
+    """Create a final Weld modifier restricted to the expanded seam band."""
+    group = _sync_autoweld_vertex_group(target)
     modifier = target.modifiers.get(AUTOWELD_MODIFIER_NAME)
     if modifier is None or modifier.type != "WELD":
         modifier = target.modifiers.new(AUTOWELD_MODIFIER_NAME, "WELD")
     modifier.merge_threshold = max(0.0, float(distance))
+    modifier.vertex_group = group.name
     modifier_index = target.modifiers.find(modifier.name)
     if modifier_index != len(target.modifiers) - 1:
         target.modifiers.move(modifier_index, len(target.modifiers) - 1)
@@ -3825,9 +3844,15 @@ class CutterApplySession:
                 self.set_stage("WELDING", 96, "Welding nearby vertices")
             elif stage == "WELDING":
                 if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_weld:
-                    _ensure_live_autoweld(
+                    _prepare_seam_band_autoweld(
                         self.target,
                         self.settings.cutter_auto_fix_weld_distance,
+                    )
+                    apply_weld_to_objects(
+                        context,
+                        [self.target],
+                        self.settings.cutter_auto_fix_weld_distance,
+                        self.report,
                     )
                 self.set_stage("FINALIZING", 98, "Finalizing cutter operation")
             elif stage == "FINALIZING":

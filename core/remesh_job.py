@@ -161,3 +161,74 @@ class RemeshJob:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=2)
+
+
+class VoxelRemeshJob:
+    """Synchronous adapter matching RemeshJob for Blender's Remesh modifier."""
+
+    def __init__(self, voxel_size, report):
+        self.voxel_size = max(float(voxel_size), 0.000001)
+        self.report = report
+        self.source = None
+
+    def start(self, context):
+        preparation = context.scene.polygroups_model_preparation_settings
+        self.auto_generate_seams = preparation.remesh_auto_generate_seams
+        self.auto_unwrap_checker = preparation.remesh_auto_unwrap_checker
+        self.source = context.active_object
+        self.source_name = self.source.name
+        self.source_collections = tuple(self.source.users_collection)
+        if preparation.remesh_pregenerate_polygroups:
+            if "FINISHED" not in bpy.ops.object.generate_polygroups():
+                raise RuntimeError("Generate PolyGroups did not finish")
+
+    def poll(self):
+        return True, 1.0
+
+    def finish(self, context):
+        source = self.source
+        if source is None or source not in set(bpy.data.objects):
+            raise RuntimeError("Voxel Remesh source object is no longer available")
+
+        result = source.copy()
+        result.data = source.data.copy()
+        collections = [
+            collection for collection in self.source_collections
+            if collection in set(bpy.data.collections)
+        ] or [context.scene.collection]
+        for collection in collections:
+            collection.objects.link(result)
+
+        for selected in context.selected_objects:
+            selected.select_set(False)
+        result.hide_set(False)
+        result.select_set(True)
+        context.view_layer.objects.active = result
+        modifier = result.modifiers.new(name="Voxel Remesh", type="REMESH")
+        modifier.mode = "VOXEL"
+        modifier.voxel_size = self.voxel_size
+        try:
+            applied = bpy.ops.object.modifier_apply(modifier=modifier.name)
+            if "FINISHED" not in applied:
+                raise RuntimeError("Blender cancelled the Voxel Remesh modifier")
+        except Exception:
+            mesh = result.data
+            bpy.data.objects.remove(result, do_unlink=True)
+            if mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+            raise
+
+        result.name = next_retopo_name(self.source_name, result)
+        if self.auto_generate_seams:
+            mark_material_boundary_seams(result)
+        if self.auto_unwrap_checker:
+            if "FINISHED" not in bpy.ops.object.polygroups_unwrap_angle_based():
+                raise RuntimeError(f"Angle Based unwrap failed for {result.name}")
+            if "FINISHED" not in bpy.ops.object.polygroups_apply_checker_material():
+                raise RuntimeError(f"Applying checker material failed for {result.name}")
+        source.hide_set(True)
+        context.view_layer.update()
+        return [result]
+
+    def abort(self):
+        pass

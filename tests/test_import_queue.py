@@ -21,6 +21,12 @@ from polygroups_generator.core.remesh_job import remesh_backend, RemeshJob
 context = bpy.context
 settings = context.scene.polygroups_model_preparation_settings
 assert remesh_backend(context).__name__.endswith("qr_operators")
+assert settings.batch_auto_remesh and settings.file_import_auto_remesh
+assert settings.batch_clear_material and settings.file_import_clear_material
+assert settings.batch_remesh_preset == "HIGH" and settings.file_import_remesh_preset == "HIGH"
+assert settings.batch_remesh_method == "QUAD" and settings.file_import_remesh_method == "QUAD"
+assert abs(settings.batch_voxel_size - 0.003) < 1e-7
+assert abs(settings.file_import_voxel_size - 0.003) < 1e-7
 settings.batch_auto_remesh = True
 settings.batch_separate_collections = True
 settings.batch_auto_arrange_objects = True
@@ -31,7 +37,6 @@ events = []
 source_material = bpy.data.materials.new("Imported Textured Material")
 source_material.use_nodes = True
 source_material.node_tree.nodes.new("ShaderNodeTexImage")
-assert not settings.batch_clear_material and not settings.file_import_clear_material
 settings.batch_clear_material = True
 
 # Exercise the modal entry point with Blender's Event shape (no timer field).
