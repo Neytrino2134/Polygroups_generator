@@ -1,6 +1,7 @@
 """Transparent UV checker drawn over Solid viewport shading."""
 
 from array import array
+import time
 
 import bpy
 import gpu
@@ -10,7 +11,10 @@ from gpu_extras.batch import batch_for_shader
 _DRAW_HANDLE = None
 _SHADER = None
 _BATCH_CACHE = None
+_CACHE_ID_POINTERS = set()
 _UV_BUFFER = array("f")
+_EDIT_CACHE_CHECK_AT = 0.0
+_EDIT_CACHE_INTERVAL = 0.5
 
 
 VERTEX_SHADER = """
@@ -76,15 +80,22 @@ def _cache_key(obj):
     mesh = obj.data
     uv_layer = mesh.uv_layers.active
     return (
-        obj.as_pointer(), mesh.as_pointer(), uv_layer.name if uv_layer else "",
+        obj.as_pointer(), mesh.as_pointer(), obj.mode, uv_layer.name if uv_layer else "",
         len(mesh.vertices), len(mesh.loops), len(mesh.polygons),
         tuple(value for row in obj.matrix_world for value in row),
-        _uv_signature(uv_layer) if uv_layer else 0,
+        _uv_signature(uv_layer) if uv_layer and obj.mode == "EDIT" else 0,
     )
 
 
 def _checker_batch(obj):
-    global _BATCH_CACHE
+    global _BATCH_CACHE, _CACHE_ID_POINTERS, _EDIT_CACHE_CHECK_AT
+    if (
+        obj.mode == "EDIT"
+        and _BATCH_CACHE is not None
+        and _BATCH_CACHE[0][0] == obj.as_pointer()
+        and time.monotonic() < _EDIT_CACHE_CHECK_AT
+    ):
+        return _BATCH_CACHE[1]
     _sync_edit_mesh(obj)
     key = _cache_key(obj)
     if _BATCH_CACHE is not None and _BATCH_CACHE[0] == key:
@@ -92,6 +103,8 @@ def _checker_batch(obj):
     positions, uvs = checker_geometry(obj)
     batch = batch_for_shader(_shader(), "TRIS", {"pos": positions, "uv": uvs}) if positions else None
     _BATCH_CACHE = (key, batch)
+    _CACHE_ID_POINTERS = {obj.as_pointer(), obj.data.as_pointer()}
+    _EDIT_CACHE_CHECK_AT = time.monotonic() + _EDIT_CACHE_INTERVAL
     return batch
 
 
@@ -115,13 +128,37 @@ def _shader():
 
 
 def clear_cache(*_args):
-    global _BATCH_CACHE
+    global _BATCH_CACHE, _CACHE_ID_POINTERS, _EDIT_CACHE_CHECK_AT
     _BATCH_CACHE = None
+    _CACHE_ID_POINTERS = set()
+    _EDIT_CACHE_CHECK_AT = 0.0
 
 
 def invalidate_geometry(_scene, depsgraph):
-    if any(update.is_updated_geometry or update.is_updated_transform for update in depsgraph.updates):
-        clear_cache()
+    if not _CACHE_ID_POINTERS:
+        return
+    for update in depsgraph.updates:
+        if not (update.is_updated_geometry or update.is_updated_transform):
+            continue
+        try:
+            pointer = update.id.original.as_pointer()
+        except (AttributeError, ReferenceError):
+            try:
+                pointer = update.id.as_pointer()
+            except (AttributeError, ReferenceError):
+                continue
+        if pointer in _CACHE_ID_POINTERS:
+            clear_cache()
+            return
+
+
+def exceeds_polygon_limit(obj, polygon_limit):
+    return bool(
+        polygon_limit > 0
+        and obj is not None
+        and obj.type == "MESH"
+        and len(obj.data.polygons) > polygon_limit
+    )
 
 
 def draw_checker_overlay():
@@ -137,6 +174,8 @@ def draw_checker_overlay():
         return
     obj = context.active_object
     if obj is None or obj.type != "MESH" or obj.mode not in {"OBJECT", "EDIT"}:
+        return
+    if exceeds_polygon_limit(obj, settings.checker_overlay_max_polygons):
         return
     batch = _checker_batch(obj)
     if batch is None:

@@ -307,7 +307,12 @@ class AIRETOPO_OT_select_cutter_tweak(bpy.types.Operator):
 
 
 SEAM_TOOL_GROUPS = {
-    "DRAW": ("polygroups_generator.connect_vertex_seam_tool", "polygroups_generator.edge_seam_path_tool"),
+    "DRAW": (
+        "polygroups_generator.connect_vertex_seam_tool",
+        "polygroups_generator.edge_seam_path_tool",
+        "polygroups_generator.smart_seams_generator_tool",
+        "polygroups_generator.longitudinal_seam_tool",
+    ),
     "ERASE": ("polygroups_generator.seam_eraser_tool", "polygroups_generator.edge_seam_eraser_tool"),
     "KNIFE": ("polygroups_generator.knife_seam_tool", "polygroups_generator.quick_knife_seam_tool"),
 }
@@ -417,7 +422,11 @@ def register_keymaps():
 
     keymap = keyconfig.keymaps.new(name="3D View", space_type="VIEW_3D")
     mesh_keymap = keyconfig.keymaps.new(name="Mesh", space_type="EMPTY")
-    for key, ctrl, group in (("D", False, "DRAW"), ("D", True, "ERASE"), ("K", False, "KNIFE")):
+    for key, ctrl, group in (
+        ("D", False, "DRAW"),
+        ("D", True, "ERASE"),
+        ("K", False, "KNIFE"),
+    ):
         item = mesh_keymap.keymap_items.new(
             MESH_OT_airetopo_cycle_seam_tool.bl_idname, key, "PRESS", ctrl=ctrl, head=True,
         )

@@ -50,6 +50,7 @@ from .knife_seam_tool import MESH_OT_polygroups_native_knife_seam
 from .mark_material_boundaries_seam import MESH_OT_polygroups_mark_material_boundaries_seam
 from .mark_longitudinal_seam import MESH_OT_polygroups_mark_boundary_and_longitudinal_seam
 from .mark_longitudinal_seam import MESH_OT_polygroups_mark_longitudinal_seam
+from .mark_longitudinal_seam import MESH_OT_polygroups_longitudinal_seam_tool_click
 from .mark_selection_boundary_seam import MESH_OT_polygroups_mark_selection_boundary_seam
 from .mark_selected_edges_seam import MESH_OT_polygroups_mark_selected_edges_seam
 from .mesh_checks import OBJECT_OT_polygroups_check_mesh
@@ -226,6 +227,7 @@ CLASSES = (
     OBJECT_OT_polygroups_auto_prepare_fab_selection,
     MESH_OT_polygroups_mark_boundary_and_longitudinal_seam,
     MESH_OT_polygroups_mark_longitudinal_seam,
+    MESH_OT_polygroups_longitudinal_seam_tool_click,
     MESH_OT_polygroups_mark_selected_edges_seam,
     MESH_OT_polygroups_clear_selected_edges_seam,
     MESH_OT_polygroups_clear_inside_edges_seam,

@@ -20,6 +20,16 @@ bpy.ops.mesh.primitive_cube_add()
 target = bpy.context.active_object
 target.name = "Cutter Autofix Target"
 
+with patch.object(cutter, "relax_seams", return_value=(2, 1)) as relax:
+    assert cutter._smart_relax_seams_for_autofix(bpy.context, target) == 2
+assert relax.call_args.args[1:] == ("SMART", 1, cutter.radians(90.0), 1)
+assert relax.call_args.kwargs == {
+    "use_corner_angle": False,
+    "select_result": False,
+    "selected_area_only": False,
+}
+assert bpy.context.mode == "OBJECT"
+
 bm = bmesh.new()
 bm.from_mesh(target.data)
 bm.faces.ensure_lookup_table()
@@ -95,6 +105,7 @@ settings.cutter_auto_fix_small_islands = True
 settings.cutter_auto_fix_small_islands_threshold = 0.5
 settings.cutter_auto_fix_weld = True
 settings.cutter_auto_fix_weld_distance = 0.005
+settings.cutter_auto_fix_smart_relax_seams = True
 settings.hide_cutters_after_apply = False
 settings.delete_cutters_after_apply = False
 with (
@@ -111,6 +122,7 @@ with (
     patch.object(cutter, "_prepare_seam_band_autoweld", return_value=None) as weld,
     patch.object(cutter, "apply_weld_to_objects", return_value=1) as apply_weld,
     patch.object(cutter, "_sync_autoweld_vertex_group") as sync_weld_group,
+    patch.object(cutter, "_smart_relax_seams_for_autofix", return_value=5) as smart_relax,
     patch.object(cutter, "play_operation_done_sound"),
 ):
     result = bpy.ops.object.polygroups_apply_cutter_seams()
@@ -131,6 +143,8 @@ assert apply_weld.call_args.args[1] == [target]
 assert abs(apply_weld.call_args.args[2] - 0.005) < 1e-7
 assert repair.call_count == 2
 assert sync_weld_group.call_count == 1
+assert smart_relax.call_count == 1
+assert smart_relax.call_args.args == (bpy.context, target)
 assert bpy.context.scene.polygroups_seam_preparation_settings.seam_gap_status == "No seam gaps found"
 assert bpy.context.scene.polygroups_generator_settings.small_island_status
 

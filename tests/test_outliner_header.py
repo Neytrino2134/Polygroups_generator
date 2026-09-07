@@ -43,5 +43,5 @@ assert calls[2][2].prefix == "Retopo_" and calls[2][2].hidden is True
 assert calls[3][2].prefix == "Retopo_" and calls[3][2].hidden is False
 assert calls[4][2].action == "PREVIOUS"
 assert calls[5][2].action == "NEXT"
-assert [call[1]["text"] for call in calls] == ["H", "H", "L", "L", "", ""]
+assert [call[1]["text"] for call in calls] == ["", "", "", "", "Prev", "Next"]
 print("OUTLINER_HEADER_OK", flush=True)

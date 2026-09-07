@@ -61,9 +61,13 @@ assert cutter_settings.cutter_auto_fix_fin_faces
 assert cutter_settings.cutter_auto_fix_seam_check
 assert cutter_settings.cutter_auto_fix_small_islands
 assert cutter_settings.cutter_auto_fix_weld
+assert cutter_settings.cutter_auto_fix_smart_relax_seams
 assert cutter_settings.cutter_auto_fix_triangulate_ngons
 assert abs(cutter_settings.cutter_auto_fix_small_islands_threshold - 0.5) < 1e-7
-assert abs(cutter_settings.cutter_auto_fix_weld_distance - 0.005) < 1e-7
+assert abs(cutter_settings.cutter_auto_fix_weld_distance - 0.001) < 1e-7
+weld_distance_property = cutter_settings.bl_rna.properties["cutter_auto_fix_weld_distance"]
+assert abs(weld_distance_property.hard_min - 0.0001) < 1e-7
+assert abs(weld_distance_property.hard_max - 0.05) < 1e-7
 settings.small_island_threshold = 0.1
 bm = strip([10, .04, 10])
 bm.to_mesh(obj.data)

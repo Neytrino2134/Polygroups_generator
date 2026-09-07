@@ -5,7 +5,11 @@ import bmesh
 import bpy
 from mathutils import Vector
 
+from ..core.smart_seam_routing import route_seams
 from .unwrap_angle_based import unwrap_selected_angle_based
+
+
+TOOL_ID = "polygroups_generator.longitudinal_seam_tool"
 
 
 def _selected_faces(bm):
@@ -150,6 +154,41 @@ def _nearest_graph_vertex(graph, position):
             nearest_vert = vert
             nearest_distance = distance
     return nearest_vert
+
+
+def _ordered_edge_component_vertices(component_edges):
+    """Return a stable walk around an open or closed boundary component."""
+    incident = {}
+    for edge in component_edges:
+        for vert in edge.verts:
+            incident.setdefault(vert, []).append(edge)
+    if not incident:
+        return []
+    endpoints = [vert for vert, edges in incident.items() if len(edges) == 1]
+    current = min(endpoints or incident, key=lambda vert: vert.index)
+    ordered = [current]
+    previous_edge = None
+    while True:
+        candidates = [edge for edge in incident[current] if edge is not previous_edge]
+        if not candidates:
+            break
+        edge = min(candidates, key=lambda item: item.index)
+        following = edge.other_vert(current)
+        if following == ordered[0] or following in ordered:
+            break
+        ordered.append(following)
+        previous_edge, current = edge, following
+    return ordered
+
+
+def _offset_boundary_vertex(component, guide_position, offset):
+    ordered = _ordered_edge_component_vertices(component[0])
+    if not ordered:
+        return None
+    nearest = min(range(len(ordered)), key=lambda index: (ordered[index].co - guide_position).length)
+    if len(component[0]) == len(ordered):
+        return ordered[(nearest + offset) % len(ordered)]
+    return ordered[max(0, min(len(ordered) - 1, nearest + offset))]
 
 
 def _active_selection_position(bm, selected_faces=None):
@@ -465,6 +504,9 @@ def _longitudinal_seam_edges_for_faces(
     obj=None,
     prefer_backside=False,
     double_seam=False,
+    seam_offset=0,
+    path_method="SIMPLE",
+    create_new_edges=True,
 ):
     boundary_edges = _selection_boundary_edges(bm, selected_faces)
     components = _edge_components(boundary_edges)
@@ -475,11 +517,16 @@ def _longitudinal_seam_edges_for_faces(
         return None, "No side-surface edge path found"
 
     guide_position = _active_selection_position(bm, selected_faces)
+    if guide_position is None:
+        guide_position = _selection_center(selected_faces)
     seam_edges = []
     if len(components) >= 2:
         loop_a = components[0][1]
         loop_b = components[1][1]
-        if prefer_backside:
+        if seam_offset:
+            source = _offset_boundary_vertex(components[0], guide_position, seam_offset)
+            seam_edges = _shortest_path_edges(graph, [source] if source else (), loop_b)
+        elif prefer_backside:
             seam_edges = _backside_boundary_path_edges(graph, loop_a, loop_b, context, obj)
 
         if not seam_edges and guide_position is not None:
@@ -503,14 +550,16 @@ def _longitudinal_seam_edges_for_faces(
 
     elif len(components) == 1:
         boundary_loop = components[0][1]
-        seam_edges = _cone_longitudinal_path_edges(
-            graph,
-            boundary_loop,
-            context,
-            obj,
-            guide_position,
-            prefer_backside,
-        )
+        if seam_offset:
+            source = _offset_boundary_vertex(components[0], guide_position, seam_offset)
+            distances, _previous, _target = _dijkstra(graph, boundary_loop)
+            apexes = [vert for vert in graph if vert not in boundary_loop and vert in distances]
+            apex = max(apexes, key=lambda vert: distances[vert]) if apexes else None
+            seam_edges = _shortest_path_edges(graph, [apex] if apex else (), [source] if source else ())
+        else:
+            seam_edges = _cone_longitudinal_path_edges(
+                graph, boundary_loop, context, obj, guide_position, prefer_backside,
+            )
         if double_seam:
             seam_edges += _opposite_cone_longitudinal_path_edges(
                 graph,
@@ -536,10 +585,23 @@ def _longitudinal_seam_edges_for_faces(
         edge.seam = True
         edge.select = True
 
-    return (marked_count, boundary_edges), None
+    cuts = 0
+    if path_method == "SMART":
+        _rerouted, cuts = route_seams(
+            bm,
+            0.785398,
+            create_edges=create_new_edges,
+            turn_weight=6.0,
+            corridor_width=2.5,
+            edge_preference=0.35,
+        )
+
+    return (marked_count, boundary_edges, cuts), None
 
 
-def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=False, double_seam=False):
+def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=False,
+                                  double_seam=False, seam_offset=0,
+                                  path_method="SIMPLE", create_new_edges=True):
     selected_faces = _selected_faces(bm)
     if not selected_faces:
         return None, "Select cylinder or cone side faces first"
@@ -558,13 +620,16 @@ def _mark_longitudinal_seam_edges(bm, context=None, obj=None, prefer_backside=Fa
             obj=obj,
             prefer_backside=prefer_backside,
             double_seam=double_seam,
+            seam_offset=seam_offset,
+            path_method=path_method,
+            create_new_edges=create_new_edges,
         )
         if warning:
             failed_count += 1
             last_warning = warning
             continue
 
-        marked_count, boundary_edges = result
+        marked_count, boundary_edges, _cuts = result
         total_marked_count += marked_count
         all_boundary_edges.update(boundary_edges)
         processed_count += 1
@@ -580,6 +645,48 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
     bl_label = "Create Longitudinal Seam"
     bl_description = "Create one lengthwise seam on selected cylinder or cone side faces"
     bl_options = {"REGISTER", "UNDO"}
+
+    double_seam: bpy.props.BoolProperty(name="Double Seam", default=False)
+    prefer_backside: bpy.props.BoolProperty(
+        name="Prefer Backside",
+        description="Prefer the side facing away from the current view",
+        default=False,
+    )
+    seam_offset: bpy.props.IntProperty(
+        name="Seam Offset",
+        description="Move the seam left or right by boundary edge steps",
+        default=0,
+        min=-100,
+        max=100,
+    )
+    path_method: bpy.props.EnumProperty(
+        name="Path Search",
+        items=(
+            ("SIMPLE", "Simple", "Use the existing shortest edge-path algorithm"),
+            ("SMART", "Smart", "Prefer smooth paths and optionally cut diagonally across faces"),
+        ),
+        default="SIMPLE",
+    )
+    create_new_edges: bpy.props.BoolProperty(
+        name="Create New Edges",
+        description="Allow Smart routing to split faces for a smoother diagonal path",
+        default=True,
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "double_seam")
+        layout.prop(self, "prefer_backside")
+        layout.prop(self, "seam_offset")
+        layout.prop(self, "path_method")
+        if self.path_method == "SMART":
+            layout.prop(self, "create_new_edges")
+
+    def invoke(self, context, event):
+        settings = context.scene.polygroups_seam_finalization_settings
+        self.double_seam = settings.double_longitudinal_seam
+        self.prefer_backside = settings.prefer_backside_longitudinal_seam
+        return self.execute(context)
 
     @classmethod
     def poll(cls, context):
@@ -599,8 +706,11 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
             bm,
             context=context,
             obj=obj,
-            prefer_backside=settings.prefer_backside_longitudinal_seam,
-            double_seam=settings.double_longitudinal_seam,
+            prefer_backside=self.prefer_backside,
+            double_seam=self.double_seam,
+            seam_offset=self.seam_offset,
+            path_method=self.path_method,
+            create_new_edges=self.create_new_edges,
         )
         if warning:
             self.report({"WARNING"}, warning)
@@ -621,6 +731,51 @@ class MESH_OT_polygroups_mark_longitudinal_seam(bpy.types.Operator):
             f"Marked {result[0]} longitudinal seam edge(s) on {result[2]} shape(s){failed_suffix}{suffix}",
         )
         return {"FINISHED"}
+
+
+class MESH_OT_polygroups_longitudinal_seam_tool_click(bpy.types.Operator):
+    bl_idname = "mesh.polygroups_longitudinal_seam_tool_click"
+    bl_label = "Create Longitudinal Seam from Point"
+    bl_description = "Pick a vertex, select its seam-bounded island, and create a longitudinal seam"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (obj is not None and obj.type == "MESH" and context.mode == "EDIT_MESH"
+                and context.area is not None and context.area.type == "VIEW_3D"
+                and context.region is not None and context.region.type == "WINDOW")
+
+    def invoke(self, context, event):
+        from .smart_angle_seams import select_linked_faces_by_seam
+
+        obj = context.active_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        old_mode = tuple(context.tool_settings.mesh_select_mode)
+        flags = [(item, item.select) for sequence in (bm.verts, bm.edges, bm.faces)
+                 for item in sequence]
+        history = list(bm.select_history)
+        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="VERT")
+        bpy.ops.mesh.select_all(action="DESELECT")
+        bpy.ops.view3d.select(location=(event.mouse_region_x, event.mouse_region_y), deselect_all=True)
+        bm = bmesh.from_edit_mesh(obj.data)
+        picked = [vert for vert in bm.verts if vert.select and not vert.hide]
+        if len(picked) != 1:
+            for item, selected in flags:
+                if item.is_valid:
+                    item.select = selected
+            bm.select_history.clear()
+            for item in history:
+                if item.is_valid and item.select:
+                    bm.select_history.add(item)
+            context.tool_settings.mesh_select_mode = old_mode
+            bm.select_flush_mode()
+            bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+            return {"CANCELLED"}
+        bm.select_history.clear()
+        bm.select_history.add(picked[0])
+        select_linked_faces_by_seam(bm, (True, False, False))
+        return bpy.ops.mesh.polygroups_mark_longitudinal_seam("INVOKE_DEFAULT")
 
 
 class MESH_OT_polygroups_mark_boundary_and_longitudinal_seam(bpy.types.Operator):

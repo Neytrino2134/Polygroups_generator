@@ -19,6 +19,7 @@ from .mesh_checks import _refresh_mesh_check
 from .mesh_checks import _select_edges
 from .mesh_checks import _thin_protrusion_faces
 from .mesh_checks import analyze_mesh
+from .relax_seams import relax_seams
 
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
@@ -1033,6 +1034,32 @@ def _copy_mirror_cutter(cutter, mirror_matrix):
     return mirrored
 
 
+def _apply_all_object_transforms(context, objects):
+    """Apply location, rotation, and scale only to the supplied objects."""
+    objects = [obj for obj in objects if obj is not None and obj.name in bpy.data.objects]
+    if not objects:
+        return False
+
+    selected = list(context.selected_objects)
+    active = context.view_layer.objects.active
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in objects:
+        obj.select_set(True)
+    context.view_layer.objects.active = objects[0]
+    try:
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    except RuntimeError:
+        return False
+    finally:
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in selected:
+            if obj.name in bpy.data.objects:
+                obj.select_set(True)
+        if active is not None and active.name in bpy.data.objects:
+            context.view_layer.objects.active = active
+    return True
+
+
 def _curve_spline_points(spline):
     return spline.bezier_points if spline.type == "BEZIER" else spline.points
 
@@ -1858,6 +1885,26 @@ def _triangulate_ngons_for_autofix(target):
         return count
     finally:
         bm.free()
+
+
+def _smart_relax_seams_for_autofix(context, target):
+    """Run the fixed, lightweight Smart Relax pass used by cutter Autofix."""
+    _prepare_target_for_autofix(context, target)
+    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        moved, _protected = relax_seams(
+            context,
+            "SMART",
+            1,
+            radians(90.0),
+            1,
+            use_corner_angle=False,
+            select_result=False,
+            selected_area_only=False,
+        )
+        return moved
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
 
 
 def _apply_arc_cutters_to_mesh(context, target, cutters):
@@ -3607,6 +3654,13 @@ class OBJECT_OT_polygroups_copy_mirror_cutters(bpy.types.Operator):
             self.report({"WARNING"}, "Selected cutters could not be mirrored")
             return {"CANCELLED"}
 
+        if not _apply_all_object_transforms(context, mirrored_cutters):
+            for mirrored in mirrored_cutters:
+                if mirrored.name in bpy.data.objects:
+                    bpy.data.objects.remove(mirrored, do_unlink=True)
+            self.report({"ERROR"}, "Could not apply transforms to mirrored cutters")
+            return {"CANCELLED"}
+
         context.view_layer.objects.active = target
         target.select_set(True)
         self.report(
@@ -3647,6 +3701,10 @@ class OBJECT_OT_polygroups_auto_fix_after_cutter(bpy.types.Operator):
             removed_fins = _remove_fin_faces_for_autofix(context, target)
             removed_loose = _delete_loose_geometry_for_autofix(context, target)
         filled_faces = _fill_open_nonmanifold_boundaries(target)
+        relaxed_vertices = (
+            _smart_relax_seams_for_autofix(context, target)
+            if settings.cutter_auto_fix_smart_relax_seams else 0
+        )
         triangulated_ngons = (
             _triangulate_ngons_for_autofix(target)
             if settings.cutter_auto_fix_triangulate_ngons else 0
@@ -3655,6 +3713,7 @@ class OBJECT_OT_polygroups_auto_fix_after_cutter(bpy.types.Operator):
             {"INFO"},
             f"Autofix removed {removed_fins} fin face(s) and {removed_loose} loose item(s), "
             f"filled {filled_faces} polygon(s), "
+            f"relaxed {relaxed_vertices} seam vertex/vertices, "
             f"triangulated {triangulated_ngons} n-gon(s)",
         )
         return {"FINISHED"}
@@ -3979,6 +4038,10 @@ class CutterApplySession:
                         self.settings.cutter_auto_fix_weld_distance,
                     )
                     _sync_autoweld_vertex_group(self.target)
+                self.set_stage("RELAXING_SEAMS", 97, "Smart relaxing seams")
+            elif stage == "RELAXING_SEAMS":
+                if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_smart_relax_seams:
+                    _smart_relax_seams_for_autofix(context, self.target)
                 self.set_stage("TRIANGULATING_NGONS", 98, "Triangulating n-gons")
             elif stage == "TRIANGULATING_NGONS":
                 if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_triangulate_ngons:

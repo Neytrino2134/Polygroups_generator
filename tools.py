@@ -7,8 +7,16 @@ from .localization import t
 from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
 from .operators.connect_vertex_seam import draw_vertex_seam_cursor, _cursor_ctrl
 from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
-from .operators.edge_seam_path import draw_edge_seam_cursor, register_hover_cache, unregister_hover_cache
+from .operators.edge_seam_path import (
+    draw_edge_seam_cursor,
+    draw_edge_seam_eraser_cursor,
+    draw_longitudinal_seam_cursor,
+    draw_smart_seam_cursor,
+    register_hover_cache,
+    unregister_hover_cache,
+)
 from .operators.smart_angle_seams import TOOL_ID as SMART_SEAMS_TOOL_ID
+from .operators.mark_longitudinal_seam import TOOL_ID as LONGITUDINAL_SEAM_TOOL_ID
 
 
 DRAW_CUTTER_GRID_TOOL_ID = "polygroups_generator.draw_cutter_grid_tool"
@@ -280,6 +288,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         weld_distance.enabled = settings.cutter_auto_fix_mesh and settings.cutter_auto_fix_weld
         weld_distance.ui_units_x = 3.5
         weld_distance.prop(settings, "cutter_auto_fix_weld_distance", text="")
+        relax_toggle = row.row(align=True)
+        relax_toggle.enabled = settings.cutter_auto_fix_mesh
+        relax_toggle.prop(
+            settings, "cutter_auto_fix_smart_relax_seams",
+            text="", icon="MOD_SMOOTH", toggle=True,
+        )
         triangulate_toggle = row.row(align=True)
         triangulate_toggle.enabled = settings.cutter_auto_fix_mesh
         triangulate_toggle.prop(
@@ -658,7 +672,7 @@ class VIEW3D_WST_polygroups_connect_vertex_seam(WorkSpaceTool):
     bl_label = "Vertex Seam Path"
     bl_description = "Select normally; Ctrl-click A, B, C to connect vertices with seams; Space/Esc/right-click finishes the chain"
     bl_icon = "ops.mesh.dupli_extrude_cursor"
-    bl_cursor = "CROSSHAIR"
+    bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
@@ -719,7 +733,7 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
     bl_label = "Smart Seams Generator"
     bl_description = "Click a vertex to select its seam-bounded island and generate smart seams"
     bl_icon = "ops.mesh.mark_seam"
-    bl_cursor = "CROSSHAIR"
+    bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
@@ -728,6 +742,7 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
         ("mesh.polygroups_smart_seams_generator_click",
          {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
+    draw_cursor = staticmethod(draw_smart_seam_cursor)
 
     @staticmethod
     def draw_settings(context, layout, tool):
@@ -745,6 +760,33 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
             layout.prop(settings, "smart_seam_edge_preference")
         layout.prop(settings, "smart_seam_replace")
         layout.prop(settings, "smart_seam_pin_generated", text=t(context, "pin_generated"))
+
+
+class VIEW3D_WST_polygroups_longitudinal_seam(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "EDIT_MESH"
+    bl_idname = LONGITUDINAL_SEAM_TOOL_ID
+    bl_label = "Longitudinal Seam"
+    bl_description = "Click a vertex to select its seam-bounded island and create a longitudinal seam"
+    bl_icon = "ops.mesh.mark_seam"
+    bl_cursor = "NONE"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
+         {"properties": [("name", "builtin.select_box")]}),
+        ("mesh.polygroups_longitudinal_seam_tool_click",
+         {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+    )
+    draw_cursor = staticmethod(draw_longitudinal_seam_cursor)
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        settings = context.scene.polygroups_seam_finalization_settings
+        layout.prop(settings, "double_longitudinal_seam", text=t(context, "double_longitudinal_seam"))
+        layout.prop(settings, "prefer_backside_longitudinal_seam",
+                    text=t(context, "prefer_backside_longitudinal_seam"))
+        _draw_seam_auto_uv_settings(context, layout)
 
 
 class VIEW3D_WST_polygroups_seam_eraser(WorkSpaceTool):
@@ -791,7 +833,7 @@ class VIEW3D_WST_polygroups_edge_seam_eraser(WorkSpaceTool):
         ("mesh.polygroups_edge_seam_eraser_click", {"type": "ESC", "value": "PRESS"}, {"properties": [("reset", True)]}),
         ("mesh.polygroups_edge_seam_eraser_click", {"type": "SPACE", "value": "PRESS"}, {"properties": [("reset", True)]}),
     )
-    draw_cursor = staticmethod(draw_edge_seam_cursor)
+    draw_cursor = staticmethod(draw_edge_seam_eraser_cursor)
 
     @staticmethod
     def draw_settings(context, layout, tool):
@@ -808,11 +850,14 @@ def draw_seam_status(self, context):
         self.layout.label(text=t(context, "seam_erase_drag_hint" if tool.idname == AREA_TOOL_ID else "seam_erase_path_hint"))
     elif tool is not None and tool.idname == SMART_SEAMS_TOOL_ID:
         self.layout.label(text="LMB: select seam island and generate smart seams")
+    elif tool is not None and tool.idname == LONGITUDINAL_SEAM_TOOL_ID:
+        self.layout.label(text="LMB: select seam island and create a longitudinal seam")
     elif tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
         self.layout.label(text=t(context, "seam_ctrl_status"))
 
 
 def register():
+    register_hover_cache()
     VIEW3D_WST_polygroups_draw_cutter_plane.bl_icon = tool_icon("draw_cutter_plane", "ops.mesh.primitive_grid_add_gizmo")
     VIEW3D_WST_polygroups_draw_cutter_grid.bl_icon = tool_icon("draw_cutter_grid", "ops.mesh.primitive_cube_add_gizmo")
     VIEW3D_WST_polygroups_draw_cutter_arc.bl_icon = tool_icon("draw_cutter_arc", "ops.gpencil.primitive_arc")
@@ -825,10 +870,10 @@ def register():
     VIEW3D_WST_polygroups_connect_vertex_seam.bl_icon = tool_icon("connect_vertex_seam", "ops.mesh.dupli_extrude_cursor")
     VIEW3D_WST_polygroups_edge_seam_path.bl_icon = tool_icon("edge_seam_path", "ops.mesh.dupli_extrude_cursor")
     VIEW3D_WST_polygroups_smart_seams_generator.bl_icon = tool_icon("smart_seams_generator", "ops.mesh.mark_seam")
+    VIEW3D_WST_polygroups_longitudinal_seam.bl_icon = tool_icon("smart_seams_generator", "ops.mesh.mark_seam")
     VIEW3D_WST_polygroups_seam_eraser.bl_icon = tool_icon("seam_eraser", "ops.generic.select_circle")
     VIEW3D_WST_polygroups_edge_seam_eraser.bl_icon = tool_icon("edge_seam_eraser", "ops.mesh.dupli_extrude_cursor")
     bpy.types.STATUSBAR_HT_header.prepend(draw_seam_status)
-    register_hover_cache()
     bpy.utils.register_class(VIEW3D_MT_polygroups_cutter_tool_type)
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_draw_cutter_plane,
@@ -901,18 +946,23 @@ def register():
         separator=False,
         group=False,
     )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_longitudinal_seam,
+        after={SMART_SEAMS_TOOL_ID},
+        separator=False,
+        group=False,
+    )
 
-    bpy.utils.register_tool(VIEW3D_WST_polygroups_seam_eraser, after={SMART_SEAMS_TOOL_ID}, separator=True)
+    bpy.utils.register_tool(VIEW3D_WST_polygroups_seam_eraser, after={LONGITUDINAL_SEAM_TOOL_ID}, separator=True)
     bpy.utils.register_tool(VIEW3D_WST_polygroups_edge_seam_eraser, after={AREA_TOOL_ID})
     scene = getattr(bpy.context, "scene", None)
     if scene is not None:
         update_dynamic_seam_tool_icons(scene.polygroups_seam_preparation_settings, bpy.context)
 
 def unregister():
+    unregister_hover_cache()
     stop_erasers()
     bpy.types.STATUSBAR_HT_header.remove(draw_seam_status)
-    _cursor_ctrl.clear()
-    unregister_hover_cache()
     # Switching tools removes Blender's cursor callback before unregister_tool
     # removes the definition and keymap (it does not remove the callback itself).
     for window in bpy.context.window_manager.windows:
@@ -926,10 +976,11 @@ def unregister():
                 if bpy.context.mode != "EDIT_MESH":
                     continue
                 tool = window.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
-                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID, SMART_SEAMS_TOOL_ID, AREA_TOOL_ID, PATH_TOOL_ID}:
+                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID, SMART_SEAMS_TOOL_ID, LONGITUDINAL_SEAM_TOOL_ID, AREA_TOOL_ID, PATH_TOOL_ID}:
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_eraser)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_seam_eraser)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_longitudinal_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_smart_seams_generator)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_connect_vertex_seam)
@@ -943,3 +994,4 @@ def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_grid)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)
     bpy.utils.unregister_class(VIEW3D_MT_polygroups_cutter_tool_type)
+    _cursor_ctrl.clear()

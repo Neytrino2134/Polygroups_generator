@@ -27,6 +27,7 @@ _RECOVERY_RESTORED_PATH = ""
 _RECOVERY_PROP_AUTOSAVE = "airetopo_recovery_autosave"
 _RECOVERY_PROP_ORIGINAL = "airetopo_recovery_original"
 _RECOVERY_PROP_RESTORED = "airetopo_recovery_restored"
+_CHANGES_SINCE_AUTOSAVE = False
 
 
 def _preferences():
@@ -300,9 +301,11 @@ def _read_status_from_disk():
 
 def _initialize_status_timer():
     """Wait until Blender releases _RestrictData after add-on registration."""
+    global _CHANGES_SINCE_AUTOSAVE
     data = getattr(bpy, "data", None)
     if not hasattr(data, "filepath"):
         return 0.1
+    _CHANGES_SINCE_AUTOSAVE = bool(getattr(data, "is_dirty", False))
     _read_status_from_disk()
     return None
 
@@ -361,7 +364,7 @@ def _save_copy(destination):
 
 def save_now(force=False):
     """Create one custom autosave. Returns (saved, user-facing status)."""
-    global _LAST_AUTOSAVE_TIME, _LAST_EVENT, _LAST_STATUS
+    global _CHANGES_SINCE_AUTOSAVE, _LAST_AUTOSAVE_TIME, _LAST_EVENT, _LAST_STATUS
     preferences = _preferences()
     if preferences is None or preferences.autosave_mode != "CUSTOM":
         return False, "Custom autosave is disabled"
@@ -369,6 +372,8 @@ def save_now(force=False):
         return False, "Autosave is already running"
     if not force and not bpy.data.is_dirty:
         return False, "No new changes"
+    if not force and not _CHANGES_SINCE_AUTOSAVE:
+        return False, "No changes since the last autosave"
     window_manager = getattr(bpy.context, "window_manager", None)
     if getattr(window_manager, "is_interface_locked", False):
         return False, "Blender is busy; autosave postponed"
@@ -393,6 +398,7 @@ def save_now(force=False):
         return False, _LAST_STATUS
 
     _LAST_AUTOSAVE_TIME = time.time()
+    _CHANGES_SINCE_AUTOSAVE = False
     _LAST_EVENT = "CUSTOM"
     _LAST_STATUS = f"Saved {paths[0]}"
     _invalidate_recent_cache()
@@ -441,10 +447,11 @@ def _cleanup_stale_temp():
 
 @persistent
 def _save_post(_unused):
-    global _LAST_REGULAR_SAVE_TIME, _LAST_EVENT, _LAST_STATUS
+    global _CHANGES_SINCE_AUTOSAVE, _LAST_REGULAR_SAVE_TIME, _LAST_EVENT, _LAST_STATUS
     if _SAVING_COPY:
         return
     if bpy.data.filepath:
+        _CHANGES_SINCE_AUTOSAVE = False
         _LAST_REGULAR_SAVE_TIME = time.time()
         _LAST_EVENT = "REGULAR"
         _LAST_STATUS = f"Saved {bpy.data.filepath}"
@@ -454,12 +461,22 @@ def _save_post(_unused):
 
 @persistent
 def _load_post(_unused):
+    global _CHANGES_SINCE_AUTOSAVE
+    _CHANGES_SINCE_AUTOSAVE = False
     # Keep a recovered temp autosave alive until the user saves it elsewhere.
     filepath = getattr(bpy.data, "filepath", "")
     if not filepath or not _path_is_within(filepath, _session_temp_dir()):
         _cleanup_session_temp()
     _read_status_from_disk()
     _load_recovery_state()
+
+
+@persistent
+def _depsgraph_update_post(_scene, _depsgraph):
+    """Remember real scene/data activity after the most recent autosave copy."""
+    global _CHANGES_SINCE_AUTOSAVE
+    if not _SAVING_COPY:
+        _CHANGES_SINCE_AUTOSAVE = True
 
 
 def configure(context=None):
@@ -601,6 +618,7 @@ def register():
     for handler, callback in (
         (bpy.app.handlers.save_post, _save_post),
         (bpy.app.handlers.load_post, _load_post),
+        (bpy.app.handlers.depsgraph_update_post, _depsgraph_update_post),
     ):
         if callback not in handler:
             handler.append(callback)
@@ -620,6 +638,7 @@ def unregister():
     for handler, callback in (
         (bpy.app.handlers.save_post, _save_post),
         (bpy.app.handlers.load_post, _load_post),
+        (bpy.app.handlers.depsgraph_update_post, _depsgraph_update_post),
     ):
         if callback in handler:
             handler.remove(callback)

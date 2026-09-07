@@ -121,14 +121,11 @@ def hovered_vertex(context, xy, radius):
     return best
 
 
-def draw_edge_seam_cursor(_context, _tool, xy):
-    """Only a crosshair; turn amber near a vertex without changing selection."""
+def draw_hover_crosshair(context, xy):
+    """Draw the common seam-tool crosshair and return the hovered vertex."""
     import gpu
     from gpu_extras.batch import batch_for_shader
 
-    context = bpy.context
-    if context.mode != "EDIT_MESH" or context.region_data is None:
-        return
     scale = context.preferences.system.ui_scale
     hovered = hovered_vertex(context, xy, 12 * scale)
     size = (8 if hovered else 6) * scale
@@ -150,6 +147,49 @@ def draw_edge_seam_cursor(_context, _tool, xy):
         batch.draw(shader)
     finally:
         gpu.state.blend_set(blend)
+    return hovered
+
+
+def draw_tool_badge(context, label, xy):
+    """Draw a small tool identifier just below and to the right of the cursor."""
+    import blf
+
+    font_id = 0
+    scale = context.preferences.system.ui_scale
+    blf.size(font_id, 14 * scale)
+    x = xy[0] + 11 * scale
+    y = xy[1] - 20 * scale
+    blf.enable(font_id, blf.SHADOW)
+    blf.shadow(font_id, 3, 0.0, 0.0, 0.0, 0.9)
+    blf.shadow_offset(font_id, 1, -1)
+    blf.color(font_id, 1.0, 0.65, 0.12, 1.0)
+    blf.position(font_id, x, y, 0)
+    blf.draw(font_id, label)
+    blf.disable(font_id, blf.SHADOW)
+
+
+def _draw_labeled_seam_cursor(label, xy):
+    context = bpy.context
+    if context.mode != "EDIT_MESH" or context.region_data is None:
+        return
+    draw_hover_crosshair(context, xy)
+    draw_tool_badge(context, label, xy)
+
+
+def draw_edge_seam_cursor(_context, _tool, xy):
+    _draw_labeled_seam_cursor("E", xy)
+
+
+def draw_edge_seam_eraser_cursor(_context, _tool, xy):
+    _draw_labeled_seam_cursor("R", xy)
+
+
+def draw_smart_seam_cursor(_context, _tool, xy):
+    _draw_labeled_seam_cursor("S", xy)
+
+
+def draw_longitudinal_seam_cursor(_context, _tool, xy):
+    _draw_labeled_seam_cursor("L", xy)
 
 
 def mark_pair(context, obj, bm, start, end):

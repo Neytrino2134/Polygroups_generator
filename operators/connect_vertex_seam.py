@@ -216,6 +216,7 @@ def draw_vertex_seam_cursor(_context, _tool, xy):
         return
     import blf
     import gpu
+    from .edge_seam_path import draw_hover_crosshair, draw_tool_badge
     from gpu_extras.batch import batch_for_shader
     from gpu_extras.presets import draw_circle_2d
 
@@ -225,7 +226,7 @@ def draw_vertex_seam_cursor(_context, _tool, xy):
     blend = gpu.state.blend_get()
     try:
         gpu.state.blend_set("ALPHA")
-        draw_circle_2d(xy, (0.1, 0.85, 1, 1), 6 * scale)
+        draw_hover_crosshair(context, xy)
         if anchor:
             obj, _bm, vert = anchor
             point = location_3d_to_region_2d(context.region, context.region_data, obj.matrix_world @ vert.co)
@@ -245,5 +246,6 @@ def draw_vertex_seam_cursor(_context, _tool, xy):
         start_key = ("edge_seam_hint_start" if _tool.idname == "polygroups_generator.edge_seam_path_tool"
                      else "connect_seam_hint_start")
         blf.draw(0, t(context, "connect_seam_hint_next" if anchor else start_key))
+        draw_tool_badge(context, "V", xy)
     finally:
         gpu.state.blend_set(blend)

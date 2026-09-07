@@ -1,0 +1,44 @@
+"""Smoke test for AI Retopo commands added to Blender's Ctrl+E menu."""
+
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+import addon_utils
+import bpy
+
+
+ADDONS = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ADDONS))
+
+from polygroups_generator.ui import draw_edge_menu
+
+addon_utils.enable("polygroups_generator")
+
+
+class Layout:
+    def __init__(self):
+        self.operators = []
+
+    def separator(self):
+        pass
+
+    def label(self, **_kwargs):
+        pass
+
+    def prop(self, *_args, **_kwargs):
+        pass
+
+    def operator(self, identifier, **kwargs):
+        self.operators.append((identifier, kwargs.get("text", "")))
+        return SimpleNamespace()
+
+
+layout = Layout()
+draw_edge_menu(SimpleNamespace(layout=layout), bpy.context)
+
+assert layout.operators[:2] == [
+    ("mesh.polygroups_connect_vertex_seam", "Connect Vertices with Seam"),
+    ("mesh.polygroups_edge_seam_path", "Connect Vertices with Edge Seam Path"),
+]
+print("EDGE_MENU_OK", flush=True)

@@ -398,6 +398,12 @@ class POLYGROUPS_PG_remesh_status(bpy.types.PropertyGroup):
 
 
 class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
+    panel_search: bpy.props.StringProperty(
+        name="Search",
+        description="Filter AI Retopo sections, tools, and settings",
+        default="",
+        update=_redraw_view3d,
+    )
     topic_import_0: bpy.props.BoolProperty(default=False)
     topic_import_1: bpy.props.BoolProperty(default=False)
     topic_import_2: bpy.props.BoolProperty(default=False)
@@ -503,6 +509,15 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
         name="Show Seams in Object Mode",
         description="Display seam edges on the active mesh while working in Object Mode",
         default=False,
+        update=_redraw_view3d,
+    )
+    seam_overlay_max_polygons: bpy.props.IntProperty(
+        name="Ignore Objects Above",
+        description="Do not build the Object Mode seam overlay for meshes above this polygon count; zero disables the limit",
+        default=500000,
+        min=0,
+        soft_max=5000000,
+        subtype="UNSIGNED",
         update=_redraw_view3d,
     )
     seam_path_pin: bpy.props.BoolProperty(
@@ -830,13 +845,19 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     cutter_auto_fix_weld_distance: bpy.props.FloatProperty(
         name="Weld Distance",
         description="Merge distance of the final seam-only AutoWeld operation",
-        default=0.005,
-        min=0.0,
+        default=0.001,
+        min=0.0001,
+        max=0.05,
         # Blender's distance widget scales this to a visible 0.001 arrow step.
         step=0.01,
         precision=4,
         subtype="DISTANCE",
         update=_sync_cutter_autoweld_distance,
+    )
+    cutter_auto_fix_smart_relax_seams: bpy.props.BoolProperty(
+        name="Smart Relax Seams",
+        description="Smart Relax cutter seams once before triangulating; protect corners is disabled and protection radius is 1",
+        default=True,
     )
     cutter_auto_fix_triangulate_ngons: bpy.props.BoolProperty(
         name="Triangulate N-gons",
@@ -1043,6 +1064,15 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         min=0.0,
         max=1.0,
         subtype="FACTOR",
+        update=_redraw_view3d,
+    )
+    checker_overlay_max_polygons: bpy.props.IntProperty(
+        name="Ignore Objects Above",
+        description="Do not build the Solid Mode checker overlay for meshes above this polygon count; zero disables the limit",
+        default=500000,
+        min=0,
+        soft_max=5000000,
+        subtype="UNSIGNED",
         update=_redraw_view3d,
     )
     auto_unwrap_after_seam: bpy.props.BoolProperty(

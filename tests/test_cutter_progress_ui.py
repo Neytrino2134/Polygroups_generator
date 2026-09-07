@@ -57,6 +57,7 @@ def run():
             patch.object(cutter, "_apply_cutters_to_mesh", return_value=7),
             patch.object(cutter, "_fill_open_nonmanifold_boundaries", return_value=0),
             patch.object(cutter, "_triangulate_ngons_for_autofix", return_value=0),
+            patch.object(cutter, "_smart_relax_seams_for_autofix", return_value=0),
             patch.object(cutter, "play_operation_done_sound"),
         ):
             with context.temp_override(window=window, area=area, region=region):
@@ -80,7 +81,7 @@ def run():
 
     expected = ["BACKUP", "PREPARING", "AUTOFIX_BEFORE", "CUTTING", "AUTOFIX_AFTER",
                 "FINDING_GAPS", "MERGING_ISLANDS", "WELDING",
-                "TRIANGULATING_NGONS", "FINALIZING", "DONE"]
+                "RELAXING_SEAMS", "TRIANGULATING_NGONS", "FINALIZING", "DONE"]
     assert stages == expected, stages
     assert progress == sorted(progress)
     assert settings.cutter_apply_progress == 100

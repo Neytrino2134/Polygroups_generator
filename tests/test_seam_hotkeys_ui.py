@@ -38,7 +38,13 @@ def run():
         window.event_simulate(type=key, value="RELEASE", x=x, y=y, ctrl=ctrl)
 
     for key, ctrl, names in (
-        ("D", False, ("connect_vertex_seam", "edge_seam_path", "connect_vertex_seam")),
+        ("D", False, (
+            "connect_vertex_seam",
+            "edge_seam_path",
+            "smart_seams_generator",
+            "longitudinal_seam",
+            "connect_vertex_seam",
+        )),
         ("D", True, ("seam_eraser", "edge_seam_eraser", "seam_eraser")),
         ("K", False, ("knife_seam", "quick_knife_seam", "knife_seam")),
     ):

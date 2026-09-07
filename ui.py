@@ -77,6 +77,198 @@ _DRAWING_SECTION = None
 _DETACHED_TARGET = None
 _DETACHED_LAYOUT = None
 _GROUP_DISCOVERY = None
+_SEARCH_PROBING = False
+_SEARCH_FILTER_GROUPS = None
+_SEARCH_FILTER_TERMS = ()
+
+
+def _normalized_search_terms(value):
+    return tuple(term for term in value.casefold().replace("_", " ").split() if term)
+
+
+class _SearchResult:
+    def __init__(self, query):
+        self.terms = _normalized_search_terms(query)
+        self.section_match = False
+        self.groups = set()
+
+    def record(self, values, group_path=()):
+        haystack = " ".join(str(value) for value in values if value).casefold().replace("_", " ")
+        if self.terms and all(term in haystack for term in self.terms):
+            self.section_match = True
+            self.groups.update(group_path)
+
+
+class _SearchProbeLayout:
+    """Collect searchable UI text without creating visible Blender controls."""
+
+    def __init__(self, result, group_path=()):
+        object.__setattr__(self, "result", result)
+        object.__setattr__(self, "group_path", group_path)
+
+    def grouped(self, key, label):
+        child = _SearchProbeLayout(self.result, self.group_path + (key,))
+        child.result.record((label,), child.group_path)
+        return child
+
+    def row(self, *args, **kwargs):
+        return self
+
+    def column(self, *args, **kwargs):
+        return self
+
+    def box(self, *args, **kwargs):
+        return self
+
+    def split(self, *args, **kwargs):
+        return self
+
+    def grid_flow(self, *args, **kwargs):
+        return self
+
+    def label(self, *args, **kwargs):
+        self.result.record((kwargs.get("text", ""),), self.group_path)
+
+    def operator(self, identifier, *args, **kwargs):
+        text = kwargs.get("text")
+        if text is None:
+            try:
+                module, name = identifier.split(".", 1)
+                text = getattr(getattr(bpy.ops, module), name).get_rna_type().name
+            except Exception:
+                text = ""
+        self.result.record((text,), self.group_path)
+        return SimpleNamespace()
+
+    def prop(self, data, property_name, *args, **kwargs):
+        text = kwargs.get("text")
+        if text is None:
+            try:
+                text = data.bl_rna.properties[property_name].name
+            except Exception:
+                text = ""
+        self.result.record((text,), self.group_path)
+        return self
+
+    def prop_search(self, data, property_name, search_data, search_property, *args, **kwargs):
+        del search_data, search_property
+        return self.prop(data, property_name, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self
+
+    def __setattr__(self, name, value):
+        if name in {"result", "group_path"}:
+            object.__setattr__(self, name, value)
+
+
+def _search_text_matches(text, terms):
+    haystack = str(text or "").casefold().replace("_", " ")
+    return bool(terms) and all(term in haystack for term in terms)
+
+
+class _FilteredLayout:
+    """Draw only controls whose visible labels match the active search."""
+
+    def __init__(self, layout, terms):
+        object.__setattr__(self, "layout", layout)
+        object.__setattr__(self, "terms", terms)
+
+    def _child(self, method, *args, **kwargs):
+        return _FilteredLayout(getattr(self.layout, method)(*args, **kwargs), self.terms)
+
+    def row(self, *args, **kwargs):
+        return self._child("row", *args, **kwargs)
+
+    def column(self, *args, **kwargs):
+        return self._child("column", *args, **kwargs)
+
+    def box(self, *args, **kwargs):
+        return self._child("box", *args, **kwargs)
+
+    def split(self, *args, **kwargs):
+        return self._child("split", *args, **kwargs)
+
+    def grid_flow(self, *args, **kwargs):
+        return self._child("grid_flow", *args, **kwargs)
+
+    def label(self, *args, **kwargs):
+        if _search_text_matches(kwargs.get("text", ""), self.terms):
+            return self.layout.label(*args, **kwargs)
+        return None
+
+    def operator(self, identifier, *args, **kwargs):
+        text = kwargs.get("text")
+        if text is None:
+            try:
+                module, name = identifier.split(".", 1)
+                text = getattr(getattr(bpy.ops, module), name).get_rna_type().name
+            except Exception:
+                text = ""
+        if _search_text_matches(text, self.terms):
+            return self.layout.operator(identifier, *args, **kwargs)
+        return SimpleNamespace()
+
+    def prop(self, data, property_name, *args, **kwargs):
+        text = kwargs.get("text")
+        if text is None:
+            try:
+                text = data.bl_rna.properties[property_name].name
+            except Exception:
+                text = ""
+        if _search_text_matches(text, self.terms):
+            return self.layout.prop(data, property_name, *args, **kwargs)
+        return self
+
+    def prop_search(self, data, property_name, search_data, search_property, *args, **kwargs):
+        text = kwargs.get("text")
+        if text is None:
+            try:
+                text = data.bl_rna.properties[property_name].name
+            except Exception:
+                text = ""
+        if _search_text_matches(text, self.terms):
+            return self.layout.prop_search(
+                data, property_name, search_data, search_property, *args, **kwargs
+            )
+        return self
+
+    def separator(self, *args, **kwargs):
+        return None
+
+    def __getattr__(self, name):
+        # Unnamed templates cannot match a name query. Layout-producing APIs
+        # still return a wrapper so later named controls can be evaluated.
+        attribute = getattr(self.layout, name)
+        if not callable(attribute):
+            return attribute
+        return lambda *args, **kwargs: self
+
+    def __setattr__(self, name, value):
+        if name in {"layout", "terms"}:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self.layout, name, value)
+
+
+def _probe_panel(panel_class, context, query):
+    global _SEARCH_PROBING
+    result = _SearchResult(query)
+    title = t(context, panel_class.bl_text_key)
+    title_text = f"{title} {panel_class.__name__}"
+    if all(term in title_text.casefold().replace("_", " ") for term in result.terms):
+        result.section_match = True
+    _SEARCH_PROBING = True
+    try:
+        draw_section_panel_content(
+            panel_class,
+            context,
+            _SearchProbeLayout(result),
+            getattr(panel_class, "visibility_property", ""),
+        )
+    finally:
+        _SEARCH_PROBING = False
+    return result
 
 
 class _NullLayout:
@@ -94,6 +286,8 @@ def draw_topic(layout, context, key, label, icon):
 
 def draw_collapsible_box(layout, settings, property_name, label, icon):
     key = settings.path_from_id() + "." + property_name
+    if isinstance(layout, _SearchProbeLayout):
+        return layout.grouped(key, label)
     if _GROUP_DISCOVERY is not None:
         _GROUP_DISCOVERY.append(dict(section=_DRAWING_SECTION.__name__, group=key, title=label))
         return _NullLayout()
@@ -102,11 +296,15 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
             return _DETACHED_LAYOUT.column(align=True)
         if isinstance(layout, _NullLayout):
             return _NullLayout()
+    if _SEARCH_FILTER_GROUPS is not None and key not in _SEARCH_FILTER_GROUPS:
+        return None
+    if isinstance(layout, _FilteredLayout):
+        layout = layout.layout
     box = layout.box()
     header = box.row(align=True)
     controls = header.row(align=True)
     controls.alignment = "LEFT"
-    is_open = getattr(settings, property_name)
+    is_open = _SEARCH_FILTER_GROUPS is not None or getattr(settings, property_name)
     controls.prop(
         settings,
         property_name,
@@ -136,6 +334,8 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
 
     content = box.column(align=True)
     content.separator()
+    if _SEARCH_FILTER_GROUPS is not None:
+        return _FilteredLayout(content, _SEARCH_FILTER_TERMS)
     return content
 
 
@@ -175,6 +375,8 @@ def update_panel_labels(context=None):
 
 
 def section_content_visible(panel, context):
+    if _SEARCH_PROBING or _SEARCH_FILTER_GROUPS is not None:
+        return True
     if _DETACHED_TARGET is not None:
         return True
     settings = getattr(context.scene, "airetopo_panel_visibility_settings", None)
@@ -283,6 +485,26 @@ def draw_optional_prop(layout, data, property_name, text="", **kwargs):
     return True
 
 
+def draw_overlay_polygon_limit_status(layout, context, polygon_limit, text_key):
+    active_object = context.active_object
+    if (
+        polygon_limit <= 0
+        or active_object is None
+        or active_object.type != "MESH"
+        or len(active_object.data.polygons) <= polygon_limit
+    ):
+        return
+    layout.label(
+        text=t(
+            context,
+            text_key,
+            polygons=f"{len(active_object.data.polygons):,}",
+            limit=f"{polygon_limit:,}",
+        ),
+        icon="INFO",
+    )
+
+
 def draw_ai_input_image_controls(layout, context, settings, provider):
     layout.prop_search(
         settings,
@@ -358,8 +580,27 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     bl_order = 0
 
     def draw(self, context):
+        global _SEARCH_FILTER_GROUPS, _SEARCH_FILTER_TERMS
         preferences = get_preferences(context)
         layout = self.layout
+        visibility = context.scene.airetopo_panel_visibility_settings
+        search_query = visibility.panel_search.strip()
+        search_row = layout.row(align=True)
+        search_row.prop(
+            visibility,
+            "panel_search",
+            text="",
+            icon="VIEWZOOM",
+            placeholder=t(context, "panel_search"),
+        )
+        if search_query:
+            clear_search = search_row.operator("wm.context_set_string", text="", icon="X")
+            clear_search.data_path = "scene.airetopo_panel_visibility_settings.panel_search"
+            clear_search.value = ""
+        visible_layout = layout
+        if search_query:
+            # Keep the search field visible while suppressing unrelated header/status UI.
+            layout = _NullLayout()
         from . import custom_autosave
 
         session_box = layout.box()
@@ -482,7 +723,6 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         )
         collapse_operator.visible = False
         header.separator()
-        visibility = context.scene.airetopo_panel_visibility_settings
         header.prop(
             visibility,
             "single_section_mode",
@@ -557,16 +797,34 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             )
             box.prop(preferences, "gemini_api_key", text=t(context, "gemini_api_key"))
 
+        layout = visible_layout
+        search_match_count = 0
         for panel_class, visibility_property in SECTION_PANEL_VISIBILITY:
-            content = draw_collapsible_box(
-                layout,
-                visibility,
-                visibility_property,
-                f"{panel_class.bl_order:02d} | {t(context, panel_class.bl_text_key)}",
-                panel_class.bl_icon,
-            )
-            if content is not None:
-                draw_section_panel_content(panel_class, context, content, visibility_property)
+            search_result = None
+            if search_query:
+                search_result = _probe_panel(panel_class, context, search_query)
+                if not search_result.section_match:
+                    continue
+                search_match_count += 1
+                outer_key = visibility.path_from_id() + "." + visibility_property
+                search_result.groups.add(outer_key)
+                _SEARCH_FILTER_GROUPS = search_result.groups
+                _SEARCH_FILTER_TERMS = search_result.terms
+            try:
+                content = draw_collapsible_box(
+                    layout,
+                    visibility,
+                    visibility_property,
+                    f"{panel_class.bl_order:02d} | {t(context, panel_class.bl_text_key)}",
+                    panel_class.bl_icon,
+                )
+                if content is not None:
+                    draw_section_panel_content(panel_class, context, content, visibility_property)
+            finally:
+                _SEARCH_FILTER_GROUPS = None
+                _SEARCH_FILTER_TERMS = ()
+        if search_query and search_match_count == 0:
+            layout.label(text=t(context, "panel_search_no_results"), icon="INFO")
 
 
 class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
@@ -977,6 +1235,18 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             toggle=True,
             icon="EDGE_SEAM",
         )
+        if seam_settings.show_seams_object_mode:
+            layout.prop(
+                seam_settings,
+                "seam_overlay_max_polygons",
+                text=t(context, "seam_overlay_max_polygons"),
+            )
+            draw_overlay_polygon_limit_status(
+                layout,
+                context,
+                seam_settings.seam_overlay_max_polygons,
+                "seam_overlay_skipped",
+            )
 
         content = draw_collapsible_box(layout, seam_settings, "show_selection_group", t(context, "seam_group_selection"), "FACESEL")
         if content is not None:
@@ -1341,6 +1611,15 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             settings,
             "cutter_auto_fix_weld_distance",
             text="Weld",
+        )
+        relax_toggle = autofix_row.row(align=True)
+        relax_toggle.enabled = settings.cutter_auto_fix_mesh
+        relax_toggle.prop(
+            settings,
+            "cutter_auto_fix_smart_relax_seams",
+            text="",
+            icon="MOD_SMOOTH",
+            toggle=True,
         )
         triangulate_toggle = autofix_row.row(align=True)
         triangulate_toggle.enabled = settings.cutter_auto_fix_mesh
@@ -2150,6 +2429,18 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
                 toggle=True,
                 icon="EDGE_SEAM",
             )
+            if display_settings.show_seams_object_mode:
+                column.prop(
+                    display_settings,
+                    "seam_overlay_max_polygons",
+                    text=t(context, "seam_overlay_max_polygons"),
+                )
+                draw_overlay_polygon_limit_status(
+                    column,
+                    context,
+                    display_settings.seam_overlay_max_polygons,
+                    "seam_overlay_skipped",
+                )
             column.prop(seam_settings, "auto_unwrap_after_seam", text=t(context, "auto_unwrap"))
             column.prop(
                 seam_settings,
@@ -2216,6 +2507,28 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
                     "checker_overlay_opacity",
                     text=t(context, "checker_overlay_opacity"),
                 )
+                column.prop(
+                    seam_settings,
+                    "checker_overlay_max_polygons",
+                    text=t(context, "checker_overlay_max_polygons"),
+                )
+                active_object = context.active_object
+                polygon_limit = seam_settings.checker_overlay_max_polygons
+                if (
+                    polygon_limit > 0
+                    and active_object is not None
+                    and active_object.type == "MESH"
+                    and len(active_object.data.polygons) > polygon_limit
+                ):
+                    column.label(
+                        text=t(
+                            context,
+                            "checker_overlay_skipped",
+                            polygons=f"{len(active_object.data.polygons):,}",
+                            limit=f"{polygon_limit:,}",
+                        ),
+                        icon="INFO",
+                    )
             column.operator(
                 "object.polygroups_apply_checker_material",
                 text=t(context, "apply_checker_material"),
@@ -2790,6 +3103,34 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 column.label(text=t(context, "render_last_output", value=settings.last_output_path), icon="FILE_IMAGE")
 
 
+class WM_OT_airetopo_toggle_view_assists(bpy.types.Operator):
+    bl_idname = "wm.airetopo_toggle_view_assists"
+    bl_label = "Toggle View Assists"
+    bl_description = "Show or hide Object Mode seams and the Solid Mode checker together"
+    bl_options = {"INTERNAL"}
+
+    def execute(self, context):
+        seam_settings = context.scene.polygroups_seam_preparation_settings
+        checker_settings = context.scene.polygroups_seam_finalization_settings
+        enable = not (
+            seam_settings.show_seams_object_mode
+            and checker_settings.show_checker_solid_mode
+        )
+        seam_settings.show_seams_object_mode = enable
+        checker_settings.show_checker_solid_mode = enable
+        if not enable:
+            from .seam_object_overlay import clear_cache as clear_seam_overlay_cache
+            from .uv_checker_overlay import clear_cache as clear_checker_overlay_cache
+
+            clear_seam_overlay_cache()
+            clear_checker_overlay_cache()
+        self.report(
+            {"INFO"},
+            t(context, "view_assists_enabled" if enable else "view_assists_disabled"),
+        )
+        return {"FINISHED"}
+
+
 SECTION_PANEL_CLASSES = (
     VIEW3D_PT_polygroups_import,
     VIEW3D_PT_polygroups_batch_import,
@@ -2808,6 +3149,7 @@ SECTION_PANEL_CLASSES = (
 
 CLASSES = (
     VIEW3D_PT_polygroups_generator,
+    WM_OT_airetopo_toggle_view_assists,
 )
 
 SECTION_PANEL_VISIBILITY = (
@@ -2841,6 +3183,17 @@ def draw_edge_menu(self, context):
         text=t(context, "mark_as_pinned"),
     )
     layout.operator(
+        "mesh.polygroups_connect_vertex_seam",
+        text=t(context, "connect_vertices_seam"),
+        icon="EDGE_SEAM",
+    )
+    layout.operator(
+        "mesh.polygroups_edge_seam_path",
+        text=t(context, "connect_vertices_edge_seam_path"),
+        **icon_kwargs("edge_seam_path", "EDGE_SEAM"),
+    )
+    layout.separator()
+    layout.operator(
         "mesh.polygroups_mark_selected_edges_seam",
         text=t(context, "mark_selected_edges_seam"),
         icon="EDGESEL",
@@ -2872,14 +3225,14 @@ def draw_outliner_header(self, context):
     row.separator()
     hide_highpoly = row.operator(
         "object.polygroups_object_visibility",
-        text="H",
+        text="",
         icon="RESTRICT_VIEW_ON",
     )
     hide_highpoly.prefix = "Highpoly_"
     hide_highpoly.hidden = True
     show_highpoly = row.operator(
         "object.polygroups_object_visibility",
-        text="H",
+        text="",
         icon="RESTRICT_VIEW_OFF",
     )
     show_highpoly.prefix = "Highpoly_"
@@ -2887,14 +3240,14 @@ def draw_outliner_header(self, context):
     row.separator()
     hide_lowpoly = row.operator(
         "object.polygroups_object_visibility",
-        text="L",
+        text="",
         icon="RESTRICT_VIEW_ON",
     )
     hide_lowpoly.prefix = "Retopo_"
     hide_lowpoly.hidden = True
     show_lowpoly = row.operator(
         "object.polygroups_object_visibility",
-        text="L",
+        text="",
         icon="RESTRICT_VIEW_OFF",
     )
     show_lowpoly.prefix = "Retopo_"
@@ -2902,16 +3255,39 @@ def draw_outliner_header(self, context):
     row.separator()
     previous = row.operator(
         "object.polygroups_generated_collection",
-        text="",
+        text="Prev",
         icon="TRIA_LEFT",
     )
     previous.action = "PREVIOUS"
     following = row.operator(
         "object.polygroups_generated_collection",
-        text="",
+        text="Next",
         icon="TRIA_RIGHT",
     )
     following.action = "NEXT"
+
+
+def draw_view_assists_header(self, context):
+    """Combined seam/checker overlay toggle in every 3D View header."""
+    scene = getattr(context, "scene", None)
+    if scene is None:
+        return
+    seam_settings = getattr(scene, "polygroups_seam_preparation_settings", None)
+    checker_settings = getattr(scene, "polygroups_seam_finalization_settings", None)
+    if seam_settings is None or checker_settings is None:
+        return
+    enabled = bool(
+        seam_settings.show_seams_object_mode
+        and checker_settings.show_checker_solid_mode
+    )
+    row = self.layout.row(align=True)
+    row.separator()
+    row.operator(
+        "wm.airetopo_toggle_view_assists",
+        text="",
+        icon="HIDE_OFF" if enabled else "HIDE_ON",
+        depress=enabled,
+    )
 
 
 def draw_object_apply_menu(self, context):
@@ -2930,10 +3306,12 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.VIEW3D_MT_edit_mesh_edges.append(draw_edge_menu)
     bpy.types.VIEW3D_MT_object_apply.append(draw_object_apply_menu)
-    bpy.types.OUTLINER_HT_header.append(draw_outliner_header)
+    bpy.types.OUTLINER_HT_header.prepend(draw_outliner_header)
+    bpy.types.VIEW3D_HT_header.append(draw_view_assists_header)
 
 
 def unregister():
+    bpy.types.VIEW3D_HT_header.remove(draw_view_assists_header)
     bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)
     bpy.types.VIEW3D_MT_object_apply.remove(draw_object_apply_menu)
     bpy.types.VIEW3D_MT_edit_mesh_edges.remove(draw_edge_menu)

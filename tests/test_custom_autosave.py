@@ -45,7 +45,16 @@ try:
     assert custom_autosave.status_snapshot()["autosave_time"] != "—"
     assert custom_autosave.status_snapshot()["regular_save_time"] == "—"
     session_dir = custom_autosave.current_autosave_directory()
-    assert (session_dir / "Unsaved.blendAutosave1").exists()
+    unsaved_autosave = session_dir / "Unsaved.blendAutosave1"
+    assert unsaved_autosave.exists()
+    unchanged_mtime = unsaved_autosave.stat().st_mtime_ns
+    saved, status = custom_autosave.save_now()
+    assert not saved
+    assert "changes" in status.lower()
+    assert unsaved_autosave.stat().st_mtime_ns == unchanged_mtime
+
+    custom_autosave._depsgraph_update_post(None, None)
+    assert custom_autosave._CHANGES_SINCE_AUTOSAVE
 
     project = test_dir / "project.blend"
     assert bpy.ops.wm.save_as_mainfile(filepath=str(project)) == {"FINISHED"}
