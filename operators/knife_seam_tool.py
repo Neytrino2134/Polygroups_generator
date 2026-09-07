@@ -5,6 +5,7 @@ from bpy.app.handlers import persistent
 from mathutils import Vector
 
 from ..localization import t
+from .unwrap_angle_based import auto_uv_after_seam_change
 
 
 ACTIVE_KNIFE_OPERATORS = []
@@ -122,10 +123,12 @@ class MESH_OT_polygroups_finish_knife_seam(bpy.types.Operator):
     clear_selection: bpy.props.BoolProperty(default=False)
 
     def execute(self, context):
-        _finish_native_cut(
+        count = _finish_native_cut(
             [obj.data.name for obj in context.objects_in_mode_unique_data if obj.type == "MESH"],
             self.mark_seam, self.clear_selection,
         )
+        if count and self.mark_seam:
+            auto_uv_after_seam_change(context)
         return {"FINISHED"}
 
 
@@ -527,6 +530,8 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
                 return {"CANCELLED"}
             if cut_count == 0:
                 self.report({"WARNING"}, "Knife Seam did not intersect the editable mesh")
+            elif self.mark_seam:
+                auto_uv_after_seam_change(context)
             return {"FINISHED"}
 
         if event.type in {"MIDDLEMOUSE", "WHEELUPMOUSE", "WHEELDOWNMOUSE", "TRACKPADPAN", "TRACKPADZOOM"}:

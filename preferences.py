@@ -307,6 +307,12 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     enable_section_number_hotkeys: bpy.props.BoolProperty(
         name="Section Number Hotkeys", default=True, update=_update_hotkeys,
     )
+    enable_collection_navigation_hotkeys: bpy.props.BoolProperty(
+        name="Collection Navigation Hotkeys",
+        description="Use Ctrl+Numpad Plus/Minus in Outliner and the AI Retopo sidebar",
+        default=True,
+        update=_update_hotkeys,
+    )
     section_digit_interval: bpy.props.FloatProperty(
         name="Digit Interval", default=0.15, min=0.15, max=1.0, precision=2,
         description="Seconds to wait for a second digit after 1", update=_update_hotkeys,
@@ -712,6 +718,13 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         section_options.prop(self, "section_hotkey_scope", text=t(context, "section_hotkey_scope"))
         section_options.prop(self, "section_digit_interval", text=t(context, "section_digit_interval"))
         section_options.label(text=t(context, "section_number_hint"))
+        navigation_box = layout.box()
+        navigation_box.prop(
+            self,
+            "enable_collection_navigation_hotkeys",
+            text=t(context, "collection_navigation_hotkeys"),
+        )
+        navigation_box.label(text=t(context, "collection_navigation_hotkeys_hint"))
         column = layout.column(align=True)
         column.prop(self, "cutter_tweak_tool", text=t(context, "cutter_tweak_tool"))
         cutter_box = column.box()

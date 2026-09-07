@@ -86,6 +86,78 @@ def run():
     yield 0.2
     log("Outliner scope rejection passed")
 
+    # Ctrl+Numpad +/- navigates exactly one Generated collection in Outliner
+    # and the AI Retopo sidebar, but not in the viewport or another N-tab.
+    generated = [bpy.data.collections.new(f"Generated.{index:03d}") for index in range(1, 4)]
+    for collection in generated:
+        context.scene.collection.children.link(collection)
+    first = context.scene.objects.get("Cube")
+    for collection in list(first.users_collection):
+        collection.objects.unlink(first)
+    generated[0].objects.link(first)
+    generated_objects = [first]
+    for index, collection in enumerate(generated[1:], 2):
+        obj = first.copy()
+        obj.data = first.data.copy()
+        obj.name = f"Highpoly_Hotkey_{index}"
+        collection.objects.link(obj)
+        generated_objects.append(obj)
+    first.name = "Highpoly_Hotkey_1"
+
+    def activate(obj):
+        for selected in context.selected_objects:
+            selected.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+
+    activate(first)
+    x, y = (outliner_region.x + outliner_region.width // 2,
+            outliner_region.y + outliner_region.height // 2)
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+    yield 0.2
+    press("NUMPAD_PLUS", ctrl=True)
+    release("NUMPAD_PLUS")
+    yield 0.2
+    assert context.active_object == generated_objects[1], "Outliner Ctrl+Num+ failed or skipped a collection"
+    press("NUMPAD_MINUS", ctrl=True)
+    release("NUMPAD_MINUS")
+    yield 0.2
+    assert context.active_object == first, "Outliner Ctrl+Num- failed"
+
+    x, y = sidebar.x + sidebar.width // 2, sidebar.y + sidebar.height - 70
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+    yield 0.2
+    press("NUMPAD_PLUS", ctrl=True)
+    release("NUMPAD_PLUS")
+    yield 0.2
+    assert context.active_object == generated_objects[1], "AI Retopo sidebar Ctrl+Num+ failed"
+    press("NUMPAD_MINUS", ctrl=True)
+    release("NUMPAD_MINUS")
+    yield 0.2
+    assert context.active_object == first, "AI Retopo sidebar Ctrl+Num- failed"
+
+    viewport = next(region for region in area.regions if region.type == "WINDOW")
+    x, y = viewport.x + viewport.width // 2, viewport.y + viewport.height // 2
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+    yield 0.2
+    press("NUMPAD_PLUS", ctrl=True)
+    release("NUMPAD_PLUS")
+    yield 0.2
+    assert context.active_object == first, "Collection navigation leaked into viewport"
+
+    sidebar.active_panel_category = "Item"
+    x, y = sidebar.x + sidebar.width // 2, sidebar.y + sidebar.height - 70
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+    yield 0.2
+    press("NUMPAD_PLUS", ctrl=True)
+    release("NUMPAD_PLUS")
+    yield 0.2
+    assert context.active_object == first, "Collection navigation leaked into another N-panel tab"
+    sidebar.active_panel_category = "AI Retopo"
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+    yield 0.2
+    log("Collection navigation scope passed")
+
     press("ONE", "1")
     release("ONE")
     yield 0.1

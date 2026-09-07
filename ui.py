@@ -1008,6 +1008,31 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             tools_column.prop(seam_settings, "smart_seam_smoothness")
             tools_column.prop(seam_settings, "smart_seam_replace")
             tools_column.prop(seam_settings, "smart_seam_pin_generated", text=t(context, "pin_generated"))
+            tools_column.prop(
+                seam_settings, "smart_seam_auto_relax",
+                text=t(context, "smart_seam_auto_relax"), toggle=True,
+            )
+            if seam_settings.smart_seam_auto_relax:
+                tools_column.prop(
+                    seam_settings, "seam_relax_iterations",
+                    text=t(context, "seam_relax_iterations"),
+                )
+                tools_column.label(
+                    text=t(context, "seam_relax_selected_area_only"),
+                    icon="CHECKBOX_HLT",
+                )
+                corner_row = tools_column.row(align=True)
+                corner_row.prop(
+                    seam_settings, "seam_relax_use_corner_angle",
+                    text=t(context, "seam_relax_use_corner_angle"), toggle=True,
+                )
+                corner_angle = corner_row.row(align=True)
+                corner_angle.enabled = seam_settings.seam_relax_use_corner_angle
+                corner_angle.prop(seam_settings, "seam_relax_corner_angle", text="")
+                tools_column.prop(
+                    seam_settings, "seam_relax_protection_radius",
+                    text=t(context, "seam_relax_protection_radius"),
+                )
             tools_column.prop(seam_settings, "smart_seam_path_turn")
             tools_column.prop(seam_settings, "smart_seam_path_corridor")
             tools_column.prop(seam_settings, "smart_seam_create_edges")
@@ -1063,11 +1088,19 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 seam_settings, "seam_relax_iterations",
                 text=t(context, "seam_relax_iterations"),
             )
+            relax_column.prop(
+                seam_settings, "seam_relax_selected_area_only",
+                text=t(context, "seam_relax_selected_area_only"), toggle=True,
+            )
             if seam_settings.seam_relax_mode == "SMART":
-                relax_column.prop(
-                    seam_settings, "seam_relax_corner_angle",
-                    text=t(context, "seam_relax_corner_angle"),
+                corner_row = relax_column.row(align=True)
+                corner_row.prop(
+                    seam_settings, "seam_relax_use_corner_angle",
+                    text=t(context, "seam_relax_use_corner_angle"), toggle=True,
                 )
+                corner_angle = corner_row.row(align=True)
+                corner_angle.enabled = seam_settings.seam_relax_use_corner_angle
+                corner_angle.prop(seam_settings, "seam_relax_corner_angle", text="")
                 relax_column.prop(
                     seam_settings, "seam_relax_protection_radius",
                     text=t(context, "seam_relax_protection_radius"),
@@ -2783,18 +2816,21 @@ def draw_outliner_header(self, context):
     """Compact duplicates of Management controls in the Outliner header."""
     row = self.layout.row(align=True)
     row.separator()
-    previous = row.operator(
-        "object.polygroups_generated_collection",
-        text="",
-        icon="TRIA_LEFT",
+    hide_highpoly = row.operator(
+        "object.polygroups_object_visibility",
+        text="H",
+        icon="RESTRICT_VIEW_ON",
     )
-    previous.action = "PREVIOUS"
-    following = row.operator(
-        "object.polygroups_generated_collection",
-        text="",
-        icon="TRIA_RIGHT",
+    hide_highpoly.prefix = "Highpoly_"
+    hide_highpoly.hidden = True
+    show_highpoly = row.operator(
+        "object.polygroups_object_visibility",
+        text="H",
+        icon="RESTRICT_VIEW_OFF",
     )
-    following.action = "NEXT"
+    show_highpoly.prefix = "Highpoly_"
+    show_highpoly.hidden = False
+    row.separator()
     hide_lowpoly = row.operator(
         "object.polygroups_object_visibility",
         text="L",
@@ -2810,20 +2846,28 @@ def draw_outliner_header(self, context):
     show_lowpoly.prefix = "Retopo_"
     show_lowpoly.hidden = False
     row.separator()
-    hide_highpoly = row.operator(
-        "object.polygroups_object_visibility",
-        text="H",
-        icon="RESTRICT_VIEW_ON",
+    previous = row.operator(
+        "object.polygroups_generated_collection",
+        text="",
+        icon="TRIA_LEFT",
     )
-    hide_highpoly.prefix = "Highpoly_"
-    hide_highpoly.hidden = True
-    show_highpoly = row.operator(
-        "object.polygroups_object_visibility",
-        text="H",
-        icon="RESTRICT_VIEW_OFF",
+    previous.action = "PREVIOUS"
+    following = row.operator(
+        "object.polygroups_generated_collection",
+        text="",
+        icon="TRIA_RIGHT",
     )
-    show_highpoly.prefix = "Highpoly_"
-    show_highpoly.hidden = False
+    following.action = "NEXT"
+
+
+def draw_object_apply_menu(self, context):
+    """Add the cutter workflow to Object Mode's Ctrl+A menu."""
+    self.layout.separator()
+    self.layout.operator(
+        "object.polygroups_apply_cutter_seams",
+        text=t(context, "apply_cutter_seams"),
+        icon="EDGE_SEAM",
+    )
 
 
 def register():
@@ -2831,11 +2875,13 @@ def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.VIEW3D_MT_edit_mesh_edges.append(draw_edge_menu)
+    bpy.types.VIEW3D_MT_object_apply.append(draw_object_apply_menu)
     bpy.types.OUTLINER_HT_header.append(draw_outliner_header)
 
 
 def unregister():
     bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)
+    bpy.types.VIEW3D_MT_object_apply.remove(draw_object_apply_menu)
     bpy.types.VIEW3D_MT_edit_mesh_edges.remove(draw_edge_menu)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

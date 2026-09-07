@@ -68,6 +68,28 @@ for end in ends:
 adjacency, _edges = _seam_adjacency(bm)
 protected = _smart_protected_vertices(adjacency, radians(90), 0)
 assert protected == {corner}
+protected_without_corners = _smart_protected_vertices(
+    adjacency, radians(90), 0, use_corner_angle=False,
+)
+assert protected_without_corners == set()
+bm.free()
+
+assert settings.seam_relax_use_corner_angle is False
+assert settings.seam_relax_selected_area_only is False
+
+# Selected Area Only builds the relax chain solely from seams touching the
+# selected faces, while preserving boundary seam edges of that area.
+bm = bmesh.new()
+bmesh.ops.create_grid(bm, x_segments=5, y_segments=3, size=2.0)
+selected_face = min(bm.faces, key=lambda face: face.calc_center_median().x)
+unselected_face = max(bm.faces, key=lambda face: face.calc_center_median().x)
+for edge in set(selected_face.edges) | set(unselected_face.edges):
+    edge.seam = True
+selected_face.select = True
+_all_adjacency, all_edges = _seam_adjacency(bm)
+_selected_adjacency, selected_edges = _seam_adjacency(bm, selected_area_only=True)
+assert 0 < len(selected_edges) < len(all_edges)
+assert all(selected_face in edge.link_faces for edge in selected_edges)
 bm.free()
 
 print("RELAX_SEAMS_TEST_PASSED", flush=True)

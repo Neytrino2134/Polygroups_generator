@@ -13,6 +13,7 @@ from .tools import CUTTER_TOOL_ORDER
 from .operators.section_hotkeys import AIRETOPO_OT_section_number
 from .operators.section_hotkeys import AIRETOPO_OT_section_set_all
 from .operators.section_hotkeys import AIRETOPO_OT_section_toggle_single_mode
+from .operators.section_hotkeys import AIRETOPO_OT_collection_navigate
 from .operators.section_hotkeys import DIGIT_KEYS, cancel_pending_sections
 
 
@@ -400,6 +401,7 @@ CLASSES = (
     AIRETOPO_OT_section_number,
     AIRETOPO_OT_section_set_all,
     AIRETOPO_OT_section_toggle_single_mode,
+    AIRETOPO_OT_collection_navigate,
     AIRETOPO_OT_select_cutter_tweak,
     VIEW3D_MT_airetopo_pie,
     VIEW3D_MT_airetopo_cutter_tweak_pie,
@@ -459,6 +461,28 @@ def register_keymaps():
                 repeat=False,
             )
             KEYMAP_ITEMS.append((number_map, item))
+
+    if _preference_value(preferences, "enable_collection_navigation_hotkeys", True):
+        for name, space_type in (
+            ("Outliner", "OUTLINER"),
+            ("User Interface", "EMPTY"),
+            ("View2D Buttons List", "EMPTY"),
+        ):
+            navigation_map = keyconfig.keymaps.new(name=name, space_type=space_type)
+            for key, action in (
+                ("NUMPAD_PLUS", "NEXT"),
+                ("NUMPAD_MINUS", "PREVIOUS"),
+            ):
+                item = navigation_map.keymap_items.new(
+                    AIRETOPO_OT_collection_navigate.bl_idname,
+                    key,
+                    "PRESS",
+                    ctrl=True,
+                    head=True,
+                    repeat=False,
+                )
+                item.properties.action = action
+                KEYMAP_ITEMS.append((navigation_map, item))
 
     if _preference_value(preferences, "enable_cutter_tweak_hotkey", True):
         item = keymap.keymap_items.new(

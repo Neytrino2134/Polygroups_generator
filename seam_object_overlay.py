@@ -23,7 +23,10 @@ def seam_line_points(obj):
 
 def draw_seams_object_mode():
     context = bpy.context
-    if context.mode != "OBJECT" or context.scene is None:
+    if (context.mode != "OBJECT" or context.scene is None
+            or context.space_data is None
+            or context.space_data.type != "VIEW_3D"
+            or not context.space_data.overlay.show_overlays):
         return
     settings = getattr(context.scene, "polygroups_seam_preparation_settings", None)
     if settings is None or not settings.show_seams_object_mode:

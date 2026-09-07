@@ -5,11 +5,12 @@ import bpy
 from mathutils.bvhtree import BVHTree
 
 
-def _seam_adjacency(bm):
+def _seam_adjacency(bm, selected_area_only=False):
     adjacency = {vert: set() for vert in bm.verts}
     seam_edges = []
     for edge in bm.edges:
-        if not edge.seam:
+        if not edge.seam or (selected_area_only and not any(
+                face.select and not face.hide for face in edge.link_faces)):
             continue
         seam_edges.append(edge)
         a, b = edge.verts
@@ -18,7 +19,7 @@ def _seam_adjacency(bm):
     return adjacency, seam_edges
 
 
-def _smart_protected_vertices(adjacency, angle_limit, radius):
+def _smart_protected_vertices(adjacency, angle_limit, radius, use_corner_angle=True):
     protected = set()
     for vert, neighbors in adjacency.items():
         degree = len(neighbors)
@@ -26,12 +27,13 @@ def _smart_protected_vertices(adjacency, angle_limit, radius):
             if degree >= 3:
                 protected.add(vert)
             continue
-        a, b = neighbors
-        va = (a.co - vert.co).normalized()
-        vb = (b.co - vert.co).normalized()
-        angle = acos(max(-1.0, min(1.0, va.dot(vb))))
-        if angle < angle_limit:
-            protected.add(vert)
+        if use_corner_angle:
+            a, b = neighbors
+            va = (a.co - vert.co).normalized()
+            vb = (b.co - vert.co).normalized()
+            angle = acos(max(-1.0, min(1.0, va.dot(vb))))
+            if angle < angle_limit:
+                protected.add(vert)
 
     frontier = set(protected)
     for _step in range(max(0, int(radius))):
@@ -42,31 +44,36 @@ def _smart_protected_vertices(adjacency, angle_limit, radius):
     return protected
 
 
-def relax_seams(context, mode, iterations, angle_limit, protection_radius):
+def relax_seams(context, mode, iterations, angle_limit, protection_radius,
+                use_corner_angle=True, select_result=True,
+                selected_area_only=False):
     obj = context.edit_object
     bm = bmesh.from_edit_mesh(obj.data)
     bm.verts.ensure_lookup_table()
-    adjacency, seam_edges = _seam_adjacency(bm)
+    adjacency, seam_edges = _seam_adjacency(bm, selected_area_only)
     if not seam_edges:
         return 0, 0
 
     protected = set()
     if mode == "SMART":
-        protected = _smart_protected_vertices(adjacency, angle_limit, protection_radius)
+        protected = _smart_protected_vertices(
+            adjacency, angle_limit, protection_radius, use_corner_angle,
+        )
     movable = [vert for vert, neighbors in adjacency.items()
                if len(neighbors) == 2 and vert not in protected]
 
-    for vert in bm.verts:
-        vert.select_set(False)
-    for edge in bm.edges:
-        edge.select_set(False)
-    for face in bm.faces:
-        face.select_set(False)
-    selected_edges = [edge for edge in seam_edges
-                      if mode != "SMART" or not any(vert in protected for vert in edge.verts)]
-    for edge in selected_edges:
-        edge.select_set(True)
-    context.tool_settings.mesh_select_mode = (False, True, False)
+    if select_result:
+        for vert in bm.verts:
+            vert.select_set(False)
+        for edge in bm.edges:
+            edge.select_set(False)
+        for face in bm.faces:
+            face.select_set(False)
+        selected_edges = [edge for edge in seam_edges
+                          if mode != "SMART" or not any(vert in protected for vert in edge.verts)]
+        for edge in selected_edges:
+            edge.select_set(True)
+        context.tool_settings.mesh_select_mode = (False, True, False)
 
     surface = BVHTree.FromBMesh(bm)
     for _iteration in range(max(1, int(iterations))):
@@ -103,6 +110,8 @@ class MESH_OT_polygroups_relax_seams(bpy.types.Operator):
             settings.seam_relax_iterations,
             settings.seam_relax_corner_angle,
             settings.seam_relax_protection_radius,
+            settings.seam_relax_use_corner_angle,
+            selected_area_only=settings.seam_relax_selected_area_only,
         )
         if not moved:
             self.report({"WARNING"}, "No relaxable seam chain vertices found")

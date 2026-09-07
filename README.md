@@ -12,7 +12,9 @@ Add-on preferences include a **Custom Autosave** section. Choose **Native** to u
 
 The top of the AI Retopo N-panel shows the latest save result plus separate times for the most recent custom autosave and regular project save. Existing timestamps are restored from file modification times when a project is opened.
 
-The Outliner header includes compact Previous/Next Generated Collection plus Hide/Show Retopo (lowpoly, `L`) and Highpoly (`H`) buttons, duplicating the Management controls from the Model Preparation section.
+The Outliner header orders compact controls as Highpoly (`H`) Hide/Show, Retopo lowpoly (`L`) Hide/Show, then Previous/Next Generated Collection. `Ctrl+Numpad +` and `Ctrl+Numpad -` navigate to the next/previous Generated collection only while the pointer is over the Outliner or the AI Retopo N-panel.
+
+Object Mode's Apply menu (`Ctrl+A`) includes **Apply Cutter Seams**, using the same validated cutter operator as the AI Retopo panel.
 
 ## Current Tools
 

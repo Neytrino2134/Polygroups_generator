@@ -33,6 +33,19 @@ def section_context_allowed(context):
     return context.region.type in {"WINDOW", "UI"}
 
 
+def collection_navigation_context_allowed(context):
+    """Collection shortcuts are limited to Outliner and the AI Retopo sidebar."""
+    if not context.area or not context.region:
+        return False
+    if context.area.type == "OUTLINER":
+        return True
+    return (
+        context.area.type == "VIEW_3D"
+        and context.region.type == "UI"
+        and context.region.active_panel_category == "AI Retopo"
+    )
+
+
 def toggle_section(context, number):
     from ..properties import SECTION_VISIBILITY_PROPERTIES
 
@@ -168,3 +181,24 @@ class AIRETOPO_OT_section_toggle_single_mode(bpy.types.Operator):
         settings.single_section_mode = not settings.single_section_mode
         context.area.tag_redraw()
         return {"FINISHED"}
+
+
+class AIRETOPO_OT_collection_navigate(bpy.types.Operator):
+    bl_idname = "wm.airetopo_collection_navigate"
+    bl_label = "Navigate Generated Collections"
+    bl_options = {"INTERNAL"}
+
+    action: bpy.props.EnumProperty(items=(
+        ("PREVIOUS", "Previous", "Switch to the previous Generated collection"),
+        ("NEXT", "Next", "Switch to the next Generated collection"),
+    ))
+
+    @classmethod
+    def poll(cls, context):
+        return (
+            collection_navigation_context_allowed(context)
+            and bpy.ops.object.polygroups_generated_collection.poll()
+        )
+
+    def execute(self, _context):
+        return bpy.ops.object.polygroups_generated_collection(action=self.action)

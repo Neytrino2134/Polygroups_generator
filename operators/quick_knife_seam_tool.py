@@ -1,4 +1,5 @@
 import bpy
+from .unwrap_angle_based import auto_uv_after_seam_change
 
 
 POST_CUT_RETRY_LIMIT = 20
@@ -144,6 +145,7 @@ class MESH_OT_polygroups_quick_knife_seam(bpy.types.Operator):
             self.clear_selection_after_cutting,
         )
         if marked_count is not None:
+            auto_uv_after_seam_change(context)
             self._finish(context)
             return {"FINISHED"}
 

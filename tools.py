@@ -30,6 +30,40 @@ CUTTER_TOOL_ORDER = (
 )
 
 
+def _draw_seam_auto_uv_settings(context, layout):
+    """Draw section 8 Auto UV settings in an Edit Mode tool header."""
+    settings = context.scene.polygroups_seam_finalization_settings
+    layout.separator(type="LINE")
+    layout.prop(settings, "auto_unwrap_after_seam",
+                text=t(context, "auto_unwrap"), toggle=True, icon="UV")
+    average = layout.row(align=True)
+    average.enabled = settings.auto_unwrap_after_seam
+    average.prop(settings, "auto_average_islands_scale_after_unwrap",
+                 text=t(context, "auto_average_islands_scale"),
+                 toggle=True, icon="UV_SYNC_SELECT")
+
+
+def _draw_smart_auto_relax_settings(context, layout):
+    settings = context.scene.polygroups_seam_preparation_settings
+    layout.separator(type="LINE")
+    layout.prop(settings, "smart_seam_auto_relax",
+                text=t(context, "smart_seam_auto_relax"),
+                toggle=True, icon="MOD_SMOOTH")
+    if not settings.smart_seam_auto_relax:
+        return
+    layout.prop(settings, "seam_relax_iterations",
+                text=t(context, "seam_relax_iterations"))
+    layout.label(text=t(context, "seam_relax_selected_area_only"), icon="CHECKBOX_HLT")
+    corner = layout.row(align=True)
+    corner.prop(settings, "seam_relax_use_corner_angle",
+                text=t(context, "seam_relax_use_corner_angle"), toggle=True)
+    angle = corner.row(align=True)
+    angle.enabled = settings.seam_relax_use_corner_angle
+    angle.prop(settings, "seam_relax_corner_angle", text="")
+    layout.prop(settings, "seam_relax_protection_radius",
+                text=t(context, "seam_relax_protection_radius"))
+
+
 def _replace_registered_tool_icon(tool_cls, icon):
     """Replace the immutable ToolDef stored in Blender's toolbar lists."""
     tool_cls.bl_icon = icon
@@ -580,6 +614,7 @@ class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
             "clear_selection_after_cutting",
             text=t(context, "clear_selection_after_cutting"),
         )
+        _draw_seam_auto_uv_settings(context, layout)
 
 
 class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
@@ -613,6 +648,7 @@ class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
             "clear_selection_after_cutting",
             text=t(context, "clear_selection_after_cutting"),
         )
+        _draw_seam_auto_uv_settings(context, layout)
 
 
 class VIEW3D_WST_polygroups_connect_vertex_seam(WorkSpaceTool):
@@ -644,6 +680,7 @@ class VIEW3D_WST_polygroups_connect_vertex_seam(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
+        _draw_seam_auto_uv_settings(context, layout)
         layout.label(text=t(context, "connect_seam_hint_next"))
 
 
@@ -671,6 +708,7 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
+        _draw_seam_auto_uv_settings(context, layout)
         layout.label(text=t(context, "connect_seam_hint_next"))
 
 
@@ -694,6 +732,8 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         settings = context.scene.polygroups_seam_preparation_settings
+        _draw_seam_auto_uv_settings(context, layout)
+        _draw_smart_auto_relax_settings(context, layout)
         layout.prop(settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
         layout.prop(settings, "smart_seam_filter_iterations")
         layout.prop(settings, "smart_seam_min_area")
@@ -732,6 +772,7 @@ class VIEW3D_WST_polygroups_seam_eraser(WorkSpaceTool):
         layout.prop(props, "shape", expand=True)
         if props.shape == "CIRCLE":
             layout.prop(props, "radius")
+        _draw_seam_auto_uv_settings(context, layout)
 
 
 class VIEW3D_WST_polygroups_edge_seam_eraser(WorkSpaceTool):
@@ -755,6 +796,7 @@ class VIEW3D_WST_polygroups_edge_seam_eraser(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_eraser_clear_mode", expand=True)
+        _draw_seam_auto_uv_settings(context, layout)
         layout.label(text=t(context, "seam_erase_path_hint"))
 
 
