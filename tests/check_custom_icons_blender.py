@@ -37,6 +37,14 @@ for cycle in range(2):
     ):
         merger.small_islands_merger_shape = shape
         assert tools.VIEW3D_WST_polygroups_small_islands_merger._bl_tool.icon == icon
+    for shape, icon in (
+        ('TWEAK', 'ops.generic.select'),
+        ('BOX', 'ops.generic.select_box'),
+        ('LASSO', 'ops.generic.select_lasso'),
+        ('CIRCLE', 'ops.generic.select_circle'),
+    ):
+        merger.island_selector_shape = shape
+        assert tools.VIEW3D_WST_polygroups_island_selector._bl_tool.icon == icon
     addon_utils.disable(root.name, default_set=False)
     assert not custom_icons._handles
     assert not custom_icons._tool_icons

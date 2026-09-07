@@ -111,6 +111,77 @@ def _nearest_endpoint_pairs(bm, max_distance):
     return pairs
 
 
+def _find_wall_gaps(bm, max_distance):
+    """Find an open seam aimed at the interior of a nearby seam edge.
+
+    Requiring a shared face keeps this from bridging unrelated surfaces which
+    merely happen to be close in 3D space.
+    """
+    max_distance = max(0.0, float(max_distance))
+    gaps = []
+    for start in _seam_endpoints(bm):
+        incoming = next(edge for edge in start.link_edges if edge.seam)
+        forward = start.co - incoming.other_vert(start).co
+        if forward.length_squared <= 1.0e-12:
+            continue
+        forward.normalize()
+        best = None
+        for face in start.link_faces:
+            for wall in face.edges:
+                if not wall.seam or start in wall.verts or incoming == wall:
+                    continue
+                a, b = wall.verts
+                ab = b.co - a.co
+                if ab.length_squared <= 1.0e-12:
+                    continue
+                factor = (start.co - a.co).dot(ab) / ab.length_squared
+                # End vertices are handled by the ordinary path/junction search.
+                if not 0.05 < factor < 0.95:
+                    continue
+                point = a.co.lerp(b.co, factor)
+                delta = point - start.co
+                distance = delta.length
+                if distance <= 1.0e-9 or (max_distance > 0.0 and distance > max_distance):
+                    continue
+                if forward.dot(delta / distance) < 0.5:
+                    continue
+                candidate = (distance, wall.index, start, wall, factor)
+                if best is None or candidate[:2] < best[:2]:
+                    best = candidate
+        if best is not None:
+            distance, _index, start, wall, factor = best
+            gaps.append({"start": start, "wall": wall, "factor": factor, "distance": distance})
+    gaps.sort(key=lambda item: item["distance"])
+    return gaps
+
+
+def _close_wall_gap(bm, gap):
+    start, wall, factor = gap["start"], gap["wall"], gap["factor"]
+    if not (start.is_valid and wall.is_valid):
+        return None
+    original_vert = wall.verts[0]
+    new_wall, point = bmesh.utils.edge_split(wall, original_vert, factor)
+    wall.seam = True
+    new_wall.seam = True
+    try:
+        result = bmesh.ops.connect_vert_pair(bm, verts=[start, point])
+    except Exception:
+        result = {}
+    connector = _edge_from_connect_result(result) or bm.edges.get((start, point))
+    if connector is None:
+        shared_face = next((face for face in start.link_faces if point in face.verts), None)
+        if shared_face is not None:
+            try:
+                _new_face, loop = bmesh.utils.face_split(shared_face, start, point)
+                connector = loop.edge
+            except ValueError:
+                connector = bm.edges.get((start, point))
+    if connector is not None:
+        connector.seam = True
+        connector.select_set(True)
+    return connector
+
+
 def _edge_from_connect_result(result):
     for key in ("edges", "geom"):
         for element in result.get(key, []):
@@ -175,6 +246,7 @@ class MESH_OT_polygroups_check_seam_gaps(bpy.types.Operator):
             settings.seam_gap_max_distance,
             settings.seam_gap_include_junctions,
         )
+        wall_gaps = _find_wall_gaps(bm, settings.seam_gap_max_distance)
         for edge in bm.edges:
             edge.select_set(False)
 
@@ -191,10 +263,24 @@ class MESH_OT_polygroups_check_seam_gaps(bpy.types.Operator):
                     edge.seam = True
                     marked_count += 1
 
+        closed_wall_gaps = 0
+        for gap in wall_gaps:
+            wall = gap["wall"]
+            if self.mode == "SELECT":
+                if wall.is_valid:
+                    wall.select_set(True)
+                    selected_edges.add(wall)
+                continue
+            connector = _close_wall_gap(bm, gap)
+            if connector is not None:
+                selected_edges.add(connector)
+                marked_count += 1
+                closed_wall_gaps += 1
+
         bpy.context.tool_settings.mesh_select_mode = (False, True, False)
         bmesh.update_edit_mesh(mesh)
 
-        gap_count = len(paths)
+        gap_count = len(paths) + (len(wall_gaps) if self.mode == "SELECT" else closed_wall_gaps)
         edge_count = len(selected_edges)
         if self.mode == "MARK":
             status = f"Closed {gap_count} seam gap(s), marked {marked_count} edge(s)"

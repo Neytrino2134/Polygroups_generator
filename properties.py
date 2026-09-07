@@ -113,6 +113,11 @@ def _small_islands_tool_icon_update(self, context):
     update_small_islands_merger_tool_icon(self, context)
 
 
+def _island_selector_tool_icon_update(self, context):
+    from .tools import update_island_selector_tool_icon
+    update_island_selector_tool_icon(self, context)
+
+
 def _sync_cutter_solidify_thickness(self, context):
     del context
     collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
@@ -492,8 +497,8 @@ class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
     cut_mode: bpy.props.EnumProperty(
         name="Knife Mode",
         items=(
-            ("PLANE", "Plane Cut", "Continuous plane cut through the mesh", 0),
-            ("POLYLINE", "Multi-Point Knife", "Standard Knife: click multiple points, then Space/Enter to apply seams", 1),
+            ("PLANE", "Plane Cut", "Continuous plane cut through the mesh", "MESH_PLANE", 0),
+            ("POLYLINE", "Multi-Point Knife", "Standard Knife: click multiple points, then Space/Enter to apply seams", "IPO_LINEAR", 1),
         ),
         get=lambda self: 0 if self.stable_view_cut else 1,
         set=lambda self, value: setattr(self, "stable_view_cut", value == 0),
@@ -1078,6 +1083,27 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
         ),
         default="BOX",
         update=_small_islands_tool_icon_update,
+    )
+    island_selector_shape: bpy.props.EnumProperty(
+        name="Selection Type",
+        description="Gesture used by the Island Selector tool",
+        items=(
+            ("TWEAK", "Tweak", "Click a polygon or vertex to select its UV island", "RESTRICT_SELECT_OFF", 0),
+            ("BOX", "Box", "Select UV islands with a rectangular region", "MESH_PLANE", 1),
+            ("LASSO", "Lasso", "Select UV islands with a freehand region", "GP_SELECT_STROKES", 2),
+            ("CIRCLE", "Circle", "Paint over UV islands with a circular brush", "MESH_CIRCLE", 3),
+        ),
+        default="TWEAK",
+        update=_island_selector_tool_icon_update,
+    )
+    island_selector_selection_mode: bpy.props.EnumProperty(
+        name="Selection Mode",
+        description="Replace the current selection or add islands to it",
+        items=(
+            ("NEW", "New Select", "Clear the previous selection before selecting islands"),
+            ("ADD", "Add", "Add newly touched islands to the current selection"),
+        ),
+        default="NEW",
     )
     small_island_protect_sharp: bpy.props.BoolProperty(name="Protect Sharp Edges", default=True)
     small_island_protect_materials: bpy.props.BoolProperty(name="Protect Material Boundaries", default=False)

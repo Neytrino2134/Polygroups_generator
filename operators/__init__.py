@@ -37,6 +37,7 @@ from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam
 from .connect_vertex_seam import MESH_OT_polygroups_seam_cursor_modifier
 from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam_click
 from .edge_seam_path import MESH_OT_polygroups_edge_seam_path, MESH_OT_polygroups_edge_seam_path_click
+from .edge_merger import MESH_OT_polygroups_edge_merger_click
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_fab_selection
 from .fab_preparation import OBJECT_OT_polygroups_prepare_fab_variant
@@ -131,6 +132,7 @@ from .small_islands import (
     MESH_OT_polygroups_merge_small_islands,
 )
 from .small_islands_tool import MESH_OT_polygroups_small_islands_merger_gesture
+from .small_islands_tool import MESH_OT_polygroups_island_selector_gesture
 from .pin_edges import MESH_OT_polygroups_pin_selected_seams, MESH_OT_polygroups_unpin_selected_edges, MESH_OT_polygroups_clear_all_pins
 from .smart_angle_seams import MESH_OT_polygroups_mark_smart_angle_seams
 from .smart_angle_seams import MESH_OT_polygroups_smart_seams_generator_click
@@ -154,6 +156,8 @@ CLASSES = (
     MESH_OT_polygroups_merge_small_islands,
     MESH_OT_polygroups_analyze_and_merge_seams,
     MESH_OT_polygroups_small_islands_merger_gesture,
+    MESH_OT_polygroups_island_selector_gesture,
+    MESH_OT_polygroups_edge_merger_click,
     MESH_OT_polygroups_pin_selected_seams,
     MESH_OT_polygroups_unpin_selected_edges,
     MESH_OT_polygroups_clear_all_pins,

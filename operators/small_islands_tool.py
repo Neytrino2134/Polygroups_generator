@@ -5,6 +5,7 @@ import bpy
 
 
 TOOL_ID = "polygroups_generator.small_islands_merger_tool"
+SELECTOR_TOOL_ID = "polygroups_generator.island_selector_tool"
 
 
 def _linked_seam_islands(seed_faces):
@@ -14,6 +15,37 @@ def _linked_seam_islands(seed_faces):
         face = stack.pop()
         for edge in face.edges:
             if edge.seam or edge.hide:
+                continue
+            for neighbor in edge.link_faces:
+                if neighbor not in linked and not neighbor.hide:
+                    linked.add(neighbor)
+                    stack.append(neighbor)
+    return linked
+
+
+def _edge_uv_continuous(edge, uv_layer):
+    if len(edge.link_faces) != 2:
+        return False
+    if uv_layer is None:
+        return not edge.seam
+    first, second = edge.link_faces
+    for vert in edge.verts:
+        first_loop = next((loop for loop in first.loops if loop.vert == vert), None)
+        second_loop = next((loop for loop in second.loops if loop.vert == vert), None)
+        if first_loop is None or second_loop is None:
+            return False
+        if (first_loop[uv_layer].uv - second_loop[uv_layer].uv).length_squared > 1.0e-10:
+            return False
+    return True
+
+
+def _linked_uv_islands(seed_faces, uv_layer):
+    linked = set(seed_faces)
+    stack = list(seed_faces)
+    while stack:
+        face = stack.pop()
+        for edge in face.edges:
+            if edge.hide or edge.seam or not _edge_uv_continuous(edge, uv_layer):
                 continue
             for neighbor in edge.link_faces:
                 if neighbor not in linked and not neighbor.hide:
@@ -38,6 +70,10 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
         default="BOX",
     )
     radius: bpy.props.IntProperty(name="Radius", default=30, min=2, max=500, subtype="PIXEL")
+    settings_property = "small_islands_merger_shape"
+    merge_after_selection = True
+    use_uv_islands = False
+    selection_mode_property = None
 
     @classmethod
     def poll(cls, context):
@@ -46,7 +82,12 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
                 and context.area is not None and context.area.type == "VIEW_3D")
 
     def invoke(self, context, event):
-        self.shape = context.scene.polygroups_generator_settings.small_islands_merger_shape
+        self.shape = getattr(context.scene.polygroups_generator_settings, self.settings_property)
+        selection_mode = (
+            getattr(context.scene.polygroups_generator_settings, self.selection_mode_property)
+            if self.selection_mode_property else "NEW"
+        )
+        self._native_mode = "ADD" if selection_mode == "ADD" else "SET"
         self._points = [(event.mouse_region_x, event.mouse_region_y)]
         self._area = context.area
         self._select_mode_before = tuple(context.tool_settings.mesh_select_mode)
@@ -56,7 +97,15 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
             for sequence in (bm.verts, bm.edges, bm.faces)
         ]
         bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
-        bpy.ops.mesh.select_all(action="DESELECT")
+        if self._native_mode == "SET":
+            bpy.ops.mesh.select_all(action="DESELECT")
+        if self.shape == "TWEAK":
+            bpy.ops.view3d.select(
+                location=(event.mouse_region_x, event.mouse_region_y),
+                deselect_all=self._native_mode == "SET",
+            )
+            self._handle = None
+            return self._finish(context)
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw, (), "WINDOW", "POST_PIXEL",
         )
@@ -79,14 +128,14 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
             bpy.ops.view3d.select_box(
                 xmin=int(min(x1, x2)), xmax=int(max(x1, x2)),
                 ymin=int(min(y1, y2)), ymax=int(max(y1, y2)),
-                wait_for_input=False, mode="SET",
+                wait_for_input=False, mode=self._native_mode,
             )
         elif len(self._points) >= 3:
             path = [
                 {"name": "", "loc": (int(x), int(y)), "time": index / 1000.0}
                 for index, (x, y) in enumerate(self._points)
             ]
-            bpy.ops.view3d.select_lasso(path=path, mode="SET")
+            bpy.ops.view3d.select_lasso(path=path, mode=self._native_mode)
 
     def _draw(self):
         if not self._points:
@@ -129,7 +178,12 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
             self.report({"WARNING"}, "No polygons touched")
             self._restore_selection(context)
             return {"CANCELLED"}
-        selected_indices = {face.index for face in _linked_seam_islands(seeds)}
+        if self.use_uv_islands:
+            uv_layer = bm.loops.layers.uv.active
+            selected_faces = _linked_uv_islands(seeds, uv_layer)
+        else:
+            selected_faces = _linked_seam_islands(seeds)
+        selected_indices = {face.index for face in selected_faces}
         bpy.ops.mesh.select_all(action="DESELECT")
         bm = bmesh.from_edit_mesh(context.active_object.data)
         bm.faces.ensure_lookup_table()
@@ -137,9 +191,11 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
             face.select_set(face.index in selected_indices)
         bm.select_flush_mode()
         bmesh.update_edit_mesh(context.active_object.data, loop_triangles=False, destructive=False)
-        settings = context.scene.polygroups_generator_settings
-        settings.small_island_selected_area = True
-        return bpy.ops.mesh.polygroups_analyze_and_merge_seams("EXEC_DEFAULT")
+        if self.merge_after_selection:
+            settings = context.scene.polygroups_generator_settings
+            settings.small_island_selected_area = True
+            return bpy.ops.mesh.polygroups_analyze_and_merge_seams("EXEC_DEFAULT")
+        return {"FINISHED"}
 
     def _restore_selection(self, context):
         bpy.ops.mesh.select_all(action="DESELECT")
@@ -173,3 +229,26 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
         if event.type == "LEFTMOUSE" and event.value == "RELEASE":
             return self._finish(context)
         return {"RUNNING_MODAL"}
+
+
+class MESH_OT_polygroups_island_selector_gesture(
+    MESH_OT_polygroups_small_islands_merger_gesture,
+):
+    bl_idname = "mesh.polygroups_island_selector_gesture"
+    bl_label = "Island Selector"
+    bl_description = "Select complete UV islands with Tweak, Box, Lasso, or Circle"
+
+    shape: bpy.props.EnumProperty(
+        name="Selection",
+        items=(
+            ("TWEAK", "Tweak", "Click a polygon or vertex to select its UV island"),
+            ("BOX", "Box", "Select UV islands touched by a box"),
+            ("LASSO", "Lasso", "Select UV islands touched by a lasso"),
+            ("CIRCLE", "Circle", "Paint over UV islands with a circle"),
+        ),
+        default="TWEAK",
+    )
+    settings_property = "island_selector_shape"
+    merge_after_selection = False
+    use_uv_islands = True
+    selection_mode_property = "island_selector_selection_mode"

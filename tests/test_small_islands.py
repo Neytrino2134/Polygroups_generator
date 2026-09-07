@@ -53,8 +53,26 @@ import addon_utils
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root.parent))
 addon_utils.enable(root.name, default_set=True)
+from polygroups_generator.operators.small_islands_tool import _linked_uv_islands
+
+# UV discontinuities and seams both stop Island Selector expansion.
+uv_bm = strip([1, 1])
+uv_bm.faces.ensure_lookup_table()
+uv_layer = uv_bm.loops.layers.uv.new("SelectorUV")
+for face in uv_bm.faces:
+    for loop in face.loops:
+        loop[uv_layer].uv = (loop.vert.co.x, loop.vert.co.y)
+assert len(_linked_uv_islands({uv_bm.faces[0]}, uv_layer)) == 1  # strip helper marks border as seam
+shared = next(edge for edge in uv_bm.edges if edge.is_manifold)
+shared.seam = False
+assert len(_linked_uv_islands({uv_bm.faces[0]}, uv_layer)) == 2
+for loop in uv_bm.faces[1].loops:
+    loop[uv_layer].uv.x += 10.0
+assert len(_linked_uv_islands({uv_bm.faces[0]}, uv_layer)) == 1
+uv_bm.free()
 obj = bpy.context.active_object
 settings = bpy.context.scene.polygroups_generator_settings
+assert settings.island_selector_selection_mode == "NEW"
 cutter_settings = bpy.context.scene.polygroups_object_seam_cutter_settings
 assert cutter_settings.cutter_auto_fix_mesh
 assert cutter_settings.cutter_auto_fix_fin_faces

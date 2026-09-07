@@ -25,8 +25,12 @@ def _draw_knife_preview(operator):
     import gpu
     from gpu_extras.batch import batch_for_shader
 
+    polyline = getattr(operator, "_polyline_region_points", None)
     start = operator._start_region_pos
     end = operator._end_region_pos or operator._mouse_region_pos
+    if polyline is not None:
+        start = polyline[0] if polyline else None
+        end = operator._mouse_region_pos
     if end is None:
         return
     scale = bpy.context.preferences.system.ui_scale
@@ -56,7 +60,23 @@ def _draw_knife_preview(operator):
         gpu.state.depth_test_set("NONE")
         cyan = (0.1, 0.85, 1.0, 1.0)
         gold = (1.0, 0.65, 0.12, 1.0)
-        if start is not None:
+        if polyline is not None:
+            preview_points = list(polyline)
+            if preview_points and end is not None:
+                preview_points.append(end)
+            segments = []
+            for point_a, point_b in zip(preview_points, preview_points[1:]):
+                segments.extend((point_a, point_b))
+            if segments:
+                line(segments, (0.015, 0.015, 0.015, 0.95), 6)
+                line(segments, cyan, 3)
+            for point in polyline:
+                dot(point, 6.5, (0.02, 0.02, 0.02, 1))
+                dot(point, 4.2, gold)
+            if end is not None:
+                dot(end, 6, (0.02, 0.02, 0.02, 1))
+                dot(end, 3.8, cyan)
+        elif start is not None:
             direction = Vector(end) - Vector(start)
             if direction.length >= 2:
                 direction.normalize()
@@ -72,8 +92,9 @@ def _draw_knife_preview(operator):
                 line((start, end), cyan, 2.5)
             dot(start, 6, (0.03, 0.03, 0.03, 1))
             dot(start, 4, gold)
-        dot(end, 6, (0.03, 0.03, 0.03, 1))
-        dot(end, 4, cyan if operator._end_region_pos is None else gold)
+        if polyline is None and end is not None:
+            dot(end, 6, (0.03, 0.03, 0.03, 1))
+            dot(end, 4, cyan if operator._end_region_pos is None else gold)
         blf.size(0, 13 * scale)
         blf.color(0, 1, 1, 1, 1)
         # An on-screen hint remains visible even if Blender's status bar is hidden.
@@ -88,6 +109,13 @@ def _draw_knife_preview(operator):
         )}).draw(fill_shader)
         blf.position(0, x, y, 0)
         blf.draw(0, hint)
+        title = "MULTI POINT KNIFE" if polyline is not None else "PLANE CUT"
+        blf.size(0, 14 * scale)
+        title_width, _ = blf.dimensions(0, title)
+        blf.position(0, (operator._region.width - title_width) * 0.5,
+                     operator._region.height * 0.56, 0)
+        blf.color(0, 1.0, 0.32, 0.36, 1.0)
+        blf.draw(0, title)
     finally:
         gpu.state.depth_test_set(previous_depth)
         gpu.state.blend_set(previous_blend)
@@ -315,17 +343,23 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
         self._cancel_requested = False
         self._start_region_pos = None
         self._end_region_pos = None
+        self._polyline_region_points = None
         settings = context.scene.polygroups_knife_seam_settings
 
         self.stable_view_cut = settings.stable_view_cut
         self.use_occlude_geometry = settings.use_occlude_geometry
         self.only_selected = settings.only_selected
-        self.xray = settings.xray
-        self.mark_seam = settings.mark_seam
+        # Knife Seam always creates seams. The custom overlay is drawn in
+        # front, so the native X-Ray option no longer needs a UI setting.
+        self.xray = True
+        self.mark_seam = True
         self.clear_selection_after_cutting = settings.clear_selection_after_cutting
 
-        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="EDGE")
         self._using_stable_view_cut = self.stable_view_cut
+        # Keep the original face mask intact for native Knife's Only Selected
+        # mode. Switching selection mode here can expand or clear that mask.
+        if self._using_stable_view_cut or not self.only_selected:
+            bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="EDGE")
 
         if self._using_stable_view_cut:
             if event.type == "LEFTMOUSE" and event.value == "PRESS":
@@ -342,6 +376,14 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
                 self._finish(context)
                 raise
             return {"RUNNING_MODAL"}
+
+        self._polyline_region_points = []
+        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+            self._polyline_region_points.append(self._mouse_region_pos)
+        self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_knife_preview, (self,), "WINDOW", "POST_PIXEL",
+        )
+        self._workspace.status_text_set(self._hint())
 
         # Override native NEW_CUT only during this seam knife session.
         self._right_mouse_bindings = []
@@ -406,10 +448,25 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
                 self.report({"ERROR"}, f"Knife Seam: {error}")
                 return {"CANCELLED"}
 
+        position = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
+        inside = 0 <= position[0] < self._region.width and 0 <= position[1] < self._region.height
+        if event.type == "MOUSEMOVE" and inside:
+            self._mouse_region_pos = position
+            self._area.tag_redraw()
+        elif event.type == "LEFTMOUSE" and event.value == "PRESS" and inside:
+            if not self._polyline_region_points or (
+                    Vector(position) - Vector(self._polyline_region_points[-1])).length > 1.0:
+                self._polyline_region_points.append(position)
+            self._mouse_region_pos = position
+            self._area.tag_redraw()
+
         if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
             # Let Knife consume its cancel event, then remove this observer on timer.
             self._cancel_requested = True
-            self._select_box_on_cancel = event.type == "RIGHTMOUSE"
+            # In Multi-Point mode the first RMB cancels only the unfinished
+            # stroke. Once the modal session is gone, the tool keymap handles
+            # a second RMB and returns to Select Box.
+            self._select_box_on_cancel = False
             return {"PASS_THROUGH"}
 
         if event.type in {"SPACE", "RET", "NUMPAD_ENTER"} and event.value == "PRESS":
@@ -473,15 +530,21 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
         self._native_selection = []
 
     def _hint(self):
+        if self._polyline_region_points is not None:
+            return "LMB: add point   Space/Enter: apply   RMB: cancel drawing"
         key = ("knife_preview_start" if self._start_region_pos is None else
                "knife_preview_end" if self._end_region_pos is None else "knife_preview_confirm")
         return t(bpy.context, key)
 
     def _modal_stable_view_cut(self, context, event):
-        if event.type in {"ESC", "RIGHTMOUSE"} and event.value == "PRESS":
+        if event.type == "RIGHTMOUSE" and event.value == "PRESS":
+            had_drawing = self._start_region_pos is not None or self._end_region_pos is not None
             self._finish(context)
-            if event.type == "RIGHTMOUSE":
+            if not had_drawing:
                 bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+            return {"CANCELLED"}
+        if event.type == "ESC" and event.value == "PRESS":
+            self._finish(context)
             return {"CANCELLED"}
 
         position = (event.mouse_x - self._region.x, event.mouse_y - self._region.y)
@@ -499,6 +562,9 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
                 self._start_region_pos = position
             else:
                 self._end_region_pos = position
+                self._workspace.status_text_set(self._hint())
+                self._area.tag_redraw()
+                return self._apply_stable_view_cut(context)
             self._workspace.status_text_set(self._hint())
             self._area.tag_redraw()
             return {"RUNNING_MODAL"}
@@ -508,35 +574,38 @@ class MESH_OT_polygroups_knife_seam(bpy.types.Operator):
                 self.report({"WARNING"}, "Click the end point before confirming the cut")
                 return {"RUNNING_MODAL"}
 
-            with context.temp_override(area=self._area, region=self._region):
-                plane_co, plane_no = _screen_plane_world(
-                    context, self._start_region_pos, self._end_region_pos,
-                )
-            if plane_co is None:
-                self.report({"WARNING"}, "Knife Seam line is too short")
-                self._finish(context)
-                return {"CANCELLED"}
-
-            cut_count = _stable_view_cut(
-                self._object_name,
-                plane_co,
-                plane_no,
-                self.only_selected,
-                self.mark_seam,
-                self.clear_selection_after_cutting,
-            )
-            self._finish(context)
-            if cut_count is None:
-                return {"CANCELLED"}
-            if cut_count == 0:
-                self.report({"WARNING"}, "Knife Seam did not intersect the editable mesh")
-            elif self.mark_seam:
-                auto_uv_after_seam_change(context)
-            return {"FINISHED"}
+            return self._apply_stable_view_cut(context)
 
         if event.type in {"MIDDLEMOUSE", "WHEELUPMOUSE", "WHEELDOWNMOUSE", "TRACKPADPAN", "TRACKPADZOOM"}:
             return {"PASS_THROUGH"}
         return {"RUNNING_MODAL"}
+
+    def _apply_stable_view_cut(self, context):
+        with context.temp_override(area=self._area, region=self._region):
+            plane_co, plane_no = _screen_plane_world(
+                context, self._start_region_pos, self._end_region_pos,
+            )
+        if plane_co is None:
+            self.report({"WARNING"}, "Knife Seam line is too short")
+            self._finish(context)
+            return {"CANCELLED"}
+
+        cut_count = _stable_view_cut(
+            self._object_name,
+            plane_co,
+            plane_no,
+            self.only_selected,
+            self.mark_seam,
+            self.clear_selection_after_cutting,
+        )
+        self._finish(context)
+        if cut_count is None:
+            return {"CANCELLED"}
+        if cut_count == 0:
+            self.report({"WARNING"}, "Knife Seam did not intersect the editable mesh")
+        else:
+            auto_uv_after_seam_change(context)
+        return {"FINISHED"}
 
     def cancel(self, context):
         self._finish(context)

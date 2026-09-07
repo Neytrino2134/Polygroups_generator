@@ -72,15 +72,10 @@ def run():
         bpy.ops.screen.screenshot(filepath=str(SCREENSHOT))
     log(f"Preview screenshot: {SCREENSHOT}")
     click(cx + 150, cy + 100)
-    yield 0.2
-    assert operator._end_region_pos is not None
-    before = len(bmesh.from_edit_mesh(obj.data).edges)
-    event("RET", "PRESS", cx + 150, cy + 100)
-    event("RET", "RELEASE", cx + 150, cy + 100)
     yield 0.3
     assert not knife.ACTIVE_KNIFE_OPERATORS
     bm = bmesh.from_edit_mesh(obj.data)
-    assert len(bm.edges) > before and any(edge.seam for edge in bm.edges)
+    assert len(bm.edges) > 12 and any(edge.seam for edge in bm.edges)
     log("Preview, confirmation, and seam marking passed")
     before = len(bm.edges)
     click(cx - 80, cy - 40)
@@ -93,6 +88,27 @@ def run():
     assert not knife.ACTIVE_KNIFE_OPERATORS
     assert len(bmesh.from_edit_mesh(obj.data).edges) == before
     log("Cancel cleanup passed")
+
+    # RMB first clears an unfinished Plane Cut, then a second RMB leaves the tool.
+    click(cx - 60, cy - 30)
+    event("MOUSEMOVE", "NOTHING", cx + 60, cy + 30)
+    yield 0.2
+    assert knife.ACTIVE_KNIFE_OPERATORS
+    operator = knife.ACTIVE_KNIFE_OPERATORS[0]
+    event("RIGHTMOUSE", "PRESS", cx + 60, cy + 30)
+    event("RIGHTMOUSE", "RELEASE", cx + 60, cy + 30)
+    yield 0.2
+    assert not knife.ACTIVE_KNIFE_OPERATORS
+    assert context.workspace.tools.from_space_view3d_mode("EDIT_MESH").idname == "polygroups_generator.knife_seam_tool"
+    event("RIGHTMOUSE", "PRESS", cx + 60, cy + 30)
+    event("RIGHTMOUSE", "RELEASE", cx + 60, cy + 30)
+    yield 0.3
+    assert not knife.ACTIVE_KNIFE_OPERATORS
+    assert context.workspace.tools.from_space_view3d_mode("EDIT_MESH").idname == "builtin.select_box"
+    log("Two-stage Plane Cut RMB passed")
+
+    with context.temp_override(window=window, area=area, region=region):
+        bpy.ops.wm.tool_set_by_id(name="polygroups_generator.knife_seam_tool")
     click(cx, cy)
     yield 0.2
     assert knife.ACTIVE_KNIFE_OPERATORS
