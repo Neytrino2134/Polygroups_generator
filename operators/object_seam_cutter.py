@@ -20,6 +20,7 @@ from .mesh_checks import _select_edges
 from .mesh_checks import _thin_protrusion_faces
 from .mesh_checks import analyze_mesh
 from .relax_seams import relax_seams
+from ..pin_edges import pin_layer, set_pinned
 
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
@@ -34,6 +35,8 @@ CUTTER_COLLECTION_BY_TOOL = {
 }
 CUTTER_PROP = "polygroups_object_seam_cutter"
 CUTTER_TYPE_PROP = "polygroups_object_seam_cutter_type"
+CUTTER_PIN_SEAMS_PROP = "polygroups_object_seam_cutter_pin_seams"
+CUTTER_SOURCE_TOOL_PROP = "polygroups_object_seam_cutter_source_tool"
 CUTTER_PATH_DATA_PROP = "polygroups_object_seam_cutter_path_data"
 CUTTER_DRAW_DATA_PROP = "polygroups_object_seam_cutter_draw_data"
 CUTTER_BACKUP_PREFIX = "Backup_"
@@ -48,6 +51,22 @@ AUTOWELD_VERTEX_GROUP_NAME = "Cutter Seam Weld"
 BOOLEAN_PATH_TEMP_MATERIAL_NAME = "__AI_RETOPO_PATH_CUTTER_TEMP__"
 BOOLEAN_PATH_PLACEHOLDER_MATERIAL_NAME = "__AI_RETOPO_PATH_ORIGINAL_TEMP__"
 DEFAULT_CUTTER_PATH_TILT = radians(90.0)
+
+
+def _cutter_mark_pinned(context, cutter):
+    settings = context.scene.polygroups_object_seam_cutter_settings
+    cutter_type = cutter.get(CUTTER_TYPE_PROP)
+    if cutter_type == "LOCAL_RING":
+        return settings.cutter_local_ring_mark_pinned
+    if cutter_type == "LOCAL_CONTOUR":
+        return settings.cutter_local_contour_mark_pinned
+    if cutter_type == "PATH":
+        source_tool = cutter.get(CUTTER_SOURCE_TOOL_PROP, "PATH")
+        return (settings.cutter_draw_mark_pinned if source_tool == "DRAW"
+                else settings.cutter_path_mark_pinned)
+    if cutter_type == "DRAW_STROKE":
+        return settings.cutter_draw_mark_pinned
+    return bool(cutter.get(CUTTER_PIN_SEAMS_PROP, False))
 CUTTER_PATH_TILT_STEP = radians(15.0)
 DEFAULT_NON_PLANE_CUTTER_THICKNESS = 0.0001
 AUTOFIX_MAX_PROTRUSION_FACES = 2000
@@ -633,6 +652,7 @@ def _create_cutter_path(
     obj.display_type = "TEXTURED"
     obj[CUTTER_PROP] = True
     obj[CUTTER_TYPE_PROP] = "PATH"
+    obj[CUTTER_SOURCE_TOOL_PROP] = collection_type
     obj[CUTTER_PATH_DATA_PROP] = json.dumps(
         [
             {
@@ -696,6 +716,7 @@ def _create_cutter_draw_stroke(
     obj.display_type = "TEXTURED"
     obj[CUTTER_PROP] = True
     obj[CUTTER_TYPE_PROP] = "DRAW_STROKE"
+    obj[CUTTER_SOURCE_TOOL_PROP] = "DRAW"
     obj[CUTTER_DRAW_DATA_PROP] = json.dumps(
         [
             {
@@ -795,6 +816,7 @@ def _convert_draw_stroke_to_cutter_path(context, stroke):
         settings.cutter_path_render_u,
         settings.cutter_extrude,
         settings.cutter_alpha,
+        collection_type="DRAW",
         thickness=settings.cutter_thickness,
     )
     if settings.delete_draw_strokes_after_convert and stroke.name in bpy.data.objects:
@@ -1579,7 +1601,7 @@ def _apply_knife_intersect_cutter_to_mesh(
     )
 
 
-def _remove_cutter_faces_and_mark_seams(mesh, material_index, merge_distance):
+def _remove_cutter_faces_and_mark_seams(mesh, material_index, merge_distance, mark_pinned=False):
     """Keep the shared intersection edges, deleting only cutter-owned geometry."""
     import bmesh
 
@@ -1621,10 +1643,13 @@ def _remove_cutter_faces_and_mark_seams(mesh, material_index, merge_distance):
         if cut_verts:
             bmesh.ops.remove_doubles(bm, verts=list(cut_verts), dist=merge_distance)
         marked = sum(1 for e in bm.edges if e[cut_layer])
+        pins = pin_layer(bm, True) if mark_pinned else None
         for edge in bm.edges:
             if edge[cut_layer]:
                 edge.seam = True
                 edge.select_set(True)
+                if pins is not None:
+                    set_pinned((edge,), pins)
         bm.edges.layers.int.remove(cut_layer)
         bm.normal_update()
         bm.to_mesh(mesh)
@@ -1682,6 +1707,7 @@ def _intersect_cutter_surface(
         return _remove_cutter_faces_and_mark_seams(
             target.data, temp_index,
             thickness * 4.0 if method == "BOOLEAN" else 0.000001,
+            mark_pinned=_cutter_mark_pinned(context, cutter),
         )
     finally:
         if context.object and context.object.mode != "OBJECT":
@@ -2612,6 +2638,7 @@ class OBJECT_OT_polygroups_draw_cutter_local_ring(_LocalDiskCutterInteraction, b
             settings.cutter_alpha,
             settings.cutter_thickness,
         )
+        cutter[CUTTER_PIN_SEAMS_PROP] = settings.cutter_local_ring_mark_pinned
         return cutter
 
 
@@ -2646,6 +2673,7 @@ class OBJECT_OT_polygroups_draw_cutter_local_contour(_LocalDiskCutterInteraction
         cutter.location = seed
         cutter[CUTTER_PROP] = True
         cutter[CUTTER_TYPE_PROP] = "LOCAL_CONTOUR"
+        cutter[CUTTER_PIN_SEAMS_PROP] = settings.cutter_local_contour_mark_pinned
         cutter.data.materials.append(_material(settings.cutter_alpha))
         _add_solidify_modifier(cutter, settings.cutter_thickness)
         _tool_collection("LOCAL_CONTOUR").objects.link(cutter)
@@ -3018,6 +3046,7 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
             )
             if cutter is not None:
                 _write_cutter_path_points(cutter, joined_points)
+                cutter[CUTTER_SOURCE_TOOL_PROP] = "PATH"
 
         if cutter is None:
             cutter = _create_cutter_path(
@@ -3272,6 +3301,7 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
             )
             if cutter is not None:
                 _write_cutter_path_points(cutter, joined_points)
+                cutter[CUTTER_SOURCE_TOOL_PROP] = "DRAW"
 
         if cutter is None:
             cutter = _create_cutter_path(

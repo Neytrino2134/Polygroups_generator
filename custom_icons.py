@@ -17,6 +17,8 @@ _FILES = {
     "edge_seam_path_pin": "Edge_Seam_Path_PIN.png",
     "smart_seams_generator": "Smart_Seam_Generator.png",
     "smart_seams_generator_pin": "Smart_Seam_Generator_PIN.png",
+    "longitudinal_seam": "Long_Seam_Generator.png",
+    "longitudinal_seam_pin": "Long_Seam_Generator_PIN.png",
     "seam_eraser": "Seam_Eraser.png",
     "seam_eraser_pin": "Seam_Eraser_PIN.png",
     "edge_seam_eraser": "Edge_seam_Eraser.png",

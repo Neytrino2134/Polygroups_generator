@@ -43,11 +43,26 @@ def checker_geometry(obj):
     if obj is None or obj.type != "MESH":
         return [], []
     mesh = obj.data
+    matrix = obj.matrix_world
+    if obj.mode == "EDIT":
+        import bmesh
+
+        bm = bmesh.from_edit_mesh(mesh)
+        uv_layer = bm.loops.layers.uv.active
+        if uv_layer is None:
+            return [], []
+        positions = []
+        uvs = []
+        for triangle in bm.calc_loop_triangles():
+            for loop in triangle:
+                positions.append(matrix @ loop.vert.co)
+                uvs.append(loop[uv_layer].uv.copy())
+        return positions, uvs
+
     uv_layer = mesh.uv_layers.active
     if uv_layer is None:
         return [], []
     mesh.calc_loop_triangles()
-    matrix = obj.matrix_world
     positions = []
     uvs = []
     for triangle in mesh.loop_triangles:
@@ -56,13 +71,6 @@ def checker_geometry(obj):
             positions.append(matrix @ mesh.vertices[loop.vertex_index].co)
             uvs.append(uv_layer.data[loop_index].uv.copy())
     return positions, uvs
-
-
-def _sync_edit_mesh(obj):
-    if obj.mode == "EDIT":
-        # UV Editor changes live in the edit BMesh and are not guaranteed to
-        # produce a dependency-graph geometry update. Copy them to Mesh first.
-        obj.update_from_editmode()
 
 
 def _uv_signature(uv_layer):
@@ -76,6 +84,22 @@ def _uv_signature(uv_layer):
     return hash(_UV_BUFFER.tobytes())
 
 
+def _edit_uv_signature(obj):
+    """Read live Edit Mode UVs without copying the BMesh back to Mesh."""
+    import bmesh
+
+    bm = bmesh.from_edit_mesh(obj.data)
+    uv_layer = bm.loops.layers.uv.active
+    if uv_layer is None:
+        return 0
+    values = array("f")
+    for face in bm.faces:
+        for loop in face.loops:
+            uv = loop[uv_layer].uv
+            values.extend((uv.x, uv.y))
+    return hash(values.tobytes())
+
+
 def _cache_key(obj):
     mesh = obj.data
     uv_layer = mesh.uv_layers.active
@@ -83,7 +107,7 @@ def _cache_key(obj):
         obj.as_pointer(), mesh.as_pointer(), obj.mode, uv_layer.name if uv_layer else "",
         len(mesh.vertices), len(mesh.loops), len(mesh.polygons),
         tuple(value for row in obj.matrix_world for value in row),
-        _uv_signature(uv_layer) if uv_layer and obj.mode == "EDIT" else 0,
+        _edit_uv_signature(obj) if uv_layer and obj.mode == "EDIT" else 0,
     )
 
 
@@ -96,7 +120,6 @@ def _checker_batch(obj):
         and time.monotonic() < _EDIT_CACHE_CHECK_AT
     ):
         return _BATCH_CACHE[1]
-    _sync_edit_mesh(obj)
     key = _cache_key(obj)
     if _BATCH_CACHE is not None and _BATCH_CACHE[0] == key:
         return _BATCH_CACHE[1]

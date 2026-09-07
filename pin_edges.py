@@ -4,6 +4,9 @@ import bmesh
 
 PIN_LAYER = "polygroups_pin_edge"
 PIN_COLOR = (1.0, 0.18, 0.75, 1.0)
+PIN_GROOVE_COLOR = (0.16, 0.015, 0.09, 0.95)
+PIN_OUTLINE_WIDTH = 1.8
+PIN_GROOVE_WIDTH = 0.65
 _draw_handle = None
 
 
@@ -59,9 +62,15 @@ def draw_pinned_edges():
         )
         shader.bind()
         shader.uniform_float("viewportSize", viewport)
-        shader.uniform_float("lineWidth", max(2.0, 2.5 * scale))
+        shader.uniform_float("lineWidth", max(1.5, PIN_OUTLINE_WIDTH * scale))
         shader.uniform_float("color", PIN_COLOR)
-        batch_for_shader(shader, "LINES", {"pos": coords}).draw(shader)
+        batch = batch_for_shader(shader, "LINES", {"pos": coords})
+        batch.draw(shader)
+        # A narrow dark center gives pinned seams the same recessed/readable
+        # profile as Blender's native marked-seam overlay without a heavy band.
+        shader.uniform_float("lineWidth", max(0.5, PIN_GROOVE_WIDTH * scale))
+        shader.uniform_float("color", PIN_GROOVE_COLOR)
+        batch.draw(shader)
     finally:
         gpu.state.depth_test_set(depth_test)
         gpu.state.blend_set(blend)

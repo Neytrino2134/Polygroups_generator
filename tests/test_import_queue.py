@@ -27,6 +27,8 @@ assert settings.batch_remesh_preset == "HIGH" and settings.file_import_remesh_pr
 assert settings.batch_remesh_method == "QUAD" and settings.file_import_remesh_method == "QUAD"
 assert abs(settings.batch_voxel_size - 0.003) < 1e-7
 assert abs(settings.file_import_voxel_size - 0.003) < 1e-7
+assert settings.batch_disable_auto_unwrap and settings.file_import_disable_auto_unwrap
+assert settings.batch_disable_view_assist and settings.file_import_disable_view_assist
 settings.batch_auto_remesh = True
 settings.batch_separate_collections = True
 settings.batch_auto_arrange_objects = True
@@ -119,8 +121,16 @@ with tempfile.TemporaryDirectory() as directory:
         wm.fileselect_add.assert_not_called()
     queue_module.ACTIVE_QUEUE = None
     with patch.object(queue_module, "RemeshJob", FakeJob):
+        context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam = True
+        context.scene.polygroups_seam_finalization_settings.show_checker_solid_mode = True
+        context.scene.polygroups_seam_preparation_settings.show_seams_object_mode = True
+        settings.remesh_auto_unwrap_checker = True
         queue = queue_module.ImportQueue(context, paths, False, report)
         queue.begin()
+        assert not context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam
+        assert not context.scene.polygroups_seam_finalization_settings.show_checker_solid_mode
+        assert not context.scene.polygroups_seam_preparation_settings.show_seams_object_mode
+        assert not settings.remesh_auto_unwrap_checker
         advance_until(queue, lambda: queue.stage == "WAIT_REMESH")
         settings.batch_is_paused = True
         advance_until(queue, lambda: queue.stage == "NEXT")

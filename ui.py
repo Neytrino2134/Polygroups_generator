@@ -1027,6 +1027,10 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
                 text=t(context, "auto_rename_objects"),
             )
             files_box.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
+            files_box.prop(settings, "file_import_disable_auto_unwrap",
+                           text=t(context, "disable_auto_unwrap"))
+            files_box.prop(settings, "file_import_disable_view_assist",
+                           text=t(context, "disable_view_assist"))
             draw_import_remesh_options(files_box, context, settings, "file_import")
 
         content = draw_topic(layout, context, "import_2", t(context, "import_group_progress"), "INFO")
@@ -1077,6 +1081,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         if content is not None:
             content.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
             content.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
+            content.prop(settings, "batch_disable_auto_unwrap",
+                         text=t(context, "disable_auto_unwrap"))
+            content.prop(settings, "batch_disable_view_assist",
+                         text=t(context, "disable_view_assist"))
             draw_import_remesh_options(content, context, settings, "batch")
 
         content = draw_topic(layout, context, "batch_2", t(context, "arrange_objects"), "SNAP_EDGE")
@@ -3182,6 +3190,13 @@ def draw_edge_menu(self, context):
         "seam_path_pin",
         text=t(context, "mark_as_pinned"),
     )
+    layout.prop(
+        context.scene.polygroups_seam_finalization_settings,
+        "auto_unwrap_after_seam",
+        text=t(context, "auto_unwrap"),
+        toggle=True,
+        icon="UV",
+    )
     layout.operator(
         "mesh.polygroups_connect_vertex_seam",
         text=t(context, "connect_vertices_seam"),
@@ -3223,6 +3238,19 @@ def draw_outliner_header(self, context):
     """Compact duplicates of Management controls in the Outliner header."""
     row = self.layout.row(align=True)
     row.separator()
+    previous = row.operator(
+        "object.polygroups_generated_collection",
+        text="Prev",
+        icon="TRIA_LEFT",
+    )
+    previous.action = "PREVIOUS"
+    following = row.operator(
+        "object.polygroups_generated_collection",
+        text="Next",
+        icon="TRIA_RIGHT",
+    )
+    following.action = "NEXT"
+    row.separator()
     hide_highpoly = row.operator(
         "object.polygroups_object_visibility",
         text="",
@@ -3252,19 +3280,6 @@ def draw_outliner_header(self, context):
     )
     show_lowpoly.prefix = "Retopo_"
     show_lowpoly.hidden = False
-    row.separator()
-    previous = row.operator(
-        "object.polygroups_generated_collection",
-        text="Prev",
-        icon="TRIA_LEFT",
-    )
-    previous.action = "PREVIOUS"
-    following = row.operator(
-        "object.polygroups_generated_collection",
-        text="Next",
-        icon="TRIA_RIGHT",
-    )
-    following.action = "NEXT"
 
 
 def draw_view_assists_header(self, context):

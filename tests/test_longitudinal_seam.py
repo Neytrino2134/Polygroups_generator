@@ -10,6 +10,7 @@ import bpy
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
 addon_utils.enable(ROOT.name, default_set=True)
+from polygroups_generator.pin_edges import is_pinned, pin_layer
 
 
 def make_open_cylinder(columns=12, rows=7):
@@ -61,7 +62,9 @@ assert offset and offset != simple
 obj = make_open_cylinder()
 assert bpy.ops.mesh.polygroups_mark_longitudinal_seam(
     double_seam=False, prefer_backside=False, seam_offset=0,
-    path_method="SMART", create_new_edges=True) == {"FINISHED"}
+    path_method="SMART", create_new_edges=True, mark_as_pinned=True) == {"FINISHED"}
 bm = bmesh.from_edit_mesh(obj.data)
 assert any(edge.seam for edge in bm.edges)
+pins = pin_layer(bm, False)
+assert pins is not None and all(is_pinned(edge, pins) for edge in bm.edges if edge.seam)
 print("LONGITUDINAL SEAM MODES PASSED")

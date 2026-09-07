@@ -130,6 +130,7 @@ from .small_islands import (
     MESH_OT_polygroups_analyze_and_merge_seams,
     MESH_OT_polygroups_merge_small_islands,
 )
+from .small_islands_tool import MESH_OT_polygroups_small_islands_merger_gesture
 from .pin_edges import MESH_OT_polygroups_pin_selected_seams, MESH_OT_polygroups_unpin_selected_edges, MESH_OT_polygroups_clear_all_pins
 from .smart_angle_seams import MESH_OT_polygroups_mark_smart_angle_seams
 from .smart_angle_seams import MESH_OT_polygroups_smart_seams_generator_click
@@ -152,6 +153,7 @@ CLASSES = (
     WM_OT_airetopo_dev_cleanup,
     MESH_OT_polygroups_merge_small_islands,
     MESH_OT_polygroups_analyze_and_merge_seams,
+    MESH_OT_polygroups_small_islands_merger_gesture,
     MESH_OT_polygroups_pin_selected_seams,
     MESH_OT_polygroups_unpin_selected_edges,
     MESH_OT_polygroups_clear_all_pins,

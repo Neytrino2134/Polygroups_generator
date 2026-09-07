@@ -72,6 +72,8 @@ class ImportQueue:
         self.voxel_size = getattr(settings, prefix + "_voxel_size")
         self.clear_material = getattr(settings, prefix + "_clear_material")
         self.separate = getattr(settings, prefix + "_separate_collections")
+        self.disable_auto_unwrap = getattr(settings, prefix + "_disable_auto_unwrap")
+        self.disable_view_assist = getattr(settings, prefix + "_disable_view_assist")
         self.quad_count = dict(get_remesh_preset_counts(context))[
             getattr(settings, prefix + "_remesh_preset")
         ]
@@ -90,6 +92,12 @@ class ImportQueue:
     def begin(self):
         self.timing = ImportTiming()
         settings = self.settings
+        if self.disable_auto_unwrap:
+            self.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam = False
+            settings.remesh_auto_unwrap_checker = False
+        if self.disable_view_assist:
+            self.scene.polygroups_seam_preparation_settings.show_seams_object_mode = False
+            self.scene.polygroups_seam_finalization_settings.show_checker_solid_mode = False
         settings.batch_is_running = True
         settings.batch_is_paused = False
         settings.batch_stop_requested = False

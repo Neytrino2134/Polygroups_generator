@@ -30,18 +30,18 @@ class FakeLayout:
 
 draw_outliner_header(SimpleNamespace(layout=FakeLayout()), None)
 assert [call[0] for call in calls] == [
-    "object.polygroups_object_visibility",
-    "object.polygroups_object_visibility",
-    "object.polygroups_object_visibility",
-    "object.polygroups_object_visibility",
     "object.polygroups_generated_collection",
     "object.polygroups_generated_collection",
+    "object.polygroups_object_visibility",
+    "object.polygroups_object_visibility",
+    "object.polygroups_object_visibility",
+    "object.polygroups_object_visibility",
 ]
-assert calls[0][2].prefix == "Highpoly_" and calls[0][2].hidden is True
-assert calls[1][2].prefix == "Highpoly_" and calls[1][2].hidden is False
-assert calls[2][2].prefix == "Retopo_" and calls[2][2].hidden is True
-assert calls[3][2].prefix == "Retopo_" and calls[3][2].hidden is False
-assert calls[4][2].action == "PREVIOUS"
-assert calls[5][2].action == "NEXT"
-assert [call[1]["text"] for call in calls] == ["", "", "", "", "Prev", "Next"]
+assert calls[0][2].action == "PREVIOUS"
+assert calls[1][2].action == "NEXT"
+assert calls[2][2].prefix == "Highpoly_" and calls[2][2].hidden is True
+assert calls[3][2].prefix == "Highpoly_" and calls[3][2].hidden is False
+assert calls[4][2].prefix == "Retopo_" and calls[4][2].hidden is True
+assert calls[5][2].prefix == "Retopo_" and calls[5][2].hidden is False
+assert [call[1]["text"] for call in calls] == ["Prev", "Next", "", "", "", ""]
 print("OUTLINER_HEADER_OK", flush=True)

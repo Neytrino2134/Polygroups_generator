@@ -104,7 +104,13 @@ def _single_section_mode_update(self, context):
 
 def _seam_tool_icon_update(self, context):
     from .tools import update_dynamic_seam_tool_icons
-    update_dynamic_seam_tool_icons(self, context)
+    settings = getattr(context.scene, "polygroups_seam_preparation_settings", self)
+    update_dynamic_seam_tool_icons(settings, context)
+
+
+def _small_islands_tool_icon_update(self, context):
+    from .tools import update_small_islands_merger_tool_icon
+    update_small_islands_merger_tool_icon(self, context)
 
 
 def _sync_cutter_solidify_thickness(self, context):
@@ -239,6 +245,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Apply Weld to mesh objects imported through file selection",
         default=True,
     )
+    file_import_disable_auto_unwrap: bpy.props.BoolProperty(
+        name="Disable Auto Unwrap",
+        description="Disable automatic UV unwrapping after import",
+        default=True,
+    )
+    file_import_disable_view_assist: bpy.props.BoolProperty(
+        name="Disable View Assist",
+        description="Disable checker and seam display after import",
+        default=True,
+    )
     batch_auto_rename_objects: bpy.props.BoolProperty(
         name="Auto Rename Objects",
         description="Rename imported objects and move them to the Generated collection",
@@ -247,6 +263,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_apply_weld: bpy.props.BoolProperty(
         name="Apply Weld",
         description="Apply Weld to imported mesh objects after each file import",
+        default=True,
+    )
+    batch_disable_auto_unwrap: bpy.props.BoolProperty(
+        name="Disable Auto Unwrap",
+        description="Disable automatic UV unwrapping after batch import",
+        default=True,
+    )
+    batch_disable_view_assist: bpy.props.BoolProperty(
+        name="Disable View Assist",
+        description="Disable checker and seam display after batch import",
         default=True,
     )
     batch_include_subfolders: bpy.props.BoolProperty(
@@ -791,6 +817,16 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         ),
         default="VOLUME",
     )
+    cutter_local_ring_mark_pinned: bpy.props.BoolProperty(
+        name="Mark As Pinned",
+        description="Pin seams created by Local Ring cutters",
+        default=False,
+    )
+    cutter_local_contour_mark_pinned: bpy.props.BoolProperty(
+        name="Mark As Pinned",
+        description="Pin seams created by Local Contour cutters",
+        default=False,
+    )
     cutter_apply_method: bpy.props.EnumProperty(
         name="Apply Method",
         description="Method used to apply arc, path, and draw cutter seams",
@@ -887,6 +923,16 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         name="Continue Path Cutters",
         description="Append new cutter paths to nearby existing cutter paths instead of creating separate objects",
         default=True,
+    )
+    cutter_path_mark_pinned: bpy.props.BoolProperty(
+        name="Mark As Pinned",
+        description="Pin seams created by Path curve cutters",
+        default=False,
+    )
+    cutter_draw_mark_pinned: bpy.props.BoolProperty(
+        name="Mark As Pinned",
+        description="Pin seams created by Draw curve cutters",
+        default=False,
     )
     cutter_path_join_distance: bpy.props.FloatProperty(
         name="Path Join Distance",
@@ -1022,6 +1068,17 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
     show_group_materials: bpy.props.BoolProperty(name="Material Management", default=False)
     small_island_threshold: bpy.props.FloatProperty(name="Area Threshold (%)", default=3.0, min=1.0, max=49.0,
         description="Percentage of the largest seam island area in each connected mesh component")
+    small_islands_merger_shape: bpy.props.EnumProperty(
+        name="Selection Type",
+        description="Gesture used by the Small Islands Merger tool",
+        items=(
+            ("BOX", "Box", "Select seam islands with a rectangular region", "MESH_PLANE", 0),
+            ("LASSO", "Lasso", "Select seam islands with a freehand region", "GP_SELECT_STROKES", 1),
+            ("CIRCLE", "Circle", "Paint over seam islands with a circular brush", "MESH_CIRCLE", 2),
+        ),
+        default="BOX",
+        update=_small_islands_tool_icon_update,
+    )
     small_island_protect_sharp: bpy.props.BoolProperty(name="Protect Sharp Edges", default=True)
     small_island_protect_materials: bpy.props.BoolProperty(name="Protect Material Boundaries", default=False)
     small_island_selected_area: bpy.props.BoolProperty(
@@ -1094,6 +1151,12 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         name="Double Seam",
         description="Create a second longitudinal seam on the opposite side of the selected cylinder or cone",
         default=False,
+    )
+    pin_longitudinal_seam: bpy.props.BoolProperty(
+        name="Mark Generated As Pinned",
+        description="Pin seam edges generated by the Longitudinal Seam tool",
+        default=False,
+        update=_seam_tool_icon_update,
     )
 
 

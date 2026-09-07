@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT.parent))
 addon_utils.enable(ROOT.name, default_set=True)
 
 from polygroups_generator import uv_checker_overlay as overlay
-from polygroups_generator.uv_checker_overlay import _cache_key, _sync_edit_mesh, checker_geometry
+from polygroups_generator.uv_checker_overlay import _cache_key, checker_geometry
 
 
 settings = bpy.context.scene.polygroups_seam_finalization_settings
@@ -80,8 +80,13 @@ bm.faces.ensure_lookup_table()
 bm_uv = bm.loops.layers.uv.active
 bm.faces[0].loops[0][bm_uv].uv.x += 0.375
 bmesh.update_edit_mesh(mesh, loop_triangles=False, destructive=False)
-_sync_edit_mesh(obj)
 assert _cache_key(obj) != original_key
+edit_positions, edit_uvs = checker_geometry(obj)
+assert len(edit_positions) == 6
+assert len(edit_uvs) == 6
+
+# The same polygon safety limit applies before any Edit Mode mesh/UV sync.
+assert overlay.exceeds_polygon_limit(obj, 0) is False
 
 bpy.ops.object.mode_set(mode="OBJECT")
 bpy.data.objects.remove(obj, do_unlink=True)

@@ -19,6 +19,7 @@ addon_utils.enable("polygroups_generator")
 class Layout:
     def __init__(self):
         self.operators = []
+        self.properties = []
 
     def separator(self):
         pass
@@ -26,8 +27,8 @@ class Layout:
     def label(self, **_kwargs):
         pass
 
-    def prop(self, *_args, **_kwargs):
-        pass
+    def prop(self, owner, name, **kwargs):
+        self.properties.append((owner, name, kwargs))
 
     def operator(self, identifier, **kwargs):
         self.operators.append((identifier, kwargs.get("text", "")))
@@ -41,4 +42,7 @@ assert layout.operators[:2] == [
     ("mesh.polygroups_connect_vertex_seam", "Connect Vertices with Seam"),
     ("mesh.polygroups_edge_seam_path", "Connect Vertices with Edge Seam Path"),
 ]
+assert layout.properties[1][0] == bpy.context.scene.polygroups_seam_finalization_settings
+assert layout.properties[1][1] == "auto_unwrap_after_seam"
+assert layout.properties[1][2]["toggle"] is True
 print("EDGE_MENU_OK", flush=True)

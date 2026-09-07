@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT.parent))
 addon_utils.enable(ROOT.name, default_set=True)
 bpy.context.preferences.addons[ROOT.name].preferences.play_sound_after_operations = False
 from polygroups_generator.operators import object_seam_cutter as c
+from polygroups_generator.pin_edges import is_pinned, pin_layer
 
 # Extrude and Solidify must remain independent on both new and existing curves.
 settings = bpy.context.scene.polygroups_object_seam_cutter_settings
@@ -51,6 +52,10 @@ for method in ('KNIFE', 'BOOLEAN'):
             settings.cutter_apply_method = method
             settings.cutter_boolean_solver = solver
             settings.cutter_auto_fix_mesh = False
+            settings.cutter_local_ring_mark_pinned = kind == 'LOCAL_RING'
+            settings.cutter_local_contour_mark_pinned = False
+            settings.cutter_path_mark_pinned = kind == 'PATH'
+            settings.cutter_draw_mark_pinned = False
             settings.hide_cutters_after_apply = False
             settings.delete_cutters_after_apply = False
             bpy.ops.object.select_all(action='DESELECT')
@@ -61,13 +66,26 @@ for method in ('KNIFE', 'BOOLEAN'):
             bm = bmesh.new()
             bm.from_mesh(target.data)
             seams = [e for e in bm.edges if e.seam]
+            pins = pin_layer(bm, False)
             print('CASE', method, solver, kind, 'seams', len(seams), 'open', sum(not e.is_manifold for e in bm.edges), flush=True)
             assert len(seams) >= 4, (method, solver, kind)
+            if kind in {'LOCAL_RING', 'PATH'}:
+                assert pins is not None and all(is_pinned(edge, pins) for edge in seams)
             assert all(e.is_manifold for e in bm.edges), (method, solver, kind, 'open edges')
             assert all(sum(e.seam for e in v.link_edges) == 2 for v in bm.verts if any(e.seam for e in v.link_edges)), 'seam must be a closed loop'
             assert abs(abs(bm.calc_volume()) - 8) < .05
             assert not target.data.materials
             bm.free()
+# Draw and Path use independent pin switches even though both apply as curves.
+probe = c._create_cutter_path('DrawProbe', [
+    {'location': Vector((-1, 0, 0)), 'normal': Vector((0, 0, 1))},
+    {'location': Vector((1, 0, 0)), 'normal': Vector((0, 0, 1))},
+], 4, .1, .5, collection_type='DRAW')
+settings.cutter_path_mark_pinned = False
+settings.cutter_draw_mark_pinned = True
+assert c._cutter_mark_pinned(bpy.context, probe)
+probe[c.CUTTER_SOURCE_TOOL_PROP] = 'PATH'
+assert not c._cutter_mark_pinned(bpy.context, probe)
 # Repeated cuts keep the previous seam selected, preserve materials and open borders.
 for method in ('KNIFE', 'BOOLEAN'):
     bpy.ops.object.select_all(action='SELECT')
