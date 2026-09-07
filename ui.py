@@ -1223,6 +1223,15 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             "cutter_auto_fix_weld_distance",
             text="Weld",
         )
+        triangulate_toggle = autofix_row.row(align=True)
+        triangulate_toggle.enabled = settings.cutter_auto_fix_mesh
+        triangulate_toggle.prop(
+            settings,
+            "cutter_auto_fix_triangulate_ngons",
+            text="",
+            icon="MOD_TRIANGULATE",
+            toggle=True,
+        )
         status_box = layout.box()
         status_box.label(text="Apply Cutter Seams Status", icon="MOD_BOOLEAN")
         if settings.cutter_apply_stage:
@@ -1255,6 +1264,15 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
         layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
+        stabilize_row = layout.row(align=True)
+        stabilize_row.prop(settings, "cutter_draw_stabilize_stroke",
+                           text=t(context, "draw_stabilize_stroke"), toggle=True)
+        stabilize_settings = stabilize_row.row(align=True)
+        stabilize_settings.enabled = settings.cutter_draw_stabilize_stroke
+        stabilize_settings.prop(settings, "cutter_draw_stabilize_radius",
+                                text=t(context, "draw_stabilize_radius"))
+        stabilize_settings.prop(settings, "cutter_draw_stabilize_factor",
+                                text=t(context, "draw_stabilize_factor"))
         layout.prop(settings, "continue_draw_strokes", text=t(context, "continue_draw_strokes"))
         layout.prop(settings, "cutter_draw_join_distance", text=t(context, "draw_join_distance"))
         layout.prop(settings, "auto_convert_draw_strokes", text=t(context, "auto_convert_draw_strokes"))
@@ -2708,14 +2726,63 @@ def draw_edge_menu(self, context):
     layout.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), **icon_kwargs("unpin_vertices", "X"))
 
 
+def draw_outliner_header(self, context):
+    """Compact duplicates of Management controls in the Outliner header."""
+    row = self.layout.row(align=True)
+    row.separator()
+    previous = row.operator(
+        "object.polygroups_generated_collection",
+        text="",
+        icon="TRIA_LEFT",
+    )
+    previous.action = "PREVIOUS"
+    following = row.operator(
+        "object.polygroups_generated_collection",
+        text="",
+        icon="TRIA_RIGHT",
+    )
+    following.action = "NEXT"
+    hide_lowpoly = row.operator(
+        "object.polygroups_object_visibility",
+        text="L",
+        icon="RESTRICT_VIEW_ON",
+    )
+    hide_lowpoly.prefix = "Retopo_"
+    hide_lowpoly.hidden = True
+    show_lowpoly = row.operator(
+        "object.polygroups_object_visibility",
+        text="L",
+        icon="RESTRICT_VIEW_OFF",
+    )
+    show_lowpoly.prefix = "Retopo_"
+    show_lowpoly.hidden = False
+    row.separator()
+    hide_highpoly = row.operator(
+        "object.polygroups_object_visibility",
+        text="H",
+        icon="RESTRICT_VIEW_ON",
+    )
+    hide_highpoly.prefix = "Highpoly_"
+    hide_highpoly.hidden = True
+    show_highpoly = row.operator(
+        "object.polygroups_object_visibility",
+        text="H",
+        icon="RESTRICT_VIEW_OFF",
+    )
+    show_highpoly.prefix = "Highpoly_"
+    show_highpoly.hidden = False
+
+
 def register():
     update_panel_labels(bpy.context)
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.VIEW3D_MT_edit_mesh_edges.append(draw_edge_menu)
+    bpy.types.OUTLINER_HT_header.append(draw_outliner_header)
 
 
 def unregister():
+    bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)
     bpy.types.VIEW3D_MT_edit_mesh_edges.remove(draw_edge_menu)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

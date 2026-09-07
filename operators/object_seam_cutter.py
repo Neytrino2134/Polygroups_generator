@@ -71,6 +71,87 @@ def _sync_autoweld_vertex_group(target):
     return group
 
 
+def _dissolve_degenerate_seam_geometry(target, distance):
+    """Repair degenerate, concave, and locally flipped faces near seams."""
+    import bmesh
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(target.data)
+        seam_verts = {vert for edge in bm.edges if edge.seam for vert in edge.verts}
+        if not seam_verts:
+            return 0
+        tolerance = max(float(distance) * 0.01, 1e-8)
+        repaired = 0
+
+        # A vertex pushed through a quad makes one corner turn in the opposite
+        # direction. Triangulation gives Blender an unambiguous concave fill.
+        folded_quads = []
+        for face in bm.faces:
+            if len(face.verts) != 4 or not any(vert in seam_verts for vert in face.verts):
+                continue
+            turns = []
+            verts = list(face.verts)
+            for index, vert in enumerate(verts):
+                before = verts[index - 1].co - vert.co
+                after = verts[(index + 1) % len(verts)].co - vert.co
+                turns.append(before.cross(after).dot(face.normal))
+            significant = [turn for turn in turns if abs(turn) > tolerance * tolerance]
+            if significant and min(significant) < 0.0 < max(significant):
+                folded_quads.append(face)
+        if folded_quads:
+            bmesh.ops.triangulate(
+                bm, faces=folded_quads, quad_method="BEAUTY", ngon_method="BEAUTY",
+            )
+            repaired += len(folded_quads)
+            bm.normal_update()
+
+        # A triangle that has crossed into the neighboring surface points
+        # against the surrounding faces. Collapse its shortest edge instead of
+        # leaving an overlapping negative-orientation sliver.
+        flipped_edges = []
+        for face in list(bm.faces):
+            if len(face.verts) != 3 or not any(vert in seam_verts for vert in face.verts):
+                continue
+            neighbors = {other for edge in face.edges for other in edge.link_faces if other != face}
+            if len(neighbors) < 2:
+                continue
+            average = sum((other.normal * max(other.calc_area(), 1e-20) for other in neighbors), Vector())
+            if average.length and face.normal.dot(average.normalized()) < -0.25:
+                flipped_edges.append(min(face.edges, key=lambda edge: edge.calc_length()))
+        for edge in flipped_edges:
+            if edge.is_valid:
+                bmesh.ops.collapse(bm, edges=[edge])
+                repaired += 1
+        if flipped_edges:
+            bm.normal_update()
+
+        candidates = []
+        for face in bm.faces:
+            if len(face.verts) != 3 or not any(vert in seam_verts for vert in face.verts):
+                continue
+            longest = max((edge.calc_length() for edge in face.edges), default=0.0)
+            # triangle area = base * height / 2
+            if longest > 0.0 and face.calc_area() * 2.0 <= longest * tolerance:
+                candidates.extend(face.edges)
+        candidates = list(set(candidates))
+        if not candidates:
+            if repaired:
+                bm.to_mesh(target.data)
+                target.data.update()
+            return repaired
+        before = len(bm.faces)
+        bmesh.ops.dissolve_degenerate(bm, edges=candidates, dist=tolerance)
+        repaired += max(0, before - len(bm.faces))
+        if repaired:
+            bm.normal_update()
+            bm.to_mesh(target.data)
+            target.data.update()
+        return repaired
+    finally:
+        bm.free()
+
+
 def _prepare_seam_band_autoweld(target, distance):
     """Create a final Weld modifier restricted to the expanded seam band."""
     group = _sync_autoweld_vertex_group(target)
@@ -2932,6 +3013,21 @@ class OBJECT_OT_polygroups_draw_cutter_path(bpy.types.Operator):
         self._tag_redraw()
 
 
+def _stabilize_stroke_position(current, raw, radius, factor):
+    """Return a delayed screen-space point using brush-style radius and smoothing."""
+    raw = Vector(raw)
+    if current is None:
+        return raw
+    current = Vector(current)
+    delta = raw - current
+    radius = max(0.0, float(radius))
+    if delta.length <= radius:
+        return current
+    target = raw - delta.normalized() * radius
+    response = max(0.01, min(1.0, 1.0 - float(factor)))
+    return current.lerp(target, response)
+
+
 class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
     bl_idname = "object.polygroups_draw_cutter_draw"
     bl_label = "Draw Cutter Path"
@@ -2954,6 +3050,7 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
     _draw_handle = None
     _view_navigation_active = False
     _is_drawing = False
+    _stabilized_pos = None
 
     def _is_view_navigation_event(self, event):
         if event.type == "MOUSEMOVE" and self._view_navigation_active:
@@ -3009,6 +3106,7 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
         self._draw_handle = None
         self._view_navigation_active = False
         self._is_drawing = False
+        self._stabilized_pos = None
 
         if self.use_event_as_start:
             self._is_drawing = True
@@ -3040,8 +3138,9 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
             area, region, rv3d, region_pos = _view3d_under_mouse(context, event)
             if self._points and area == self._start_area and region == self._start_region:
                 del rv3d
-                self._mouse_pos = region_pos
-                self._tag_redraw()
+                if not (self._is_drawing and event.ctrl):
+                    self._mouse_pos = region_pos
+                    self._tag_redraw()
             if self._is_drawing and event.ctrl:
                 self._add_point_from_event(context, event)
             return {"RUNNING_MODAL"}
@@ -3071,11 +3170,25 @@ class OBJECT_OT_polygroups_draw_cutter_draw(bpy.types.Operator):
         elif area != self._start_area or region != self._start_region:
             return False
 
+        settings = context.scene.polygroups_object_seam_cutter_settings
+        if settings.cutter_draw_stabilize_stroke:
+            if force:
+                self._stabilized_pos = Vector(region_pos)
+            else:
+                self._stabilized_pos = _stabilize_stroke_position(
+                    self._stabilized_pos,
+                    region_pos,
+                    settings.cutter_draw_stabilize_radius,
+                    settings.cutter_draw_stabilize_factor,
+                )
+            region_pos = self._stabilized_pos
+        else:
+            self._stabilized_pos = Vector(region_pos)
+
         hit = _surface_hit_from_region_pos(region, rv3d, region_pos, target)
         if hit is None:
             return False
 
-        settings = context.scene.polygroups_object_seam_cutter_settings
         if self._surface_points and not force:
             previous = self._surface_points[-1]["location"]
             if (hit[0] - previous).length < settings.cutter_draw_min_point_distance:
@@ -3534,7 +3647,10 @@ class OBJECT_OT_polygroups_auto_fix_after_cutter(bpy.types.Operator):
             removed_fins = _remove_fin_faces_for_autofix(context, target)
             removed_loose = _delete_loose_geometry_for_autofix(context, target)
         filled_faces = _fill_open_nonmanifold_boundaries(target)
-        triangulated_ngons = _triangulate_ngons_for_autofix(target)
+        triangulated_ngons = (
+            _triangulate_ngons_for_autofix(target)
+            if settings.cutter_auto_fix_triangulate_ngons else 0
+        )
         self.report(
             {"INFO"},
             f"Autofix removed {removed_fins} fin face(s) and {removed_loose} loose item(s), "
@@ -3776,11 +3892,9 @@ class CutterApplySession:
             removed_fins = _remove_fin_faces_for_autofix(context, self.target)
             removed_loose = _delete_loose_geometry_for_autofix(context, self.target)
         filled = _fill_open_nonmanifold_boundaries(self.target)
-        triangulated = _triangulate_ngons_for_autofix(self.target)
         setattr(self, f"removed_fins_{suffix}", removed_fins)
         setattr(self, f"removed_loose_{suffix}", removed_loose)
         setattr(self, f"filled_{suffix}", filled)
-        setattr(self, f"triangulated_{suffix}", triangulated)
 
     def finish(self, context, stage, message=""):
         if self.done:
@@ -3844,6 +3958,10 @@ class CutterApplySession:
                 self.set_stage("WELDING", 96, "Welding nearby vertices")
             elif stage == "WELDING":
                 if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_weld:
+                    _dissolve_degenerate_seam_geometry(
+                        self.target,
+                        self.settings.cutter_auto_fix_weld_distance,
+                    )
                     _prepare_seam_band_autoweld(
                         self.target,
                         self.settings.cutter_auto_fix_weld_distance,
@@ -3854,7 +3972,18 @@ class CutterApplySession:
                         self.settings.cutter_auto_fix_weld_distance,
                         self.report,
                     )
-                self.set_stage("FINALIZING", 98, "Finalizing cutter operation")
+                    # Weld can create a new zero-area or folded face while
+                    # merging the seam band, so validate the result once more.
+                    _dissolve_degenerate_seam_geometry(
+                        self.target,
+                        self.settings.cutter_auto_fix_weld_distance,
+                    )
+                    _sync_autoweld_vertex_group(self.target)
+                self.set_stage("TRIANGULATING_NGONS", 98, "Triangulating n-gons")
+            elif stage == "TRIANGULATING_NGONS":
+                if self.settings.cutter_auto_fix_mesh and self.settings.cutter_auto_fix_triangulate_ngons:
+                    self.triangulated_after = _triangulate_ngons_for_autofix(self.target)
+                self.set_stage("FINALIZING", 99, "Finalizing cutter operation")
             elif stage == "FINALIZING":
                 self.settings.last_cutter_count = len(self.cutters)
                 self.settings.last_marked_edge_count = self.marked_edges

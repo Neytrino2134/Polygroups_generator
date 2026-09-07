@@ -743,7 +743,7 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
     )
     cutter_auto_fix_mesh: bpy.props.BoolProperty(
         name="Autofix",
-        description="Before and after cutter seams, fill open boundaries and triangulate n-gons",
+        description="Run the enabled mesh repair stages around cutter application",
         default=True,
     )
     cutter_auto_fix_fin_faces: bpy.props.BoolProperty(
@@ -784,6 +784,11 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         precision=4,
         subtype="DISTANCE",
         update=_sync_cutter_autoweld_distance,
+    )
+    cutter_auto_fix_triangulate_ngons: bpy.props.BoolProperty(
+        name="Triangulate N-gons",
+        description="Triangulate faces with more than four sides after the final Weld stage",
+        default=True,
     )
     cutter_mirror_axis: bpy.props.EnumProperty(
         name="Mirror Axis",
@@ -832,6 +837,28 @@ class POLYGROUPS_PG_object_seam_cutter_settings(bpy.types.PropertyGroup):
         min=0.0,
         soft_max=0.2,
         precision=4,
+    )
+    cutter_draw_stabilize_stroke: bpy.props.BoolProperty(
+        name="Stabilize Stroke",
+        description="Draw from a delayed, smoothed cursor position",
+        default=False,
+    )
+    cutter_draw_stabilize_radius: bpy.props.IntProperty(
+        name="Stabilize Radius",
+        description="Screen-space delay radius for stabilized cutter strokes",
+        default=25,
+        min=1,
+        max=200,
+        subtype="PIXEL",
+    )
+    cutter_draw_stabilize_factor: bpy.props.FloatProperty(
+        name="Stabilize Factor",
+        description="Smoothing applied while the stabilized point follows the cursor",
+        default=0.75,
+        min=0.0,
+        max=0.99,
+        subtype="FACTOR",
+        precision=2,
     )
     continue_draw_strokes: bpy.props.BoolProperty(
         name="Continue Draw Strokes",

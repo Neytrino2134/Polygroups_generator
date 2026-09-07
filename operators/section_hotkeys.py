@@ -129,3 +129,42 @@ class AIRETOPO_OT_section_number(bpy.types.Operator):
             self.cleanup()
             return {"CANCELLED", "PASS_THROUGH"}
         return {"PASS_THROUGH"}
+
+
+class AIRETOPO_OT_section_set_all(bpy.types.Operator):
+    bl_idname = "wm.airetopo_section_set_all"
+    bl_label = "Expand or Collapse AI Retopo Sections"
+    bl_options = {"INTERNAL"}
+
+    visible: bpy.props.BoolProperty(default=True, options={"SKIP_SAVE"})
+
+    @classmethod
+    def poll(cls, context):
+        return section_context_allowed(context)
+
+    def execute(self, context):
+        from ..properties import SECTION_VISIBILITY_PROPERTIES
+
+        settings = context.scene.airetopo_panel_visibility_settings
+        if self.visible:
+            settings.single_section_mode = False
+        for property_name in SECTION_VISIBILITY_PROPERTIES:
+            setattr(settings, property_name, self.visible)
+        context.area.tag_redraw()
+        return {"FINISHED"}
+
+
+class AIRETOPO_OT_section_toggle_single_mode(bpy.types.Operator):
+    bl_idname = "wm.airetopo_section_toggle_single_mode"
+    bl_label = "Toggle AI Retopo Single Section Mode"
+    bl_options = {"INTERNAL"}
+
+    @classmethod
+    def poll(cls, context):
+        return section_context_allowed(context)
+
+    def execute(self, context):
+        settings = context.scene.airetopo_panel_visibility_settings
+        settings.single_section_mode = not settings.single_section_mode
+        context.area.tag_redraw()
+        return {"FINISHED"}

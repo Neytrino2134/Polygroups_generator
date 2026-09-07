@@ -65,6 +65,27 @@ def run():
     assert settings.show_batch_import_section, "Sidebar did not receive 2"
     assert space.show_region_ui and sidebar.active_panel_category == "AI Retopo"
     log("Sidebar toggle passed")
+
+    # Global UI keymaps must still reject Outliner while scope is Sidebar only.
+    outliner = next(area for area in window.screen.areas if area.type == "OUTLINER")
+    outliner_region = next(region for region in outliner.regions if region.type == "WINDOW")
+    x, y = (outliner_region.x + outliner_region.width // 2,
+            outliner_region.y + outliner_region.height // 2)
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+    yield 0.2
+    before_sections = [getattr(settings, name) for name in sections]
+    before_single_mode = settings.single_section_mode
+    for key in ("NUMPAD_PLUS", "NUMPAD_MINUS", "NUMPAD_ASTERIX"):
+        press(key)
+        release(key)
+        yield 0.1
+    assert before_sections == [getattr(settings, name) for name in sections], "Numpad scope leaked into Outliner"
+    assert settings.single_section_mode == before_single_mode, "Single Mode leaked into Outliner"
+    x, y = sidebar.x + sidebar.width // 2, sidebar.y + sidebar.height - 70
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING", x=x, y=y)
+    yield 0.2
+    log("Outliner scope rejection passed")
+
     press("ONE", "1")
     release("ONE")
     yield 0.1

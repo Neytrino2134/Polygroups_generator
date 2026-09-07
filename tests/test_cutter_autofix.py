@@ -105,10 +105,12 @@ with (
     patch.object(cutter, "_fill_open_nonmanifold_boundaries",
                  side_effect=[2, 1]) as fill,
     patch.object(cutter, "_triangulate_ngons_for_autofix",
-                 side_effect=[3, 2]) as triangulate,
+                 return_value=3) as triangulate,
     patch.object(cutter, "_apply_cutters_to_mesh", return_value=4),
+    patch.object(cutter, "_dissolve_degenerate_seam_geometry", return_value=0) as repair,
     patch.object(cutter, "_prepare_seam_band_autoweld", return_value=None) as weld,
     patch.object(cutter, "apply_weld_to_objects", return_value=1) as apply_weld,
+    patch.object(cutter, "_sync_autoweld_vertex_group") as sync_weld_group,
     patch.object(cutter, "play_operation_done_sound"),
 ):
     result = bpy.ops.object.polygroups_apply_cutter_seams()
@@ -119,14 +121,16 @@ assert remove_loose.call_count == 2
 assert [call.args[1] for call in remove_loose.call_args_list] == [target, target]
 assert fill.call_count == 2
 assert [call.args[0] for call in fill.call_args_list] == [target, target]
-assert triangulate.call_count == 2
-assert [call.args[0] for call in triangulate.call_args_list] == [target, target]
+assert triangulate.call_count == 1
+assert triangulate.call_args.args[0] == target
 assert weld.call_count == 1
 assert weld.call_args.args[0] == target
 assert abs(weld.call_args.args[1] - 0.005) < 1e-7
 assert apply_weld.call_count == 1
 assert apply_weld.call_args.args[1] == [target]
 assert abs(apply_weld.call_args.args[2] - 0.005) < 1e-7
+assert repair.call_count == 2
+assert sync_weld_group.call_count == 1
 assert bpy.context.scene.polygroups_seam_preparation_settings.seam_gap_status == "No seam gaps found"
 assert bpy.context.scene.polygroups_generator_settings.small_island_status
 
@@ -135,12 +139,16 @@ settings.cutter_auto_fix_weld = False
 session = cutter.CutterApplySession(bpy.context, target, [], lambda *_args: None)
 session.status.cutter_apply_stage = "WELDING"
 with (
+    patch.object(cutter, "_dissolve_degenerate_seam_geometry") as repair_disabled,
     patch.object(cutter, "_prepare_seam_band_autoweld") as prepare_disabled,
     patch.object(cutter, "apply_weld_to_objects") as apply_disabled,
+    patch.object(cutter, "_sync_autoweld_vertex_group") as sync_disabled,
 ):
     session.step(bpy.context)
 assert prepare_disabled.call_count == 0
 assert apply_disabled.call_count == 0
+assert repair_disabled.call_count == 0
+assert sync_disabled.call_count == 0
 session.finish(bpy.context, "CANCELLED")
 settings.cutter_auto_fix_weld = True
 
@@ -159,6 +167,36 @@ assert abs(modifier.merge_threshold - 0.006) < 1e-7
 assert cutter.apply_weld_to_objects(bpy.context, [target], 0.006) == 1
 assert target.modifiers.get(cutter.AUTOWELD_MODIFIER_NAME) is None
 assert target.vertex_groups.get(cutter.AUTOWELD_VERTEX_GROUP_NAME) is not None
+
+# A collinear seam triangle is removed before Weld, while a normal triangle stays.
+degenerate_mesh = bpy.data.meshes.new("Degenerate Seam Triangle")
+degenerate_mesh.from_pydata(
+    [(0, 0, 0), (2, 0, 0), (1, 0, 0), (0, 1, 0)],
+    [],
+    [(0, 1, 2), (0, 1, 3)],
+)
+degenerate_target = bpy.data.objects.new("Degenerate Seam Triangle", degenerate_mesh)
+bpy.context.collection.objects.link(degenerate_target)
+degenerate_mesh.edges[0].use_seam = True
+assert cutter._dissolve_degenerate_seam_geometry(degenerate_target, 0.005) >= 1
+assert all(polygon.area > 1e-10 for polygon in degenerate_mesh.polygons)
+assert len(degenerate_mesh.polygons) == 1
+
+# A concave seam quad caused by a vertex crossing its valid area is repaired
+# into an unambiguous triangle fill before Weld.
+folded_mesh = bpy.data.meshes.new("Folded Seam Quad")
+folded_mesh.from_pydata(
+    [(0, 0, 0), (2, 0, 0), (0.4, 0.4, 0), (0, 2, 0)],
+    [],
+    [(0, 1, 2, 3)],
+)
+folded_target = bpy.data.objects.new("Folded Seam Quad", folded_mesh)
+bpy.context.collection.objects.link(folded_target)
+next(edge for edge in folded_mesh.edges if set(edge.vertices) == {0, 1}).use_seam = True
+assert cutter._dissolve_degenerate_seam_geometry(folded_target, 0.005) >= 1
+assert folded_mesh.polygons
+assert all(len(polygon.vertices) == 3 and polygon.area > 1e-10
+           for polygon in folded_mesh.polygons)
 
 addon_utils.disable(ROOT.name, default_set=True)
 print("CUTTER_AUTOFIX_TESTS_PASSED")

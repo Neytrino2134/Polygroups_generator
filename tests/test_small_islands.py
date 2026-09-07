@@ -61,6 +61,7 @@ assert cutter_settings.cutter_auto_fix_fin_faces
 assert cutter_settings.cutter_auto_fix_seam_check
 assert cutter_settings.cutter_auto_fix_small_islands
 assert cutter_settings.cutter_auto_fix_weld
+assert cutter_settings.cutter_auto_fix_triangulate_ngons
 assert abs(cutter_settings.cutter_auto_fix_small_islands_threshold - 0.5) < 1e-7
 assert abs(cutter_settings.cutter_auto_fix_weld_distance - 0.005) < 1e-7
 settings.small_island_threshold = 0.1

@@ -220,6 +220,7 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
             ),
             show_text=False,
         )
+    if cutter_type in {"PLANE", "ARC", "LOCAL_RING", "LOCAL_CONTOUR", "PATH", "DRAW"}:
         row.separator(type="LINE")
         row.prop(
             settings, "cutter_auto_fix_mesh",
@@ -245,6 +246,12 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         weld_distance.enabled = settings.cutter_auto_fix_mesh and settings.cutter_auto_fix_weld
         weld_distance.ui_units_x = 3.5
         weld_distance.prop(settings, "cutter_auto_fix_weld_distance", text="")
+        triangulate_toggle = row.row(align=True)
+        triangulate_toggle.enabled = settings.cutter_auto_fix_mesh
+        triangulate_toggle.prop(
+            settings, "cutter_auto_fix_triangulate_ngons",
+            text="", icon="MOD_TRIANGULATE", toggle=True,
+        )
     row.separator(type="LINE")
     row.operator(
         "object.polygroups_copy_mirror_cutters",
@@ -310,6 +317,15 @@ def _draw_cutter_tool_settings(context, layout, tool, cutter_type):
         edit_row.operator("object.polygroups_smooth_cutter_path_tilt", text=t(context, "curve_smooth_tilt"))
         layout.prop(settings, "cutter_draw_min_point_distance", text=t(context, "draw_point_distance"))
         layout.prop(settings, "cutter_draw_simplify_distance", text=t(context, "draw_simplify_distance"))
+        stabilize_row = layout.row(align=True)
+        stabilize_row.prop(settings, "cutter_draw_stabilize_stroke",
+                           text=t(context, "draw_stabilize_stroke"), toggle=True)
+        stabilize_settings = stabilize_row.row(align=True)
+        stabilize_settings.enabled = settings.cutter_draw_stabilize_stroke
+        stabilize_settings.prop(settings, "cutter_draw_stabilize_radius",
+                                text=t(context, "draw_stabilize_radius"))
+        stabilize_settings.prop(settings, "cutter_draw_stabilize_factor",
+                                text=t(context, "draw_stabilize_factor"))
         layout.prop(settings, "continue_path_cutters", text=t(context, "continue_path_cutters"))
         layout.prop(settings, "cutter_path_join_distance", text=t(context, "path_join_distance"))
         layout.operator(

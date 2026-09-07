@@ -11,6 +11,8 @@ from .tools import DRAW_CUTTER_GRID_TOOL_ID
 from .tools import DRAW_CUTTER_TOOL_ID
 from .tools import CUTTER_TOOL_ORDER
 from .operators.section_hotkeys import AIRETOPO_OT_section_number
+from .operators.section_hotkeys import AIRETOPO_OT_section_set_all
+from .operators.section_hotkeys import AIRETOPO_OT_section_toggle_single_mode
 from .operators.section_hotkeys import DIGIT_KEYS, cancel_pending_sections
 
 
@@ -396,6 +398,8 @@ CLASSES = (
     MESH_OT_airetopo_cycle_seam_tool,
     MESH_OT_airetopo_linked_seam,
     AIRETOPO_OT_section_number,
+    AIRETOPO_OT_section_set_all,
+    AIRETOPO_OT_section_toggle_single_mode,
     AIRETOPO_OT_select_cutter_tweak,
     VIEW3D_MT_airetopo_pie,
     VIEW3D_MT_airetopo_cutter_tweak_pie,
@@ -439,7 +443,7 @@ def register_keymaps():
                 KEYMAP_ITEMS.append((number_map, item))
             for key, visible in (("NUMPAD_PLUS", True), ("NUMPAD_MINUS", False)):
                 item = number_map.keymap_items.new(
-                    "object.airetopo_set_all_section_visibility",
+                    AIRETOPO_OT_section_set_all.bl_idname,
                     key,
                     "PRESS",
                     head=True,
@@ -448,13 +452,12 @@ def register_keymaps():
                 item.properties.visible = visible
                 KEYMAP_ITEMS.append((number_map, item))
             item = number_map.keymap_items.new(
-                "wm.context_toggle",
+                AIRETOPO_OT_section_toggle_single_mode.bl_idname,
                 "NUMPAD_ASTERIX",
                 "PRESS",
                 head=True,
                 repeat=False,
             )
-            item.properties.data_path = "scene.airetopo_panel_visibility_settings.single_section_mode"
             KEYMAP_ITEMS.append((number_map, item))
 
     if _preference_value(preferences, "enable_cutter_tweak_hotkey", True):
