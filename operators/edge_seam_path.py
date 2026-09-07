@@ -5,7 +5,7 @@ import bpy
 from ..core.edge_seam_path import find_edge_path
 from ..localization import t
 from ..pin_edges import pin_layer, set_pinned
-from .connect_vertex_seam import edit_meshes, selected_vertices, invoke_seam_click
+from .connect_vertex_seam import edit_meshes, selected_vertices, invoke_seam_click, cursor_erase_held
 from .unwrap_angle_based import auto_uv_after_seam_change
 
 TOOL_ID = "polygroups_generator.edge_seam_path_tool"
@@ -150,7 +150,7 @@ def draw_hover_crosshair(context, xy):
     return hovered
 
 
-def draw_tool_badge(context, label, xy):
+def draw_tool_badge(context, label, xy, hint=None):
     """Draw a small tool identifier just below and to the right of the cursor."""
     import blf
 
@@ -165,31 +165,41 @@ def draw_tool_badge(context, label, xy):
     blf.color(font_id, 1.0, 0.65, 0.12, 1.0)
     blf.position(font_id, x, y, 0)
     blf.draw(font_id, label)
+    if hint:
+        blf.size(font_id, 11 * scale)
+        blf.color(font_id, 0.82, 0.92, 1.0, 1.0)
+        blf.position(font_id, x, y - 17 * scale, 0)
+        blf.draw(font_id, hint)
     blf.disable(font_id, blf.SHADOW)
 
 
-def _draw_labeled_seam_cursor(label, xy):
+def _draw_labeled_seam_cursor(label, xy, hint=None):
     context = bpy.context
     if context.mode != "EDIT_MESH" or context.region_data is None:
         return
     draw_hover_crosshair(context, xy)
-    draw_tool_badge(context, label, xy)
+    draw_tool_badge(context, label, xy, hint)
 
 
 def draw_edge_seam_cursor(_context, _tool, xy):
-    _draw_labeled_seam_cursor("E", xy)
+    erasing = cursor_erase_held(bpy.context)
+    _draw_labeled_seam_cursor(
+        "Edge Seam Eraser" if erasing else "Edge Seam Path",
+        xy,
+        "Ctrl + Shift + Click: Erase" if erasing else "Ctrl + Click: Draw",
+    )
 
 
 def draw_edge_seam_eraser_cursor(_context, _tool, xy):
-    _draw_labeled_seam_cursor("R", xy)
+    _draw_labeled_seam_cursor("Edge Seam Eraser", xy, "Ctrl + Click: Erase")
 
 
 def draw_smart_seam_cursor(_context, _tool, xy):
-    _draw_labeled_seam_cursor("S", xy)
+    _draw_labeled_seam_cursor("Smart Seams Generator", xy)
 
 
 def draw_longitudinal_seam_cursor(_context, _tool, xy):
-    _draw_labeled_seam_cursor("L", xy)
+    _draw_labeled_seam_cursor("Longitudinal Seam", xy)
 
 
 def mark_pair(context, obj, bm, start, end):

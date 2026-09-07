@@ -22,6 +22,10 @@ void main()
 {
     checker_uv = uv;
     gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+    // The checker is coplanar with the Solid pass. Pull it a tiny, constant
+    // screen-depth distance toward the camera to prevent view-dependent
+    // z-fighting without changing the mesh or revealing back-side geometry.
+    gl_Position.z -= depth_bias * gl_Position.w;
 }
 """
 
@@ -54,6 +58,8 @@ def checker_geometry(obj):
         positions = []
         uvs = []
         for triangle in bm.calc_loop_triangles():
+            if triangle[0].face.hide:
+                continue
             for loop in triangle:
                 positions.append(matrix @ loop.vert.co)
                 uvs.append(loop[uv_layer].uv.copy())
@@ -100,6 +106,14 @@ def _edit_uv_signature(obj):
     return hash(values.tobytes())
 
 
+def _edit_visibility_signature(obj):
+    """Cheap per-redraw signature so Hide/Reveal updates without cache delay."""
+    import bmesh
+
+    bm = bmesh.from_edit_mesh(obj.data)
+    return hash(tuple(face.index for face in bm.faces if face.hide))
+
+
 def _cache_key(obj):
     mesh = obj.data
     uv_layer = mesh.uv_layers.active
@@ -108,6 +122,7 @@ def _cache_key(obj):
         len(mesh.vertices), len(mesh.loops), len(mesh.polygons),
         tuple(value for row in obj.matrix_world for value in row),
         _edit_uv_signature(obj) if uv_layer and obj.mode == "EDIT" else 0,
+        _edit_visibility_signature(obj) if obj.mode == "EDIT" else 0,
     )
 
 
@@ -117,6 +132,7 @@ def _checker_batch(obj):
         obj.mode == "EDIT"
         and _BATCH_CACHE is not None
         and _BATCH_CACHE[0][0] == obj.as_pointer()
+        and _BATCH_CACHE[0][-1] == _edit_visibility_signature(obj)
         and time.monotonic() < _EDIT_CACHE_CHECK_AT
     ):
         return _BATCH_CACHE[1]
@@ -143,6 +159,7 @@ def _shader():
         info.push_constant("MAT4", "ModelViewProjectionMatrix")
         info.push_constant("FLOAT", "scale")
         info.push_constant("FLOAT", "opacity")
+        info.push_constant("FLOAT", "depth_bias")
         info.fragment_out(0, "VEC4", "fragColor")
         info.vertex_source(VERTEX_SHADER)
         info.fragment_source(FRAGMENT_SHADER)
@@ -216,6 +233,7 @@ def draw_checker_overlay():
         shader.uniform_float("ModelViewProjectionMatrix", gpu.matrix.get_projection_matrix() @ gpu.matrix.get_model_view_matrix())
         shader.uniform_float("scale", scene.polygroups_generator_settings.checker_scale)
         shader.uniform_float("opacity", settings.checker_overlay_opacity)
+        shader.uniform_float("depth_bias", 2.0e-5)
         batch.draw(shader)
     finally:
         gpu.state.depth_mask_set(old_depth_mask)

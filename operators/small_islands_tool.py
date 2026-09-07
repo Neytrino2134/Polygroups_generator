@@ -54,22 +54,9 @@ def _linked_uv_islands(seed_faces, uv_layer):
     return linked
 
 
-class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
-    bl_idname = "mesh.polygroups_small_islands_merger_gesture"
-    bl_label = "Small Islands Merger"
-    bl_description = "Select touched seam islands with a gesture and merge their small seams"
-    bl_options = {"REGISTER", "UNDO"}
+class _IslandGestureMixin:
+    """Non-RNA implementation shared by two independently registered operators."""
 
-    shape: bpy.props.EnumProperty(
-        name="Selection",
-        items=(
-            ("BOX", "Box", "Select seam islands touched by a box"),
-            ("LASSO", "Lasso", "Select seam islands touched by a lasso"),
-            ("CIRCLE", "Circle", "Paint over seam islands with a circle"),
-        ),
-        default="BOX",
-    )
-    radius: bpy.props.IntProperty(name="Radius", default=30, min=2, max=500, subtype="PIXEL")
     settings_property = "small_islands_merger_shape"
     merge_after_selection = True
     use_uv_islands = False
@@ -87,6 +74,8 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
             getattr(context.scene.polygroups_generator_settings, self.selection_mode_property)
             if self.selection_mode_property else "NEW"
         )
+        if self.selection_mode_property and event.shift:
+            selection_mode = "ADD"
         self._native_mode = "ADD" if selection_mode == "ADD" else "SET"
         self._points = [(event.mouse_region_x, event.mouse_region_y)]
         self._area = context.area
@@ -96,6 +85,9 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
             [item.select for item in sequence]
             for sequence in (bm.verts, bm.edges, bm.faces)
         ]
+        self._selected_face_indices_before = {
+            face.index for face in bm.faces if face.select and not face.hide
+        }
         bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
         if self._native_mode == "SET":
             bpy.ops.mesh.select_all(action="DESELECT")
@@ -184,6 +176,8 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
         else:
             selected_faces = _linked_seam_islands(seeds)
         selected_indices = {face.index for face in selected_faces}
+        if self._native_mode == "ADD":
+            selected_indices.update(self._selected_face_indices_before)
         bpy.ops.mesh.select_all(action="DESELECT")
         bm = bmesh.from_edit_mesh(context.active_object.data)
         bm.faces.ensure_lookup_table()
@@ -231,8 +225,30 @@ class MESH_OT_polygroups_small_islands_merger_gesture(bpy.types.Operator):
         return {"RUNNING_MODAL"}
 
 
+class MESH_OT_polygroups_small_islands_merger_gesture(
+    _IslandGestureMixin,
+    bpy.types.Operator,
+):
+    bl_idname = "mesh.polygroups_small_islands_merger_gesture"
+    bl_label = "Small Islands Merger"
+    bl_description = "Select touched seam islands with a gesture and merge their small seams"
+    bl_options = {"REGISTER", "UNDO"}
+
+    shape: bpy.props.EnumProperty(
+        name="Selection",
+        items=(
+            ("BOX", "Box", "Select seam islands touched by a box"),
+            ("LASSO", "Lasso", "Select seam islands touched by a lasso"),
+            ("CIRCLE", "Circle", "Paint over seam islands with a circle"),
+        ),
+        default="BOX",
+    )
+    radius: bpy.props.IntProperty(name="Radius", default=30, min=2, max=500, subtype="PIXEL")
+
+
 class MESH_OT_polygroups_island_selector_gesture(
-    MESH_OT_polygroups_small_islands_merger_gesture,
+    _IslandGestureMixin,
+    bpy.types.Operator,
 ):
     bl_idname = "mesh.polygroups_island_selector_gesture"
     bl_label = "Island Selector"
@@ -248,6 +264,7 @@ class MESH_OT_polygroups_island_selector_gesture(
         ),
         default="TWEAK",
     )
+    radius: bpy.props.IntProperty(name="Radius", default=30, min=2, max=500, subtype="PIXEL")
     settings_property = "island_selector_shape"
     merge_after_selection = False
     use_uv_islands = True

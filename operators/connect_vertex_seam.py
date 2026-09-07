@@ -11,17 +11,24 @@ TOOL_ID = "polygroups_generator.connect_vertex_seam_tool"
 
 # Only modifier flags are cached; never mesh data or undo-sensitive references.
 _cursor_ctrl = {}
+_cursor_erase = {}
 
 
 def cursor_ctrl_held(context):
     return _cursor_ctrl.get((context.window.as_pointer(), context.area.as_pointer()), False)
 
 
+def cursor_erase_held(context):
+    return _cursor_erase.get((context.window.as_pointer(), context.area.as_pointer()), False)
+
+
 def update_cursor_ctrl(context, event):
     key = (context.window.as_pointer(), context.area.as_pointer())
     held = bool(event.ctrl) and event.type != "WINDOW_DEACTIVATE"
-    if _cursor_ctrl.get(key, False) != held:
+    erase = held and bool(event.shift)
+    if _cursor_ctrl.get(key, False) != held or _cursor_erase.get(key, False) != erase:
         _cursor_ctrl[key] = held
+        _cursor_erase[key] = erase
         context.area.tag_redraw()
 
 
@@ -32,6 +39,13 @@ class MESH_OT_polygroups_seam_cursor_modifier(bpy.types.Operator):
     bl_options = {"INTERNAL"}
 
     def invoke(self, context, event):
+        tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
+        if tool is not None and tool.idname in {
+            "polygroups_generator.connect_vertex_seam_tool",
+            "polygroups_generator.edge_seam_path_tool",
+            "polygroups_generator.edge_seam_eraser_tool",
+        }:
+            context.tool_settings.mesh_select_mode = (True, False, False)
         update_cursor_ctrl(context, event)
         return {"PASS_THROUGH"}
 
@@ -246,6 +260,6 @@ def draw_vertex_seam_cursor(_context, _tool, xy):
         start_key = ("edge_seam_hint_start" if _tool.idname == "polygroups_generator.edge_seam_path_tool"
                      else "connect_seam_hint_start")
         blf.draw(0, t(context, "connect_seam_hint_next" if anchor else start_key))
-        draw_tool_badge(context, "V", xy)
+        draw_tool_badge(context, "Vertex Seam Path", xy, "Ctrl + Click: Draw")
     finally:
         gpu.state.blend_set(blend)

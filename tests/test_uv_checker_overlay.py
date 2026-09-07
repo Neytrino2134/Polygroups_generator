@@ -85,6 +85,16 @@ edit_positions, edit_uvs = checker_geometry(obj)
 assert len(edit_positions) == 6
 assert len(edit_uvs) == 6
 
+# Hidden Edit Mode faces must disappear from both generated geometry and the
+# cache signature, even though their topology and UV coordinates are unchanged.
+visible_key = _cache_key(obj)
+bm.faces[0].hide_set(True)
+hidden_key = _cache_key(obj)
+assert hidden_key != visible_key
+hidden_positions, hidden_uvs = checker_geometry(obj)
+assert hidden_positions == [] and hidden_uvs == []
+bm.faces[0].hide_set(False)
+
 # The same polygon safety limit applies before any Edit Mode mesh/UV sync.
 assert overlay.exceeds_polygon_limit(obj, 0) is False
 

@@ -5,7 +5,7 @@ from bpy.types import WorkSpaceTool
 
 from .localization import t
 from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
-from .operators.connect_vertex_seam import draw_vertex_seam_cursor, _cursor_ctrl
+from .operators.connect_vertex_seam import draw_vertex_seam_cursor, _cursor_ctrl, _cursor_erase
 from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
 from .operators.edge_merger import TOOL_ID as EDGE_MERGER_TOOL_ID
 from .operators.edge_seam_path import (
@@ -769,13 +769,22 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = EDGE_SEAM_TOOL_ID
     bl_label = "Edge Seam Path"
-    bl_description = "Select normally; Ctrl-click A, B, C to mark existing edge rows with seams; Space/Esc/right-click finishes the chain"
+    bl_description = "Ctrl-click vertices to mark a seam path; Ctrl-Shift-click to erase a seam path"
     bl_icon = "ops.mesh.dupli_extrude_cursor"
     bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
+        ("mesh.polygroups_edge_seam_eraser_click",
+         {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True, "shift": True}, None),
         ("mesh.polygroups_edge_seam_path_click", {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
+        # Modifier observers switch the cursor badge between Edge and Eraser.
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "MOUSEMOVE", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "LEFT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "RIGHT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "LEFT_SHIFT", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "RIGHT_SHIFT", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "WINDOW_DEACTIVATE", "value": "ANY", "any": True}, None),
         ("mesh.polygroups_edge_seam_path_click", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("reset", True)]}),
         ("mesh.polygroups_edge_seam_path_click", {"type": "ESC", "value": "PRESS"},
@@ -789,7 +798,7 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         layout.prop(context.scene.polygroups_seam_preparation_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
         _draw_seam_auto_uv_settings(context, layout)
-        layout.label(text=t(context, "connect_seam_hint_next"))
+        layout.label(text="Ctrl+LMB: mark path   Ctrl+Shift+LMB: erase path")
 
 
 class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
@@ -892,7 +901,7 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = ISLAND_SELECTOR_TOOL_ID
     bl_label = "Island Selector"
-    bl_description = "Select complete UV islands with Tweak, Box, Lasso, or Circle"
+    bl_description = "Select complete UV islands; hold Shift to add islands to the current selection"
     bl_icon = "ops.generic.select"
     bl_cursor = "CROSSHAIR"
     bl_options = {"KEYMAP_FALLBACK"}
@@ -900,6 +909,8 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
     bl_keymap = (
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("name", "builtin.select_box")]}),
+        ("mesh.polygroups_island_selector_gesture",
+         {"type": "LEFTMOUSE", "value": "PRESS", "shift": True}, None),
         ("mesh.polygroups_island_selector_gesture",
          {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -912,6 +923,7 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
         layout.prop(settings, "island_selector_selection_mode", expand=True)
         if settings.island_selector_shape == "CIRCLE":
             layout.prop(props, "radius")
+        layout.label(text="Shift + LMB: Add linked island")
 
 
 class VIEW3D_WST_polygroups_edge_merger(WorkSpaceTool):
@@ -980,6 +992,10 @@ class VIEW3D_WST_polygroups_edge_seam_eraser(WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("mesh.polygroups_edge_seam_eraser_click", {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "MOUSEMOVE", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "LEFT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "RIGHT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier", {"type": "WINDOW_DEACTIVATE", "value": "ANY", "any": True}, None),
         ("mesh.polygroups_edge_seam_eraser_click", {"type": "RIGHTMOUSE", "value": "PRESS"}, {"properties": [("reset", True)]}),
         ("mesh.polygroups_edge_seam_eraser_click", {"type": "ESC", "value": "PRESS"}, {"properties": [("reset", True)]}),
         ("mesh.polygroups_edge_seam_eraser_click", {"type": "SPACE", "value": "PRESS"}, {"properties": [("reset", True)]}),
@@ -1009,7 +1025,9 @@ def draw_seam_status(self, context):
         self.layout.label(text="LMB: select complete UV islands")
     elif tool is not None and tool.idname == EDGE_MERGER_TOOL_ID:
         self.layout.label(text="LMB: merge edge at center")
-    elif tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID}:
+    elif tool is not None and tool.idname == EDGE_SEAM_TOOL_ID:
+        self.layout.label(text="Ctrl+LMB: mark path   Ctrl+Shift+LMB: erase path")
+    elif tool is not None and tool.idname == VERTEX_SEAM_TOOL_ID:
         self.layout.label(text=t(context, "seam_ctrl_status"))
 
 
@@ -1178,3 +1196,4 @@ def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_draw_cutter_plane)
     bpy.utils.unregister_class(VIEW3D_MT_polygroups_cutter_tool_type)
     _cursor_ctrl.clear()
+    _cursor_erase.clear()
