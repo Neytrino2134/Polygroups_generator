@@ -18,6 +18,15 @@ _LAST_AUTOSAVE_TIME = None
 _LAST_REGULAR_SAVE_TIME = None
 _LAST_EVENT = "NONE"
 _TEMP_MAX_AGE_DAYS = 7
+_RECENT_CACHE_SECONDS = 5.0
+_RECENT_CACHE_TIME = 0.0
+_RECENT_CACHE = []
+_RECOVERY_AUTOSAVE_PATH = ""
+_RECOVERY_ORIGINAL_PATH = ""
+_RECOVERY_RESTORED_PATH = ""
+_RECOVERY_PROP_AUTOSAVE = "airetopo_recovery_autosave"
+_RECOVERY_PROP_ORIGINAL = "airetopo_recovery_original"
+_RECOVERY_PROP_RESTORED = "airetopo_recovery_restored"
 
 
 def _preferences():
@@ -54,6 +63,186 @@ def autosave_paths(filepath, versions, temp_directory=None):
 def current_autosave_directory():
     filepath = bpy.data.filepath
     return Path(filepath).parent if filepath else _session_temp_dir()
+
+
+def _autosave_version(path):
+    _prefix, separator, suffix = Path(path).name.rpartition("Autosave")
+    return int(suffix) if separator and suffix.isdigit() and int(suffix) > 0 else None
+
+
+def collect_recent_autosaves(temp_root, project_paths, limit=8):
+    """Collect valid custom autosaves, newest first, without depending on Blender."""
+    candidates = []
+    root = Path(temp_root)
+    if root.exists():
+        try:
+            candidates.extend(root.rglob("*Autosave*"))
+        except OSError:
+            pass
+
+    for project_path in project_paths:
+        project = Path(project_path)
+        if _autosave_version(project) is not None:
+            candidates.append(project)
+        try:
+            candidates.extend(project.parent.glob(f"{project.name}Autosave*"))
+        except OSError:
+            pass
+
+    entries = []
+    seen = set()
+    for candidate in candidates:
+        if _autosave_version(candidate) is None:
+            continue
+        try:
+            if not candidate.is_file() or candidate.stat().st_size <= 0:
+                continue
+            absolute = candidate.resolve()
+            key = os.path.normcase(str(absolute))
+            if key in seen:
+                continue
+            seen.add(key)
+            entries.append(
+                {
+                    "filepath": str(absolute),
+                    "name": candidate.name,
+                    "modified": candidate.stat().st_mtime,
+                }
+            )
+        except OSError:
+            continue
+
+    entries.sort(key=lambda entry: entry["modified"], reverse=True)
+    return entries[:max(0, int(limit))]
+
+
+def _recent_project_paths():
+    try:
+        config_directory = bpy.utils.user_resource("CONFIG")
+    except (AttributeError, RuntimeError):
+        return []
+    if not config_directory:
+        return []
+    recent_file = Path(config_directory) / "recent-files.txt"
+    try:
+        return [line.strip() for line in recent_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except OSError:
+        return []
+
+
+def _invalidate_recent_cache():
+    global _RECENT_CACHE_TIME
+    _RECENT_CACHE_TIME = 0.0
+
+
+def recent_autosaves(limit=8, refresh=False):
+    """Return cached recovery entries for the startup N-panel."""
+    global _RECENT_CACHE, _RECENT_CACHE_TIME
+    now = time.monotonic()
+    if refresh or not _RECENT_CACHE_TIME or now - _RECENT_CACHE_TIME >= _RECENT_CACHE_SECONDS:
+        _RECENT_CACHE = collect_recent_autosaves(
+            _temp_root(),
+            _recent_project_paths(),
+            limit=32,
+        )
+        _RECENT_CACHE_TIME = now
+    return _RECENT_CACHE[:max(0, int(limit))]
+
+
+def _original_path_for_autosave(filepath):
+    autosave = Path(filepath).resolve()
+    version = _autosave_version(autosave)
+    if version is None or _path_is_within(autosave, _temp_root()):
+        return None
+    suffix = f"Autosave{version}"
+    return autosave.with_name(autosave.name[:-len(suffix)])
+
+
+def _restored_path_for_autosave(filepath, timestamp=None):
+    autosave = Path(filepath).resolve()
+    original = _original_path_for_autosave(autosave)
+    if original is None:
+        directory = _temp_root() / "recovered"
+        stem = "Unsaved"
+    else:
+        directory = original.parent
+        stem = original.stem
+    stamp = time.strftime(
+        "%Y-%m-%d_%H-%M-%S",
+        time.localtime(timestamp if timestamp is not None else time.time()),
+    )
+    candidate = directory / f"{stem}_restored_{stamp}.blend"
+    index = 2
+    while candidate.exists():
+        candidate = directory / f"{stem}_restored_{stamp}_{index}.blend"
+        index += 1
+    return candidate
+
+
+def _scene_recovery_value(key):
+    scene = getattr(getattr(bpy, "context", None), "scene", None)
+    if scene is None:
+        return ""
+    try:
+        return str(scene.get(key, ""))
+    except (AttributeError, ReferenceError):
+        return ""
+
+
+def _set_recovery_state(autosave_path, original_path, restored_path):
+    global _RECOVERY_AUTOSAVE_PATH, _RECOVERY_ORIGINAL_PATH, _RECOVERY_RESTORED_PATH
+    _RECOVERY_AUTOSAVE_PATH = str(autosave_path or "")
+    _RECOVERY_ORIGINAL_PATH = str(original_path or "")
+    _RECOVERY_RESTORED_PATH = str(restored_path or "")
+    scene = getattr(getattr(bpy, "context", None), "scene", None)
+    if scene is not None:
+        scene[_RECOVERY_PROP_AUTOSAVE] = _RECOVERY_AUTOSAVE_PATH
+        scene[_RECOVERY_PROP_ORIGINAL] = _RECOVERY_ORIGINAL_PATH
+        scene[_RECOVERY_PROP_RESTORED] = _RECOVERY_RESTORED_PATH
+
+
+def _load_recovery_state():
+    global _RECOVERY_AUTOSAVE_PATH, _RECOVERY_ORIGINAL_PATH, _RECOVERY_RESTORED_PATH
+    _RECOVERY_AUTOSAVE_PATH = _scene_recovery_value(_RECOVERY_PROP_AUTOSAVE)
+    _RECOVERY_ORIGINAL_PATH = _scene_recovery_value(_RECOVERY_PROP_ORIGINAL)
+    _RECOVERY_RESTORED_PATH = _scene_recovery_value(_RECOVERY_PROP_RESTORED)
+
+
+def _clear_recovery_state():
+    global _RECOVERY_AUTOSAVE_PATH, _RECOVERY_ORIGINAL_PATH, _RECOVERY_RESTORED_PATH
+    _RECOVERY_AUTOSAVE_PATH = ""
+    _RECOVERY_ORIGINAL_PATH = ""
+    _RECOVERY_RESTORED_PATH = ""
+    scene = getattr(getattr(bpy, "context", None), "scene", None)
+    if scene is not None:
+        for key in (
+            _RECOVERY_PROP_AUTOSAVE,
+            _RECOVERY_PROP_ORIGINAL,
+            _RECOVERY_PROP_RESTORED,
+        ):
+            try:
+                del scene[key]
+            except (KeyError, ReferenceError):
+                pass
+
+
+def recovery_snapshot():
+    """Return recovery state persisted in the restored blend file."""
+    if not _RECOVERY_RESTORED_PATH:
+        _load_recovery_state()
+    current = getattr(getattr(bpy, "data", None), "filepath", "")
+    active = bool(
+        current
+        and _RECOVERY_RESTORED_PATH
+        and os.path.normcase(str(Path(current).resolve()))
+        == os.path.normcase(str(Path(_RECOVERY_RESTORED_PATH).resolve()))
+    )
+    return {
+        "active": active,
+        "autosave": _RECOVERY_AUTOSAVE_PATH,
+        "original": _RECOVERY_ORIGINAL_PATH,
+        "restored": _RECOVERY_RESTORED_PATH,
+    }
 
 
 def _clock_time(timestamp):
@@ -206,6 +395,7 @@ def save_now(force=False):
     _LAST_AUTOSAVE_TIME = time.time()
     _LAST_EVENT = "CUSTOM"
     _LAST_STATUS = f"Saved {paths[0]}"
+    _invalidate_recent_cache()
     _tag_redraw()
     print(f"AI Retopo custom autosave: {_LAST_STATUS}")
     return True, _LAST_STATUS
@@ -225,6 +415,15 @@ def _cleanup_session_temp():
     session_dir = _session_temp_dir()
     if session_dir.exists():
         shutil.rmtree(session_dir, ignore_errors=True)
+        _invalidate_recent_cache()
+
+
+def _path_is_within(path, directory):
+    try:
+        Path(path).resolve().relative_to(Path(directory).resolve())
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 def _cleanup_stale_temp():
@@ -255,8 +454,12 @@ def _save_post(_unused):
 
 @persistent
 def _load_post(_unused):
-    _cleanup_session_temp()
+    # Keep a recovered temp autosave alive until the user saves it elsewhere.
+    filepath = getattr(bpy.data, "filepath", "")
+    if not filepath or not _path_is_within(filepath, _session_temp_dir()):
+        _cleanup_session_temp()
     _read_status_from_disk()
+    _load_recovery_state()
 
 
 def configure(context=None):
@@ -286,8 +489,115 @@ class AIRETOPO_OT_custom_autosave_now(bpy.types.Operator):
         return {"FINISHED" if saved else "CANCELLED"}
 
 
+class AIRETOPO_OT_open_recent_autosave(bpy.types.Operator):
+    bl_idname = "wm.airetopo_open_recent_autosave"
+    bl_label = "Open Recent Autosave"
+    bl_description = "Open this custom autosave as the current Blender file"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH", options={"SKIP_SAVE"})
+
+    @classmethod
+    def description(cls, _context, properties):
+        return f"Open autosave: {properties.filepath}"
+
+    def invoke(self, context, _event):
+        if getattr(bpy.data, "is_dirty", False):
+            return context.window_manager.invoke_confirm(self, _event)
+        return self.execute(context)
+
+    def execute(self, _context):
+        global _LAST_EVENT, _LAST_STATUS, _LAST_REGULAR_SAVE_TIME
+        filepath = Path(self.filepath)
+        if not filepath.is_file():
+            self.report({"ERROR"}, f"Autosave not found: {filepath}")
+            _invalidate_recent_cache()
+            return {"CANCELLED"}
+        original = _original_path_for_autosave(filepath)
+        restored = _restored_path_for_autosave(filepath)
+        try:
+            result = bpy.ops.wm.open_mainfile(filepath=str(filepath), load_ui=False)
+            if "FINISHED" not in result:
+                return result
+            restored.parent.mkdir(parents=True, exist_ok=True)
+            _set_recovery_state(filepath, original, restored)
+            result = bpy.ops.wm.save_as_mainfile(
+                filepath=str(restored),
+                check_existing=False,
+            )
+            if "FINISHED" not in result:
+                raise RuntimeError("Blender cancelled creation of the restored copy")
+        except RuntimeError as error:
+            self.report({"ERROR"}, f"Could not restore autosave: {error}")
+            return {"CANCELLED"}
+
+        _LAST_REGULAR_SAVE_TIME = time.time()
+        _LAST_EVENT = "RECOVERY"
+        _LAST_STATUS = f"Recovered as {restored}"
+        _tag_redraw()
+        return {"FINISHED"}
+
+
+class AIRETOPO_OT_save_recovery_to_original(bpy.types.Operator):
+    bl_idname = "wm.airetopo_save_recovery_to_original"
+    bl_label = "Save Recovery to Original"
+    bl_description = "Overwrite the original blend file and delete the restored copy"
+
+    @classmethod
+    def poll(cls, _context):
+        state = recovery_snapshot()
+        return state["active"] and bool(state["original"])
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, _context):
+        global _LAST_EVENT, _LAST_STATUS, _LAST_REGULAR_SAVE_TIME
+        state = recovery_snapshot()
+        if not state["active"] or not state["original"]:
+            self.report({"ERROR"}, "There is no original project for this recovery")
+            return {"CANCELLED"}
+
+        original = Path(state["original"])
+        restored = Path(state["restored"])
+        _clear_recovery_state()
+        try:
+            result = bpy.ops.wm.save_as_mainfile(
+                filepath=str(original),
+                check_existing=False,
+            )
+            if "FINISHED" not in result:
+                raise RuntimeError("Blender cancelled saving to the original")
+        except RuntimeError as error:
+            _set_recovery_state(state["autosave"], original, restored)
+            self.report({"ERROR"}, f"Could not save to original: {error}")
+            return {"CANCELLED"}
+
+        try:
+            if restored.is_file() and restored.resolve() != original.resolve():
+                restored.unlink()
+        except OSError as error:
+            self.report({"WARNING"}, f"Original saved, but restored copy remains: {error}")
+            return {"FINISHED"}
+
+        _LAST_REGULAR_SAVE_TIME = time.time()
+        _LAST_EVENT = "REGULAR"
+        _LAST_STATUS = f"Saved recovery to {original}"
+        _invalidate_recent_cache()
+        _tag_redraw()
+        self.report({"INFO"}, f"Saved to original: {original}")
+        return {"FINISHED"}
+
+
+CLASSES = (
+    AIRETOPO_OT_custom_autosave_now,
+    AIRETOPO_OT_open_recent_autosave,
+    AIRETOPO_OT_save_recovery_to_original,
+)
+
+
 def register():
-    bpy.utils.register_class(AIRETOPO_OT_custom_autosave_now)
+    for cls in CLASSES:
+        bpy.utils.register_class(cls)
     for handler, callback in (
         (bpy.app.handlers.save_post, _save_post),
         (bpy.app.handlers.load_post, _load_post),
@@ -313,4 +623,5 @@ def unregister():
     ):
         if callback in handler:
             handler.remove(callback)
-    bpy.utils.unregister_class(AIRETOPO_OT_custom_autosave_now)
+    for cls in reversed(CLASSES):
+        bpy.utils.unregister_class(cls)

@@ -69,7 +69,39 @@ try:
     assert (test_dir / "project.blendAutosave1").exists()
     assert not (test_dir / "project.blendAutosave2").exists()
     autosave = test_dir / "project.blendAutosave1"
-    assert bpy.ops.wm.open_mainfile(filepath=str(autosave)) == {"FINISHED"}
+
+    recovery_root = test_dir / "recovery"
+    recovery_session = recovery_root / "old-session"
+    recovery_session.mkdir(parents=True)
+    unsaved_recovery = recovery_session / "Unsaved.blendAutosave1"
+    shutil.copy2(autosave, unsaved_recovery)
+    (recovery_session / "not-an-autosave.txt").write_text("ignored", encoding="utf-8")
+    recoveries = custom_autosave.collect_recent_autosaves(
+        recovery_root,
+        [project, autosave],
+        limit=8,
+    )
+    recovery_paths = {entry["filepath"] for entry in recoveries}
+    assert str(autosave.resolve()) in recovery_paths
+    assert str(unsaved_recovery.resolve()) in recovery_paths
+    assert len(recoveries) == 2
+
+    assert bpy.ops.wm.airetopo_open_recent_autosave(filepath=str(autosave)) == {"FINISHED"}
+    assert "Torus" in bpy.data.objects
+    recovery = custom_autosave.recovery_snapshot()
+    restored = Path(recovery["restored"])
+    assert recovery["active"]
+    assert Path(recovery["original"]) == project
+    assert restored.exists()
+    assert restored.parent == project.parent
+    assert restored.name.startswith("project_restored_")
+    assert restored.suffix == ".blend"
+    assert bpy.data.filepath == str(restored)
+
+    assert bpy.ops.wm.airetopo_save_recovery_to_original() == {"FINISHED"}
+    assert bpy.data.filepath == str(project)
+    assert not restored.exists()
+    assert not custom_autosave.recovery_snapshot()["active"]
     assert "Torus" in bpy.data.objects
 
     preferences.autosave_mode = "NATIVE"

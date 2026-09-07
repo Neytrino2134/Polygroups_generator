@@ -186,3 +186,22 @@ class MESH_OT_polygroups_merge_small_islands(bpy.types.Operator):
             obj.data.update()
         self.report({'INFO'}, settings.small_island_status)
         return {'FINISHED'}
+
+
+class MESH_OT_polygroups_analyze_and_merge_seams(bpy.types.Operator):
+    bl_idname = "mesh.polygroups_analyze_and_merge_seams"
+    bl_label = "Analyze and Merge Seams"
+    bl_description = (
+        "Analyze seam islands and immediately remove mergeable borders around "
+        "small islands, respecting Selected Area and protection settings"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return MESH_OT_polygroups_merge_small_islands.poll(context)
+
+    def execute(self, context):
+        return bpy.ops.mesh.polygroups_merge_small_islands(
+            "EXEC_DEFAULT", preview=False,
+        )

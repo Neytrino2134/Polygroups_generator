@@ -10,6 +10,8 @@ Add-on preferences include Git-based update checks and fast-forward updates from
 
 Add-on preferences include a **Custom Autosave** section. Choose **Native** to use Blender's normal temporary-file autosave, or **Custom** to keep rotating copies beside a saved project (`file.blendAutosave1`, `file.blendAutosave2`, and so on). Unsaved projects are written to a session-specific folder under the system temp directory; that session folder is removed after the first regular save. The interval and retained version count are configurable, and only projects with unsaved changes are written by the timer.
 
+When Blender starts with an unsaved file, the expanded **Autosave and Restart** block in the N-panel lists recent custom autosaves. It includes recoveries from previous temporary sessions and autosaves beside projects in Blender's recent-files list. Clicking `name.blendAutosaveN` opens it and immediately creates `name_restored_YYYY-MM-DD_HH-MM-SS.blend` beside the original. The recovery block can overwrite the original with the recovered data and then remove that restored copy. Recoveries of projects that never had an original path use the add-on's recovered-temp folder and provide **Save Recovered File As** instead.
+
 The top of the AI Retopo N-panel shows the latest save result plus separate times for the most recent custom autosave and regular project save. Existing timestamps are restored from file modification times when a project is opened.
 
 The Outliner header orders compact controls as Highpoly (`H`) Hide/Show, Retopo lowpoly (`L`) Hide/Show, then Previous/Next Generated Collection. `Ctrl+Numpad +` and `Ctrl+Numpad -` navigate to the next/previous Generated collection only while the pointer is over the Outliner or the AI Retopo N-panel.

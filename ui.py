@@ -1,6 +1,7 @@
 from .custom_icons import icon_kwargs
 import os
 import sys
+import time
 from types import SimpleNamespace
 
 import bpy
@@ -388,6 +389,8 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             elif event == "ERROR":
                 status_row.alert = True
                 status_row.label(text=t(context, "autosave_status_error"), icon="ERROR")
+            elif event == "RECOVERY":
+                status_row.label(text=t(context, "autosave_recovery_created"), icon="RECOVER_LAST")
             else:
                 status_row.label(text=t(context, "save_status_waiting"), icon="TIME")
             time_row = session_box.row(align=True)
@@ -399,6 +402,53 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                 text=t(context, "last_regular_save_time", value=save_status["regular_save_time"]),
                 icon="FILE_TICK",
             )
+            recovery = custom_autosave.recovery_snapshot()
+            if recovery["active"]:
+                session_box.separator()
+                recovery_box = session_box.box()
+                recovery_box.label(
+                    text=t(context, "recovered_file", value=os.path.basename(recovery["restored"])),
+                    icon="FILE_BLEND",
+                )
+                if recovery["original"]:
+                    recovery_box.label(
+                        text=t(context, "original_file", value=os.path.basename(recovery["original"])),
+                        icon="FILE_TICK",
+                    )
+                    save_original = recovery_box.row(align=True)
+                    save_original.alert = True
+                    save_original.operator(
+                        "wm.airetopo_save_recovery_to_original",
+                        text=t(context, "save_recovery_to_original"),
+                        icon="FILE_TICK",
+                    )
+                    recovery_box.label(text=t(context, "save_recovery_warning"), icon="ERROR")
+                else:
+                    recovery_box.operator(
+                        "wm.save_as_mainfile",
+                        text=t(context, "save_recovery_as"),
+                        icon="FILE_NEW",
+                    )
+            if not getattr(bpy.data, "filepath", ""):
+                session_box.separator()
+                session_box.label(text=t(context, "recent_autosaves"), icon="RECOVER_LAST")
+                recent_entries = custom_autosave.recent_autosaves()
+                if recent_entries:
+                    recent_column = session_box.column(align=True)
+                    for entry in recent_entries:
+                        modified = time.strftime(
+                            "%d.%m.%Y %H:%M",
+                            time.localtime(entry["modified"]),
+                        )
+                        operator = recent_column.operator(
+                            "wm.airetopo_open_recent_autosave",
+                            text=f'{entry["name"]}  ·  {modified}',
+                            icon="FILE_BLEND",
+                        )
+                        operator.filepath = entry["filepath"]
+                    session_box.label(text=t(context, "recent_autosave_save_as_hint"), icon="INFO")
+                else:
+                    session_box.label(text=t(context, "no_recent_autosaves"), icon="INFO")
             if preferences and preferences.enable_dev_mode:
                 session_box.separator()
                 restart_column = session_box.column(align=True)
@@ -1054,7 +1104,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             content.prop(settings, "small_island_protect_materials", text=t(context, "small_islands_materials"))
             row = content.row(align=True)
             row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_preview"), icon="VIEWZOOM").preview = True
-            row.operator("mesh.polygroups_merge_small_islands", text=t(context, "small_islands_merge"), icon="AUTOMERGE_ON").preview = False
+            row.operator(
+                "mesh.polygroups_analyze_and_merge_seams",
+                text=t(context, "small_islands_analyze_merge"),
+                icon="AUTOMERGE_ON",
+            )
             if settings.small_island_status:
                 content.label(text=settings.small_island_status)
 

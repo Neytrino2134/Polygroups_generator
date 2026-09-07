@@ -82,3 +82,26 @@ assert bpy.ops.mesh.polygroups_merge_small_islands(
 assert sum(edge.seam for edge in live.edges) == before - 1
 bpy.ops.object.mode_set(mode='OBJECT')
 print('SMALL ISLAND PREVIEW AND APPLY PASSED')
+
+# Combined Analyze and Merge respects Selected Area: an equivalent small
+# island outside the selected faces must keep its seam borders.
+bm = strip([10, .04, 10, .04, 10])
+bm.faces.ensure_lookup_table()
+for face in bm.faces:
+    face.select = face.index in {0, 1}
+bm.to_mesh(obj.data)
+bm.free()
+before = sum(edge.use_seam for edge in obj.data.edges)
+settings.small_island_threshold = 0.5
+settings.small_island_selected_area = True
+bpy.ops.object.mode_set(mode='EDIT')
+live = bmesh.from_edit_mesh(obj.data)
+live.faces.ensure_lookup_table()
+for face in live.faces:
+    face.select_set(face.index in {0, 1})
+bmesh.update_edit_mesh(obj.data)
+assert bpy.ops.mesh.polygroups_analyze_and_merge_seams() == {'FINISHED'}
+live = bmesh.from_edit_mesh(obj.data)
+assert sum(edge.seam for edge in live.edges) == before - 1
+bpy.ops.object.mode_set(mode='OBJECT')
+print('ANALYZE AND MERGE SELECTED AREA PASSED')
