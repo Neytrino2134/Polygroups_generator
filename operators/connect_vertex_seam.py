@@ -5,6 +5,7 @@ from bpy_extras.view3d_utils import location_3d_to_region_2d
 
 from ..localization import t
 from ..pin_edges import pin_layer, set_pinned
+from .unwrap_angle_based import auto_uv_after_seam_change
 
 TOOL_ID = "polygroups_generator.connect_vertex_seam_tool"
 
@@ -72,6 +73,7 @@ def connect_pair(context, obj, bm, start, end):
         if pins is not None:
             set_pinned((direct_edge,), pins)
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+        auto_uv_after_seam_change(context)
         return 1
     result = bpy.ops.mesh.vert_connect_path()
     if "FINISHED" not in result:
@@ -84,6 +86,8 @@ def connect_pair(context, obj, bm, start, end):
     if path and pins is not None:
         set_pinned(path, pins)
     bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+    if path:
+        auto_uv_after_seam_change(context)
     return len(path)
 
 

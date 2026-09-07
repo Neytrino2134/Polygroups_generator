@@ -1,7 +1,7 @@
 import bmesh
 import bpy
 
-from .unwrap_angle_based import unwrap_selected_angle_based
+from .unwrap_angle_based import auto_uv_after_seam_change
 from ..pin_edges import pin_layer, set_pinned
 
 
@@ -56,12 +56,8 @@ class MESH_OT_polygroups_mark_selection_boundary_seam(bpy.types.Operator):
         bmesh.update_edit_mesh(mesh)
 
         auto_unwrapped = False
-        settings = context.scene.polygroups_seam_finalization_settings
-        if settings.auto_unwrap_after_seam:
-            auto_unwrapped = unwrap_selected_angle_based(
-                context,
-                average_islands=settings.auto_average_islands_scale_after_unwrap,
-            )
+        if marked_count:
+            auto_unwrapped = auto_uv_after_seam_change(context)
 
         suffix = " and unwrapped selected faces" if auto_unwrapped else ""
         self.report({"INFO"}, f"Marked {marked_count} boundary seam edge(s){suffix}")

@@ -7,6 +7,7 @@ from ..core.edge_seam_path import find_edge_path
 from ..localization import t
 from .connect_vertex_seam import edit_meshes, invoke_seam_click
 from ..pin_edges import pin_layer
+from .unwrap_angle_based import auto_uv_after_seam_change
 
 AREA_TOOL_ID = "polygroups_generator.seam_eraser_tool"
 PATH_TOOL_ID = "polygroups_generator.edge_seam_eraser_tool"
@@ -14,6 +15,7 @@ PATH_TOOL_ID = "polygroups_generator.edge_seam_eraser_tool"
 
 def erase_pair(context, obj, bm, start, end):
     path = find_edge_path(bm, start, end, obj.matrix_world)
+    seams_changed = False
     if context.scene.polygroups_seam_preparation_settings.seam_eraser_clear_mode == "PINNED":
         layer = pin_layer(bm)
         if layer is not None:
@@ -22,11 +24,14 @@ def erase_pair(context, obj, bm, start, end):
     else:
         layer = pin_layer(bm)
         for edge in path:
+            seams_changed |= edge.seam
             edge.seam = False
             if layer is not None:
                 edge[layer] = 0
     if path:
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+    if seams_changed:
+        auto_uv_after_seam_change(context)
     return len(path)
 
 
@@ -117,6 +122,7 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
         self._points = [(event.mouse_region_x, event.mouse_region_y)]
         self._handle = None
         self._closed = False
+        self._seams_changed = False
         self._clear_selection()
         bpy.ops.mesh.select_mode(type="EDGE")
         try:
@@ -150,6 +156,7 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
                         if layer is not None:
                             edge[layer] = 0
                     else:
+                        self._seams_changed |= edge.seam
                         edge.seam = False
                         if layer is not None:
                             edge[layer] = 0
@@ -210,6 +217,8 @@ class MESH_OT_polygroups_seam_eraser(bpy.types.Operator):
                             edge[layer] = value
             bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
         self._area.tag_redraw()
+        if not cancel and self._seams_changed:
+            auto_uv_after_seam_change(context)
 
     def modal(self, context, event):
         if self._closed:

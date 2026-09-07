@@ -4,6 +4,7 @@ import bmesh
 from ..core.smart_seams import segment_surfaces
 from ..core.smart_seam_routing import route_seams
 from ..pin_edges import pin_layer, is_pinned, set_pinned
+from .unwrap_angle_based import auto_uv_after_seam_change
 
 TOOL_ID = "polygroups_generator.smart_seams_generator_tool"
 
@@ -96,7 +97,9 @@ class MESH_OT_polygroups_mark_smart_angle_seams(bpy.types.Operator):
             set_pinned((edge for edge in bm.edges if edge.seam and edge not in initial_seams
                         and any(face in selected for face in edge.link_faces)), pins)
         bmesh.update_edit_mesh(obj.data, loop_triangles=bool(cuts), destructive=bool(cuts))
-        self.report({'INFO'}, f"Generated {region_count} surface regions; marked {marked} seam edges; rerouted {rerouted} paths; created {cuts} diagonal edges")
+        auto_unwrapped = auto_uv_after_seam_change(context)
+        uv_suffix = "; updated UVs" if auto_unwrapped else ""
+        self.report({'INFO'}, f"Generated {region_count} surface regions; marked {marked} seam edges; rerouted {rerouted} paths; created {cuts} diagonal edges{uv_suffix}")
         return {'FINISHED'}
 
 

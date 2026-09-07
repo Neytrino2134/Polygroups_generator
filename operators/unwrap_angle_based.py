@@ -79,7 +79,9 @@ def unwrap_selected_angle_based(context, average_islands=False):
         return False
 
     ensure_active_uv(obj)
-    selection_snapshot = _snapshot_edit_selection(obj) if average_islands else None
+    # Seam tools can be modal or chained. Always restore their selection and
+    # selection mode so automatic UV work remains an invisible post-process.
+    selection_snapshot = _snapshot_edit_selection(obj)
     bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
     bpy.ops.uv.unwrap(method="ANGLE_BASED")
     if average_islands:
@@ -89,6 +91,34 @@ def unwrap_selected_angle_based(context, average_islands=False):
         except Exception:
             pass
         bpy.ops.uv.average_islands_scale()
+    _restore_edit_selection(obj, selection_snapshot)
+    return True
+
+
+def auto_uv_after_seam_change(context):
+    """Unwrap the active mesh after a seam edit without changing selection."""
+    settings = context.scene.polygroups_seam_finalization_settings
+    if not settings.auto_unwrap_after_seam:
+        return False
+    obj = context.active_object
+    if obj is None or obj.type != "MESH" or obj.mode != "EDIT":
+        return False
+
+    ensure_active_uv(obj)
+    selection_snapshot = _snapshot_edit_selection(obj)
+    try:
+        # Path tools normally leave only vertices or edges selected. Explicitly
+        # select every face so Auto Unwrap always has geometry to process.
+        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.unwrap(method="ANGLE_BASED")
+        if settings.auto_average_islands_scale_after_unwrap:
+            try:
+                bpy.ops.uv.select_all(action="SELECT")
+            except Exception:
+                pass
+            bpy.ops.uv.average_islands_scale()
+    finally:
         _restore_edit_selection(obj, selection_snapshot)
     return True
 

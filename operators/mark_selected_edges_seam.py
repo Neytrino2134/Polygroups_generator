@@ -1,6 +1,7 @@
 import bmesh
 import bpy
 from ..pin_edges import pin_layer, set_pinned
+from .unwrap_angle_based import auto_uv_after_seam_change
 
 
 class MESH_OT_polygroups_mark_selected_edges_seam(bpy.types.Operator):
@@ -35,5 +36,7 @@ class MESH_OT_polygroups_mark_selected_edges_seam(bpy.types.Operator):
             set_pinned(selected_edges, pins)
 
         bmesh.update_edit_mesh(mesh)
-        self.report({"INFO"}, f"Marked {marked_count} selected edge seam(s)")
+        auto_unwrapped = auto_uv_after_seam_change(context) if marked_count else False
+        suffix = " and updated UVs" if auto_unwrapped else ""
+        self.report({"INFO"}, f"Marked {marked_count} selected edge seam(s){suffix}")
         return {"FINISHED"}

@@ -2115,7 +2115,20 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         if content is not None:
             column = content.column(align=True)
             column.separator()
+            column.prop(
+                seam_settings,
+                "show_checker_solid_mode",
+                text=t(context, "show_checker_solid_mode"),
+                toggle=True,
+                icon="SHADING_SOLID",
+            )
             column.prop(settings, "checker_scale", text=t(context, "checker_scale"))
+            if seam_settings.show_checker_solid_mode:
+                column.prop(
+                    seam_settings,
+                    "checker_overlay_opacity",
+                    text=t(context, "checker_overlay_opacity"),
+                )
             column.operator(
                 "object.polygroups_apply_checker_material",
                 text=t(context, "apply_checker_material"),

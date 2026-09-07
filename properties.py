@@ -1015,6 +1015,21 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
+    show_checker_solid_mode: bpy.props.BoolProperty(
+        name="Show Checker in Solid Mode",
+        description="Overlay a UV checker on the active mesh while preserving Solid mode lighting and MatCap",
+        default=False,
+        update=_redraw_view3d,
+    )
+    checker_overlay_opacity: bpy.props.FloatProperty(
+        name="Opacity",
+        description="Opacity of the UV checker drawn over Solid mode shading",
+        default=0.35,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+        update=_redraw_view3d,
+    )
     auto_unwrap_after_seam: bpy.props.BoolProperty(
         name="Auto Unwrap",
         description="Run Angle Based unwrap on selected faces after final seam operators",

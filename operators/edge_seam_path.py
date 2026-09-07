@@ -6,6 +6,7 @@ from ..core.edge_seam_path import find_edge_path
 from ..localization import t
 from ..pin_edges import pin_layer, set_pinned
 from .connect_vertex_seam import edit_meshes, selected_vertices, invoke_seam_click
+from .unwrap_angle_based import auto_uv_after_seam_change
 
 TOOL_ID = "polygroups_generator.edge_seam_path_tool"
 
@@ -174,6 +175,7 @@ def mark_pair(context, obj, bm, start, end):
                 set_pinned(path, pins)
             mesh.select_history.add(path[-1])
         bmesh.update_edit_mesh(owner.data, loop_triangles=False, destructive=False)
+    auto_uv_after_seam_change(context)
     return len(path)
 
 
@@ -213,6 +215,7 @@ def mark_click_pair(context, obj, bm, start, end):
         set_pinned(path, pins)
     if path:
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+        auto_uv_after_seam_change(context)
     return len(path)
 
 
