@@ -29,6 +29,8 @@ from .ui import register as register_ui
 from .ui import unregister as unregister_ui
 from .pin_edges import register as register_pin_edges
 from .pin_edges import unregister as unregister_pin_edges
+from .seam_object_overlay import register as register_seam_object_overlay
+from .seam_object_overlay import unregister as unregister_seam_object_overlay
 
 
 def register():
@@ -40,6 +42,7 @@ def register():
     register_tools()
     register_ui()
     register_pin_edges()
+    register_seam_object_overlay()
     register_hotkeys()
     register_remesh_defaults_timer()
 
@@ -52,6 +55,7 @@ def unregister():
     unregister_remesh_defaults_timer()
     unregister_hotkeys()
     unregister_ui()
+    unregister_seam_object_overlay()
     unregister_pin_edges()
     unregister_tools()
     unregister_operators()

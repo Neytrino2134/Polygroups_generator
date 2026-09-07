@@ -920,6 +920,14 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         layout = self.layout
         seam_settings = context.scene.polygroups_seam_preparation_settings
 
+        layout.prop(
+            seam_settings,
+            "show_seams_object_mode",
+            text=t(context, "show_seams_object_mode"),
+            toggle=True,
+            icon="EDGE_SEAM",
+        )
+
         content = draw_collapsible_box(layout, seam_settings, "show_selection_group", t(context, "seam_group_selection"), "FACESEL")
         if content is not None:
             tools_column = content.column(align=True)
@@ -1044,6 +1052,30 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         content = draw_collapsible_box(layout, seam_settings, "show_check_group", t(context, "seam_group_check"), "VIEWZOOM")
         if content is not None:
             draw_seam_gap_controls(content, context, seam_settings)
+            content.separator(type="LINE")
+            relax_column = content.column(align=True)
+            relax_column.label(text=t(context, "seam_relax"), icon="MOD_SMOOTH")
+            relax_column.prop(
+                seam_settings, "seam_relax_mode",
+                text=t(context, "seam_relax_mode"), expand=True,
+            )
+            relax_column.prop(
+                seam_settings, "seam_relax_iterations",
+                text=t(context, "seam_relax_iterations"),
+            )
+            if seam_settings.seam_relax_mode == "SMART":
+                relax_column.prop(
+                    seam_settings, "seam_relax_corner_angle",
+                    text=t(context, "seam_relax_corner_angle"),
+                )
+                relax_column.prop(
+                    seam_settings, "seam_relax_protection_radius",
+                    text=t(context, "seam_relax_protection_radius"),
+                )
+            relax_column.operator(
+                "mesh.polygroups_relax_seams",
+                text=t(context, "seam_relax"), icon="MOD_SMOOTH",
+            )
 
         content = draw_collapsible_box(layout, seam_settings, "show_cut_group", t(context, "seam_group_cut"), "MOD_BEVEL")
         if content is not None:
@@ -2020,9 +2052,17 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
         layout = self.layout.box()
         settings = context.scene.polygroups_generator_settings
         seam_settings = context.scene.polygroups_seam_finalization_settings
+        display_settings = context.scene.polygroups_seam_preparation_settings
         content = draw_topic(layout, context, "seam_final_0", 'Seam Settings', "PREFERENCES")
         if content is not None:
             column = content.column(align=True)
+            column.prop(
+                display_settings,
+                "show_seams_object_mode",
+                text=t(context, "show_seams_object_mode"),
+                toggle=True,
+                icon="EDGE_SEAM",
+            )
             column.prop(seam_settings, "auto_unwrap_after_seam", text=t(context, "auto_unwrap"))
             column.prop(
                 seam_settings,

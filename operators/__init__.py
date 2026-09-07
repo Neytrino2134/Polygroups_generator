@@ -108,6 +108,7 @@ from .select_seam_tool import MESH_OT_polygroups_select_seam_tool
 from .seam_gap_detection import MESH_OT_polygroups_check_seam_gaps
 from .seam_gap_detection import MESH_OT_polygroups_check_and_close_seam_gaps
 from .seam_gap_detection import MESH_OT_polygroups_connect_seam_gap_pairs
+from .relax_seams import MESH_OT_polygroups_relax_seams
 from .safety_checks import OBJECT_OT_polygroups_checked_quad_remesh
 from .safety_checks import OBJECT_OT_polygroups_checked_generate_polygroups
 from .safety_checks import OBJECT_OT_polygroups_checked_prepare_and_bake
@@ -236,6 +237,7 @@ CLASSES = (
     MESH_OT_polygroups_check_seam_gaps,
     MESH_OT_polygroups_check_and_close_seam_gaps,
     MESH_OT_polygroups_connect_seam_gap_pairs,
+    MESH_OT_polygroups_relax_seams,
     MESH_OT_polygroups_smooth_face_selection,
     OBJECT_OT_polygroups_check_mesh,
     OBJECT_OT_polygroups_fix_mesh_normals,

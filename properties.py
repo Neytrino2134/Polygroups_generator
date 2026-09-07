@@ -1,4 +1,5 @@
 import os
+from math import radians
 
 import bpy
 
@@ -75,6 +76,16 @@ def _normalize_render_output_directory(self, context):
     value = (self.output_directory or "").strip()
     if value.startswith("//"):
         self["output_directory"] = bpy.path.abspath(value)
+
+
+def _redraw_view3d(_self, context):
+    window_manager = getattr(context, "window_manager", None)
+    if window_manager is None:
+        return
+    for window in window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
 
 
 def _single_section_mode_update(self, context):
@@ -488,6 +499,12 @@ class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
+    show_seams_object_mode: bpy.props.BoolProperty(
+        name="Show Seams in Object Mode",
+        description="Display seam edges on the active mesh while working in Object Mode",
+        default=False,
+        update=_redraw_view3d,
+    )
     seam_path_pin: bpy.props.BoolProperty(
         name="Mark As Pinned", description="Pin seams created by Vertex Seam Path and Edge Seam Path",
         default=False, update=_seam_tool_icon_update)
@@ -579,6 +596,27 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
     seam_gap_status: bpy.props.StringProperty(
         name="Seam Gap Status",
         default="Not checked",
+    )
+    seam_relax_mode: bpy.props.EnumProperty(
+        name="Relax Mode",
+        items=(
+            ("RELAX", "Relax", "Relax all continuous seam chains"),
+            ("SMART", "Smart Relax", "Protect junctions and sharp seam corners"),
+        ),
+        default="RELAX",
+    )
+    seam_relax_iterations: bpy.props.IntProperty(
+        name="Iterations", default=3, min=1, max=100, soft_max=20,
+    )
+    seam_relax_corner_angle: bpy.props.FloatProperty(
+        name="Corner Angle",
+        description="Protect Smart Relax corners sharper than this angle",
+        default=radians(90.0), min=0.0, max=radians(180.0), subtype="ANGLE",
+    )
+    seam_relax_protection_radius: bpy.props.IntProperty(
+        name="Protection Radius",
+        description="Number of seam edges protected around junctions and sharp corners",
+        default=1, min=0, max=20, soft_max=5,
     )
     show_knife_seam_settings: bpy.props.BoolProperty(
         name="Knife Seam",
