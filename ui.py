@@ -3305,6 +3305,28 @@ def draw_view_assists_header(self, context):
     )
 
 
+def draw_view_assists_shading_pie(self, context):
+    """Add the combined overlay toggle to Blender's standard Z shading pie."""
+    scene = getattr(context, "scene", None)
+    if scene is None:
+        return
+    seam_settings = getattr(scene, "polygroups_seam_preparation_settings", None)
+    checker_settings = getattr(scene, "polygroups_seam_finalization_settings", None)
+    if seam_settings is None or checker_settings is None:
+        return
+    enabled = bool(
+        seam_settings.show_seams_object_mode
+        and checker_settings.show_checker_solid_mode
+    )
+    pie = self.layout.menu_pie()
+    pie.operator(
+        "wm.airetopo_toggle_view_assists",
+        text=t(context, "toggle_view_assists"),
+        icon="HIDE_OFF" if enabled else "HIDE_ON",
+        depress=enabled,
+    )
+
+
 def draw_object_apply_menu(self, context):
     """Add the cutter workflow to Object Mode's Ctrl+A menu."""
     self.layout.separator()
@@ -3321,6 +3343,7 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.VIEW3D_MT_edit_mesh_edges.append(draw_edge_menu)
     bpy.types.VIEW3D_MT_object_apply.append(draw_object_apply_menu)
+    bpy.types.VIEW3D_MT_shading_pie.append(draw_view_assists_shading_pie)
     bpy.types.OUTLINER_HT_header.prepend(draw_outliner_header)
     bpy.types.VIEW3D_HT_header.append(draw_view_assists_header)
 
@@ -3328,6 +3351,7 @@ def register():
 def unregister():
     bpy.types.VIEW3D_HT_header.remove(draw_view_assists_header)
     bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)
+    bpy.types.VIEW3D_MT_shading_pie.remove(draw_view_assists_shading_pie)
     bpy.types.VIEW3D_MT_object_apply.remove(draw_object_apply_menu)
     bpy.types.VIEW3D_MT_edit_mesh_edges.remove(draw_edge_menu)
     for cls in reversed(CLASSES):

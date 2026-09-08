@@ -506,6 +506,32 @@ class AIRETOPO_OT_custom_autosave_now(bpy.types.Operator):
         return {"FINISHED" if saved else "CANCELLED"}
 
 
+class AIRETOPO_OT_clear_temp_unsaved_files(bpy.types.Operator):
+    bl_idname = "wm.airetopo_clear_temp_unsaved_files"
+    bl_label = "Clear Temp Unsaved Files"
+    bl_description = "Delete custom autosaves for unsaved files from the add-on temporary folder"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, _context):
+        root = _temp_root()
+        removed = 0
+        if root.exists():
+            try:
+                removed = sum(1 for path in root.rglob("*") if path.is_file())
+                shutil.rmtree(root)
+            except OSError as error:
+                self.report({"ERROR"}, f"Could not clear temporary autosaves: {error}")
+                return {"CANCELLED"}
+
+        _invalidate_recent_cache()
+        recent_autosaves(refresh=True)
+        _tag_redraw()
+        self.report({"INFO"}, f"Removed {removed} temporary autosave file(s)")
+        return {"FINISHED"}
+
+
 class AIRETOPO_OT_open_recent_autosave(bpy.types.Operator):
     bl_idname = "wm.airetopo_open_recent_autosave"
     bl_label = "Open Recent Autosave"
@@ -607,6 +633,7 @@ class AIRETOPO_OT_save_recovery_to_original(bpy.types.Operator):
 
 CLASSES = (
     AIRETOPO_OT_custom_autosave_now,
+    AIRETOPO_OT_clear_temp_unsaved_files,
     AIRETOPO_OT_open_recent_autosave,
     AIRETOPO_OT_save_recovery_to_original,
 )

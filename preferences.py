@@ -648,6 +648,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         layout.prop(self, "enable_dev_mode", text=t(context, "enable_dev_mode"))
         layout.label(text=t(context, "dev_restart_hint"))
         layout.operator("wm.airetopo_dev_cleanup", text=t(context, "dev_cleanup"), icon="TRASH")
+        layout.operator(
+            "wm.airetopo_clear_temp_unsaved_files",
+            text=t(context, "clear_temp_unsaved_files"),
+            icon="TRASH",
+        )
 
     def draw_info(self, context, layout):
         addon_name, version = _addon_info()

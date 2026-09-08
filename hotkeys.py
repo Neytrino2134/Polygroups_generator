@@ -10,6 +10,8 @@ from .tools import DRAW_CUTTER_PATH_TOOL_ID
 from .tools import DRAW_CUTTER_GRID_TOOL_ID
 from .tools import DRAW_CUTTER_TOOL_ID
 from .tools import CUTTER_TOOL_ORDER
+from .tools import ISLAND_SELECTOR_TOOL_ID
+from .tools import SMALL_ISLANDS_MERGER_TOOL_ID
 from .operators.section_hotkeys import AIRETOPO_OT_section_number
 from .operators.section_hotkeys import AIRETOPO_OT_section_set_all
 from .operators.section_hotkeys import AIRETOPO_OT_section_toggle_single_mode
@@ -334,6 +336,27 @@ class MESH_OT_airetopo_cycle_seam_tool(bpy.types.Operator):
         return bpy.ops.mesh.polygroups_select_seam_tool(tool_id=tool_id)
 
 
+class MESH_OT_airetopo_cycle_island_tool(bpy.types.Operator):
+    bl_idname = "mesh.airetopo_cycle_island_tool"
+    bl_label = "Cycle Island Tools"
+    bl_description = "Cycle between Island Selector and Small Islands Merger"
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "EDIT_MESH" and context.area is not None and context.area.type == "VIEW_3D"
+
+    def execute(self, context):
+        order = (ISLAND_SELECTOR_TOOL_ID, SMALL_ISLANDS_MERGER_TOOL_ID)
+        active = _active_workspace_tool_id(context)
+        tool_id = order[(order.index(active) + 1) % len(order)] if active in order else order[0]
+        try:
+            bpy.ops.wm.tool_set_by_id(name=tool_id)
+        except Exception as error:
+            self.report({"ERROR"}, f"Could not select island tool: {error}")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 class MESH_OT_airetopo_linked_seam(bpy.types.Operator):
     bl_idname = "mesh.airetopo_linked_seam"
     bl_label = "Select Linked by Seam"
@@ -402,6 +425,7 @@ class VIEW3D_MT_airetopo_cutter_tweak_pie(bpy.types.Menu):
 
 CLASSES = (
     MESH_OT_airetopo_cycle_seam_tool,
+    MESH_OT_airetopo_cycle_island_tool,
     MESH_OT_airetopo_linked_seam,
     AIRETOPO_OT_section_number,
     AIRETOPO_OT_section_set_all,
@@ -432,6 +456,24 @@ def register_keymaps():
         )
         item.properties.group = group
         KEYMAP_ITEMS.append((mesh_keymap, item))
+    item = mesh_keymap.keymap_items.new(
+        "mesh.knife_tool",
+        "K",
+        "PRESS",
+        shift=True,
+        head=True,
+        repeat=False,
+    )
+    KEYMAP_ITEMS.append((mesh_keymap, item))
+    item = mesh_keymap.keymap_items.new(
+        MESH_OT_airetopo_cycle_island_tool.bl_idname,
+        "W",
+        "PRESS",
+        ctrl=True,
+        head=True,
+        repeat=False,
+    )
+    KEYMAP_ITEMS.append((mesh_keymap, item))
     for ctrl, pick in ((False, True), (True, False)):
         item = mesh_keymap.keymap_items.new(
             MESH_OT_airetopo_linked_seam.bl_idname, "L", "PRESS", ctrl=ctrl, head=True,

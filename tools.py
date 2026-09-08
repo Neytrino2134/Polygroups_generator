@@ -923,6 +923,19 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
         layout.prop(settings, "island_selector_selection_mode", expand=True)
         if settings.island_selector_shape == "CIRCLE":
             layout.prop(props, "radius")
+        layout.separator(type="LINE")
+        layout.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
+        merge = layout.operator(
+            "mesh.polygroups_merge_small_islands",
+            text=t(context, "small_islands_merge"),
+            icon="AUTOMERGE_ON",
+        )
+        merge.preview = False
+        layout.operator(
+            "mesh.polygroups_clear_inside_edges_seam",
+            text=t(context, "clear_inside_edges_seam"),
+            icon="X",
+        )
         layout.label(text="Shift + LMB: Add linked island")
 
 
@@ -1131,20 +1144,20 @@ def register():
         group=False,
     )
     bpy.utils.register_tool(
-        VIEW3D_WST_polygroups_small_islands_merger,
+        VIEW3D_WST_polygroups_island_selector,
         after={LONGITUDINAL_SEAM_TOOL_ID},
         separator=False,
         group=False,
     )
     bpy.utils.register_tool(
-        VIEW3D_WST_polygroups_island_selector,
-        after={SMALL_ISLANDS_MERGER_TOOL_ID},
+        VIEW3D_WST_polygroups_small_islands_merger,
+        after={ISLAND_SELECTOR_TOOL_ID},
         separator=False,
         group=False,
     )
     bpy.utils.register_tool(
         VIEW3D_WST_polygroups_edge_merger,
-        after={ISLAND_SELECTOR_TOOL_ID},
+        after={SMALL_ISLANDS_MERGER_TOOL_ID},
         separator=False,
         group=False,
     )
@@ -1179,8 +1192,8 @@ def unregister():
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_eraser)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_seam_eraser)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_merger)
-    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_island_selector)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_small_islands_merger)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_island_selector)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_longitudinal_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_smart_seams_generator)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_path)

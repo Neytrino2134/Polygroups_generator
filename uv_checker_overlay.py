@@ -201,16 +201,36 @@ def exceeds_polygon_limit(obj, polygon_limit):
     )
 
 
+def _solid_view_exists():
+    window_manager = getattr(bpy.context, "window_manager", None)
+    if window_manager is None:
+        return False
+    for window in window_manager.windows:
+        for area in window.screen.areas:
+            if area.type != "VIEW_3D":
+                continue
+            space = area.spaces.active
+            if space is not None and space.shading.type == "SOLID":
+                return True
+    return False
+
+
 def draw_checker_overlay():
     context = bpy.context
     space = context.space_data
-    if space is None or space.type != "VIEW_3D" or space.shading.type != "SOLID":
+    if space is None or space.type != "VIEW_3D":
+        return
+    if space.shading.type != "SOLID":
+        if _BATCH_CACHE is not None and not _solid_view_exists():
+            clear_cache()
         return
     scene = context.scene
     if scene is None:
         return
     settings = scene.polygroups_seam_finalization_settings
     if not settings.show_checker_solid_mode or settings.checker_overlay_opacity <= 0.0:
+        if _BATCH_CACHE is not None:
+            clear_cache()
         return
     obj = context.active_object
     if obj is None or obj.type != "MESH" or obj.mode not in {"OBJECT", "EDIT"}:
