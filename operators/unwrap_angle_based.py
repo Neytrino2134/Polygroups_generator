@@ -152,6 +152,30 @@ def unwrap_all_angle_based(context, average_islands=False):
     return True
 
 
+def smart_project_all(context, obj=None, angle_limit=1.1519173063162575, island_margin=0.02):
+    """Run Blender's native Smart UV Project on all faces of one mesh."""
+    obj = obj or context.active_object
+    if obj is None or obj.type != "MESH":
+        return False
+    original_mode = obj.mode
+    obj.hide_set(False)
+    context.view_layer.objects.active = obj
+    ensure_active_uv(obj)
+    if original_mode != "EDIT":
+        bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.smart_project(angle_limit=angle_limit, island_margin=island_margin)
+    finally:
+        if original_mode != "EDIT" and obj.mode == "EDIT":
+            try:
+                bpy.ops.object.mode_set(mode=original_mode)
+            except Exception:
+                bpy.ops.object.mode_set(mode="OBJECT")
+    return True
+
+
 class OBJECT_OT_polygroups_unwrap_angle_based(bpy.types.Operator):
     bl_idname = "object.polygroups_unwrap_angle_based"
     bl_label = "Unwrap Angle Based"
@@ -199,29 +223,63 @@ class OBJECT_OT_polygroups_smart_uv_project(bpy.types.Operator):
         return obj is not None and obj.type == "MESH"
 
     def execute(self, context):
-        obj = context.active_object
-        original_mode = obj.mode
-
-        context.view_layer.objects.active = obj
-        ensure_active_uv(obj)
-
-        if original_mode != "EDIT":
-            bpy.ops.object.mode_set(mode="EDIT")
-
-        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
-        bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.uv.smart_project(
+        smart_project_all(
+            context,
             angle_limit=self.angle_limit,
             island_margin=self.island_margin,
         )
-
-        if original_mode != "EDIT":
-            try:
-                bpy.ops.object.mode_set(mode=original_mode)
-            except Exception:
-                bpy.ops.object.mode_set(mode="OBJECT")
-
         self.report({"INFO"}, "Unwrapped UVs with Smart UV Project")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_smart_uv_unwrap(bpy.types.Operator):
+    bl_idname = "object.polygroups_smart_uv_unwrap"
+    bl_label = "Smart UV Unwrap"
+    bl_description = "Generate smart seams, unwrap with Angle Based, and optionally pack UV islands"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH"
+
+    def execute(self, context):
+        obj = context.active_object
+        original_mode = obj.mode
+        seam_settings = context.scene.polygroups_seam_finalization_settings
+        context.view_layer.objects.active = obj
+        obj.hide_set(False)
+        if original_mode != "EDIT":
+            bpy.ops.object.mode_set(mode="EDIT")
+        try:
+            bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
+            bpy.ops.mesh.select_all(action="SELECT")
+            auto_unwrap = seam_settings.auto_unwrap_after_seam
+            seam_settings.auto_unwrap_after_seam = False
+            try:
+                result = bpy.ops.mesh.polygroups_mark_smart_angle_seams()
+            finally:
+                seam_settings.auto_unwrap_after_seam = auto_unwrap
+            if "FINISHED" not in result:
+                return {"CANCELLED"}
+
+            unwrap_all_angle_based(
+                context,
+                average_islands=seam_settings.auto_average_islands_scale_after_unwrap,
+            )
+            packed = False
+            if seam_settings.smart_uv_unwrap_auto_pack:
+                bpy.ops.uv.select_all(action="SELECT")
+                bpy.ops.uv.pack_islands()
+                packed = True
+        finally:
+            if original_mode != "EDIT" and obj.mode == "EDIT":
+                try:
+                    bpy.ops.object.mode_set(mode=original_mode)
+                except Exception:
+                    bpy.ops.object.mode_set(mode="OBJECT")
+        suffix = " and packed islands" if packed else ""
+        self.report({"INFO"}, f"Generated smart seams and unwrapped UVs{suffix}")
         return {"FINISHED"}
 
 

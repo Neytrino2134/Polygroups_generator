@@ -3,6 +3,7 @@ import re
 import bpy
 
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once
+from ..core.generated_index import generated_collection_info
 from ..localization import t
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import rename_and_move_objects
@@ -18,6 +19,7 @@ LOWPOLY_TOKEN_PATTERN = re.compile(
     r"^(?:low|retopo(?:logy)?)(?:[_. -]|$)|(?:^|[_. -])(?:low|retopo(?:logy)?)(?:\.\d+)?$",
     re.IGNORECASE,
 )
+RETOPO_SOURCE_PATTERN = re.compile(r"^Retopo_(?:\d+_)?(.+)$", re.IGNORECASE)
 
 
 def is_generated_highpoly_name(name):
@@ -81,7 +83,92 @@ def make_selected_lowpoly_active(context):
     return lowpoly
 
 
+def expected_highpoly_name(lowpoly_name):
+    """Return the original highpoly name encoded in a Retopo[_NN]_ name."""
+    match = RETOPO_SOURCE_PATTERN.match(lowpoly_name)
+    if match is None:
+        return ""
+    candidate = match.group(1)
+    return candidate if is_generated_highpoly_name(candidate) else ""
+
+
+def find_matching_highpoly(lowpoly):
+    """Find the exact source mesh in the lowpoly's numbered Generated collection."""
+    expected_name = expected_highpoly_name(lowpoly.name)
+    collection, _index = generated_collection_info(lowpoly)
+    if not expected_name or collection is None:
+        return None, expected_name, collection
+    source = next(
+        (
+            obj
+            for obj in collection.objects
+            if obj != lowpoly
+            and obj.type == "MESH"
+            and obj.name.casefold() == expected_name.casefold()
+        ),
+        None,
+    )
+    return source, expected_name, collection
+
+
+def auto_select_matching_highpoly(context, lowpoly):
+    source, expected_name, collection = find_matching_highpoly(lowpoly)
+    if source is None:
+        return None, expected_name, collection
+    if lowpoly.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    source.hide_viewport = False
+    source.hide_render = False
+    source.hide_set(False)
+    source.select_set(True)
+    lowpoly.select_set(True)
+    context.view_layer.objects.active = lowpoly
+    return source, expected_name, collection
+
+
+def report_missing_matching_highpoly(operator, context, lowpoly, expected_name, collection):
+    collection_name = collection.name if collection is not None else "Generated.N"
+    if expected_name:
+        message = t(
+            context,
+            "bake_matching_highpoly_not_found",
+            object=expected_name,
+            collection=collection_name,
+        )
+    else:
+        message = t(context, "bake_matching_highpoly_name_invalid", object=lowpoly.name)
+    operator.report({"WARNING"}, message)
+    if not bpy.app.background:
+        def draw_warning(menu, _context):
+            menu.layout.label(text=message)
+            menu.layout.label(text=t(context, "bake_matching_highpoly_hint"))
+
+        context.window_manager.popup_menu(
+            draw_warning,
+            title=t(context, "bake_selection_required"),
+            icon="ERROR",
+        )
+
+
 def run_bake_action(operator, context, action, check_uv=True):
+    mesh_objects = selected_mesh_objects(context)
+    if action == "PREPARE_AND_BAKE" and len(mesh_objects) == 1:
+        lowpoly = context.active_object
+        source, expected_name, collection = auto_select_matching_highpoly(context, lowpoly)
+        if source is None:
+            report_missing_matching_highpoly(
+                operator,
+                context,
+                lowpoly,
+                expected_name,
+                collection,
+            )
+            return {"CANCELLED"}
+        operator.report(
+            {"INFO"},
+            t(context, "bake_matching_highpoly_selected", object=source.name),
+        )
+
     if action in {"PREPARE_AND_BAKE", "BAKE"} and len(selected_mesh_objects(context)) < 2:
         message = t(context, "bake_requires_two_objects")
         operator.report({"WARNING"}, message)

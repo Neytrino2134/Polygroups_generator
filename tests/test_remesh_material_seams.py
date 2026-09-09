@@ -35,7 +35,7 @@ class Backend:
 settings = context.scene.polygroups_model_preparation_settings
 assert settings.remesh_auto_generate_seams
 assert settings.remesh_pregenerate_polygroups
-assert not settings.remesh_auto_unwrap_checker
+assert settings.remesh_auto_unwrap_checker
 settings.remesh_pregenerate_polygroups = False
 for enabled in (False, True):
     context.view_layer.objects.active = source

@@ -18,7 +18,7 @@ from polygroups_generator.uv_checker_overlay import _cache_key, checker_geometry
 
 settings = bpy.context.scene.polygroups_seam_finalization_settings
 assert settings.show_checker_solid_mode is False
-assert abs(settings.checker_overlay_opacity - 0.35) < 1.0e-6
+assert abs(settings.checker_overlay_opacity - 0.1) < 1.0e-6
 assert settings.checker_overlay_max_polygons == 500000
 heavy = SimpleNamespace(type="MESH", data=SimpleNamespace(polygons=range(500001)))
 assert overlay.exceeds_polygon_limit(heavy, 500000)

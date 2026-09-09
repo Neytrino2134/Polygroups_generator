@@ -27,8 +27,10 @@ assert settings.batch_remesh_preset == "HIGH" and settings.file_import_remesh_pr
 assert settings.batch_remesh_method == "QUAD" and settings.file_import_remesh_method == "QUAD"
 assert abs(settings.batch_voxel_size - 0.003) < 1e-7
 assert abs(settings.file_import_voxel_size - 0.003) < 1e-7
-assert settings.batch_disable_auto_unwrap and settings.file_import_disable_auto_unwrap
+assert settings.batch_auto_smart_uv_project and settings.file_import_auto_smart_uv_project
 assert settings.batch_disable_view_assist and settings.file_import_disable_view_assist
+assert settings.batch_separate_collections and settings.file_import_separate_collections
+assert settings.remesh_auto_unwrap_checker
 settings.batch_auto_remesh = True
 settings.batch_separate_collections = True
 settings.batch_auto_arrange_objects = True
@@ -122,12 +124,14 @@ with tempfile.TemporaryDirectory() as directory:
     queue_module.ACTIVE_QUEUE = None
     with patch.object(queue_module, "RemeshJob", FakeJob):
         context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam = True
+        context.scene.polygroups_seam_finalization_settings.smart_uv_unwrap_auto_pack = True
         context.scene.polygroups_seam_finalization_settings.show_checker_solid_mode = True
         context.scene.polygroups_seam_preparation_settings.show_seams_object_mode = True
         settings.remesh_auto_unwrap_checker = True
         queue = queue_module.ImportQueue(context, paths, False, report)
         queue.begin()
         assert not context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam
+        assert not context.scene.polygroups_seam_finalization_settings.smart_uv_unwrap_auto_pack
         assert not context.scene.polygroups_seam_finalization_settings.show_checker_solid_mode
         assert not context.scene.polygroups_seam_preparation_settings.show_seams_object_mode
         assert not settings.remesh_auto_unwrap_checker
@@ -147,6 +151,7 @@ with tempfile.TemporaryDirectory() as directory:
         for anchor, objects in queue.groups:
             assert len(objects) == 2
             result = next(obj for obj in objects if obj != anchor)
+            assert result.data.uv_layers.active is not None
             assert list(anchor.data.materials) == [source_material]
             assert len(result.data.materials) == 1
             gray = result.active_material
@@ -222,12 +227,14 @@ with tempfile.TemporaryDirectory() as directory:
         # Import-tab settings are independent of Batch Import settings.
         settings.file_import_clear_material = True
         settings.file_import_auto_remesh = False
+        assert not settings.file_import_auto_smart_uv_project
         settings.file_import_separate_collections = True
         queue = queue_module.ImportQueue(context, paths[:1], True, report)
         queue.begin()
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_imported_count == 1
         assert len(queue.groups[0][1]) == 1
+        assert queue.groups[0][0].data.uv_layers.active is None
         assert not queue.groups[0][0].data.materials
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)

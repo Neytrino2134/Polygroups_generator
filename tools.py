@@ -828,6 +828,9 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
         settings = context.scene.polygroups_seam_preparation_settings
         layout.prop(settings, "smart_seam_pin_generated", text=t(context, "pin_generated"), toggle=True)
         _draw_seam_auto_uv_settings(context, layout)
+        layout.prop(settings, "smart_seam_create_edges")
+        if settings.smart_seam_create_edges:
+            layout.prop(settings, "smart_seam_edge_preference")
         _draw_smart_auto_relax_settings(context, layout)
         layout.prop(settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
         layout.prop(settings, "smart_seam_filter_iterations")
@@ -835,9 +838,6 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
         layout.prop(settings, "smart_seam_smoothness")
         layout.prop(settings, "smart_seam_path_turn")
         layout.prop(settings, "smart_seam_path_corridor")
-        layout.prop(settings, "smart_seam_create_edges")
-        if settings.smart_seam_create_edges:
-            layout.prop(settings, "smart_seam_edge_preference")
         layout.prop(settings, "smart_seam_replace")
 
 

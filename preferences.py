@@ -436,6 +436,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         description="Show autosave status and Blender restart controls in the N-panel",
         default=True,
     )
+    show_panel_recent_autosaves: bpy.props.BoolProperty(
+        name="Recent Autosaves",
+        description="Show recent custom autosave files for unsaved sessions",
+        default=False,
+    )
     enable_dev_mode: bpy.props.BoolProperty(
         name="Enable Dev Mode",
         description="Show developer restart controls in the AI Retopo N-panel",

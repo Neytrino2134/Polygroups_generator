@@ -102,6 +102,15 @@ def _single_section_mode_update(self, context):
         _set_single_visible_section(self, visible_properties[0])
 
 
+def _import_auto_remesh_update(auto_remesh_property, auto_unwrap_property):
+    def update(self, context):
+        del context
+        if not getattr(self, auto_remesh_property):
+            setattr(self, auto_unwrap_property, False)
+
+    return update
+
+
 def _seam_tool_icon_update(self, context):
     from .tools import update_dynamic_seam_tool_icons
     settings = getattr(context.scene, "polygroups_seam_preparation_settings", self)
@@ -260,6 +269,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Disable checker and seam display after import",
         default=True,
     )
+    file_import_auto_smart_uv_project: bpy.props.BoolProperty(
+        name="Auto Unwrap Smart UV Project",
+        description="Unwrap imported results with Blender's native Smart UV Project",
+        default=True,
+    )
     batch_auto_rename_objects: bpy.props.BoolProperty(
         name="Auto Rename Objects",
         description="Rename imported objects and move them to the Generated collection",
@@ -278,6 +292,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_disable_view_assist: bpy.props.BoolProperty(
         name="Disable View Assist",
         description="Disable checker and seam display after batch import",
+        default=True,
+    )
+    batch_auto_smart_uv_project: bpy.props.BoolProperty(
+        name="Auto Unwrap Smart UV Project",
+        description="Unwrap each imported result with Blender's native Smart UV Project",
         default=True,
     )
     batch_include_subfolders: bpy.props.BoolProperty(
@@ -333,9 +352,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     remesh_auto_unwrap_checker: bpy.props.BoolProperty(
         name="Auto Unwrap and Apply Checker",
         description="Unwrap each remeshed result with Angle Based and apply the checker material",
-        default=False,
+        default=True,
     )
-    file_import_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
+    file_import_auto_remesh: bpy.props.BoolProperty(
+        name="Auto Remesh",
+        default=True,
+        update=_import_auto_remesh_update(
+            "file_import_auto_remesh",
+            "file_import_auto_smart_uv_project",
+        ),
+    )
     file_import_clear_material: bpy.props.BoolProperty(
         name="Clear Material",
         description="Replace transferred materials on the remeshed result with a plain gray material",
@@ -349,8 +375,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Voxel Size", description="Voxel size used by Blender's native Remesh modifier",
         default=0.003, min=0.000001, soft_max=1.0, precision=4, unit="LENGTH",
     )
-    file_import_separate_collections: bpy.props.BoolProperty(default=False)
-    batch_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
+    file_import_separate_collections: bpy.props.BoolProperty(default=True)
+    batch_auto_remesh: bpy.props.BoolProperty(
+        name="Auto Remesh",
+        default=True,
+        update=_import_auto_remesh_update(
+            "batch_auto_remesh",
+            "batch_auto_smart_uv_project",
+        ),
+    )
     batch_clear_material: bpy.props.BoolProperty(
         name="Clear Material",
         description="Replace transferred materials on the remeshed result with a plain gray material",
@@ -364,7 +397,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Voxel Size", description="Voxel size used by Blender's native Remesh modifier",
         default=0.003, min=0.000001, soft_max=1.0, precision=4, unit="LENGTH",
     )
-    batch_separate_collections: bpy.props.BoolProperty(default=False)
+    batch_separate_collections: bpy.props.BoolProperty(default=True)
     batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     batch_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     batch_cancel_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
@@ -577,7 +610,7 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
         description="Favor shorter region boundaries over small changes in surface orientation",
     )
     smart_seam_create_edges: bpy.props.BoolProperty(
-        name="Create New Edges", default=False,
+        name="Create New Edges", default=True,
         description="Allow diagonal connections through faces when they improve the seam route; changes topology",
     )
     smart_seam_path_turn: bpy.props.FloatProperty(
@@ -602,7 +635,7 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
     smart_seam_auto_relax: bpy.props.BoolProperty(
         name="Auto Smart Relax Seams",
         description="Run Smart Relax automatically after generating seams",
-        default=False,
+        default=True,
     )
     prefer_linked_seam: bpy.props.BoolProperty(
         name="Prefer Select Linked by Seam", default=True,
@@ -654,10 +687,10 @@ class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
             ("RELAX", "Relax", "Relax all continuous seam chains"),
             ("SMART", "Smart Relax", "Protect junctions and sharp seam corners"),
         ),
-        default="RELAX",
+        default="SMART",
     )
     seam_relax_iterations: bpy.props.IntProperty(
-        name="Iterations", default=3, min=1, max=100, soft_max=20,
+        name="Iterations", default=2, min=1, max=100, soft_max=20,
     )
     seam_relax_selected_area_only: bpy.props.BoolProperty(
         name="Selected Area Only",
@@ -1126,7 +1159,7 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
     checker_scale: bpy.props.FloatProperty(
         name="Checker Scale",
         description="Mapping scale for generated checker texture materials",
-        default=16.0,
+        default=80.0,
         min=0.01,
         soft_max=100.0,
         precision=2,
@@ -1143,7 +1176,7 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
     checker_overlay_opacity: bpy.props.FloatProperty(
         name="Opacity",
         description="Opacity of the UV checker drawn over Solid mode shading",
-        default=0.35,
+        default=0.1,
         min=0.0,
         max=1.0,
         subtype="FACTOR",
@@ -1166,6 +1199,11 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
     auto_average_islands_scale_after_unwrap: bpy.props.BoolProperty(
         name="Auto Average Islands Scale",
         description="Average UV island scale after automatic seam unwrap and restore the edit selection",
+        default=False,
+    )
+    smart_uv_unwrap_auto_pack: bpy.props.BoolProperty(
+        name="Auto Pack",
+        description="Pack UV islands with Blender's native Pack Islands after Smart UV Unwrap",
         default=False,
     )
     prefer_backside_longitudinal_seam: bpy.props.BoolProperty(
@@ -1620,7 +1658,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     hide_highpoly_after_bake: bpy.props.BoolProperty(
         name="Hide Highpoly After Bake",
         description="Hide the selected highpoly source objects in the current view layer after baking finishes",
-        default=False,
+        default=True,
     )
     auto_fix_generated_index: bpy.props.BoolProperty(
         name="Auto Fix Generated Index",

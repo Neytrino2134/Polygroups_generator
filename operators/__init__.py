@@ -94,6 +94,7 @@ from .object_seam_cutter import OBJECT_OT_polygroups_smooth_cutter_path_tilt
 from .object_seam_cutter import OBJECT_OT_polygroups_smooth_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_tilt_cutter_path
 from .object_seam_cutter import OBJECT_OT_polygroups_toggle_cyclic_cutter_paths
+from .panel_visibility import OBJECT_OT_airetopo_restore_panel_defaults
 from .panel_visibility import OBJECT_OT_airetopo_set_all_section_visibility
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
@@ -129,6 +130,7 @@ from .smooth_face_selection import MESH_OT_polygroups_smooth_face_selection
 from .smart_decimate import OBJECT_OT_polygroups_smart_decimate
 from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
+from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_unwrap
 from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
 
@@ -186,6 +188,7 @@ CLASSES = (
     OBJECT_OT_airetopo_open_generated_image,
     OBJECT_OT_airetopo_save_generated_image,
     OBJECT_OT_airetopo_set_all_section_visibility,
+    OBJECT_OT_airetopo_restore_panel_defaults,
     OBJECT_OT_polygroups_scan_import_folder,
     OBJECT_OT_polygroups_batch_import,
     OBJECT_OT_polygroups_import_control,
@@ -233,6 +236,7 @@ CLASSES = (
     MESH_OT_polygroups_mark_material_boundaries_seam,
     OBJECT_OT_polygroups_unwrap_angle_based,
     OBJECT_OT_polygroups_smart_uv_project,
+    OBJECT_OT_polygroups_smart_uv_unwrap,
     OBJECT_OT_polygroups_average_islands_scale,
     OBJECT_OT_polygroups_uvpackmaster_pack,
     OBJECT_OT_face_sets_to_materials,

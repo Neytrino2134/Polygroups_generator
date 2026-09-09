@@ -32,8 +32,20 @@ class OBJECT_OT_polygroups_uvpackmaster_pack(bpy.types.Operator):
         if hasattr(main_props, "heuristic_max_wait_time") and main_props.heuristic_max_wait_time <= 0:
             main_props.heuristic_max_wait_time = 3
 
-        return bpy.ops.uvpackmaster4.pack(
-            "INVOKE_DEFAULT",
-            mode_id="__active__",
-            pack_op_type="0",
-        )
+        try:
+            # EXEC_DEFAULT keeps this wrapper alive until UVPackmaster finishes
+            # its heuristic search (bounded by Max Wait Time).
+            return bpy.ops.uvpackmaster4.pack(
+                "EXEC_DEFAULT",
+                mode_id="__active__",
+                pack_op_type="0",
+            )
+        except Exception as error:
+            self.report({"ERROR"}, f"UVPackmaster packing failed: {error}")
+            return {"CANCELLED"}
+        finally:
+            if obj.mode == "EDIT":
+                try:
+                    bpy.ops.object.mode_set(mode="OBJECT")
+                except Exception as error:
+                    self.report({"WARNING"}, f"Could not return to Object Mode: {error}")

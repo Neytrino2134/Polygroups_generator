@@ -583,23 +583,12 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         global _SEARCH_FILTER_GROUPS, _SEARCH_FILTER_TERMS
         preferences = get_preferences(context)
         layout = self.layout
+        visible_layout = layout
         visibility = context.scene.airetopo_panel_visibility_settings
         search_query = visibility.panel_search.strip()
-        search_row = layout.row(align=True)
-        search_row.prop(
-            visibility,
-            "panel_search",
-            text="",
-            icon="VIEWZOOM",
-            placeholder=t(context, "panel_search"),
-        )
         if search_query:
-            clear_search = search_row.operator("wm.context_set_string", text="", icon="X")
-            clear_search.data_path = "scene.airetopo_panel_visibility_settings.panel_search"
-            clear_search.value = ""
-        visible_layout = layout
-        if search_query:
-            # Keep the search field visible while suppressing unrelated header/status UI.
+            # Search results replace unrelated header/status UI while the real
+            # search field is drawn directly above the first matching section.
             layout = _NullLayout()
         if preferences is not None:
             from .preferences import draw_global_notices
@@ -706,31 +695,46 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                     )
             if not getattr(bpy.data, "filepath", ""):
                 session_box.separator()
-                session_box.label(text=t(context, "recent_autosaves"), icon="RECOVER_LAST")
-                recent_entries = custom_autosave.recent_autosaves()
-                if recent_entries:
-                    recent_column = session_box.column(align=True)
-                    for entry in recent_entries:
-                        modified = time.strftime(
-                            "%d.%m.%Y %H:%M",
-                            time.localtime(entry["modified"]),
-                        )
-                        entry_row = recent_column.row(align=True)
-                        operator = entry_row.operator(
-                            "wm.airetopo_open_recent_autosave",
-                            text=f'{entry["name"]}  ·  {modified}',
-                            icon="FILE_BLEND",
-                        )
-                        operator.filepath = entry["filepath"]
-                        show_file = entry_row.operator(
-                            "wm.airetopo_show_file_in_browser",
-                            text="",
-                            icon="FILE_FOLDER",
-                        )
-                        show_file.filepath = entry["filepath"]
-                    session_box.label(text=t(context, "recent_autosave_save_as_hint"), icon="INFO")
+                recent_box = session_box.box()
+                recent_expanded = bool(
+                    preferences is None or preferences.show_panel_recent_autosaves
+                )
+                recent_header = recent_box.row(align=True)
+                if preferences is not None:
+                    recent_header.prop(
+                        preferences,
+                        "show_panel_recent_autosaves",
+                        text=t(context, "recent_autosaves"),
+                        icon="TRIA_DOWN" if recent_expanded else "TRIA_RIGHT",
+                        emboss=False,
+                    )
                 else:
-                    session_box.label(text=t(context, "no_recent_autosaves"), icon="INFO")
+                    recent_header.label(text=t(context, "recent_autosaves"), icon="TRIA_DOWN")
+                if recent_expanded:
+                    recent_entries = custom_autosave.recent_autosaves()
+                    if recent_entries:
+                        recent_column = recent_box.column(align=True)
+                        for entry in recent_entries:
+                            modified = time.strftime(
+                                "%d.%m.%Y %H:%M",
+                                time.localtime(entry["modified"]),
+                            )
+                            entry_row = recent_column.row(align=True)
+                            operator = entry_row.operator(
+                                "wm.airetopo_open_recent_autosave",
+                                text=f'{entry["name"]}  ·  {modified}',
+                                icon="FILE_BLEND",
+                            )
+                            operator.filepath = entry["filepath"]
+                            show_file = entry_row.operator(
+                                "wm.airetopo_show_file_in_browser",
+                                text="",
+                                icon="FILE_FOLDER",
+                            )
+                            show_file.filepath = entry["filepath"]
+                        recent_box.label(text=t(context, "recent_autosave_save_as_hint"), icon="INFO")
+                    else:
+                        recent_box.label(text=t(context, "no_recent_autosaves"), icon="INFO")
             if preferences and preferences.enable_dev_mode:
                 session_box.separator()
                 restart_column = session_box.column(align=True)
@@ -784,6 +788,11 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             box = layout.box()
             box.prop(preferences, "interface_language", text=t(context, "language"))
             box.label(text=t(context, "main_description"))
+            box.operator(
+                "object.airetopo_restore_panel_defaults",
+                text=t(context, "restore_defaults"),
+                icon="LOOP_BACK",
+            )
             box.separator()
             box.label(text=t(context, "preferences_pie_menu"), icon="MENU_PANEL")
             box.prop(preferences, "active_pie_preset", text=t(context, "pie_active_preset"))
@@ -839,6 +848,18 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             box.prop(preferences, "gemini_api_key", text=t(context, "gemini_api_key"))
 
         layout = visible_layout
+        search_row = layout.row(align=True)
+        search_row.prop(
+            visibility,
+            "panel_search",
+            text="",
+            icon="VIEWZOOM",
+            placeholder=t(context, "panel_search"),
+        )
+        if search_query:
+            clear_search = search_row.operator("wm.context_set_string", text="", icon="X")
+            clear_search.data_path = "scene.airetopo_panel_visibility_settings.panel_search"
+            clear_search.value = ""
         search_match_count = 0
         for panel_class, visibility_property in SECTION_PANEL_VISIBILITY:
             search_result = None
@@ -988,6 +1009,11 @@ def draw_import_remesh_options(layout, context, settings, prefix):
                 text=t(context, "voxel_size"),
             )
         column.prop(settings, prefix + "_clear_material", text="Clear Material")
+        column.prop(
+            settings,
+            prefix + "_auto_smart_uv_project",
+            text=t(context, "auto_smart_uv_project"),
+        )
     column.prop(settings, prefix + "_separate_collections", text=t(context, "import_separate_collections"))
 
 
@@ -1074,8 +1100,6 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
                 text=t(context, "auto_rename_objects"),
             )
             files_box.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
-            files_box.prop(settings, "file_import_disable_auto_unwrap",
-                           text=t(context, "disable_auto_unwrap"))
             files_box.prop(settings, "file_import_disable_view_assist",
                            text=t(context, "disable_view_assist"))
             draw_import_remesh_options(files_box, context, settings, "file_import")
@@ -1128,8 +1152,6 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         if content is not None:
             content.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
             content.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
-            content.prop(settings, "batch_disable_auto_unwrap",
-                         text=t(context, "disable_auto_unwrap"))
             content.prop(settings, "batch_disable_view_assist",
                          text=t(context, "disable_view_assist"))
             draw_import_remesh_options(content, context, settings, "batch")
@@ -1383,6 +1405,9 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             tools_column.prop(seam_settings, "smart_seam_smoothness")
             tools_column.prop(seam_settings, "smart_seam_replace")
             tools_column.prop(seam_settings, "smart_seam_pin_generated", text=t(context, "pin_generated"))
+            tools_column.prop(seam_settings, "smart_seam_create_edges")
+            if seam_settings.smart_seam_create_edges:
+                tools_column.prop(seam_settings, "smart_seam_edge_preference")
             tools_column.prop(
                 seam_settings, "smart_seam_auto_relax",
                 text=t(context, "smart_seam_auto_relax"), toggle=True,
@@ -1410,9 +1435,6 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 )
             tools_column.prop(seam_settings, "smart_seam_path_turn")
             tools_column.prop(seam_settings, "smart_seam_path_corridor")
-            tools_column.prop(seam_settings, "smart_seam_create_edges")
-            if seam_settings.smart_seam_create_edges:
-                tools_column.prop(seam_settings, "smart_seam_edge_preference")
             tools_column.operator(
                 "mesh.polygroups_mark_smart_angle_seams",
                 text=t(context, "mark_smart_angle_seams"),
@@ -2212,6 +2234,18 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
 
         content = draw_topic(layout, context, "uv_0", 'UV Unwrap', "UV")
         if content is not None:
+            smart_column = content.column(align=True)
+            smart_column.operator(
+                "object.polygroups_smart_uv_unwrap",
+                text=t(context, "smart_uv_unwrap"),
+                icon="UV",
+            )
+            smart_column.prop(
+                context.scene.polygroups_seam_finalization_settings,
+                "smart_uv_unwrap_auto_pack",
+                text=t(context, "auto_pack"),
+            )
+            content.separator()
             content.operator(
                 "object.polygroups_unwrap_angle_based",
                 text=t(context, "unwrap_angle_based"),

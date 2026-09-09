@@ -141,6 +141,8 @@ class RemeshJob:
         context.view_layer.objects.active = meshes[0]
         if getattr(self, "auto_unwrap_checker", False):
             for obj in meshes:
+                obj.hide_viewport = False
+                obj.hide_set(False)
                 context.view_layer.objects.active = obj
                 if "FINISHED" not in bpy.ops.object.polygroups_unwrap_angle_based():
                     raise RuntimeError(f"Angle Based unwrap failed for {obj.name}")

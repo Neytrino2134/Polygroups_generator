@@ -10,6 +10,7 @@ from ..core.remesh_job import RemeshJob, VoxelRemeshJob, remesh_backend
 from ..core.import_timing import ImportTiming
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import get_next_object_index, rename_and_move_objects
+from .unwrap_angle_based import smart_project_all
 
 
 ACTIVE_QUEUE = None
@@ -72,8 +73,13 @@ class ImportQueue:
         self.voxel_size = getattr(settings, prefix + "_voxel_size")
         self.clear_material = getattr(settings, prefix + "_clear_material")
         self.separate = getattr(settings, prefix + "_separate_collections")
-        self.disable_auto_unwrap = getattr(settings, prefix + "_disable_auto_unwrap")
         self.disable_view_assist = getattr(settings, prefix + "_disable_view_assist")
+        auto_smart_uv_property = prefix + "_auto_smart_uv_project"
+        self.auto_smart_uv_project = bool(
+            self.auto_remesh and getattr(settings, auto_smart_uv_property)
+        )
+        if not self.auto_remesh:
+            setattr(settings, auto_smart_uv_property, False)
         self.quad_count = dict(get_remesh_preset_counts(context))[
             getattr(settings, prefix + "_remesh_preset")
         ]
@@ -92,9 +98,12 @@ class ImportQueue:
     def begin(self):
         self.timing = ImportTiming()
         settings = self.settings
-        if self.disable_auto_unwrap:
-            self.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam = False
-            settings.remesh_auto_unwrap_checker = False
+        # Import owns its UV workflow. Disable the seam/remesh automatic unwrap
+        # and Smart UV Unwrap packing switches on the first import run.
+        seam_settings = self.scene.polygroups_seam_finalization_settings
+        seam_settings.auto_unwrap_after_seam = False
+        seam_settings.smart_uv_unwrap_auto_pack = False
+        settings.remesh_auto_unwrap_checker = False
         if self.disable_view_assist:
             self.scene.polygroups_seam_preparation_settings.show_seams_object_mode = False
             self.scene.polygroups_seam_finalization_settings.show_checker_solid_mode = False
@@ -161,6 +170,7 @@ class ImportQueue:
                 return
             self.file_objects = []
             self.meshes = []
+            self.result_meshes = []
             self.mesh_index = 0
             self.collection = None
             settings.batch_current_file = os.path.basename(self.files[self.index])
@@ -250,8 +260,10 @@ class ImportQueue:
             before = set(self.owned_objects)
             self.tracked(lambda: self.job.finish(context))
             outputs = list(self.owned_objects - before)
-            if not any(obj.type == "MESH" for obj in outputs):
+            output_meshes = [obj for obj in outputs if obj.type == "MESH"]
+            if not output_meshes:
                 raise RuntimeError(f"{self.remesh_method.title()} Remesh did not create a mesh")
+            self.result_meshes.extend(output_meshes)
             if self.clear_material:
                 for obj in outputs:
                     if obj.type == "MESH":
@@ -269,6 +281,11 @@ class ImportQueue:
             self.mesh_index += 1
             self.stage = "REMESH" if self.mesh_index < len(self.meshes) else "COMPLETE"
         elif self.stage == "COMPLETE":
+            if self.auto_smart_uv_project:
+                for obj in self.result_meshes:
+                    self.select_source(context, obj)
+                    if not smart_project_all(context, obj):
+                        raise RuntimeError(f"Smart UV Project failed for {obj.name}")
             self.groups.append((self.meshes[0], list(self.file_objects)))
             if self.arrange:
                 self.arrange_groups()
