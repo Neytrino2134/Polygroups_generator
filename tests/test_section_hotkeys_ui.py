@@ -27,6 +27,7 @@ def log(text):
 def run():
     addon_utils.enable(ROOT.name, default_set=True)
     from polygroups_generator.properties import SECTION_VISIBILITY_PROPERTIES as sections
+    from polygroups_generator.properties import SUBSECTION_VISIBILITY_PROPERTIES as subsections
     from polygroups_generator import hotkeys
     from polygroups_generator.operators.section_hotkeys import PENDING
     context = bpy.context
@@ -37,7 +38,7 @@ def run():
     preferences = context.preferences.addons[ROOT.name].preferences
     preferences.enable_section_number_hotkeys = False
     settings = context.scene.airetopo_panel_visibility_settings
-    for prop in sections:
+    for prop in sections + subsections:
         setattr(settings, prop, False)
     yield 0.5
     sidebar = next(region for region in area.regions if region.type == "UI")
@@ -273,7 +274,17 @@ def run():
     release("NUMPAD_PLUS")
     yield 0.2
     assert all(getattr(settings, name) for name in sections)
+    assert not any(getattr(settings, name) for name in subsections)
     assert not settings.single_section_mode
+    press("NUMPAD_PLUS")
+    release("NUMPAD_PLUS")
+    yield 0.2
+    assert all(getattr(settings, name) for name in subsections)
+    press("NUMPAD_MINUS")
+    release("NUMPAD_MINUS")
+    yield 0.2
+    assert not any(getattr(settings, name) for name in subsections)
+    assert all(getattr(settings, name) for name in sections)
     press("NUMPAD_MINUS")
     release("NUMPAD_MINUS")
     yield 0.2

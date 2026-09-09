@@ -8,6 +8,7 @@ import bpy
 
 from .localization import get_preferences
 from .localization import t
+from .properties import SECTION_SUBSECTION_PROPERTIES
 from .core.remesh_defaults import get_remesh_preset_counts
 from .core.import_timing import format_duration
 
@@ -321,10 +322,32 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
         icon=icon,
         emboss=False,
     )
-    if _DRAWING_SECTION is not None and _DETACHED_TARGET is None:
+    subsection_properties = SECTION_SUBSECTION_PROPERTIES.get(property_name, ())
+    if subsection_properties and _SEARCH_FILTER_GROUPS is None:
         actions = header.row(align=True)
         actions.alignment = "RIGHT"
-        detach = actions.operator("wm.airetopo_detach_group", text="", icon="DUPLICATE", emboss=False)
+        collapse = actions.operator(
+            "object.airetopo_set_section_subsection_visibility",
+            text="",
+            icon="REMOVE",
+        )
+        collapse.section_property = property_name
+        collapse.visible = False
+        expand = actions.operator(
+            "object.airetopo_set_section_subsection_visibility",
+            text="",
+            icon="ADD",
+        )
+        expand.section_property = property_name
+        expand.visible = True
+    preferences = get_preferences(bpy.context)
+    experimental_features = bool(
+        preferences and getattr(preferences, "enable_experimental_features", False)
+    )
+    if experimental_features and _DRAWING_SECTION is not None and _DETACHED_TARGET is None:
+        actions = header.row(align=True)
+        actions.alignment = "RIGHT"
+        detach = actions.operator("wm.airetopo_detach_group", text="", icon="XRAY", emboss=False)
         detach.section = _DRAWING_SECTION.__name__
         detach.group = key
         detach.title = label
@@ -2063,6 +2086,8 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             column = content.column(align=True)
             column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
             column.prop(settings, "bake_margin", text=t(context, "bake_margin"))
+            column.prop(settings, "bake_background_mode", text=t(context, "bake_background"))
+            column.label(text=t(context, "bake_alpha_hint"), icon="IMAGE_ALPHA")
             column.prop(settings, "image_prefix", text=t(context, "image_prefix"))
             column.prop(settings, "use_selected_to_active", text=t(context, "selected_to_active"))
 
@@ -2073,6 +2098,11 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 settings,
                 "auto_save_textures_after_bake",
                 text=t(context, "auto_save_textures_after_bake"),
+            )
+            column.prop(
+                settings,
+                "disable_highpoly_after_bake",
+                text=t(context, "disable_highpoly_after_bake"),
             )
             column.prop(
                 settings,

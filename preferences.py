@@ -303,6 +303,13 @@ def _tag_preferences_redraw():
             area.tag_redraw()
 
 
+def _update_experimental_features(preferences, _context):
+    if not preferences.enable_experimental_features:
+        from .operators.detached_groups import cleanup_windows
+        cleanup_windows()
+    _tag_preferences_redraw()
+
+
 def _auto_check_worker():
     global _AUTO_CHECK_RESULT
     state_holder = type("UpdateState", (), {})()
@@ -378,6 +385,11 @@ def draw_global_notices(layout, context, preferences):
             text=t(context, "save_and_restart_blender"),
             icon="FILE_TICK",
         )
+        box.operator(
+            "wm.airetopo_dev_restart_without_saving",
+            text=t(context, "restart_without_saving_blender"),
+            icon="LOOP_BACK",
+        )
 
     autosave_state = autosave_configuration_state(context, preferences)
     if autosave_state == "BOTH":
@@ -445,6 +457,12 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         name="Enable Dev Mode",
         description="Show developer restart controls in the AI Retopo N-panel",
         default=True,
+    )
+    enable_experimental_features: bpy.props.BoolProperty(
+        name="Experimental Features",
+        description="Enable unfinished features that may change or be unstable",
+        default=False,
+        update=_update_experimental_features,
     )
 
     enable_section_number_hotkeys: bpy.props.BoolProperty(
@@ -768,7 +786,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
         draw_global_notices(layout, context, self)
-        sections = (
+        sections = [
             ("show_preferences_info", t(context, "preferences_info"), self.draw_info),
             ("show_preferences_updates", t(context, "updates"), self.draw_updates),
             ("show_preferences_icons", "Custom Icons", self.draw_icons),
@@ -779,9 +797,10 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
             ("show_preferences_api", t(context, "preferences_api"), self.draw_api),
             ("show_preferences_hotkeys", t(context, "hotkeys"), self.draw_hotkeys),
             ("show_preferences_pie_menu", t(context, "preferences_pie_menu"), self.draw_pie_menu),
-            ("show_preferences_windows", "Floating Windows", self.draw_windows),
-            ("show_preferences_dev", "Dev", self.draw_dev),
-        )
+        ]
+        if self.enable_experimental_features:
+            sections.append(("show_preferences_windows", "Floating Windows", self.draw_windows))
+        sections.append(("show_preferences_dev", "Dev", self.draw_dev))
         for property_name, label, draw_content in sections:
             box = layout.box()
             header = box.row(align=True)
@@ -799,6 +818,13 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         layout.operator('wm.airetopo_group_window_control')
 
     def draw_dev(self, context, layout):
+        layout.prop(
+            self,
+            "enable_experimental_features",
+            text=t(context, "experimental_features"),
+        )
+        layout.label(text=t(context, "experimental_features_hint"), icon="EXPERIMENTAL")
+        layout.separator()
         layout.prop(self, "enable_dev_mode", text=t(context, "enable_dev_mode"))
         layout.label(text=t(context, "dev_restart_hint"))
         layout.operator("wm.airetopo_dev_cleanup", text=t(context, "dev_cleanup"), icon="TRASH")
@@ -956,6 +982,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
                 "wm.airetopo_dev_restart_current",
                 text=t(context, "save_and_restart_blender"),
                 icon="FILE_TICK",
+            )
+            layout.operator(
+                "wm.airetopo_dev_restart_without_saving",
+                text=t(context, "restart_without_saving_blender"),
+                icon="LOOP_BACK",
             )
 
 

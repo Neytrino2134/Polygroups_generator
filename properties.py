@@ -41,6 +41,28 @@ SECTION_VISIBILITY_PROPERTIES = (
     "show_render_section",
 )
 
+SECTION_SUBSECTION_PROPERTIES = {
+    "show_import_section": ("topic_import_0", "topic_import_1", "topic_import_2"),
+    "show_batch_import_section": tuple(f"topic_batch_{index}" for index in range(5)),
+    "show_model_preparation_section": tuple(f"topic_prepare_{index}" for index in range(4)),
+    "show_seam_preparation_section": (),
+    "show_polygroups_section": (),
+    "show_remesh_section": ("topic_remesh_0", "topic_remesh_1"),
+    "show_resculpting_section": ("topic_sculpt_0", "topic_sculpt_1"),
+    "show_seam_finalization_section": tuple(f"topic_seam_final_{index}" for index in range(5)),
+    "show_uv_preparation_section": ("topic_uv_0", "topic_uv_1"),
+    "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
+    "show_ai_generation_section": (),
+    "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(5)),
+}
+
+SUBSECTION_VISIBILITY_PROPERTIES = tuple(
+    property_name
+    for section_properties in SECTION_SUBSECTION_PROPERTIES.values()
+    for property_name in section_properties
+)
+
 
 def _set_single_visible_section(settings, visible_property):
     global _PANEL_VISIBILITY_UPDATE_LOCK
@@ -1550,6 +1572,15 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         min=0,
         max=256,
     )
+    bake_background_mode: bpy.props.EnumProperty(
+        name="Bake Background",
+        description="How transparent pixels are filled after preserving the bake coverage as a separate alpha map",
+        items=(
+            ("BLACK", "Black", "Fill pixels outside the baked surface with black"),
+            ("EXTEND", "Edge Extend", "Extend colors from the nearest baked edge into the background"),
+        ),
+        default="EXTEND",
+    )
     ray_distance: bpy.props.FloatProperty(
         name="Ray Distance",
         description="Maximum ray distance for selected-to-active baking",
@@ -1653,6 +1684,11 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     auto_save_textures_after_bake: bpy.props.BoolProperty(
         name="Auto Save Textures After Bake",
         description="Run Save Textures automatically after Prepare And Bake finishes",
+        default=True,
+    )
+    disable_highpoly_after_bake: bpy.props.BoolProperty(
+        name="Disable Highpoly After Bake",
+        description="Disable baked highpoly source objects in viewports after a successful bake",
         default=True,
     )
     auto_fix_generated_index: bpy.props.BoolProperty(

@@ -19,6 +19,7 @@ bpy.context.preferences.view.show_splash = False
 
 def run():
     addon_utils.enable(ROOT.name, default_set=True)
+    bpy.context.preferences.addons[ROOT.name].preferences.enable_experimental_features = True
     from polygroups_generator import ui
     from polygroups_generator.core.window_schema import Layout
     from polygroups_generator.operators.detached_groups import SESSIONS, cleanup_windows

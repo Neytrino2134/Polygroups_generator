@@ -14,6 +14,7 @@ from polygroups_generator import hotkeys
 from polygroups_generator.tools import CUTTER_TOOL_ORDER
 
 preferences = bpy.context.preferences.addons[root.name].preferences
+assert not preferences.enable_experimental_features
 assert preferences.enable_cutter_tweak_pie_hotkey
 assert preferences.cutter_tweak_pie_key == "D"
 assert not preferences.cutter_tweak_pie_ctrl and not preferences.cutter_tweak_pie_shift
@@ -71,6 +72,7 @@ for property_name in (
     "show_preferences_language", "show_preferences_operations", "show_preferences_remesh",
     "show_preferences_api", "show_preferences_hotkeys", "show_preferences_pie_menu",
     "show_preferences_windows", "show_preferences_dev",
+    "enable_experimental_features",
 ):
     assert property_name in preferences.bl_rna.properties
 

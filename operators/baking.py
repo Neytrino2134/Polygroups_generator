@@ -14,13 +14,17 @@ from ..localization import t
 BAKE_MATERIAL_NAME = "Bake_Target"
 BAKE_BASE_COLOR_NODE = "PolyGroups Bake Base Color"
 BAKE_NORMAL_NODE = "PolyGroups Bake Normal"
+BAKE_ALPHA_NODE = "PolyGroups Bake Alpha"
 BAKE_TARGET_MATERIAL_PROP = "polygroups_bake_target_material"
 BAKE_BASE_COLOR_IMAGE_PROP = "polygroups_bake_base_color_image"
 BAKE_NORMAL_IMAGE_PROP = "polygroups_bake_normal_image"
+BAKE_ALPHA_IMAGE_PROP = "polygroups_bake_alpha_image"
 BAKE_SOURCE_BASE_COLOR_IMAGE_PROP = "polygroups_bake_source_base_color_image"
 BAKE_SOURCE_NORMAL_IMAGE_PROP = "polygroups_bake_source_normal_image"
+BAKE_SOURCE_ALPHA_IMAGE_PROP = "polygroups_bake_source_alpha_image"
 BAKE_MERGED_BASE_COLOR_IMAGE_PROP = "polygroups_bake_merged_base_color_image"
 BAKE_MERGED_NORMAL_IMAGE_PROP = "polygroups_bake_merged_normal_image"
+BAKE_MERGED_ALPHA_IMAGE_PROP = "polygroups_bake_merged_alpha_image"
 BAKE_MERGED_MATERIAL_PROP = "polygroups_bake_merged_material"
 BAKE_PACK_TYPE_PROP = "polygroups_bake_pack_type"
 BAKE_PACK_NAME_PROP = "polygroups_bake_pack_name"
@@ -461,6 +465,16 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
         if update_source_images:
             target[BAKE_SOURCE_NORMAL_IMAGE_PROP] = normal_image.name
 
+    alpha_image = _ensure_target_image(
+        target,
+        settings,
+        BAKE_ALPHA_IMAGE_PROP,
+        "Alpha",
+        "Non-Color",
+        generated_color=(0.0, 0.0, 0.0, 1.0),
+        source_prop_name=BAKE_SOURCE_ALPHA_IMAGE_PROP if update_source_images else None,
+    )
+
     base_node = nodes.get(BAKE_BASE_COLOR_NODE)
     if base_node is None:
         base_node = nodes.new("ShaderNodeTexImage")
@@ -476,6 +490,14 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
         normal_node.label = "Bake Normal"
         normal_node.location = (-560, -120)
     normal_node.image = normal_image
+
+    alpha_node = nodes.get(BAKE_ALPHA_NODE)
+    if alpha_node is None:
+        alpha_node = nodes.new("ShaderNodeTexImage")
+        alpha_node.name = BAKE_ALPHA_NODE
+        alpha_node.label = "Bake Alpha Mask"
+        alpha_node.location = (-560, -340)
+    alpha_node.image = alpha_image
 
     if bsdf is not None:
         base_input = bsdf.inputs.get("Base Color")
@@ -683,6 +705,145 @@ def _ensure_output_image(name, resolution, colorspace, generated_color):
     return image
 
 
+def _coverage_from_pixels(pixels, resolution):
+    pixel_count = resolution[0] * resolution[1]
+    coverage = array("f", [0.0]) * pixel_count
+    for pixel_index in range(pixel_count):
+        coverage[pixel_index] = max(0.0, min(1.0, pixels[pixel_index * 4 + 3]))
+    return coverage
+
+
+def _coverage_from_image(image, resolution):
+    return _coverage_from_pixels(_read_image_pixels(image, resolution), resolution)
+
+
+def _alpha_map_pixels(coverage):
+    output = array("f", [0.0]) * (len(coverage) * 4)
+    for pixel_index, value in enumerate(coverage):
+        index = pixel_index * 4
+        output[index] = value
+        output[index + 1] = value
+        output[index + 2] = value
+        output[index + 3] = 1.0
+    return output
+
+
+def _extend_background_rgb(pixels, coverage, resolution):
+    """Fill uncovered pixels from nearby covered pixels without external dependencies."""
+    width, height = resolution
+    output = array("f", pixels)
+    populated_rows = bytearray(height)
+    left_sources = array("i", [-1]) * width
+
+    for y in range(height):
+        row_pixel = y * width
+        left_source = -1
+        for x in range(width):
+            if coverage[row_pixel + x] > 0.0001:
+                left_source = x
+                populated_rows[y] = 1
+            left_sources[x] = left_source
+
+        if not populated_rows[y]:
+            continue
+
+        right_source = -1
+        for x in range(width - 1, -1, -1):
+            pixel_index = row_pixel + x
+            if coverage[pixel_index] > 0.0001:
+                right_source = x
+                continue
+            left_source = left_sources[x]
+            source_x = left_source
+            if right_source >= 0 and (left_source < 0 or right_source - x < x - left_source):
+                source_x = right_source
+            if source_x < 0:
+                continue
+            destination = pixel_index * 4
+            source = (row_pixel + source_x) * 4
+            output[destination] = output[source]
+            output[destination + 1] = output[source + 1]
+            output[destination + 2] = output[source + 2]
+
+    populated = [y for y, value in enumerate(populated_rows) if value]
+    if not populated:
+        return output
+
+    populated_index = 0
+    for y in range(height):
+        if populated_rows[y]:
+            while populated_index + 1 < len(populated) and populated[populated_index + 1] <= y:
+                populated_index += 1
+            continue
+        lower = populated[populated_index] if populated[populated_index] < y else None
+        upper_index = populated_index if populated[populated_index] > y else populated_index + 1
+        upper = populated[upper_index] if upper_index < len(populated) else None
+        if lower is None:
+            source_y = upper
+        elif upper is None:
+            source_y = lower
+        else:
+            source_y = lower if y - lower <= upper - y else upper
+        source_start = source_y * width * 4
+        destination_start = y * width * 4
+        output[destination_start:destination_start + width * 4] = output[
+            source_start:source_start + width * 4
+        ]
+
+    return output
+
+
+def _apply_bake_background(pixels, coverage, resolution, mode):
+    if mode == "EXTEND":
+        output = _extend_background_rgb(pixels, coverage, resolution)
+    else:
+        output = array("f", pixels)
+        for pixel_index, mask in enumerate(coverage):
+            index = pixel_index * 4
+            output[index] *= mask
+            output[index + 1] *= mask
+            output[index + 2] *= mask
+
+    for index in range(3, len(output), 4):
+        output[index] = 1.0
+    return output
+
+
+def _finalize_bake_images(target, settings):
+    base_image = _find_current_bake_image(
+        target, BAKE_BASE_COLOR_NODE, BAKE_BASE_COLOR_IMAGE_PROP,
+    ) if settings.bake_base_color else None
+    normal_image = _find_current_bake_image(
+        target, BAKE_NORMAL_NODE, BAKE_NORMAL_IMAGE_PROP,
+    ) if settings.bake_normal else None
+    coverage_source = base_image or normal_image
+    resolution = _image_resolution(coverage_source)
+    if resolution is None:
+        return None
+
+    coverage = _coverage_from_image(coverage_source, resolution)
+    alpha_image = _ensure_target_image(
+        target,
+        settings,
+        BAKE_ALPHA_IMAGE_PROP,
+        "Alpha",
+        "Non-Color",
+        generated_color=(0.0, 0.0, 0.0, 1.0),
+        source_prop_name=BAKE_SOURCE_ALPHA_IMAGE_PROP,
+    )
+    _write_pixels(alpha_image, _alpha_map_pixels(coverage))
+
+    for image in (base_image, normal_image):
+        if image is None or not _image_is_readable(image, resolution):
+            continue
+        pixels = _read_image_pixels(image, resolution)
+        _write_pixels(
+            image,
+            _apply_bake_background(pixels, coverage, resolution, settings.bake_background_mode),
+        )
+    return alpha_image
+
+
 def _collect_bake_texture_packs(objects, settings):
     packs = []
     for obj in objects:
@@ -702,7 +863,15 @@ def _collect_bake_texture_packs(objects, settings):
             BAKE_SOURCE_NORMAL_IMAGE_PROP,
             "Normal",
         )
-        if base_image is None and normal_image is None:
+        alpha_image = _find_object_source_bake_image(
+            obj,
+            settings,
+            BAKE_ALPHA_NODE,
+            BAKE_ALPHA_IMAGE_PROP,
+            BAKE_SOURCE_ALPHA_IMAGE_PROP,
+            "Alpha",
+        )
+        if alpha_image is None or (base_image is None and normal_image is None):
             continue
 
         packs.append(
@@ -710,18 +879,25 @@ def _collect_bake_texture_packs(objects, settings):
                 "object": obj,
                 "base": base_image,
                 "normal": normal_image,
+                "alpha": alpha_image,
             },
         )
     return packs
 
 
 def _pack_resolution(pack):
-    base_resolution = _image_resolution(pack["base"])
-    normal_resolution = _image_resolution(pack["normal"])
-    if base_resolution is not None and normal_resolution is not None and base_resolution != normal_resolution:
+    resolutions = [
+        resolution
+        for resolution in (
+            _image_resolution(pack["base"]),
+            _image_resolution(pack["normal"]),
+            _image_resolution(pack.get("alpha")),
+        )
+        if resolution is not None
+    ]
+    if not resolutions or any(resolution != resolutions[0] for resolution in resolutions[1:]):
         return None
-
-    return base_resolution or normal_resolution
+    return resolutions[0]
 
 
 def _validate_pack_resolutions(packs):
@@ -736,6 +912,26 @@ def _validate_pack_resolutions(packs):
     return resolution
 
 
+def _pack_coverage(pack, resolution):
+    alpha_image = pack.get("alpha")
+    if alpha_image is not None and _image_is_readable(alpha_image, resolution):
+        pixels = _read_image_pixels(alpha_image, resolution)
+        coverage = array("f", [0.0]) * (resolution[0] * resolution[1])
+        for pixel_index in range(len(coverage)):
+            coverage[pixel_index] = max(0.0, min(1.0, pixels[pixel_index * 4]))
+        return coverage
+    return array("f", [0.0]) * (resolution[0] * resolution[1])
+
+
+def _merge_pack_coverage(packs, resolution):
+    output = array("f", [0.0]) * (resolution[0] * resolution[1])
+    for pack in packs:
+        source = _pack_coverage(pack, resolution)
+        for index, source_alpha in enumerate(source):
+            output[index] = source_alpha + output[index] * (1.0 - source_alpha)
+    return output
+
+
 def _merge_base_color_pixels(packs, resolution):
     pixel_count = resolution[0] * resolution[1] * 4
     output = array("f", [0.0]) * pixel_count
@@ -745,8 +941,9 @@ def _merge_base_color_pixels(packs, resolution):
             continue
 
         pixels = _read_image_pixels(image, resolution)
+        coverage = _pack_coverage(pack, resolution)
         for index in range(0, pixel_count, 4):
-            source_alpha = max(0.0, min(1.0, pixels[index + 3]))
+            source_alpha = coverage[index // 4]
             if source_alpha <= 0.0:
                 continue
 
@@ -790,7 +987,7 @@ def _merge_normal_pixels(packs, resolution):
         output[index] = 0.5
         output[index + 1] = 0.5
         output[index + 2] = 1.0
-        output[index + 3] = 1.0
+        output[index + 3] = 0.0
 
     for pack in packs:
         normal_image = pack["normal"]
@@ -798,14 +995,9 @@ def _merge_normal_pixels(packs, resolution):
             continue
 
         normal_pixels = _read_image_pixels(normal_image, resolution)
-        base_pixels = (
-            _read_image_pixels(pack["base"], resolution)
-            if pack["base"] is not None and _image_is_readable(pack["base"], resolution)
-            else None
-        )
+        coverage = _pack_coverage(pack, resolution)
         for index in range(0, pixel_count, 4):
-            mask = base_pixels[index + 3] if base_pixels is not None else normal_pixels[index + 3]
-            mask = max(0.0, min(1.0, mask))
+            mask = coverage[index // 4]
             if mask <= 0.001:
                 continue
 
@@ -821,7 +1013,7 @@ def _merge_normal_pixels(packs, resolution):
                     for channel in range(3)
                 ]
                 output[index], output[index + 1], output[index + 2] = _normalized_to_color(blended)
-            output[index + 3] = 1.0
+            output[index + 3] = mask + output[index + 3] * (1.0 - mask)
 
     return output
 
@@ -829,7 +1021,7 @@ def _merge_normal_pixels(packs, resolution):
 def _count_unreadable_pack_images(packs, resolution):
     count = 0
     for pack in packs:
-        for key in ("base", "normal"):
+        for key in ("base", "normal", "alpha"):
             image = pack[key]
             if image is not None and not _image_is_readable(image, resolution):
                 count += 1
@@ -851,7 +1043,7 @@ def _merged_pack_name(objects):
     return f"{base_name} Merged"
 
 
-def _ensure_merged_material(pack_name, base_image, normal_image, objects):
+def _ensure_merged_material(pack_name, base_image, normal_image, alpha_image, objects):
     material_name = f"Merged Material - {_safe_path_name(pack_name)}"
     material = bpy.data.materials.get(material_name)
     if material is None:
@@ -883,6 +1075,14 @@ def _ensure_merged_material(pack_name, base_image, normal_image, objects):
         normal_node.label = "Merged Normal"
         normal_node.location = (-560, -120)
     normal_node.image = normal_image
+
+    alpha_node = nodes.get(BAKE_ALPHA_NODE)
+    if alpha_node is None:
+        alpha_node = nodes.new("ShaderNodeTexImage")
+        alpha_node.name = BAKE_ALPHA_NODE
+        alpha_node.label = "Merged Alpha Mask"
+        alpha_node.location = (-560, -340)
+    alpha_node.image = alpha_image
 
     if bsdf is not None:
         base_input = bsdf.inputs.get("Base Color")
@@ -988,12 +1188,12 @@ def _select_sources_and_target(context, sources, target):
     context.view_layer.objects.active = target
 
 
-def _hide_highpoly_sources(context, sources):
-    """Disable completed bake sources in the view layer, viewport, and render."""
+def _disable_highpoly_sources_after_bake(settings, sources):
+    """Optionally disable completed bake sources in viewports only."""
+    if not settings.disable_highpoly_after_bake:
+        return
     for obj in sources:
-        obj.hide_set(True, view_layer=context.view_layer)
         obj.hide_viewport = True
-        obj.hide_render = True
 
 
 def _auto_fix_selected_generated_indices(context, settings):
@@ -1038,6 +1238,8 @@ def _configure_bake_settings(context, settings, bake_type):
     bake.cage_extrusion = settings.cage_extrusion
     bake.max_ray_distance = settings.ray_distance
     bake.margin = settings.bake_margin
+    if hasattr(bake, "margin_type"):
+        bake.margin_type = "EXTEND"
     bake.use_clear = True
 
     if bake_type == "DIFFUSE":
@@ -1167,7 +1369,7 @@ class OBJECT_OT_polygroups_save_blend_file_as(bpy.types.Operator):
 class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
     bl_idname = "object.polygroups_save_bake_textures"
     bl_label = "Save Textures"
-    bl_description = "Save baked Base Color and Normal images next to the blend file"
+    bl_description = "Save baked Base Color, Normal, and Alpha images next to the blend file"
     bl_options = {"REGISTER"}
 
     @classmethod
@@ -1187,6 +1389,7 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             output_name = _safe_path_name(pack_name)
             base_image = _find_material_bake_image(active_material, BAKE_BASE_COLOR_NODE)
             normal_image = _find_material_bake_image(active_material, BAKE_NORMAL_NODE)
+            alpha_image = _find_material_bake_image(active_material, BAKE_ALPHA_NODE)
         else:
             output_name = _safe_path_name(bake_collection_name(target) or target.name)
             base_image = _find_current_bake_image(
@@ -1199,8 +1402,13 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
                 BAKE_NORMAL_NODE,
                 BAKE_NORMAL_IMAGE_PROP,
             )
+            alpha_image = _find_current_bake_image(
+                target,
+                BAKE_ALPHA_NODE,
+                BAKE_ALPHA_IMAGE_PROP,
+            )
 
-        if base_image is None and normal_image is None:
+        if base_image is None and normal_image is None and alpha_image is None:
             self.report({"WARNING"}, "No bake images found on the active mesh")
             return {"CANCELLED"}
 
@@ -1219,6 +1427,11 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             _save_image_as_png(normal_image, filepath)
             saved_paths.append(filepath)
 
+        if alpha_image is not None:
+            filepath = os.path.join(output_dir, f"{output_name}_Bake_Alpha.png")
+            _save_image_as_png(alpha_image, filepath)
+            saved_paths.append(filepath)
+
         self.report({"INFO"}, f"Saved {len(saved_paths)} texture(s) to {output_dir}")
         return {"FINISHED"}
 
@@ -1226,7 +1439,7 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
 class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
     bl_idname = "object.polygroups_merge_bake_textures"
     bl_label = "Merge Materials/Textures"
-    bl_description = "Merge baked texture packs from selected objects into one pack on the active object"
+    bl_description = "Merge baked Base Color and Normal maps using their separate baked Alpha maps"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -1240,7 +1453,7 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
         objects = _selected_bake_targets(context)
         packs = _collect_bake_texture_packs(objects, settings)
         if len(packs) < 2:
-            self.report({"WARNING"}, "Select at least two objects with baked texture packs")
+            self.report({"WARNING"}, "Select at least two objects with baked textures and Alpha maps")
             return {"CANCELLED"}
 
         resolution = _validate_pack_resolutions(packs)
@@ -1250,6 +1463,13 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
 
         base_pixels = _merge_base_color_pixels(packs, resolution)
         normal_pixels = _merge_normal_pixels(packs, resolution)
+        merged_coverage = _merge_pack_coverage(packs, resolution)
+        base_pixels = _apply_bake_background(
+            base_pixels, merged_coverage, resolution, settings.bake_background_mode,
+        )
+        normal_pixels = _apply_bake_background(
+            normal_pixels, merged_coverage, resolution, settings.bake_background_mode,
+        )
 
         pack_objects = [pack["object"] for pack in packs]
         pack_name = _merged_pack_name(pack_objects)
@@ -1266,15 +1486,26 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
             "Non-Color",
             (0.5, 0.5, 1.0, 1.0),
         )
+        alpha_image = _ensure_output_image(
+            _bake_pack_data_name(settings, pack_name, "Merged_Alpha"),
+            resolution,
+            "Non-Color",
+            (0.0, 0.0, 0.0, 1.0),
+        )
         _write_pixels(base_image, base_pixels)
         _write_pixels(normal_image, normal_pixels)
+        _write_pixels(alpha_image, _alpha_map_pixels(merged_coverage))
         _tag_merged_image(base_image, pack_name)
         _tag_merged_image(normal_image, pack_name)
+        _tag_merged_image(alpha_image, pack_name)
 
-        material = _ensure_merged_material(pack_name, base_image, normal_image, pack_objects)
+        material = _ensure_merged_material(
+            pack_name, base_image, normal_image, alpha_image, pack_objects,
+        )
         for obj in pack_objects:
             obj[BAKE_MERGED_BASE_COLOR_IMAGE_PROP] = base_image.name
             obj[BAKE_MERGED_NORMAL_IMAGE_PROP] = normal_image.name
+            obj[BAKE_MERGED_ALPHA_IMAGE_PROP] = alpha_image.name
             _assign_material_to_object(obj, material)
         target.active_material = material
 
@@ -1360,7 +1591,7 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         _restore_bake_render_objects(getattr(self, "render_visibility", {}))
         self.render_visibility = {}
         if success:
-            _hide_highpoly_sources(context, self.sources)
+            _disable_highpoly_sources_after_bake(settings, self.sources)
         if getattr(self, "_timer", None) is not None:
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
@@ -1424,7 +1655,7 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
                 self.stage = "NORMAL_READY"
         elif self.stage == "NORMAL_READY":
             if not self.settings.bake_normal:
-                self.stage = "SAVE"
+                self.stage = "POSTPROCESS"
             else:
                 self._set_status(context, self.stage, 68, "Baking Normal")
                 self.stage = "NORMAL_LAUNCH"
@@ -1438,7 +1669,11 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             self.wait_ticks -= 1
             if self.wait_ticks <= 0 and not bpy.app.is_job_running("OBJECT_BAKE"):
                 self._set_status(context, self.stage, 90, "Normal bake complete")
-                self.stage = "SAVE"
+                self.stage = "POSTPROCESS"
+        elif self.stage == "POSTPROCESS":
+            self._set_status(context, self.stage, 93, "Creating Alpha map and filling background")
+            _finalize_bake_images(self.target, self.settings)
+            self.stage = "SAVE"
         elif self.stage == "SAVE":
             self._set_status(context, self.stage, 95, "Saving bake textures")
             if self.prepare_materials and self.settings.auto_save_textures_after_bake:
@@ -1560,7 +1795,8 @@ class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
         if settings.bake_normal:
             _bake_to_node(context, target, normal_node, "NORMAL", settings)
 
-        _hide_highpoly_sources(context, sources)
+        _finalize_bake_images(target, settings)
+        _disable_highpoly_sources_after_bake(settings, sources)
         self.report({"INFO"}, "Bake finished")
         return {"FINISHED"}
 
@@ -1607,6 +1843,7 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
         if settings.bake_normal:
             _bake_to_node(context, target, normal_node, "NORMAL", settings)
 
+        _finalize_bake_images(target, settings)
         if settings.auto_save_textures_after_bake:
             try:
                 save_result = bpy.ops.object.polygroups_save_bake_textures()
@@ -1616,7 +1853,7 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
                 if "FINISHED" not in save_result:
                     self.report({"WARNING"}, "Auto save textures was not completed")
 
-        _hide_highpoly_sources(context, sources)
+        _disable_highpoly_sources_after_bake(settings, sources)
         self.report(
             {"INFO"},
             f"Prepared {changed_count} material(s) and finished bake",

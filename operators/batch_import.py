@@ -3,6 +3,8 @@ import time
 from math import ceil
 
 import bpy
+from bpy_extras.io_utils import ImportHelper
+from bpy_extras.io_utils import poll_file_object_drop
 from mathutils import Vector
 
 
@@ -249,15 +251,17 @@ class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
+class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
     bl_idname = "object.polygroups_batch_import"
-    bl_label = "Batch Import"
+    bl_label = "Import AI Retopo Toolkit"
     bl_description = "Import mesh files from a folder one by one"
     bl_options = {"REGISTER", "UNDO"}
 
     _timer = None
     use_file_selection: bpy.props.BoolProperty(
-        default=False,
+        # N-panel buttons set this explicitly. FileHandler drag-and-drop uses
+        # the default and supplies directory/files directly.
+        default=True,
         options={"HIDDEN", "SKIP_SAVE"},
     )
     directory: bpy.props.StringProperty(
@@ -276,6 +280,28 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return context.scene is not None
+
+    def draw(self, context):
+        from ..localization import t
+        from ..ui import draw_import_remesh_options
+
+        layout = self.layout
+        settings = context.scene.polygroups_model_preparation_settings
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        layout.label(text=t(context, "import_group_processing"), icon="MODIFIER")
+        layout.prop(
+            settings,
+            "file_import_auto_rename_objects",
+            text=t(context, "auto_rename_objects"),
+        )
+        layout.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
+        layout.prop(
+            settings,
+            "file_import_disable_view_assist",
+            text=t(context, "disable_view_assist"),
+        )
+        draw_import_remesh_options(layout, context, settings, "file_import")
 
     def execute(self, context):
         from . import import_queue
@@ -311,8 +337,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
 
     def invoke(self, context, event):
         if self.use_file_selection:
-            context.window_manager.fileselect_add(self)
-            return {"RUNNING_MODAL"}
+            return ImportHelper.invoke_popup(self, context)
         return self.execute(context)
 
     def modal(self, context, event):
@@ -360,6 +385,17 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator):
         if getattr(self, "_queue", None) is not None:
             self._queue.finish(context, "CANCELLED", rollback=True)
         self._finish(context)
+
+
+class AIRETOPO_FH_gltf(bpy.types.FileHandler):
+    bl_idname = "AIRETOPO_FH_gltf"
+    bl_label = "Import AI Retopo Toolkit"
+    bl_import_operator = OBJECT_OT_polygroups_batch_import.bl_idname
+    bl_file_extensions = ".glb;.gltf"
+
+    @classmethod
+    def poll_drop(cls, context):
+        return poll_file_object_drop(context)
 
 
 class OBJECT_OT_polygroups_arrange_batch_objects(bpy.types.Operator):

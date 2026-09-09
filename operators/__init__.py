@@ -27,6 +27,7 @@ from .baking import OBJECT_OT_polygroups_prepare_lowpoly_bake_material
 from .baking import OBJECT_OT_polygroups_save_blend_file
 from .baking import OBJECT_OT_polygroups_save_blend_file_as
 from .baking import OBJECT_OT_polygroups_save_bake_textures
+from .batch_import import AIRETOPO_FH_gltf
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .import_queue import OBJECT_OT_polygroups_import_control
 from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
@@ -95,6 +96,7 @@ from .object_seam_cutter import OBJECT_OT_polygroups_smooth_cutter_paths
 from .object_seam_cutter import OBJECT_OT_polygroups_tilt_cutter_path
 from .object_seam_cutter import OBJECT_OT_polygroups_toggle_cyclic_cutter_paths
 from .panel_visibility import OBJECT_OT_airetopo_restore_panel_defaults
+from .panel_visibility import OBJECT_OT_airetopo_set_section_subsection_visibility
 from .panel_visibility import OBJECT_OT_airetopo_set_all_section_visibility
 from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
@@ -188,9 +190,11 @@ CLASSES = (
     OBJECT_OT_airetopo_open_generated_image,
     OBJECT_OT_airetopo_save_generated_image,
     OBJECT_OT_airetopo_set_all_section_visibility,
+    OBJECT_OT_airetopo_set_section_subsection_visibility,
     OBJECT_OT_airetopo_restore_panel_defaults,
     OBJECT_OT_polygroups_scan_import_folder,
     OBJECT_OT_polygroups_batch_import,
+    AIRETOPO_FH_gltf,
     OBJECT_OT_polygroups_import_control,
     OBJECT_OT_polygroups_arrange_batch_objects,
     OBJECT_OT_polygroups_rename_objects,

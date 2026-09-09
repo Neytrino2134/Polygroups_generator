@@ -11,6 +11,8 @@ import time
 import bpy
 from bpy.app.handlers import persistent
 
+from ..localization import get_preferences
+
 SESSIONS = []
 MAX_MESSAGE = 1024 * 1024
 
@@ -267,7 +269,13 @@ class WM_OT_airetopo_detach_group(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return not bpy.app.background and context.area and context.area.type == 'VIEW_3D'
+        preferences = get_preferences(context)
+        return (
+            bool(preferences and getattr(preferences, 'enable_experimental_features', False))
+            and not bpy.app.background
+            and context.area
+            and context.area.type == 'VIEW_3D'
+        )
 
     def execute(self, context):
         try:

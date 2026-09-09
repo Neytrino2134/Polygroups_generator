@@ -16,6 +16,7 @@ model = scene.polygroups_model_preparation_settings
 seams = scene.polygroups_seam_preparation_settings
 generator = scene.polygroups_generator_settings
 finalization = scene.polygroups_seam_finalization_settings
+baking = scene.polygroups_baking_settings
 
 assert model.file_import_separate_collections
 assert model.batch_separate_collections
@@ -28,6 +29,7 @@ assert seams.seam_relax_mode == "SMART"
 assert seams.seam_relax_iterations == 2
 assert generator.checker_scale == 80.0
 assert abs(finalization.checker_overlay_opacity - 0.1) < 1.0e-6
+assert baking.disable_highpoly_after_bake
 
 model.file_import_auto_remesh = False
 assert not model.file_import_auto_smart_uv_project
@@ -38,6 +40,7 @@ seams.smart_seam_auto_relax = False
 seams.seam_relax_iterations = 9
 generator.checker_scale = 12.0
 finalization.checker_overlay_opacity = 0.7
+baking.disable_highpoly_after_bake = False
 assert bpy.ops.object.airetopo_restore_panel_defaults() == {"FINISHED"}
 assert model.file_import_separate_collections
 assert model.file_import_auto_remesh
@@ -46,6 +49,7 @@ assert seams.smart_seam_auto_relax
 assert seams.seam_relax_iterations == 2
 assert generator.checker_scale == 80.0
 assert abs(finalization.checker_overlay_opacity - 0.1) < 1.0e-6
+assert baking.disable_highpoly_after_bake
 
 addon_utils.disable(ROOT.name, default_set=True)
 print("PANEL_DEFAULTS_OK", flush=True)
