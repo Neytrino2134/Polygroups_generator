@@ -1655,11 +1655,6 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         description="Run Save Textures automatically after Prepare And Bake finishes",
         default=True,
     )
-    hide_highpoly_after_bake: bpy.props.BoolProperty(
-        name="Hide Highpoly After Bake",
-        description="Hide the selected highpoly source objects in the current view layer after baking finishes",
-        default=True,
-    )
     auto_fix_generated_index: bpy.props.BoolProperty(
         name="Auto Fix Generated Index",
         description="Before baking, force selected mesh name indices to match their Generated.N collections",

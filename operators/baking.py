@@ -988,11 +988,12 @@ def _select_sources_and_target(context, sources, target):
     context.view_layer.objects.active = target
 
 
-def _hide_highpoly_sources(context, sources, settings):
-    if not settings.hide_highpoly_after_bake:
-        return
+def _hide_highpoly_sources(context, sources):
+    """Disable completed bake sources in the view layer, viewport, and render."""
     for obj in sources:
         obj.hide_set(True, view_layer=context.view_layer)
+        obj.hide_viewport = True
+        obj.hide_render = True
 
 
 def _auto_fix_selected_generated_indices(context, settings):
@@ -1358,6 +1359,8 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         settings.bake_task_message = message
         _restore_bake_render_objects(getattr(self, "render_visibility", {}))
         self.render_visibility = {}
+        if success:
+            _hide_highpoly_sources(context, self.sources)
         if getattr(self, "_timer", None) is not None:
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
@@ -1443,7 +1446,6 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             self.stage = "FINALIZE"
         elif self.stage == "FINALIZE":
             self._set_status(context, self.stage, 99, "Finalizing bake")
-            _hide_highpoly_sources(context, self.sources, self.settings)
             return self._finish(context, True, "Bake finished")
         return None
 
@@ -1558,7 +1560,7 @@ class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
         if settings.bake_normal:
             _bake_to_node(context, target, normal_node, "NORMAL", settings)
 
-        _hide_highpoly_sources(context, sources, settings)
+        _hide_highpoly_sources(context, sources)
         self.report({"INFO"}, "Bake finished")
         return {"FINISHED"}
 
@@ -1614,7 +1616,7 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
                 if "FINISHED" not in save_result:
                     self.report({"WARNING"}, "Auto save textures was not completed")
 
-        _hide_highpoly_sources(context, sources, settings)
+        _hide_highpoly_sources(context, sources)
         self.report(
             {"INFO"},
             f"Prepared {changed_count} material(s) and finished bake",

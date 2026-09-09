@@ -69,11 +69,41 @@ finally:
 assert bake_calls and highpoly.select_get() and lowpoly.select_get()
 assert context.active_object == lowpoly
 
-bake_settings = context.scene.polygroups_baking_settings
-assert bake_settings.hide_highpoly_after_bake
-baking._hide_highpoly_sources(context, [highpoly], bake_settings)
+baking._hide_highpoly_sources(context, [highpoly])
 assert highpoly.hide_get(view_layer=context.view_layer)
-assert not highpoly.hide_viewport
+assert highpoly.hide_viewport and highpoly.hide_render
+
+# Staged Bake restores its temporary render snapshot first, then permanently
+# disables the highpoly in all three visibility channels.
+highpoly.hide_viewport = False
+highpoly.hide_render = False
+highpoly.hide_set(False, view_layer=context.view_layer)
+task_settings = SimpleNamespace(
+    bake_task_is_running=True,
+    bake_task_stage="FINALIZE",
+    bake_task_progress=99.0,
+    bake_task_message="",
+)
+task_context = SimpleNamespace(
+    scene=SimpleNamespace(polygroups_baking_settings=task_settings),
+    view_layer=context.view_layer,
+    window_manager=SimpleNamespace(
+        windows=[],
+        progress_end=lambda: None,
+        event_timer_remove=lambda _timer: None,
+    ),
+)
+task = SimpleNamespace(
+    render_visibility={highpoly: False},
+    sources=[highpoly],
+    _timer=None,
+    report=lambda *_args: None,
+)
+assert baking.OBJECT_OT_polygroups_bake_task._finish(
+    task, task_context, True, "Bake finished",
+) == {"FINISHED"}
+assert highpoly.hide_get(view_layer=context.view_layer)
+assert highpoly.hide_viewport and highpoly.hide_render
 
 missing = mesh_object("Retopo_03_Highpoly_Generated.002", collection)
 bpy.ops.object.select_all(action="DESELECT")

@@ -2076,11 +2076,6 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             )
             column.prop(
                 settings,
-                "hide_highpoly_after_bake",
-                text=t(context, "hide_highpoly_after_bake"),
-            )
-            column.prop(
-                settings,
                 "auto_fix_generated_index",
                 text=t(context, "auto_fix_generated_index"),
             )
