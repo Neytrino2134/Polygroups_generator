@@ -3,8 +3,12 @@ import re
 from array import array
 
 import bpy
+import blf
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+
+from ..core.generated_index import bake_collection_name, fix_object_generated_index
+from ..localization import t
 
 
 BAKE_MATERIAL_NAME = "Bake_Target"
@@ -24,6 +28,29 @@ BAKE_PACK_OBJECTS_PROP = "polygroups_bake_pack_objects"
 BAKE_PACK_TYPE_MERGED = "MERGED"
 BAKE_TEMP_IMAGE_PREFIX = "Bake_Temp_"
 AUTO_CAGE_INTERSECTION_EPSILON = 0.00001
+_BAKE_CURSOR_HANDLE = None
+_BAKE_CURSOR_POSITION = (32, 32)
+
+
+def _redraw_bake_ui(context):
+    for window in context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
+
+
+def _draw_bake_cursor_status():
+    context = bpy.context
+    scene = getattr(context, "scene", None)
+    settings = getattr(scene, "polygroups_baking_settings", None) if scene else None
+    if settings is None or not settings.bake_task_is_running:
+        return
+    x, y = _BAKE_CURSOR_POSITION
+    font_id = 0
+    blf.position(font_id, x + 18, y + 18, 0)
+    blf.size(font_id, 16)
+    blf.color(font_id, 1.0, 0.85, 0.25, 1.0)
+    blf.draw(font_id, f"Bake {settings.bake_task_progress:.0f}%")
 
 
 def _safe_path_name(name):
@@ -44,6 +71,52 @@ def _source_meshes(context, target):
         for obj in context.selected_objects
         if obj != target and obj.type == "MESH"
     ]
+
+
+def _auto_pack_target_uvs(context, target, settings, report, force=False):
+    if not force and not settings.auto_pack_uv_before_bake:
+        return True
+    if not hasattr(context.scene, "uvpm4_props"):
+        report({"ERROR"}, "Auto Pack UV requires UVPackmaster 4")
+        return False
+    pack_operator = getattr(getattr(bpy.ops, "uvpackmaster4", None), "pack", None)
+    if pack_operator is None:
+        report({"ERROR"}, "UVPackmaster 4 is not enabled")
+        return False
+
+    selected_before = list(context.selected_objects)
+    active_before = context.view_layer.objects.active
+    if target.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action="DESELECT")
+    target.select_set(True)
+    context.view_layer.objects.active = target
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
+    bpy.ops.mesh.reveal()
+    bpy.ops.mesh.select_all(action="SELECT")
+
+    main_props = context.scene.uvpm4_props.default_main_props
+    if hasattr(main_props, "heuristic_max_wait_time") and main_props.heuristic_max_wait_time <= 0:
+        main_props.heuristic_max_wait_time = 3
+    try:
+        result = pack_operator("EXEC_DEFAULT", mode_id="__active__", pack_op_type="0")
+    except Exception as error:
+        report({"ERROR"}, f"UVPackmaster packing failed: {error}")
+        return False
+    finally:
+        if target.mode == "EDIT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in selected_before:
+            if obj.name in bpy.data.objects:
+                obj.select_set(True)
+        if active_before is not None and active_before.name in bpy.data.objects:
+            context.view_layer.objects.active = active_before
+    if "FINISHED" not in result:
+        report({"ERROR"}, "UVPackmaster packing was not completed")
+        return False
+    return True
 
 
 def _evaluated_mesh(obj, depsgraph):
@@ -272,7 +345,7 @@ def _make_image(name, resolution, colorspace):
 
 
 def _bake_data_name(settings, target, suffix):
-    object_name = _safe_path_name(target.name)
+    object_name = _safe_path_name(bake_collection_name(target) or target.name)
     prefix = _safe_path_name(settings.image_prefix)
     return f"{prefix}_{object_name}_{suffix}"
 
@@ -300,12 +373,16 @@ def _ensure_target_image(
     if image_name:
         image = bpy.data.images.get(image_name)
 
+    desired_name = _bake_data_name(settings, target, suffix)
     if not _image_matches_resolution(image, settings.bake_resolution):
         image = _make_image(
-            _bake_data_name(settings, target, suffix),
+            desired_name,
             settings.bake_resolution,
             colorspace,
         )
+        target[prop_name] = image.name
+    elif image.name != desired_name:
+        image.name = desired_name
         target[prop_name] = image.name
 
     if source_prop_name is not None:
@@ -323,8 +400,12 @@ def _ensure_target_bake_material(target, settings):
     if material_name:
         material = bpy.data.materials.get(material_name)
 
+    desired_name = _bake_data_name(settings, target, "Material")
     if material is None:
-        material = bpy.data.materials.new(_bake_data_name(settings, target, "Material"))
+        material = bpy.data.materials.new(desired_name)
+        target[BAKE_TARGET_MATERIAL_PROP] = material.name
+    elif material.name != desired_name:
+        material.name = desired_name
         target[BAKE_TARGET_MATERIAL_PROP] = material.name
 
     return material
@@ -907,6 +988,44 @@ def _select_sources_and_target(context, sources, target):
     context.view_layer.objects.active = target
 
 
+def _hide_highpoly_sources(context, sources, settings):
+    if not settings.hide_highpoly_after_bake:
+        return
+    for obj in sources:
+        obj.hide_set(True, view_layer=context.view_layer)
+
+
+def _auto_fix_selected_generated_indices(context, settings):
+    if not settings.auto_fix_generated_index:
+        return 0
+    return sum(
+        1
+        for obj in context.selected_objects
+        if obj.type == "MESH" and fix_object_generated_index(obj)
+    )
+
+
+def _isolate_bake_render_objects(target, sources):
+    """Temporarily allow only the bake target and sources to render."""
+    keep = {target, *sources}
+    snapshot = {}
+    for obj in bpy.data.objects:
+        if obj.type != "MESH":
+            continue
+        snapshot[obj] = obj.hide_render
+        obj.hide_render = obj not in keep
+    return snapshot
+
+
+def _restore_bake_render_objects(snapshot):
+    for obj, hidden in snapshot.items():
+        try:
+            if obj.name in bpy.data.objects:
+                obj.hide_render = hidden
+        except ReferenceError:
+            pass
+
+
 def _configure_bake_settings(context, settings, bake_type):
     scene = context.scene
     scene.render.engine = "CYCLES"
@@ -1068,7 +1187,7 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             base_image = _find_material_bake_image(active_material, BAKE_BASE_COLOR_NODE)
             normal_image = _find_material_bake_image(active_material, BAKE_NORMAL_NODE)
         else:
-            output_name = _safe_path_name(target.name)
+            output_name = _safe_path_name(bake_collection_name(target) or target.name)
             base_image = _find_current_bake_image(
                 target,
                 BAKE_BASE_COLOR_NODE,
@@ -1208,6 +1327,200 @@ class OBJECT_OT_polygroups_clear_bake_temp_images(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
+    bl_idname = "object.polygroups_bake_task"
+    bl_label = "Bake Task"
+    bl_description = "Run selected-to-active baking as a staged task with progress feedback"
+    bl_options = {"REGISTER", "UNDO", "INTERNAL"}
+
+    prepare_materials: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+
+    @classmethod
+    def poll(cls, context):
+        settings = context.scene.polygroups_baking_settings
+        target = _active_mesh(context)
+        return not settings.bake_task_is_running and target is not None and bool(_source_meshes(context, target))
+
+    def _set_status(self, context, stage, progress, message):
+        settings = context.scene.polygroups_baking_settings
+        settings.bake_task_stage = stage
+        settings.bake_task_progress = progress
+        settings.bake_task_message = message
+        context.window_manager.progress_update(progress)
+        _redraw_bake_ui(context)
+
+    def _finish(self, context, success, message, cancelled=False):
+        global _BAKE_CURSOR_HANDLE
+        settings = context.scene.polygroups_baking_settings
+        settings.bake_task_is_running = False
+        settings.bake_task_stage = "DONE" if success else ("CANCELLED" if cancelled else "FAILED")
+        settings.bake_task_progress = 100.0 if success else (0.0 if cancelled else settings.bake_task_progress)
+        settings.bake_task_message = message
+        _restore_bake_render_objects(getattr(self, "render_visibility", {}))
+        self.render_visibility = {}
+        if getattr(self, "_timer", None) is not None:
+            context.window_manager.event_timer_remove(self._timer)
+            self._timer = None
+        if _BAKE_CURSOR_HANDLE is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(_BAKE_CURSOR_HANDLE, "WINDOW")
+            _BAKE_CURSOR_HANDLE = None
+        context.window_manager.progress_end()
+        _redraw_bake_ui(context)
+        self.report({"INFO" if success or cancelled else "ERROR"}, message)
+        return {"FINISHED" if success else "CANCELLED"}
+
+    def _launch_pass(self, context, node, bake_type):
+        _set_active_bake_node(self.target, node)
+        _configure_bake_settings(context, self.settings, bake_type)
+        if bpy.app.background:
+            return bpy.ops.object.bake(type=bake_type)
+        return bpy.ops.object.bake("INVOKE_DEFAULT", type=bake_type)
+
+    def _step(self, context):
+        if self.stage == "FIX_INDEX":
+            fixed = _auto_fix_selected_generated_indices(context, self.settings)
+            self._set_status(context, self.stage, 8, f"Fixing Generated.N indices ({fixed} changed)")
+            self.stage = "PACK_UV"
+        elif self.stage == "PACK_UV":
+            if self.settings.auto_pack_uv_before_bake:
+                self._set_status(context, self.stage, 12, "Packing lowpoly UVs with UVPackmaster")
+                if not _auto_pack_target_uvs(context, self.target, self.settings, self.report):
+                    return self._finish(context, False, "UV packing before bake failed")
+            self.stage = "PREPARE_MATERIALS" if self.prepare_materials else "PREPARE_MESH"
+        elif self.stage == "PREPARE_MATERIALS":
+            changed = 0
+            for obj in self.sources:
+                for material in obj.data.materials:
+                    if _set_polygroup_material_texture_only(material):
+                        changed += 1
+            self._set_status(context, self.stage, 20, f"Preparing materials ({changed} changed)")
+            self.stage = "PREPARE_MESH"
+        elif self.stage == "PREPARE_MESH":
+            self._set_status(context, self.stage, 32, "Preparing lowpoly mesh and AutoCage")
+            if self.target.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            if not _apply_auto_cage_if_enabled(context, self.target, self.sources, self.settings, self.report):
+                return self._finish(context, False, "AutoCage preparation failed")
+            self.material, self.base_node, self.normal_node = _ensure_bake_material(self.target, self.settings)
+            self.target.active_material = self.material
+            _select_sources_and_target(context, self.sources, self.target)
+            self.stage = "BASE_READY" if self.settings.bake_base_color else "NORMAL_READY"
+        elif self.stage == "BASE_READY":
+            self._set_status(context, self.stage, 42, "Baking Base Color")
+            self.stage = "BASE_LAUNCH"
+        elif self.stage == "BASE_LAUNCH":
+            result = self._launch_pass(context, self.base_node, "DIFFUSE")
+            if "CANCELLED" in result:
+                return self._finish(context, False, "Base Color bake cancelled")
+            self.wait_ticks = 2
+            self.stage = "BASE_WAIT"
+        elif self.stage == "BASE_WAIT":
+            self.wait_ticks -= 1
+            if self.wait_ticks <= 0 and not bpy.app.is_job_running("OBJECT_BAKE"):
+                self._set_status(context, self.stage, 65, "Base Color bake complete")
+                self.stage = "NORMAL_READY"
+        elif self.stage == "NORMAL_READY":
+            if not self.settings.bake_normal:
+                self.stage = "SAVE"
+            else:
+                self._set_status(context, self.stage, 68, "Baking Normal")
+                self.stage = "NORMAL_LAUNCH"
+        elif self.stage == "NORMAL_LAUNCH":
+            result = self._launch_pass(context, self.normal_node, "NORMAL")
+            if "CANCELLED" in result:
+                return self._finish(context, False, "Normal bake cancelled")
+            self.wait_ticks = 2
+            self.stage = "NORMAL_WAIT"
+        elif self.stage == "NORMAL_WAIT":
+            self.wait_ticks -= 1
+            if self.wait_ticks <= 0 and not bpy.app.is_job_running("OBJECT_BAKE"):
+                self._set_status(context, self.stage, 90, "Normal bake complete")
+                self.stage = "SAVE"
+        elif self.stage == "SAVE":
+            self._set_status(context, self.stage, 95, "Saving bake textures")
+            if self.prepare_materials and self.settings.auto_save_textures_after_bake:
+                bpy.ops.object.polygroups_save_bake_textures()
+            self.stage = "FINALIZE"
+        elif self.stage == "FINALIZE":
+            self._set_status(context, self.stage, 99, "Finalizing bake")
+            _hide_highpoly_sources(context, self.sources, self.settings)
+            return self._finish(context, True, "Bake finished")
+        return None
+
+    def invoke(self, context, event):
+        global _BAKE_CURSOR_HANDLE, _BAKE_CURSOR_POSITION
+        self.settings = context.scene.polygroups_baking_settings
+        if not self.settings.bake_base_color and not self.settings.bake_normal:
+            self.report({"WARNING"}, "Enable at least one bake pass")
+            return {"CANCELLED"}
+        self.target = _active_mesh(context)
+        self.sources = _source_meshes(context, self.target)
+        self.render_visibility = _isolate_bake_render_objects(self.target, self.sources)
+        self.stage = "FIX_INDEX"
+        self.wait_ticks = 0
+        self.cancel_requested = False
+        self.settings.bake_task_is_running = True
+        self.settings.bake_task_stage = "STARTING"
+        self.settings.bake_task_progress = 1.0
+        self.settings.bake_task_message = "Starting bake task"
+        if event is not None:
+            _BAKE_CURSOR_POSITION = (event.mouse_region_x, event.mouse_region_y)
+        context.window_manager.progress_begin(0, 100)
+        if bpy.app.background:
+            try:
+                while self.settings.bake_task_is_running:
+                    result = self._step(context)
+                    if result is not None:
+                        return result
+            except Exception as error:
+                return self._finish(context, False, f"Bake failed: {error}")
+            return {"FINISHED"}
+        _BAKE_CURSOR_HANDLE = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_bake_cursor_status, (), "WINDOW", "POST_PIXEL",
+        )
+        self._timer = context.window_manager.event_timer_add(0.12, window=context.window)
+        context.window_manager.modal_handler_add(self)
+        _redraw_bake_ui(context)
+        return {"RUNNING_MODAL"}
+
+    def execute(self, context):
+        return self.invoke(context, None)
+
+    def modal(self, context, event):
+        global _BAKE_CURSOR_POSITION
+        if event.type == "MOUSEMOVE":
+            _BAKE_CURSOR_POSITION = (event.mouse_region_x, event.mouse_region_y)
+        if event.type == "ESC" and event.value == "PRESS":
+            self.cancel_requested = True
+            cancelled_message = t(context, "bake_cancelled")
+            self._set_status(context, "CANCELLING", 0, cancelled_message)
+            # Let Blender's running bake operator receive Esc as well. Once its
+            # job exits, the timer branch below performs all task cleanup.
+            if bpy.app.is_job_running("OBJECT_BAKE"):
+                return {"PASS_THROUGH"}
+            return self._finish(context, False, cancelled_message, cancelled=True)
+        if event.type == "TIMER":
+            if self.cancel_requested:
+                if bpy.app.is_job_running("OBJECT_BAKE"):
+                    return {"RUNNING_MODAL"}
+                return self._finish(
+                    context, False, t(context, "bake_cancelled"), cancelled=True,
+                )
+            try:
+                result = self._step(context)
+            except Exception as error:
+                return self._finish(context, False, f"Bake failed: {error}")
+            if result is not None:
+                return result
+        return {"RUNNING_MODAL"}
+
+    def cancel(self, context):
+        if not bpy.app.is_job_running("OBJECT_BAKE"):
+            self._finish(
+                context, False, t(context, "bake_cancelled"), cancelled=True,
+            )
+
+
 class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
     bl_idname = "object.polygroups_bake_selected_to_active"
     bl_label = "Bake Selected To Active"
@@ -1220,9 +1533,10 @@ class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
         return target is not None and bool(_source_meshes(context, target))
 
     def execute(self, context):
+        settings = context.scene.polygroups_baking_settings
+        _auto_fix_selected_generated_indices(context, settings)
         target = _active_mesh(context)
         sources = _source_meshes(context, target)
-        settings = context.scene.polygroups_baking_settings
 
         if not settings.bake_base_color and not settings.bake_normal:
             self.report({"WARNING"}, "Enable at least one bake pass")
@@ -1230,6 +1544,8 @@ class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
 
         if target.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
+        if not _auto_pack_target_uvs(context, target, settings, self.report):
+            return {"CANCELLED"}
         if not _apply_auto_cage_if_enabled(context, target, sources, settings, self.report):
             return {"CANCELLED"}
         material, base_node, normal_node = _ensure_bake_material(target, settings)
@@ -1242,6 +1558,7 @@ class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
         if settings.bake_normal:
             _bake_to_node(context, target, normal_node, "NORMAL", settings)
 
+        _hide_highpoly_sources(context, sources, settings)
         self.report({"INFO"}, "Bake finished")
         return {"FINISHED"}
 
@@ -1258,12 +1575,16 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
         return target is not None and bool(_source_meshes(context, target))
 
     def execute(self, context):
+        settings = context.scene.polygroups_baking_settings
+        _auto_fix_selected_generated_indices(context, settings)
         target = _active_mesh(context)
         sources = _source_meshes(context, target)
-        settings = context.scene.polygroups_baking_settings
 
         if target.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
+
+        if not _auto_pack_target_uvs(context, target, settings, self.report):
+            return {"CANCELLED"}
 
         changed_count = 0
         for obj in sources:
@@ -1293,6 +1614,7 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
                 if "FINISHED" not in save_result:
                     self.report({"WARNING"}, "Auto save textures was not completed")
 
+        _hide_highpoly_sources(context, sources, settings)
         self.report(
             {"INFO"},
             f"Prepared {changed_count} material(s) and finished bake",

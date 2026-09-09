@@ -3,6 +3,8 @@
 from pathlib import Path
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -252,10 +254,31 @@ def _clock_time(timestamp):
 
 def status_snapshot():
     """Return presentation-ready state for the N-panel status block."""
+    recovery = recovery_snapshot()
+    current = getattr(getattr(bpy, "data", None), "filepath", "")
+    regular_path = recovery["original"] if recovery["active"] and recovery["original"] else current
+    if recovery["active"] and recovery["autosave"]:
+        autosave_path = recovery["autosave"]
+    else:
+        autosave_path = autosave_paths(
+            regular_path,
+            1,
+            _session_temp_dir(),
+        )[0]
+
+    def existing_file(path):
+        try:
+            candidate = Path(path)
+            return str(candidate.resolve()) if candidate.is_file() else ""
+        except OSError:
+            return ""
+
     return {
         "event": _LAST_EVENT,
         "autosave_time": _clock_time(_LAST_AUTOSAVE_TIME),
         "regular_save_time": _clock_time(_LAST_REGULAR_SAVE_TIME),
+        "autosave_path": existing_file(autosave_path),
+        "regular_save_path": existing_file(regular_path) if regular_path else "",
         "message": _LAST_STATUS,
     }
 
@@ -484,8 +507,6 @@ def configure(context=None):
     preferences = _preferences()
     if preferences is None:
         return
-    filepaths = (context or bpy.context).preferences.filepaths
-    filepaths.use_auto_save_temporary_files = preferences.autosave_mode == "NATIVE"
     if bpy.app.timers.is_registered(_timer_callback):
         bpy.app.timers.unregister(_timer_callback)
     bpy.app.timers.register(
@@ -580,6 +601,63 @@ class AIRETOPO_OT_open_recent_autosave(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AIRETOPO_OT_open_saved_file(bpy.types.Operator):
+    bl_idname = "wm.airetopo_open_saved_file"
+    bl_label = "Open Saved File"
+    bl_description = "Open the last saved project file"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH", options={"SKIP_SAVE"})
+
+    @classmethod
+    def description(cls, _context, properties):
+        return f"Open saved file: {properties.filepath}"
+
+    def invoke(self, context, event):
+        if getattr(bpy.data, "is_dirty", False):
+            return context.window_manager.invoke_confirm(self, event)
+        return self.execute(context)
+
+    def execute(self, _context):
+        filepath = Path(self.filepath)
+        if not filepath.is_file():
+            self.report({"ERROR"}, f"Saved file not found: {filepath}")
+            return {"CANCELLED"}
+        try:
+            return bpy.ops.wm.open_mainfile(filepath=str(filepath), load_ui=False)
+        except RuntimeError as error:
+            self.report({"ERROR"}, f"Could not open saved file: {error}")
+            return {"CANCELLED"}
+
+
+class AIRETOPO_OT_show_file_in_browser(bpy.types.Operator):
+    bl_idname = "wm.airetopo_show_file_in_browser"
+    bl_label = "Show File in Browser"
+    bl_description = "Show this file in the system file browser"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH", options={"SKIP_SAVE"})
+
+    @classmethod
+    def description(cls, _context, properties):
+        return f"Show in file browser: {properties.filepath}"
+
+    def execute(self, _context):
+        filepath = Path(bpy.path.abspath(self.filepath)).resolve()
+        if not filepath.is_file():
+            self.report({"ERROR"}, f"File not found: {filepath}")
+            return {"CANCELLED"}
+        try:
+            if sys.platform == "win32":
+                subprocess.Popen(["explorer.exe", "/select,", str(filepath)])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", str(filepath)])
+            else:
+                subprocess.Popen(["xdg-open", str(filepath.parent)])
+        except OSError as error:
+            self.report({"ERROR"}, f"Could not open file browser: {error}")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
 class AIRETOPO_OT_save_recovery_to_original(bpy.types.Operator):
     bl_idname = "wm.airetopo_save_recovery_to_original"
     bl_label = "Save Recovery to Original"
@@ -635,6 +713,8 @@ CLASSES = (
     AIRETOPO_OT_custom_autosave_now,
     AIRETOPO_OT_clear_temp_unsaved_files,
     AIRETOPO_OT_open_recent_autosave,
+    AIRETOPO_OT_open_saved_file,
+    AIRETOPO_OT_show_file_in_browser,
     AIRETOPO_OT_save_recovery_to_original,
 )
 

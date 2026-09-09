@@ -109,13 +109,6 @@ def _draw_knife_preview(operator):
         )}).draw(fill_shader)
         blf.position(0, x, y, 0)
         blf.draw(0, hint)
-        title = "MULTI POINT KNIFE" if polyline is not None else "PLANE CUT"
-        blf.size(0, 14 * scale)
-        title_width, _ = blf.dimensions(0, title)
-        blf.position(0, (operator._region.width - title_width) * 0.5,
-                     operator._region.height * 0.56, 0)
-        blf.color(0, 1.0, 0.32, 0.36, 1.0)
-        blf.draw(0, title)
     finally:
         gpu.state.depth_test_set(previous_depth)
         gpu.state.blend_set(previous_blend)

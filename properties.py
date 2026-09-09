@@ -1491,6 +1491,12 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
+    bake_task_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    bake_task_stage: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    bake_task_message: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    bake_task_progress: bpy.props.FloatProperty(
+        default=0.0, min=0.0, max=100.0, subtype="PERCENTAGE", options={"SKIP_SAVE"},
+    )
     bake_resolution: bpy.props.IntProperty(
         name="Bake Resolution",
         description="Width and height for generated bake images",
@@ -1532,7 +1538,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     auto_cage_coverage: bpy.props.FloatProperty(
         name="Coverage",
         description="Highpoly surface coverage percentile used for automatic cage extrusion",
-        default=95.0,
+        default=99.8,
         min=90.0,
         max=99.8,
         precision=1,
@@ -1541,7 +1547,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     auto_cage_margin: bpy.props.FloatProperty(
         name="Safety Margin",
         description="Fixed extra distance added to the automatic cage extrusion",
-        default=0.001,
+        default=0.005,
         min=0.0,
         soft_max=0.02,
         precision=5,
@@ -1559,7 +1565,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     auto_cage_safe_zone: bpy.props.FloatProperty(
         name="Safe Zone",
         description="Extra percentage added on top of the calculated automatic cage extrusion",
-        default=3.0,
+        default=8.5,
         min=0.0,
         max=10.0,
         precision=1,
@@ -1610,6 +1616,27 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         name="Auto Save Textures After Bake",
         description="Run Save Textures automatically after Prepare And Bake finishes",
         default=True,
+    )
+    hide_highpoly_after_bake: bpy.props.BoolProperty(
+        name="Hide Highpoly After Bake",
+        description="Hide the selected highpoly source objects in the current view layer after baking finishes",
+        default=False,
+    )
+    auto_fix_generated_index: bpy.props.BoolProperty(
+        name="Auto Fix Generated Index",
+        description="Before baking, force selected mesh name indices to match their Generated.N collections",
+        default=True,
+    )
+    auto_pack_uv_before_bake: bpy.props.BoolProperty(
+        name="Auto Pack UV Before Bake",
+        description="Pack the active lowpoly UVs with UVPackmaster before baking",
+        default=False,
+    )
+    show_auto_pack_uv_settings: bpy.props.BoolProperty(
+        name="Show Auto Pack UV Settings",
+        description="Expand UVPackmaster settings used before baking",
+        default=False,
+        options={"SKIP_SAVE"},
     )
 
 

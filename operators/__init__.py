@@ -5,6 +5,8 @@ from .delete_and_fill import MESH_OT_polygroups_delete_and_fill
 from .remesh_progress import OBJECT_OT_polygroups_run_remesh, OBJECT_OT_polygroups_cancel_remesh
 from .generated_visibility import OBJECT_OT_polygroups_object_visibility
 from .generated_visibility import OBJECT_OT_polygroups_generated_collection
+from .generated_index import OBJECT_OT_polygroups_fix_all_generated_indices
+from .generated_index import OBJECT_OT_polygroups_fix_selected_generated_indices
 from .ai_generation import OBJECT_OT_airetopo_generate_google_image
 from .ai_generation import OBJECT_OT_airetopo_generate_openai_image
 from .ai_generation import OBJECT_OT_airetopo_load_library_prompt
@@ -15,6 +17,7 @@ from .ai_generation import OBJECT_OT_airetopo_refresh_prompt_library
 from .ai_generation import OBJECT_OT_airetopo_save_generated_image
 from .ai_generation import OBJECT_OT_airetopo_select_material_image
 from .baking import OBJECT_OT_polygroups_bake_selected_to_active
+from .baking import OBJECT_OT_polygroups_bake_task
 from .baking import OBJECT_OT_polygroups_calculate_auto_cage
 from .baking import OBJECT_OT_polygroups_clear_bake_temp_images
 from .baking import OBJECT_OT_polygroups_merge_bake_textures
@@ -114,8 +117,10 @@ from .relax_seams import MESH_OT_polygroups_relax_seams
 from .safety_checks import OBJECT_OT_polygroups_checked_quad_remesh
 from .safety_checks import OBJECT_OT_polygroups_checked_generate_polygroups
 from .safety_checks import OBJECT_OT_polygroups_checked_prepare_and_bake
+from .safety_checks import OBJECT_OT_polygroups_checked_bake_selected_to_active
 from .safety_checks import OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material
 from .safety_checks import OBJECT_OT_polygroups_make_lowpoly_active
+from .safety_checks import OBJECT_OT_polygroups_missing_uv_bake_dialog
 from .safety_checks import OBJECT_OT_polygroups_rename_and_apply_weld
 from .safety_checks import OBJECT_OT_polygroups_skip_prepare_and_bake
 from .safety_checks import OBJECT_OT_polygroups_skip_generate_polygroups
@@ -168,6 +173,8 @@ CLASSES = (
     OBJECT_OT_polygroups_apply_weld,
     OBJECT_OT_polygroups_object_visibility,
     OBJECT_OT_polygroups_generated_collection,
+    OBJECT_OT_polygroups_fix_all_generated_indices,
+    OBJECT_OT_polygroups_fix_selected_generated_indices,
     OBJECT_OT_polygroups_select_import_folder,
     OBJECT_OT_airetopo_generate_openai_image,
     OBJECT_OT_airetopo_generate_google_image,
@@ -189,6 +196,7 @@ CLASSES = (
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_calculate_auto_cage,
     OBJECT_OT_polygroups_bake_selected_to_active,
+    OBJECT_OT_polygroups_bake_task,
     OBJECT_OT_polygroups_prepare_and_bake,
     OBJECT_OT_polygroups_save_blend_file,
     OBJECT_OT_polygroups_save_blend_file_as,
@@ -204,6 +212,8 @@ CLASSES = (
     OBJECT_OT_polygroups_checked_generate_polygroups,
     OBJECT_OT_polygroups_checked_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_checked_prepare_and_bake,
+    OBJECT_OT_polygroups_checked_bake_selected_to_active,
+    OBJECT_OT_polygroups_missing_uv_bake_dialog,
     OBJECT_OT_polygroups_skip_quad_remesh,
     OBJECT_OT_polygroups_skip_generate_polygroups,
     OBJECT_OT_polygroups_skip_prepare_and_bake,

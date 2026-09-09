@@ -150,6 +150,32 @@ def draw_hover_crosshair(context, xy):
     return hovered
 
 
+def draw_colored_crosshair(context, xy, color):
+    """Draw a compact outlined cursor without doing a mesh hover query."""
+    import gpu
+    from gpu_extras.batch import batch_for_shader
+
+    scale = context.preferences.system.ui_scale
+    size = 7 * scale
+    x, y = xy
+    points = ((x - size, y), (x + size, y), (x, y - size), (x, y + size))
+    shader = gpu.shader.from_builtin("POLYLINE_UNIFORM_COLOR")
+    batch = batch_for_shader(shader, "LINES", {"pos": points})
+    blend = gpu.state.blend_get()
+    try:
+        gpu.state.blend_set("ALPHA")
+        shader.bind()
+        shader.uniform_float("viewportSize", gpu.state.viewport_get()[2:])
+        shader.uniform_float("lineWidth", 4 * scale)
+        shader.uniform_float("color", (0.02, 0.02, 0.02, 0.9))
+        batch.draw(shader)
+        shader.uniform_float("lineWidth", 2 * scale)
+        shader.uniform_float("color", color)
+        batch.draw(shader)
+    finally:
+        gpu.state.blend_set(blend)
+
+
 def draw_tool_badge(context, label, xy, hint=None):
     """Draw a small tool identifier just below and to the right of the cursor."""
     import blf
@@ -195,11 +221,35 @@ def draw_edge_seam_eraser_cursor(_context, _tool, xy):
 
 
 def draw_smart_seam_cursor(_context, _tool, xy):
-    _draw_labeled_seam_cursor("Smart Seams Generator", xy)
+    _draw_labeled_seam_cursor(
+        "Smart Seams Generator",
+        xy,
+        "Ctrl + Click: Generate smart seams",
+    )
 
 
 def draw_longitudinal_seam_cursor(_context, _tool, xy):
-    _draw_labeled_seam_cursor("Longitudinal Seam", xy)
+    _draw_labeled_seam_cursor(
+        "Longitudinal Seam",
+        xy,
+        "Ctrl + Click: Draw longitudinal seams",
+    )
+
+
+def draw_island_selector_cursor(_context, _tool, xy):
+    context = bpy.context
+    if context.mode != "EDIT_MESH" or context.region_data is None:
+        return
+    draw_colored_crosshair(context, xy, (1.0, 0.55, 0.08, 1.0))
+    draw_tool_badge(context, "Island Selector", xy, "Click: Select island")
+
+
+def draw_small_islands_merger_cursor(_context, _tool, xy):
+    context = bpy.context
+    if context.mode != "EDIT_MESH" or context.region_data is None:
+        return
+    draw_colored_crosshair(context, xy, (1.0, 0.55, 0.08, 1.0))
+    draw_tool_badge(context, "Small Islands Merger", xy, "Click and drag: Merge small islands")
 
 
 def mark_pair(context, obj, bm, start, end):

@@ -601,6 +601,10 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         if search_query:
             # Keep the search field visible while suppressing unrelated header/status UI.
             layout = _NullLayout()
+        if preferences is not None:
+            from .preferences import draw_global_notices
+
+            draw_global_notices(layout, context, preferences)
         from . import custom_autosave
 
         session_box = layout.box()
@@ -634,15 +638,45 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                 status_row.label(text=t(context, "autosave_recovery_created"), icon="RECOVER_LAST")
             else:
                 status_row.label(text=t(context, "save_status_waiting"), icon="TIME")
-            time_row = session_box.row(align=True)
-            time_row.label(
+            autosave_row = session_box.row(align=True)
+            autosave_row.label(
                 text=t(context, "last_autosave_time", value=save_status["autosave_time"]),
                 icon="RECOVER_LAST",
             )
-            time_row.label(
+            autosave_actions = autosave_row.row(align=True)
+            autosave_actions.enabled = bool(save_status["autosave_path"])
+            open_autosave = autosave_actions.operator(
+                "wm.airetopo_open_recent_autosave",
+                text=t(context, "load_latest_autosave"),
+                icon="FILE_REFRESH",
+            )
+            open_autosave.filepath = save_status["autosave_path"]
+            show_autosave = autosave_actions.operator(
+                "wm.airetopo_show_file_in_browser",
+                text="",
+                icon="FILE_FOLDER",
+            )
+            show_autosave.filepath = save_status["autosave_path"]
+
+            regular_row = session_box.row(align=True)
+            regular_row.label(
                 text=t(context, "last_regular_save_time", value=save_status["regular_save_time"]),
                 icon="FILE_TICK",
             )
+            regular_actions = regular_row.row(align=True)
+            regular_actions.enabled = bool(save_status["regular_save_path"])
+            open_regular = regular_actions.operator(
+                "wm.airetopo_open_saved_file",
+                text=t(context, "load_latest_save"),
+                icon="FILE_BLEND",
+            )
+            open_regular.filepath = save_status["regular_save_path"]
+            show_regular = regular_actions.operator(
+                "wm.airetopo_show_file_in_browser",
+                text="",
+                icon="FILE_FOLDER",
+            )
+            show_regular.filepath = save_status["regular_save_path"]
             recovery = custom_autosave.recovery_snapshot()
             if recovery["active"]:
                 session_box.separator()
@@ -681,12 +715,19 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                             "%d.%m.%Y %H:%M",
                             time.localtime(entry["modified"]),
                         )
-                        operator = recent_column.operator(
+                        entry_row = recent_column.row(align=True)
+                        operator = entry_row.operator(
                             "wm.airetopo_open_recent_autosave",
                             text=f'{entry["name"]}  ·  {modified}',
                             icon="FILE_BLEND",
                         )
                         operator.filepath = entry["filepath"]
+                        show_file = entry_row.operator(
+                            "wm.airetopo_show_file_in_browser",
+                            text="",
+                            icon="FILE_FOLDER",
+                        )
+                        show_file.filepath = entry["filepath"]
                     session_box.label(text=t(context, "recent_autosave_save_as_hint"), icon="INFO")
                 else:
                     session_box.label(text=t(context, "no_recent_autosaves"), icon="INFO")
@@ -894,6 +935,12 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
                          text=t(context, "previous_generated_collection"), icon="TRIA_LEFT").action = "PREVIOUS"
             row.operator("object.polygroups_generated_collection",
                          text=t(context, "next_generated_collection"), icon="TRIA_RIGHT").action = "NEXT"
+            column.separator()
+            column.operator(
+                "object.polygroups_fix_all_generated_indices",
+                text=t(context, "fix_all_generated_indices"),
+                icon="FILE_REFRESH",
+            )
 
         content = draw_topic(layout, context, "prepare_3", t(context, "model_preparation_group_seams"), "EDGE_SEAM")
         if content is not None:
@@ -1968,11 +2015,9 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             )
             column.separator()
 
-        content = draw_topic(layout, context, "bake_1", 'Bake Settings and Cage', "MOD_SHRINKWRAP")
+        content = draw_topic(layout, context, "bake_1", 'Cage Settings', "MOD_SHRINKWRAP")
         if content is not None:
             column = content.column(align=True)
-            column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
-            column.prop(settings, "bake_margin", text=t(context, "bake_margin"))
             column.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
             auto_cage_box = column.box()
             auto_cage_box.prop(settings, "use_auto_cage", text=t(context, "auto_cage"))
@@ -1990,6 +2035,12 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             )
             auto_cage_box.label(text=t(context, "auto_cage_status", value=settings.auto_cage_status), icon="INFO")
             column.prop(settings, "ray_distance", text=t(context, "ray_distance"))
+
+        content = draw_topic(layout, context, "bake_2", 'Bake Settings', "RENDER_STILL")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
+            column.prop(settings, "bake_margin", text=t(context, "bake_margin"))
             column.prop(settings, "image_prefix", text=t(context, "image_prefix"))
             column.prop(settings, "use_selected_to_active", text=t(context, "selected_to_active"))
 
@@ -2001,47 +2052,130 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 "auto_save_textures_after_bake",
                 text=t(context, "auto_save_textures_after_bake"),
             )
-
-        content = draw_topic(layout, context, "bake_2", 'Prepare Materials and Bake', "MATERIAL")
-        if content is not None:
-            column = content.column(align=True)
+            column.prop(
+                settings,
+                "hide_highpoly_after_bake",
+                text=t(context, "hide_highpoly_after_bake"),
+            )
+            column.prop(
+                settings,
+                "auto_fix_generated_index",
+                text=t(context, "auto_fix_generated_index"),
+            )
+            pack_box = column.box()
+            pack_header = pack_box.row(align=True)
+            pack_header.prop(
+                settings,
+                "show_auto_pack_uv_settings",
+                text="",
+                icon=(
+                    "TRIA_DOWN"
+                    if settings.show_auto_pack_uv_settings
+                    else "TRIA_RIGHT"
+                ),
+                emboss=False,
+            )
+            pack_header.prop(
+                settings,
+                "auto_pack_uv_before_bake",
+                text=t(context, "auto_pack_uv_before_bake"),
+            )
+            if settings.show_auto_pack_uv_settings:
+                pack_settings = pack_box.column(align=True)
+                installed, enabled, available = uvpackmaster_status(context)
+                if not installed:
+                    pack_settings.label(text=t(context, "uvpackmaster_not_installed"), icon="ERROR")
+                elif not enabled or not available:
+                    pack_settings.label(text=t(context, "uvpackmaster_not_enabled"), icon="ERROR")
+                else:
+                    main_props = context.scene.uvpm4_props.default_main_props
+                    draw_optional_prop(
+                        pack_settings, main_props, "rotation_enable",
+                        text=t(context, "uvpackmaster_rotation_enable"),
+                    )
+                    draw_optional_prop(
+                        pack_settings, main_props, "margin",
+                        text=t(context, "uvpackmaster_margin"),
+                    )
+                    rotation_row = pack_settings.row(align=True)
+                    rotation_row.enabled = bool(getattr(main_props, "rotation_enable", True))
+                    draw_optional_prop(
+                        rotation_row, main_props, "rotation_step",
+                        text=t(context, "uvpackmaster_rotation_step"),
+                    )
+                    draw_optional_prop(
+                        pack_settings, main_props, "heuristic_enable",
+                        text=t(context, "uvpackmaster_heuristic_search"),
+                    )
+                    draw_optional_prop(
+                        pack_settings, main_props, "heuristic_max_wait_time",
+                        text=t(context, "uvpackmaster_max_wait_time"),
+                    )
             column.separator()
-            column.operator(
-                "object.polygroups_check_material_textures",
-                text=t(context, "check_material_textures"),
-                icon="NODE_MATERIAL",
-            )
-            column.operator(
-                "object.polygroups_prepare_highpoly_bake_materials",
-                text=t(context, "prepare_highpoly_texture_only"),
-                icon="MATERIAL",
-            )
-            column.operator(
-                "object.polygroups_checked_prepare_lowpoly_bake_material",
-                text=t(context, "prepare_lowpoly_bake_material"),
-                icon="TEXTURE",
-            )
-            column.operator(
-                "object.polygroups_bake_selected_to_active",
-                text=t(context, "bake_selected_to_active"),
-                icon="RENDER_STILL",
-            )
-
-        content = draw_topic(layout, context, "bake_3", 'Bake and Export Textures', "RENDER_STILL")
-        if content is not None:
-            column = content.column(align=True)
-            column.separator()
-            column.operator(
+            auto_bake_row = column.row(align=True)
+            auto_bake_row.scale_y = 1.3
+            auto_bake_row.enabled = not settings.bake_task_is_running
+            auto_bake_row.operator(
                 "object.polygroups_checked_prepare_and_bake",
                 text=t(context, "prepare_and_bake"),
                 icon="RENDER_RESULT",
             )
-            column.operator(
+
+        content = draw_topic(layout, context, "bake_3", 'Bake Operations', "RENDER_STILL")
+        if content is not None:
+            column = content.column(align=True)
+            if settings.bake_task_stage:
+                status_box = column.box()
+                status_box.label(text=t(context, "bake_task_status"), icon="TIME")
+                status_box.label(text=settings.bake_task_message)
+                if settings.bake_task_stage != "CANCELLED":
+                    status_box.progress(
+                        factor=settings.bake_task_progress / 100.0,
+                        type="BAR",
+                        text=f"{settings.bake_task_progress:.0f}%",
+                    )
+            material_box = column.box()
+            material_box.enabled = not settings.bake_task_is_running
+            material_box.label(text=t(context, "material_setup"), icon="MATERIAL")
+            material_box.operator(
+                "object.polygroups_check_material_textures",
+                text=t(context, "check_material_textures"),
+                icon="NODE_MATERIAL",
+            )
+            material_box.operator(
+                "object.polygroups_prepare_highpoly_bake_materials",
+                text=t(context, "prepare_highpoly_texture_only"),
+                icon="MATERIAL",
+            )
+            material_box.operator(
+                "object.polygroups_checked_prepare_lowpoly_bake_material",
+                text=t(context, "prepare_lowpoly_bake_material"),
+                icon="TEXTURE",
+            )
+
+            bake_box = column.box()
+            bake_box.enabled = not settings.bake_task_is_running
+            bake_box.label(text=t(context, "bake_action"), icon="RENDER_STILL")
+            bake_box.operator(
+                "object.polygroups_checked_bake_selected_to_active",
+                text=t(context, "bake_selected_to_active"),
+                icon="RENDER_STILL",
+            )
+            bake_box.operator(
+                "object.polygroups_checked_prepare_and_bake",
+                text=t(context, "prepare_and_bake"),
+                icon="RENDER_RESULT",
+            )
+
+            save_box = column.box()
+            save_box.enabled = not settings.bake_task_is_running
+            save_box.label(text=t(context, "save_textures_group"), icon="FILE_FOLDER")
+            save_box.operator(
                 "object.polygroups_save_bake_textures",
                 text=t(context, "save_textures"),
                 icon="FILE_FOLDER",
             )
-            column.operator(
+            save_box.operator(
                 "object.polygroups_merge_bake_textures",
                 text=t(context, "merge_materials_textures"),
                 icon="NODE_COMPOSITING",
@@ -3305,6 +3439,51 @@ def draw_view_assists_header(self, context):
     )
 
 
+OBJECT_SELECT_TOOL_IDS = {
+    "builtin.select",
+    "builtin.select_box",
+    "builtin.select_circle",
+    "builtin.select_lasso",
+}
+
+
+def draw_object_select_tool_actions(self, context):
+    """AI Retopo actions beside native Object Mode selection-tool settings."""
+    if context.mode != "OBJECT":
+        return
+    tool = context.workspace.tools.from_space_view3d_mode("OBJECT", create=False)
+    if tool is None or tool.idname not in OBJECT_SELECT_TOOL_IDS:
+        return
+
+    layout = self.layout
+    layout.separator()
+    remesh_row = layout.row(align=True)
+    remesh_row.label(text="Remesh:")
+    for label, quad_count in get_remesh_preset_counts(context):
+        operator = remesh_row.operator(
+            "object.polygroups_checked_quad_remesh",
+            text=label,
+        )
+        operator.quad_count = quad_count
+
+    layout.separator()
+    layout.operator(
+        "object.polygroups_unwrap_angle_based",
+        text="Unwrap",
+        icon="UV",
+    )
+    layout.operator(
+        "object.polygroups_uvpackmaster_pack",
+        text="Pack",
+        icon="UV_SYNC_SELECT",
+    )
+    layout.operator(
+        "object.polygroups_checked_prepare_and_bake",
+        text="Auto Bake",
+        icon="RENDER_RESULT",
+    )
+
+
 def draw_view_assists_shading_pie(self, context):
     """Add the combined overlay toggle to Blender's standard Z shading pie."""
     scene = getattr(context, "scene", None)
@@ -3346,9 +3525,11 @@ def register():
     bpy.types.VIEW3D_MT_shading_pie.append(draw_view_assists_shading_pie)
     bpy.types.OUTLINER_HT_header.prepend(draw_outliner_header)
     bpy.types.VIEW3D_HT_header.append(draw_view_assists_header)
+    bpy.types.VIEW3D_HT_tool_header.append(draw_object_select_tool_actions)
 
 
 def unregister():
+    bpy.types.VIEW3D_HT_tool_header.remove(draw_object_select_tool_actions)
     bpy.types.VIEW3D_HT_header.remove(draw_view_assists_header)
     bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)
     bpy.types.VIEW3D_MT_shading_pie.remove(draw_view_assists_shading_pie)

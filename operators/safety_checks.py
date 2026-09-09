@@ -3,16 +3,21 @@ import re
 import bpy
 
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once
+from ..localization import t
 from .apply_weld import apply_weld_to_objects
 from .rename_objects import rename_and_move_objects
 from .remesh_progress import remesh_available
 
 
-HIGHPOLY_NAME_PATTERN = re.compile(r"^Highpoly_Generated\.\d{3,}$")
+HIGHPOLY_NAME_PATTERN = re.compile(r"^Highpoly_Generated\.\d+$", re.IGNORECASE)
 FAB_HIGHPOLY_NAME_PATTERN = re.compile(r"^SM_.+_HIGH(?:\.\d+)?$")
 FAB_LOWPOLY_NAME_PATTERN = re.compile(r"^SM_.+_LOW(?:\.\d+)?$")
 FAB_MIDPOLY_NAME_PATTERN = re.compile(r"^SM_.+_MID(?:\.\d+)?$")
 LOWPOLY_PREFIXES = ("Retopo_", "Retopology")
+LOWPOLY_TOKEN_PATTERN = re.compile(
+    r"^(?:low|retopo(?:logy)?)(?:[_. -]|$)|(?:^|[_. -])(?:low|retopo(?:logy)?)(?:\.\d+)?$",
+    re.IGNORECASE,
+)
 
 
 def is_generated_highpoly_name(name):
@@ -27,6 +32,7 @@ def is_lowpoly_name(name):
         name.startswith(LOWPOLY_PREFIXES)
         or FAB_LOWPOLY_NAME_PATTERN.match(name)
         or FAB_MIDPOLY_NAME_PATTERN.match(name)
+        or LOWPOLY_TOKEN_PATTERN.search(name)
     )
 
 
@@ -75,7 +81,35 @@ def make_selected_lowpoly_active(context):
     return lowpoly
 
 
-def run_bake_action(operator, context, action):
+def run_bake_action(operator, context, action, check_uv=True):
+    if action in {"PREPARE_AND_BAKE", "BAKE"} and len(selected_mesh_objects(context)) < 2:
+        message = t(context, "bake_requires_two_objects")
+        operator.report({"WARNING"}, message)
+        if not bpy.app.background:
+            def draw_warning(menu, _context):
+                menu.layout.label(text=message)
+                menu.layout.label(text=t(context, "bake_select_highpoly_lowpoly_hint"))
+
+            context.window_manager.popup_menu(
+                draw_warning,
+                title=t(context, "bake_selection_required"),
+                icon="ERROR",
+            )
+        return {"CANCELLED"}
+
+    target = context.active_object
+    if (
+        check_uv
+        and action in {"PREPARE_AND_BAKE", "BAKE"}
+        and target is not None
+        and target.type == "MESH"
+        and not target.data.uv_layers
+    ):
+        return bpy.ops.object.polygroups_missing_uv_bake_dialog(
+            "INVOKE_DEFAULT",
+            bake_action=action,
+        )
+
     if action == "PREPARE_LOWPOLY":
         try:
             return bpy.ops.object.polygroups_prepare_lowpoly_bake_material()
@@ -85,13 +119,70 @@ def run_bake_action(operator, context, action):
 
     if action == "PREPARE_AND_BAKE":
         try:
-            return bpy.ops.object.polygroups_prepare_and_bake()
+            return bpy.ops.object.polygroups_bake_task("INVOKE_DEFAULT", prepare_materials=True)
         except Exception as error:
             operator.report({"ERROR"}, f"Prepare and bake failed: {error}")
             return {"CANCELLED"}
 
+    if action == "BAKE":
+        try:
+            return bpy.ops.object.polygroups_bake_task("INVOKE_DEFAULT", prepare_materials=False)
+        except Exception as error:
+            operator.report({"ERROR"}, f"Bake failed: {error}")
+            return {"CANCELLED"}
+
     operator.report({"ERROR"}, "Unknown bake action")
     return {"CANCELLED"}
+
+
+class OBJECT_OT_polygroups_missing_uv_bake_dialog(bpy.types.Operator):
+    bl_idname = "object.polygroups_missing_uv_bake_dialog"
+    bl_label = "Lowpoly Has No UV Map"
+    bl_description = "Unwrap and pack the active lowpoly before baking"
+    bl_options = {"UNDO", "INTERNAL"}
+
+    bake_action: bpy.props.StringProperty(default="BAKE", options={"HIDDEN", "SKIP_SAVE"})
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(
+            self,
+            width=500,
+            confirm_text="Unwrap + UVPackmaster + Bake",
+        )
+
+    def draw(self, context):
+        layout = self.layout
+        target = context.active_object
+        name = target.name if target is not None else "Active object"
+        layout.label(text=f'"{name}" has no UV map.', icon="ERROR")
+        layout.label(text="The lowpoly object is not unwrapped and the bake may be invalid.")
+        layout.label(text="Confirm to unwrap it with Angle Based and pack it with UVPackmaster.")
+
+    def execute(self, context):
+        target = context.active_object
+        if target is None or target.type != "MESH":
+            self.report({"ERROR"}, "Active bake target must be a mesh")
+            return {"CANCELLED"}
+        if (
+            not hasattr(context.scene, "uvpm4_props")
+            or getattr(getattr(bpy.ops, "uvpackmaster4", None), "pack", None) is None
+        ):
+            self.report({"ERROR"}, "UVPackmaster 4 must be installed and enabled")
+            return {"CANCELLED"}
+        try:
+            unwrap_result = bpy.ops.object.polygroups_unwrap_angle_based("EXEC_DEFAULT")
+        except Exception as error:
+            self.report({"ERROR"}, f"UV unwrap failed: {error}")
+            return {"CANCELLED"}
+        if "FINISHED" not in unwrap_result:
+            self.report({"ERROR"}, "UV unwrap was not completed")
+            return {"CANCELLED"}
+
+        from .baking import _auto_pack_target_uvs
+        settings = context.scene.polygroups_baking_settings
+        if not _auto_pack_target_uvs(context, target, settings, self.report, force=True):
+            return {"CANCELLED"}
+        return run_bake_action(self, context, self.bake_action, check_uv=False)
 
 
 class OBJECT_OT_polygroups_rename_and_apply_weld(bpy.types.Operator):
@@ -256,11 +347,7 @@ class OBJECT_OT_polygroups_skip_prepare_and_bake(bpy.types.Operator):
         return obj is not None and obj.type == "MESH"
 
     def execute(self, context):
-        try:
-            return bpy.ops.object.polygroups_bake_selected_to_active()
-        except Exception as error:
-            self.report({"ERROR"}, f"Bake failed: {error}")
-            return {"CANCELLED"}
+        return run_bake_action(self, context, "BAKE")
 
 
 class OBJECT_OT_polygroups_checked_generate_polygroups(bpy.types.Operator):
@@ -474,3 +561,75 @@ class OBJECT_OT_polygroups_checked_prepare_and_bake(
     bake_action = "PREPARE_AND_BAKE"
     confirm_label = "Make Lowpoly Active + Bake"
     skip_operator_id = "object.polygroups_skip_prepare_and_bake"
+
+
+class OBJECT_OT_polygroups_checked_bake_selected_to_active(bpy.types.Operator):
+    bl_idname = "object.polygroups_checked_bake_selected_to_active"
+    bl_label = "Bake Selected To Active"
+    bl_description = "Verify or automatically select the lowpoly target before baking"
+    bl_options = {"UNDO"}
+
+    target_name: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
+
+    @classmethod
+    def poll(cls, context):
+        return len(selected_mesh_objects(context)) >= 2
+
+    def invoke(self, context, event):
+        self.target_name = ""
+        active = context.active_object
+        if active is not None and is_lowpoly_name(active.name):
+            return self.execute(context)
+
+        lowpoly = find_selected_lowpoly(context)
+        if lowpoly is not None:
+            self.target_name = lowpoly.name
+            return self.execute(context)
+
+        meshes = selected_mesh_objects(context)
+        candidate = None
+        if active is not None and is_generated_highpoly_name(active.name) and len(meshes) == 2:
+            candidate = next((obj for obj in meshes if obj != active), None)
+        self.target_name = candidate.name if candidate is not None else ""
+        confirm_text = (
+            f'Make "{candidate.name}" Active and Bake'
+            if candidate is not None
+            else "Bake With Current Active"
+        )
+        return context.window_manager.invoke_props_dialog(
+            self,
+            width=500,
+            confirm_text=confirm_text,
+        )
+
+    def draw(self, context):
+        layout = self.layout
+        active = context.active_object
+        layout.label(text="Could not identify a lowpoly target by name.", icon="ERROR")
+        layout.label(text="Make sure the intended lowpoly object is active before baking.")
+        if self.target_name:
+            layout.separator()
+            layout.label(text=f'Highpoly "{active.name}" is currently active.')
+            layout.label(text=f'Confirm to make "{self.target_name}" active and bake.')
+        layout.separator()
+        layout.operator(
+            "object.polygroups_skip_prepare_and_bake",
+            text="Skip Check - Bake With Current Active",
+            icon="RENDER_STILL",
+        )
+
+    def execute(self, context):
+        if self.target_name:
+            target = next(
+                (obj for obj in selected_mesh_objects(context) if obj.name == self.target_name),
+                None,
+            )
+            if target is None:
+                self.report({"ERROR"}, f'Bake target "{self.target_name}" is no longer selected')
+                return {"CANCELLED"}
+            if context.active_object and context.active_object.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            target.select_set(True)
+            context.view_layer.objects.active = target
+            self.report({"INFO"}, f"Active lowpoly: {target.name}")
+        return run_bake_action(self, context, "BAKE")

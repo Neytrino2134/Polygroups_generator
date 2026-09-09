@@ -27,6 +27,15 @@ def next_retopo_name(source_name, result=None):
         generation += 1
 
 
+def disable_previous_remesh(source):
+    """Disable the previous generation using Outliner's viewport and render toggles."""
+    if source is None or source not in set(bpy.data.objects):
+        return
+    source.hide_set(True)
+    source.hide_viewport = True
+    source.hide_render = True
+
+
 def remesh_backend(context):
     if not hasattr(context.scene, "qremesher"):
         raise RuntimeError("Enable Quad Remesher before using Auto Remesh")
@@ -57,8 +66,9 @@ class RemeshJob:
         preparation = context.scene.polygroups_model_preparation_settings
         self.auto_generate_seams = preparation.remesh_auto_generate_seams
         self.auto_unwrap_checker = preparation.remesh_auto_unwrap_checker
-        self.source_name = context.active_object.name
-        self.source_collections = tuple(context.active_object.users_collection)
+        self.source = context.active_object
+        self.source_name = self.source.name
+        self.source_collections = tuple(self.source.users_collection)
         # Every add-on Remesh entry point, including import queues, starts here.
         # Enforce this for each job even if defaults were already applied or the
         # user enabled angle detection in Quad Remesher between runs.
@@ -139,13 +149,14 @@ class RemeshJob:
             context.view_layer.objects.active = meshes[0]
         match = re.fullmatch(r"Retopo_(?:(\d+)_)?(.+)", self.source_name)
         if match and match.group(1) is None:
-            source = self.state.the_input_object
+            source = self.source
             first_name = f"Retopo_01_{match.group(2)}"
             existing = bpy.data.objects.get(first_name)
             if existing is None or existing == source:
                 source.name = first_name
             else:
                 self.state.report({"WARNING"}, f"Source name kept: {first_name} already exists")
+        disable_previous_remesh(self.source)
         if self.cursor is not None:
             self.cursor.close()
         return outputs
@@ -226,7 +237,7 @@ class VoxelRemeshJob:
                 raise RuntimeError(f"Angle Based unwrap failed for {result.name}")
             if "FINISHED" not in bpy.ops.object.polygroups_apply_checker_material():
                 raise RuntimeError(f"Applying checker material failed for {result.name}")
-        source.hide_set(True)
+        disable_previous_remesh(source)
         context.view_layer.update()
         return [result]
 

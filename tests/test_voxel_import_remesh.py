@@ -46,6 +46,8 @@ try:
     assert not result.modifiers
     assert len(result.data.polygons) > 0
     assert source.hide_get()
+    assert source.hide_viewport and source.hide_render
+    assert not result.hide_viewport and not result.hide_render
     assert bpy.context.active_object == result and result.select_get()
 
     bpy.data.objects.remove(result, do_unlink=True)

@@ -41,6 +41,32 @@ def controls_available(context):
             and not context.scene.polygroups_remesh_status.is_running)
 
 
+def reveal_active_collection_in_outliners(context):
+    """Force collections open, then reveal the active target in every Outliner."""
+    window_manager = getattr(context, "window_manager", None)
+    for window in getattr(window_manager, "windows", ()):
+        screen = getattr(window, "screen", None)
+        for area in getattr(screen, "areas", ()):
+            if area.type != "OUTLINER":
+                continue
+            region = next((item for item in area.regions if item.type == "WINDOW"), None)
+            if region is None:
+                continue
+            try:
+                with context.temp_override(window=window, area=area, region=region):
+                    # show_active only opens the target's parents. show_hierarchy
+                    # also opens the collection itself, even if the user had
+                    # explicitly collapsed it before navigating away.
+                    if bpy.ops.outliner.show_hierarchy.poll():
+                        bpy.ops.outliner.show_hierarchy()
+                    if bpy.ops.outliner.show_active.poll():
+                        bpy.ops.outliner.show_active()
+                area.tag_redraw()
+            except (RuntimeError, ReferenceError):
+                # Outliner state can change while switching workspaces/windows.
+                continue
+
+
 class OBJECT_OT_polygroups_object_visibility(bpy.types.Operator):
     bl_idname = "object.polygroups_object_visibility"
     bl_label = "Highpoly / Retopo Visibility"
@@ -123,5 +149,6 @@ class OBJECT_OT_polygroups_generated_collection(bpy.types.Operator):
             if candidates:
                 candidates[0].select_set(True)
                 context.view_layer.objects.active = candidates[0]
+            reveal_active_collection_in_outliners(context)
         self.report({"INFO"}, target[-1].collection.name)
         return {"FINISHED"}

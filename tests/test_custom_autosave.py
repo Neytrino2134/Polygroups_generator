@@ -35,6 +35,7 @@ try:
         autosave_interval_minutes=2.0,
     )
     custom_autosave._preferences = lambda: preferences
+    bpy.context.preferences.filepaths.use_auto_save_temporary_files = False
     custom_autosave.register()
     assert not bpy.context.preferences.filepaths.use_auto_save_temporary_files
 
@@ -63,6 +64,7 @@ try:
     assert custom_autosave.status_snapshot()["event"] == "REGULAR"
     assert custom_autosave.status_snapshot()["regular_save_time"] != "—"
     assert custom_autosave.status_snapshot()["autosave_time"] != "—"
+    assert custom_autosave.status_snapshot()["regular_save_path"] == str(project.resolve())
 
     bpy.ops.mesh.primitive_uv_sphere_add()
     assert custom_autosave.save_now(force=True)[0]
@@ -78,6 +80,7 @@ try:
     assert (test_dir / "project.blendAutosave1").exists()
     assert not (test_dir / "project.blendAutosave2").exists()
     autosave = test_dir / "project.blendAutosave1"
+    assert custom_autosave.status_snapshot()["autosave_path"] == str(autosave.resolve())
 
     recovery_root = test_dir / "recovery"
     recovery_session = recovery_root / "old-session"
@@ -106,6 +109,8 @@ try:
     assert restored.name.startswith("project_restored_")
     assert restored.suffix == ".blend"
     assert bpy.data.filepath == str(restored)
+    assert custom_autosave.status_snapshot()["autosave_path"] == str(autosave.resolve())
+    assert custom_autosave.status_snapshot()["regular_save_path"] == str(project.resolve())
 
     assert bpy.ops.wm.airetopo_save_recovery_to_original() == {"FINISHED"}
     assert bpy.data.filepath == str(project)
@@ -114,6 +119,7 @@ try:
     assert "Torus" in bpy.data.objects
 
     preferences.autosave_mode = "NATIVE"
+    bpy.context.preferences.filepaths.use_auto_save_temporary_files = True
     custom_autosave.configure()
     assert bpy.context.preferences.filepaths.use_auto_save_temporary_files
     print("CUSTOM_AUTOSAVE_OK", flush=True)

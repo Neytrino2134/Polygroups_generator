@@ -62,6 +62,9 @@ def run_remesh(obj, expected, expected_source_name=None):
         assert session.status.polygon_count == len(result.data.polygons) > 0
         assert session.status.elapsed_seconds > 0
         assert session.status.result_name == result.name
+        assert obj.hide_viewport, f"Previous remesh remained enabled in viewport: {obj.name}"
+        assert obj.hide_render, f"Previous remesh remained enabled in render: {obj.name}"
+        assert not result.hide_viewport and not result.hide_render
         return result
     finally:
         if not session.done:

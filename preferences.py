@@ -3,6 +3,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zipfile
 from urllib.error import URLError
@@ -28,6 +29,9 @@ ADDON_RAW_INIT_URL = (
 ADDON_ZIP_URL = (
     "https://github.com/Neytrino2134/Polygroups_generator/archive/refs/heads/master.zip"
 )
+
+_AUTO_CHECK_RESULT = None
+_AUTO_CHECK_THREAD = None
 
 
 def _update_interface_language(self, context):
@@ -274,6 +278,140 @@ def _addon_info():
     return bl_info.get("name", "AI Retopo Toolkit"), version
 
 
+def _copy_update_state(source, target):
+    for name in (
+        "update_branch",
+        "update_upstream",
+        "update_current_commit",
+        "update_remote_commit",
+        "update_last_checked",
+    ):
+        setattr(target, name, getattr(source, name, ""))
+
+
+def _check_update_state(preferences):
+    try:
+        return _repo_state(preferences)
+    except RuntimeError:
+        return _zip_repo_state(preferences)
+
+
+def _tag_preferences_redraw():
+    window_manager = getattr(bpy.context, "window_manager", None)
+    for window in getattr(window_manager, "windows", ()):
+        for area in window.screen.areas:
+            area.tag_redraw()
+
+
+def _auto_check_worker():
+    global _AUTO_CHECK_RESULT
+    state_holder = type("UpdateState", (), {})()
+    try:
+        state, message = _check_update_state(state_holder)
+        _AUTO_CHECK_RESULT = (state, message, state_holder, "")
+    except Exception as error:
+        _AUTO_CHECK_RESULT = ("ERROR", "", state_holder, str(error))
+
+
+def _auto_check_timer():
+    global _AUTO_CHECK_RESULT, _AUTO_CHECK_THREAD
+    context = getattr(bpy, "context", None)
+    addons = getattr(getattr(context, "preferences", None), "addons", None)
+    addon = addons.get(__package__) if addons is not None else None
+    if addon is None:
+        return None
+    preferences = addon.preferences
+    if not preferences.auto_check_updates:
+        return None
+
+    if _AUTO_CHECK_THREAD is None:
+        preferences.update_status = "Checking for updates..."
+        _AUTO_CHECK_THREAD = threading.Thread(
+            target=_auto_check_worker,
+            name="AI Retopo update check",
+            daemon=True,
+        )
+        _AUTO_CHECK_THREAD.start()
+        return 0.25
+    if _AUTO_CHECK_THREAD.is_alive():
+        return 0.25
+
+    result = _AUTO_CHECK_RESULT
+    _AUTO_CHECK_RESULT = None
+    _AUTO_CHECK_THREAD = None
+    if result is None:
+        return None
+    state, message, state_holder, error = result
+    if error:
+        preferences.update_available = False
+        preferences.update_status = error
+    else:
+        _copy_update_state(state_holder, preferences)
+        preferences.update_available = state == "UPDATE_AVAILABLE"
+        preferences.update_status = message
+    _tag_preferences_redraw()
+    return None
+
+
+def autosave_configuration_state(context, preferences):
+    custom_enabled = preferences.autosave_mode == "CUSTOM"
+    native_enabled = bool(context.preferences.filepaths.use_auto_save_temporary_files)
+    if custom_enabled and native_enabled:
+        return "BOTH"
+    if not custom_enabled and not native_enabled:
+        return "NONE"
+    return "OK"
+
+
+def draw_global_notices(layout, context, preferences):
+    if preferences.update_available:
+        box = layout.box()
+        box.alert = True
+        box.label(text=t(context, "update_available_notice"), icon="IMPORT")
+        box.operator("wm.airetopo_update_addon", text=t(context, "update_addon"), icon="IMPORT")
+    if preferences.update_restart_required:
+        box = layout.box()
+        box.alert = True
+        box.label(text=t(context, "update_restart_notice"), icon="FILE_REFRESH")
+        box.operator(
+            "wm.airetopo_dev_restart_current",
+            text=t(context, "save_and_restart_blender"),
+            icon="FILE_TICK",
+        )
+
+    autosave_state = autosave_configuration_state(context, preferences)
+    if autosave_state == "BOTH":
+        box = layout.box()
+        box.alert = True
+        box.label(text=t(context, "autosave_both_enabled"), icon="ERROR")
+        row = box.row(align=True)
+        native = row.operator(
+            "wm.airetopo_set_autosave_configuration",
+            text=t(context, "disable_native_autosave"),
+        )
+        native.action = "DISABLE_NATIVE"
+        custom = row.operator(
+            "wm.airetopo_set_autosave_configuration",
+            text=t(context, "disable_custom_autosave"),
+        )
+        custom.action = "DISABLE_CUSTOM"
+    elif autosave_state == "NONE":
+        box = layout.box()
+        box.alert = True
+        box.label(text=t(context, "autosave_both_disabled"), icon="ERROR")
+        row = box.row(align=True)
+        native = row.operator(
+            "wm.airetopo_set_autosave_configuration",
+            text=t(context, "enable_native_autosave"),
+        )
+        native.action = "ENABLE_NATIVE"
+        custom = row.operator(
+            "wm.airetopo_set_autosave_configuration",
+            text=t(context, "enable_custom_autosave"),
+        )
+        custom.action = "ENABLE_CUSTOM"
+
+
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     panel_python_executable: bpy.props.StringProperty(
         name="Development Python Fallback", subtype='FILE_PATH', default='',
@@ -402,6 +540,16 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     update_available: bpy.props.BoolProperty(
         name="Update Available",
         default=False,
+    )
+    auto_check_updates: bpy.props.BoolProperty(
+        name="Check for Updates on Startup",
+        description="Check for a newer add-on version after Blender starts",
+        default=True,
+    )
+    update_restart_required: bpy.props.BoolProperty(
+        name="Restart Required",
+        default=False,
+        options={"HIDDEN"},
     )
     cutter_tweak_tool: bpy.props.EnumProperty(
         name="Cutter Tweak Tool",
@@ -614,6 +762,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
+        draw_global_notices(layout, context, self)
         sections = (
             ("show_preferences_info", t(context, "preferences_info"), self.draw_info),
             ("show_preferences_updates", t(context, "updates"), self.draw_updates),
@@ -771,6 +920,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         pie_presets.draw_pie_settings(self, context, layout)
 
     def draw_updates(self, context, layout):
+        layout.prop(self, "auto_check_updates", text=t(context, "auto_check_updates"))
         update_row = layout.row(align=True)
         update_row.operator(
             "wm.airetopo_check_updates",
@@ -796,6 +946,12 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
             )
         if self.update_last_checked:
             layout.label(text=t(context, "update_last_checked", value=self.update_last_checked))
+        if self.update_restart_required:
+            layout.operator(
+                "wm.airetopo_dev_restart_current",
+                text=t(context, "save_and_restart_blender"),
+                icon="FILE_TICK",
+            )
 
 
 class AIRETOPO_OT_toggle_panel_settings(bpy.types.Operator):
@@ -839,10 +995,7 @@ class AIRETOPO_OT_check_updates(bpy.types.Operator):
     def execute(self, context):
         preferences = context.preferences.addons[__package__].preferences
         try:
-            try:
-                state, message = _repo_state(preferences)
-            except RuntimeError:
-                state, message = _zip_repo_state(preferences)
+            state, message = _check_update_state(preferences)
         except RuntimeError as error:
             preferences.update_available = False
             preferences.update_status = str(error)
@@ -853,6 +1006,38 @@ class AIRETOPO_OT_check_updates(bpy.types.Operator):
         preferences.update_status = message
         report_type = {"INFO"} if state in {"UP_TO_DATE", "UPDATE_AVAILABLE"} else {"WARNING"}
         self.report(report_type, message)
+        return {"FINISHED"}
+
+
+class AIRETOPO_OT_set_autosave_configuration(bpy.types.Operator):
+    bl_idname = "wm.airetopo_set_autosave_configuration"
+    bl_label = "Set Autosave Configuration"
+    bl_description = "Resolve the conflicting or disabled autosave configuration"
+
+    action: bpy.props.EnumProperty(
+        items=(
+            ("DISABLE_NATIVE", "Disable Native", "Keep custom autosave only"),
+            ("DISABLE_CUSTOM", "Disable Custom", "Keep native autosave only"),
+            ("ENABLE_NATIVE", "Enable Native", "Enable native autosave"),
+            ("ENABLE_CUSTOM", "Enable Custom", "Enable custom autosave"),
+        ),
+        options={"SKIP_SAVE"},
+    )
+
+    def execute(self, context):
+        preferences = context.preferences.addons[__package__].preferences
+        filepaths = context.preferences.filepaths
+        if self.action == "DISABLE_NATIVE":
+            filepaths.use_auto_save_temporary_files = False
+        elif self.action in {"DISABLE_CUSTOM", "ENABLE_NATIVE"}:
+            preferences.autosave_mode = "NATIVE"
+            filepaths.use_auto_save_temporary_files = True
+        elif self.action == "ENABLE_CUSTOM":
+            filepaths.use_auto_save_temporary_files = False
+            preferences.autosave_mode = "CUSTOM"
+        from . import custom_autosave
+        custom_autosave.configure(context)
+        _tag_preferences_redraw()
         return {"FINISHED"}
 
 
@@ -895,6 +1080,7 @@ class AIRETOPO_OT_update_addon(bpy.types.Operator):
                 state, message = _repo_state(preferences)
             else:
                 _update_from_zip()
+                state = "UP_TO_DATE"
         except RuntimeError as error:
             preferences.update_available = False
             preferences.update_status = str(error)
@@ -902,6 +1088,7 @@ class AIRETOPO_OT_update_addon(bpy.types.Operator):
             return {"CANCELLED"}
 
         preferences.update_available = state == "UPDATE_AVAILABLE"
+        preferences.update_restart_required = True
         preferences.update_status = "Updated. Restart Blender or reload the add-on."
         self.report({"INFO"}, preferences.update_status)
         return {"FINISHED"}
@@ -912,6 +1099,7 @@ CLASSES = (
     AIRETOPO_Preferences,
     AIRETOPO_OT_toggle_panel_settings,
     AIRETOPO_OT_check_updates,
+    AIRETOPO_OT_set_autosave_configuration,
     AIRETOPO_OT_update_icons,
     AIRETOPO_OT_update_addon,
 )
@@ -920,8 +1108,15 @@ CLASSES = (
 def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+    addon = getattr(bpy.context.preferences, "addons", {}).get(__package__)
+    if addon is not None:
+        addon.preferences.update_restart_required = False
+        if addon.preferences.auto_check_updates and not bpy.app.background:
+            bpy.app.timers.register(_auto_check_timer, first_interval=2.0)
 
 
 def unregister():
+    if bpy.app.timers.is_registered(_auto_check_timer):
+        bpy.app.timers.unregister(_auto_check_timer)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

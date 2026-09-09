@@ -7,12 +7,14 @@ from .localization import t
 from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
 from .operators.connect_vertex_seam import draw_vertex_seam_cursor, _cursor_ctrl, _cursor_erase
 from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
-from .operators.edge_merger import TOOL_ID as EDGE_MERGER_TOOL_ID
+from .operators.edge_merger import TOOL_ID as EDGE_MERGER_TOOL_ID, draw_edge_merger_cursor
 from .operators.edge_seam_path import (
     draw_edge_seam_cursor,
     draw_edge_seam_eraser_cursor,
     draw_longitudinal_seam_cursor,
     draw_smart_seam_cursor,
+    draw_island_selector_cursor,
+    draw_small_islands_merger_cursor,
     register_hover_cache,
     unregister_hover_cache,
 )
@@ -30,6 +32,8 @@ DRAW_CUTTER_LOCAL_RING_TOOL_ID = "polygroups_generator.draw_cutter_local_ring_to
 DRAW_CUTTER_PATH_TOOL_ID = "polygroups_generator.draw_cutter_path_tool"
 DRAW_CUTTER_DRAW_TOOL_ID = "polygroups_generator.draw_cutter_draw_tool"
 VIEW3D_CURSOR_TOOL_ID = "builtin.cursor"
+KNIFE_SEAM_TOOL_ID = "polygroups_generator.knife_seam_tool"
+QUICK_KNIFE_SEAM_TOOL_ID = "polygroups_generator.quick_knife_seam_tool"
 CUTTER_TOOL_ORDER = (
     DRAW_CUTTER_TOOL_ID,
     DRAW_CUTTER_LOCAL_RING_TOOL_ID,
@@ -663,7 +667,7 @@ class VIEW3D_WST_polygroups_draw_cutter_draw(WorkSpaceTool):
 class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
     bl_context_mode = "EDIT_MESH"
-    bl_idname = "polygroups_generator.knife_seam_tool"
+    bl_idname = KNIFE_SEAM_TOOL_ID
     bl_label = "Knife Seam"
     bl_description = "Knife cut through the entire mesh and mark the new cut edges as seams"
     bl_icon = "ops.mesh.knife_tool"
@@ -700,7 +704,7 @@ class VIEW3D_WST_polygroups_knife_seam(WorkSpaceTool):
 class VIEW3D_WST_polygroups_quick_knife_seam(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
     bl_context_mode = "EDIT_MESH"
-    bl_idname = "polygroups_generator.quick_knife_seam_tool"
+    bl_idname = QUICK_KNIFE_SEAM_TOOL_ID
     bl_label = "Quick Knife Seam"
     bl_description = "Bisect through the full mesh, then mark the cut line as seams"
     bl_icon = "ops.mesh.bisect"
@@ -806,7 +810,7 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = SMART_SEAMS_TOOL_ID
     bl_label = "Smart Seams Generator"
-    bl_description = "Click a vertex to select its seam-bounded island and generate smart seams"
+    bl_description = "Ctrl-click a vertex to select its seam-bounded island and generate smart seams"
     bl_icon = "ops.mesh.mark_seam"
     bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
@@ -815,7 +819,7 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("name", "builtin.select_box")]}),
         ("mesh.polygroups_smart_seams_generator_click",
-         {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+         {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
     )
     draw_cursor = staticmethod(draw_smart_seam_cursor)
 
@@ -842,7 +846,7 @@ class VIEW3D_WST_polygroups_longitudinal_seam(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = LONGITUDINAL_SEAM_TOOL_ID
     bl_label = "Longitudinal Seam"
-    bl_description = "Click a vertex to select its seam-bounded island and create a longitudinal seam"
+    bl_description = "Ctrl-click a vertex to select its seam-bounded island and create a longitudinal seam"
     bl_icon = "ops.mesh.mark_seam"
     bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
@@ -851,7 +855,7 @@ class VIEW3D_WST_polygroups_longitudinal_seam(WorkSpaceTool):
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("name", "builtin.select_box")]}),
         ("mesh.polygroups_longitudinal_seam_tool_click",
-         {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+         {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
     )
     draw_cursor = staticmethod(draw_longitudinal_seam_cursor)
 
@@ -873,7 +877,7 @@ class VIEW3D_WST_polygroups_small_islands_merger(WorkSpaceTool):
     bl_label = "Small Islands Merger"
     bl_description = "Select seam islands with Box, Lasso, or Circle and merge small seams"
     bl_icon = "ops.generic.select_box"
-    bl_cursor = "CROSSHAIR"
+    bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
@@ -882,6 +886,7 @@ class VIEW3D_WST_polygroups_small_islands_merger(WorkSpaceTool):
         ("mesh.polygroups_small_islands_merger_gesture",
          {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
+    draw_cursor = staticmethod(draw_small_islands_merger_cursor)
 
     @staticmethod
     def draw_settings(context, layout, tool):
@@ -903,7 +908,7 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
     bl_label = "Island Selector"
     bl_description = "Select complete UV islands; hold Shift to add islands to the current selection"
     bl_icon = "ops.generic.select"
-    bl_cursor = "CROSSHAIR"
+    bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
@@ -914,6 +919,7 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
         ("mesh.polygroups_island_selector_gesture",
          {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
+    draw_cursor = staticmethod(draw_island_selector_cursor)
 
     @staticmethod
     def draw_settings(context, layout, tool):
@@ -946,7 +952,7 @@ class VIEW3D_WST_polygroups_edge_merger(WorkSpaceTool):
     bl_label = "Edge Merger"
     bl_description = "Click one edge to merge its vertices at the center"
     bl_icon = "ops.mesh.bisect"
-    bl_cursor = "DEFAULT"
+    bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
@@ -955,6 +961,7 @@ class VIEW3D_WST_polygroups_edge_merger(WorkSpaceTool):
         ("mesh.polygroups_edge_merger_click",
          {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
+    draw_cursor = staticmethod(draw_edge_merger_cursor)
 
     @staticmethod
     def draw_settings(context, layout, tool):
@@ -1028,16 +1035,20 @@ def draw_seam_status(self, context):
     tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
     if tool is not None and tool.idname in {AREA_TOOL_ID, PATH_TOOL_ID}:
         self.layout.label(text=t(context, "seam_erase_drag_hint" if tool.idname == AREA_TOOL_ID else "seam_erase_path_hint"))
+    elif tool is not None and tool.idname == KNIFE_SEAM_TOOL_ID:
+        self.layout.label(text="Knife Seam  |  Click: draw points   Right-click: cancel")
+    elif tool is not None and tool.idname == QUICK_KNIFE_SEAM_TOOL_ID:
+        self.layout.label(text="Quick Knife Seam  |  Click and drag: split mesh and mark seam")
     elif tool is not None and tool.idname == SMART_SEAMS_TOOL_ID:
-        self.layout.label(text="LMB: select seam island and generate smart seams")
+        self.layout.label(text="Smart Seams Generator  |  Ctrl+Click: generate smart seams")
     elif tool is not None and tool.idname == LONGITUDINAL_SEAM_TOOL_ID:
-        self.layout.label(text="LMB: select seam island and create a longitudinal seam")
+        self.layout.label(text="Longitudinal Seam  |  Ctrl+Click: create a longitudinal seam")
     elif tool is not None and tool.idname == SMALL_ISLANDS_MERGER_TOOL_ID:
-        self.layout.label(text="LMB drag: select seam islands and merge small seams")
+        self.layout.label(text="Small Islands Merger  |  Click and drag: select and merge small islands")
     elif tool is not None and tool.idname == ISLAND_SELECTOR_TOOL_ID:
-        self.layout.label(text="LMB: select complete UV islands")
+        self.layout.label(text="Island Selector  |  Click: select island   Shift+Click: add island")
     elif tool is not None and tool.idname == EDGE_MERGER_TOOL_ID:
-        self.layout.label(text="LMB: merge edge at center")
+        self.layout.label(text="Edge Merger  |  Click: merge edge at center")
     elif tool is not None and tool.idname == EDGE_SEAM_TOOL_ID:
         self.layout.label(text="Ctrl+LMB: mark path   Ctrl+Shift+LMB: erase path")
     elif tool is not None and tool.idname == VERTEX_SEAM_TOOL_ID:
