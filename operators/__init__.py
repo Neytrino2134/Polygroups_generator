@@ -64,9 +64,16 @@ from .mesh_checks import OBJECT_OT_polygroups_create_mesh_backup
 from .mesh_checks import OBJECT_OT_polygroups_delete_loose_geometry
 from .mesh_checks import OBJECT_OT_polygroups_delete_thin_protrusions
 from .mesh_checks import OBJECT_OT_polygroups_fill_nonmanifold
+from .mesh_checks import OBJECT_OT_polygroups_fix_mesh_stage
 from .mesh_checks import OBJECT_OT_polygroups_fix_mesh_normals
+from .mesh_checks import OBJECT_OT_polygroups_next_mesh_check_stage
+from .mesh_checks import OBJECT_OT_polygroups_scan_and_fix_all
+from .mesh_checks import OBJECT_OT_polygroups_scan_mesh_stage
 from .mesh_checks import OBJECT_OT_polygroups_select_thin_protrusions
+from .mesh_checks import OBJECT_OT_polygroups_start_mesh_check
 from .mesh_checks import OBJECT_OT_polygroups_triangulate_ngons
+from .mesh_checks import OBJECT_OT_polygroups_undo_mesh_check_fix
+from .mesh_checks import discard_mesh_check_backup
 from .mesh_export import OBJECT_OT_polygroups_export_blend_assets
 from .mesh_export import OBJECT_OT_polygroups_export_selected_meshes
 from .mesh_export import OBJECT_OT_polygroups_add_blend_static_collection
@@ -109,6 +116,8 @@ from .render_queue import OBJECT_OT_polygroups_render_current_state
 from .render_queue import OBJECT_OT_polygroups_scan_render_queue
 from .render_queue import OBJECT_OT_polygroups_start_render_queue
 from .render_queue import OBJECT_OT_polygroups_stop_render_queue
+from .turnaround_animation import OBJECT_OT_polygroups_prepare_turnaround_animation
+from .turnaround_animation import OBJECT_OT_polygroups_render_turnaround_animation
 from .resculpting import OBJECT_OT_polygroups_add_multires
 from .resculpting import OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly
 from .resculpting import OBJECT_OT_polygroups_setup_resculpting
@@ -234,6 +243,8 @@ CLASSES = (
     OBJECT_OT_polygroups_mark_freestyle_edges,
     OBJECT_OT_polygroups_clear_freestyle_edges,
     OBJECT_OT_polygroups_continue_render_queue,
+    OBJECT_OT_polygroups_prepare_turnaround_animation,
+    OBJECT_OT_polygroups_render_turnaround_animation,
     OBJECT_OT_generate_polygroups,
     OBJECT_OT_polygroups_apply_checker_material,
     OBJECT_OT_polygroups_apply_material_mode,
@@ -269,6 +280,12 @@ CLASSES = (
     MESH_OT_polygroups_connect_seam_gap_pairs,
     MESH_OT_polygroups_relax_seams,
     MESH_OT_polygroups_smooth_face_selection,
+    OBJECT_OT_polygroups_start_mesh_check,
+    OBJECT_OT_polygroups_scan_mesh_stage,
+    OBJECT_OT_polygroups_fix_mesh_stage,
+    OBJECT_OT_polygroups_next_mesh_check_stage,
+    OBJECT_OT_polygroups_undo_mesh_check_fix,
+    OBJECT_OT_polygroups_scan_and_fix_all,
     OBJECT_OT_polygroups_check_mesh,
     OBJECT_OT_polygroups_fix_mesh_normals,
     OBJECT_OT_polygroups_triangulate_ngons,
@@ -331,6 +348,7 @@ def register():
     bpy.app.handlers.load_pre.append(stop_remesh)
     bpy.app.handlers.load_pre.append(stop_knife_seams)
     bpy.app.handlers.load_pre.append(stop_cutter_apply)
+    bpy.app.handlers.load_pre.append(discard_mesh_check_backup)
     from .detached_groups import cleanup_windows
     bpy.app.handlers.load_pre.append(cleanup_windows)
 
@@ -350,6 +368,9 @@ def unregister():
     stop_remesh()
     stop_knife_seams()
     stop_cutter_apply()
+    discard_mesh_check_backup()
+    if discard_mesh_check_backup in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(discard_mesh_check_backup)
     if stop_cutter_apply in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_cutter_apply)
     if stop_knife_seams in bpy.app.handlers.load_pre:

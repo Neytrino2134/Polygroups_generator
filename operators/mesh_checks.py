@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 import bpy
+import bmesh
 from mathutils import Vector
 
 
@@ -8,6 +9,73 @@ ZERO_AREA_EPSILON = 0.00000001
 DUPLICATE_VERTEX_EPSILON = 0.00001
 STATUS_OK = "Mesh OK"
 STATUS_NOT_CHECKED = "Not checked"
+
+MESH_CHECK_STAGES = (
+    "FIN_FACES",
+    "LOOSE_EDGES",
+    "ISOLATED_VERTICES",
+    "NGONS",
+    "OPEN_BOUNDARIES",
+    "NORMALS",
+)
+
+STAGE_LABELS = {
+    "FIN_FACES": "Dangling Fin Polygons",
+    "LOOSE_EDGES": "Loose Edges",
+    "ISOLATED_VERTICES": "Isolated Vertices",
+    "NGONS": "N-gons",
+    "OPEN_BOUNDARIES": "Open Boundaries",
+    "NORMALS": "Inverted Normals",
+}
+
+STAGE_COUNT_PROPERTIES = {
+    "FIN_FACES": "mesh_check_thin_protrusions",
+    "LOOSE_EDGES": "mesh_check_loose_edges",
+    "ISOLATED_VERTICES": "mesh_check_loose_vertices",
+    "NGONS": "mesh_check_ngons",
+    "OPEN_BOUNDARIES": "mesh_check_boundary_loops",
+}
+
+_MESH_FIX_BACKUP = {}
+
+
+def _discard_mesh_fix_backup():
+    backup_mesh = _MESH_FIX_BACKUP.get("mesh")
+    if backup_mesh is not None and backup_mesh.users == 0:
+        bpy.data.meshes.remove(backup_mesh)
+    _MESH_FIX_BACKUP.clear()
+
+
+def discard_mesh_check_backup(_unused=None):
+    _discard_mesh_fix_backup()
+
+
+def _remember_mesh_before_fix(obj):
+    _discard_mesh_fix_backup()
+    _MESH_FIX_BACKUP.update(
+        object_name=obj.name,
+        mesh=obj.data.copy(),
+        mesh_name=obj.data.name,
+    )
+
+
+def _restore_mesh_before_fix(context):
+    backup_mesh = _MESH_FIX_BACKUP.get("mesh")
+    obj = bpy.data.objects.get(_MESH_FIX_BACKUP.get("object_name", ""))
+    if obj is None or obj.type != "MESH" or backup_mesh is None:
+        return None
+
+    if context.object is not None and context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    context.view_layer.objects.active = obj
+    obj.select_set(True)
+    current_mesh = obj.data
+    obj.data = backup_mesh
+    backup_mesh.name = _MESH_FIX_BACKUP.get("mesh_name", backup_mesh.name)
+    _MESH_FIX_BACKUP.clear()
+    if current_mesh.users == 0:
+        bpy.data.meshes.remove(current_mesh)
+    return obj
 
 
 def _active_mesh(context):
@@ -216,6 +284,190 @@ def analyze_mesh(obj):
     return result
 
 
+def _stage_issue_count(result, stage):
+    if stage == "NORMALS":
+        return result["normal_issues"]
+    result_key = {
+        "FIN_FACES": "thin_protrusions",
+        "LOOSE_EDGES": "loose_edges",
+        "ISOLATED_VERTICES": "loose_vertices",
+        "NGONS": "ngons",
+        "OPEN_BOUNDARIES": "boundary_loops",
+    }[stage]
+    return result[result_key]
+
+
+def _store_stage_result(settings, result, stage):
+    if stage == "NORMALS":
+        settings.mesh_check_inconsistent_normals = result["inconsistent_normals"]
+        settings.mesh_check_inward_normals = result["inward_normals"]
+    else:
+        setattr(settings, STAGE_COUNT_PROPERTIES[stage], _stage_issue_count(result, stage))
+
+
+def analyze_mesh_stage(obj, stage):
+    """Analyze just one guided stage so each Scan button is an independent pass."""
+    mesh = obj.data
+    mesh.update(calc_edges=True)
+
+    if stage == "NGONS":
+        return {"ngons": sum(1 for polygon in mesh.polygons if len(polygon.vertices) > 4)}
+    if stage == "ISOLATED_VERTICES":
+        used_vertices = {index for edge in mesh.edges for index in edge.vertices}
+        return {
+            "loose_vertices": sum(
+                1 for vertex in mesh.vertices if vertex.index not in used_vertices
+            )
+        }
+
+    edge_to_faces, edge_directions = _edge_face_data(mesh)
+    if stage == "FIN_FACES":
+        return {"thin_protrusions": len(_thin_protrusion_faces(mesh, edge_to_faces))}
+    if stage == "LOOSE_EDGES":
+        return {
+            "loose_edges": sum(
+                1
+                for edge in mesh.edges
+                if not edge_to_faces.get(tuple(sorted(edge.vertices)))
+            )
+        }
+    if stage == "OPEN_BOUNDARIES":
+        return {"boundary_loops": _count_boundary_loops(mesh, edge_to_faces)}
+    if stage == "NORMALS":
+        boundary_edges = sum(1 for faces in edge_to_faces.values() if len(faces) == 1)
+        inconsistent = _inconsistent_normal_edge_count(edge_to_faces, edge_directions)
+        inward = _inward_normal_face_count(obj) if not boundary_edges else 0
+        return {
+            "inconsistent_normals": inconsistent,
+            "inward_normals": inward,
+            "normal_issues": inconsistent + inward,
+        }
+    raise ValueError(f"Unknown mesh check stage: {stage}")
+
+
+def _scan_stage(context, obj, stage):
+    result = analyze_mesh_stage(obj, stage)
+    settings = context.scene.polygroups_mesh_finalization_settings
+    _store_stage_result(settings, result, stage)
+    count = _stage_issue_count(result, stage)
+    settings.mesh_check_active_stage = stage
+    settings.mesh_check_stage_state = "ISSUES" if count else "CLEAN"
+    scanned = {item for item in settings.mesh_check_scanned_stages.split(",") if item}
+    scanned.add(stage)
+    settings.mesh_check_scanned_stages = ",".join(
+        item for item in MESH_CHECK_STAGES if item in scanned
+    )
+    label = STAGE_LABELS[stage]
+    settings.mesh_check_status = f"{label}: found {count}" if count else f"{label}: OK"
+    return count
+
+
+def _delete_fin_faces(context, obj):
+    edge_to_faces, _edge_directions = _edge_face_data(obj.data)
+    face_indices = sorted(_thin_protrusion_faces(obj.data, edge_to_faces))
+    return _delete_faces_by_indices(context, obj, face_indices)
+
+
+def _delete_loose_edges(context, obj):
+    edge_to_faces, _edge_directions = _edge_face_data(obj.data)
+    edge_indices = [
+        edge.index
+        for edge in obj.data.edges
+        if not edge_to_faces.get(tuple(sorted(edge.vertices)))
+    ]
+    if not edge_indices:
+        return 0
+    _select_edges(context, obj, edge_indices)
+    bpy.ops.mesh.delete(type="EDGE")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return len(edge_indices)
+
+
+def _delete_isolated_vertices(context, obj):
+    used_vertices = {index for edge in obj.data.edges for index in edge.vertices}
+    vertex_indices = [
+        vertex.index for vertex in obj.data.vertices if vertex.index not in used_vertices
+    ]
+    if not vertex_indices:
+        return 0
+    _ensure_object_mode(obj)
+    _clear_mesh_selection(obj.data)
+    for vertex_index in vertex_indices:
+        obj.data.vertices[vertex_index].select = True
+    obj.data.update()
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="VERT")
+    bpy.ops.mesh.delete(type="VERT")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return len(vertex_indices)
+
+
+def _triangulate_ngons(obj):
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        ngons = [face for face in bm.faces if len(face.verts) > 4]
+        count = len(ngons)
+        if count:
+            bmesh.ops.triangulate(
+                bm,
+                faces=ngons,
+                quad_method="BEAUTY",
+                ngon_method="BEAUTY",
+            )
+            bm.normal_update()
+            bm.to_mesh(obj.data)
+            obj.data.update()
+        return count
+    finally:
+        bm.free()
+
+
+def _fill_open_boundaries(obj):
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        boundary_edges = [edge for edge in bm.edges if len(edge.link_faces) == 1]
+        if not boundary_edges:
+            return 0
+        result = bmesh.ops.holes_fill(bm, edges=boundary_edges, sides=0)
+        count = len(result.get("faces", ()))
+        if count:
+            bm.normal_update()
+            bm.to_mesh(obj.data)
+            obj.data.update()
+        return count
+    finally:
+        bm.free()
+
+
+def _fix_normals(context, obj):
+    _ensure_object_mode(obj)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return 1
+
+
+def _fix_stage(context, obj, stage):
+    _ensure_object_mode(obj)
+    if stage == "FIN_FACES":
+        return _delete_fin_faces(context, obj)
+    if stage == "LOOSE_EDGES":
+        return _delete_loose_edges(context, obj)
+    if stage == "ISOLATED_VERTICES":
+        return _delete_isolated_vertices(context, obj)
+    if stage == "NGONS":
+        return _triangulate_ngons(obj)
+    if stage == "OPEN_BOUNDARIES":
+        return _fill_open_boundaries(obj)
+    if stage == "NORMALS":
+        return _fix_normals(context, obj)
+    raise ValueError(f"Unknown mesh check stage: {stage}")
+
+
 def _store_result(settings, result):
     settings.mesh_check_inconsistent_normals = result["inconsistent_normals"]
     settings.mesh_check_inward_normals = result["inward_normals"]
@@ -297,6 +549,200 @@ def _delete_faces_by_indices(context, obj, face_indices):
     bpy.ops.mesh.delete(type="FACE")
     bpy.ops.object.mode_set(mode="OBJECT")
     return len(face_indices)
+
+
+class OBJECT_OT_polygroups_start_mesh_check(bpy.types.Operator):
+    bl_idname = "object.polygroups_start_mesh_check"
+    bl_label = "Start Step Scan"
+    bl_description = "Start the guided mesh check with dangling fin polygons"
+
+    @classmethod
+    def poll(cls, context):
+        return _active_mesh(context) is not None
+
+    def execute(self, context):
+        obj = _active_mesh(context)
+        _ensure_object_mode(obj)
+        settings = context.scene.polygroups_mesh_finalization_settings
+        _discard_mesh_fix_backup()
+        settings.mesh_check_can_undo = False
+        settings.mesh_check_scanned_stages = ""
+        count = _scan_stage(context, obj, MESH_CHECK_STAGES[0])
+        self.report({"WARNING" if count else "INFO"}, f"Stage 1/6: found {count} issue(s)")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_scan_mesh_stage(bpy.types.Operator):
+    bl_idname = "object.polygroups_scan_mesh_stage"
+    bl_label = "Scan Stage"
+    bl_description = "Scan only this mesh problem category"
+
+    stage: bpy.props.EnumProperty(
+        items=tuple((stage, stage.replace("_", " ").title(), "") for stage in MESH_CHECK_STAGES),
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return _active_mesh(context) is not None
+
+    def execute(self, context):
+        obj = _active_mesh(context)
+        _ensure_object_mode(obj)
+        settings = context.scene.polygroups_mesh_finalization_settings
+        _discard_mesh_fix_backup()
+        settings.mesh_check_can_undo = False
+        count = _scan_stage(context, obj, self.stage)
+        self.report({"WARNING" if count else "INFO"}, f"Found {count} issue(s)")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_fix_mesh_stage(bpy.types.Operator):
+    bl_idname = "object.polygroups_fix_mesh_stage"
+    bl_label = "Fix Stage"
+    bl_description = "Fix only the active mesh check category"
+    bl_options = {"REGISTER", "UNDO"}
+
+    stage: bpy.props.EnumProperty(
+        items=tuple((stage, stage.replace("_", " ").title(), "") for stage in MESH_CHECK_STAGES),
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return _active_mesh(context) is not None
+
+    def execute(self, context):
+        obj = _active_mesh(context)
+        settings = context.scene.polygroups_mesh_finalization_settings
+        before = _scan_stage(context, obj, self.stage)
+        if not before:
+            self.report({"INFO"}, "This stage is already clean")
+            return {"CANCELLED"}
+
+        _remember_mesh_before_fix(obj)
+        changed = _fix_stage(context, obj, self.stage)
+        remaining = _scan_stage(context, obj, self.stage)
+        settings.mesh_check_stage_state = "FIXED" if not remaining else "ISSUES"
+        settings.mesh_check_can_undo = bool(changed)
+        settings.mesh_check_last_fixed_stage = self.stage if changed else ""
+        settings.mesh_check_status = (
+            f"{self.stage}: fixed {changed}, remaining {remaining}"
+        )
+        self.report(
+            {"INFO" if not remaining else "WARNING"},
+            f"Fixed {changed} item(s); {remaining} remain",
+        )
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_next_mesh_check_stage(bpy.types.Operator):
+    bl_idname = "object.polygroups_next_mesh_check_stage"
+    bl_label = "Next Stage"
+    bl_description = "Skip unresolved items if needed and scan the next check stage"
+
+    @classmethod
+    def poll(cls, context):
+        return _active_mesh(context) is not None
+
+    def execute(self, context):
+        obj = _active_mesh(context)
+        settings = context.scene.polygroups_mesh_finalization_settings
+        current = settings.mesh_check_active_stage
+        current_index = MESH_CHECK_STAGES.index(current)
+        if settings.mesh_check_stage_state == "ISSUES":
+            settings.mesh_check_stage_state = "SKIPPED"
+        _discard_mesh_fix_backup()
+        settings.mesh_check_can_undo = False
+
+        if current_index == len(MESH_CHECK_STAGES) - 1:
+            result = analyze_mesh(obj)
+            _store_result(settings, result)
+            settings.mesh_check_stage_state = "COMPLETE"
+            self.report({"INFO"}, "Step-by-step mesh check complete")
+            return {"FINISHED"}
+
+        next_stage = MESH_CHECK_STAGES[current_index + 1]
+        count = _scan_stage(context, obj, next_stage)
+        self.report(
+            {"WARNING" if count else "INFO"},
+            f"Stage {current_index + 2}/6: found {count} issue(s)",
+        )
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_undo_mesh_check_fix(bpy.types.Operator):
+    bl_idname = "object.polygroups_undo_mesh_check_fix"
+    bl_label = "Undo Fix"
+    bl_description = "Undo the most recent staged mesh fix and scan that stage again"
+
+    @classmethod
+    def poll(cls, context):
+        settings = getattr(context.scene, "polygroups_mesh_finalization_settings", None)
+        obj = _active_mesh(context)
+        return bool(
+            obj is not None
+            and settings
+            and settings.mesh_check_can_undo
+            and obj.name == _MESH_FIX_BACKUP.get("object_name")
+        )
+
+    def execute(self, context):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        stage = settings.mesh_check_last_fixed_stage or settings.mesh_check_active_stage
+        obj = _restore_mesh_before_fix(context)
+        if obj is None:
+            self.report({"WARNING"}, "Nothing to undo")
+            return {"CANCELLED"}
+
+        settings = context.scene.polygroups_mesh_finalization_settings
+        settings.mesh_check_can_undo = False
+        if stage == "ALL":
+            _store_result(settings, analyze_mesh(obj))
+            settings.mesh_check_scanned_stages = ",".join(MESH_CHECK_STAGES)
+            settings.mesh_check_stage_state = "COMPLETE"
+        else:
+            _scan_stage(context, obj, stage)
+        self.report({"INFO"}, "Mesh fix undone")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_scan_and_fix_all(bpy.types.Operator):
+    bl_idname = "object.polygroups_scan_and_fix_all"
+    bl_label = "Scan and Fix All"
+    bl_description = "Scan and repair every mesh finalization category in order"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return _active_mesh(context) is not None
+
+    def execute(self, context):
+        obj = _active_mesh(context)
+        _ensure_object_mode(obj)
+        _remember_mesh_before_fix(obj)
+        fixed_stages = 0
+        for stage in MESH_CHECK_STAGES:
+            result = analyze_mesh_stage(obj, stage)
+            if _stage_issue_count(result, stage):
+                _fix_stage(context, obj, stage)
+                fixed_stages += 1
+
+        result = analyze_mesh(obj)
+        settings = context.scene.polygroups_mesh_finalization_settings
+        _store_result(settings, result)
+        settings.mesh_check_active_stage = MESH_CHECK_STAGES[-1]
+        settings.mesh_check_stage_state = "COMPLETE"
+        settings.mesh_check_scanned_stages = ",".join(MESH_CHECK_STAGES)
+        settings.mesh_check_can_undo = bool(fixed_stages)
+        if not fixed_stages:
+            _discard_mesh_fix_backup()
+        settings.mesh_check_last_fixed_stage = "ALL"
+        remaining = sum(_stage_issue_count(result, stage) for stage in MESH_CHECK_STAGES)
+        settings.mesh_check_status = f"Fixed {fixed_stages} stage(s); remaining {remaining}"
+        self.report(
+            {"INFO" if not remaining else "WARNING"},
+            f"Scan and Fix All: fixed {fixed_stages} stage(s), remaining {remaining}",
+        )
+        return {"FINISHED"}
 
 
 class OBJECT_OT_polygroups_check_mesh(bpy.types.Operator):

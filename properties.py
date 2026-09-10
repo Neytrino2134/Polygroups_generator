@@ -54,7 +54,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": (),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
-    "show_render_section": tuple(f"topic_render_{index}" for index in range(5)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(6)),
 }
 
 SUBSECTION_VISIBILITY_PROPERTIES = tuple(
@@ -324,7 +324,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_include_subfolders: bpy.props.BoolProperty(
         name="Include Subfolders",
         description="Scan and import supported mesh files from nested folders",
-        default=False,
+        default=True,
     )
     batch_auto_arrange_objects: bpy.props.BoolProperty(
         name="Auto Arrange Imports",
@@ -521,6 +521,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_render_2: bpy.props.BoolProperty(default=False)
     topic_render_3: bpy.props.BoolProperty(default=False)
     topic_render_4: bpy.props.BoolProperty(default=False)
+    topic_render_5: bpy.props.BoolProperty(default=False)
     topic_remesh_0: bpy.props.BoolProperty(default=False)
     topic_remesh_1: bpy.props.BoolProperty(default=False)
     topic_export_0: bpy.props.BoolProperty(default=False)
@@ -1394,6 +1395,35 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         name="Mesh Check Status",
         default="Not checked",
     )
+    mesh_check_active_stage: bpy.props.EnumProperty(
+        name="Active Check Stage",
+        items=(
+            ("FIN_FACES", "Dangling Fin Polygons", "Find weakly attached fin-like polygons"),
+            ("LOOSE_EDGES", "Loose Edges", "Find edges that do not belong to a face"),
+            ("ISOLATED_VERTICES", "Isolated Vertices", "Find vertices not connected to an edge"),
+            ("NGONS", "N-gons", "Find polygons with more than four sides"),
+            ("OPEN_BOUNDARIES", "Open Boundaries", "Find open non-manifold boundary loops"),
+            ("NORMALS", "Inverted Normals", "Find inconsistent or inward-facing normals"),
+        ),
+        default="FIN_FACES",
+        options={"SKIP_SAVE"},
+    )
+    mesh_check_stage_state: bpy.props.EnumProperty(
+        name="Check Stage State",
+        items=(
+            ("NOT_SCANNED", "Not Scanned", "This stage has not been scanned"),
+            ("ISSUES", "Issues Found", "This stage has unresolved issues"),
+            ("CLEAN", "Clean", "This stage has no issues"),
+            ("FIXED", "Fixed", "The issues in this stage were fixed"),
+            ("SKIPPED", "Skipped", "The issues in this stage were skipped"),
+            ("COMPLETE", "Complete", "The staged check is complete"),
+        ),
+        default="NOT_SCANNED",
+        options={"SKIP_SAVE"},
+    )
+    mesh_check_can_undo: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    mesh_check_last_fixed_stage: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    mesh_check_scanned_stages: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     mesh_check_inconsistent_normals: bpy.props.IntProperty(default=0, min=0)
     mesh_check_inward_normals: bpy.props.IntProperty(default=0, min=0)
     mesh_check_ngons: bpy.props.IntProperty(default=0, min=0)
@@ -1408,6 +1438,32 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
+    animation_frame_count: bpy.props.IntProperty(
+        name="Animation Length",
+        description="Last frame and total turnaround animation length",
+        default=300,
+        min=2,
+        soft_max=1200,
+    )
+    animation_fps: bpy.props.IntProperty(
+        name="Frame Rate",
+        description="Frames per second for the turnaround MP4",
+        default=30,
+        min=1,
+        max=240,
+    )
+    animation_quality: bpy.props.EnumProperty(
+        name="Video Quality",
+        description="H.264 constant-rate quality for the MP4",
+        items=(("PERC_LOSSLESS", "Perceptually Lossless", "Highest practical quality"),
+               ("HIGH", "High", "High quality and moderate file size"),
+               ("MEDIUM", "Medium", "Balanced quality and file size")),
+        default="HIGH",
+    )
+    animation_collection_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
+    animation_object_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
+    animation_status: bpy.props.StringProperty(name="Animation Status", default="Not prepared")
+    animation_last_output: bpy.props.StringProperty(name="Animation Output", default="", subtype="FILE_PATH")
     render_engine: bpy.props.EnumProperty(
         name="Render Engine",
         description="Render engine used for batch asset previews",

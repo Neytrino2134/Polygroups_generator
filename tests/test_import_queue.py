@@ -30,6 +30,7 @@ assert abs(settings.file_import_voxel_size - 0.003) < 1e-7
 assert settings.batch_auto_smart_uv_project and settings.file_import_auto_smart_uv_project
 assert settings.batch_disable_view_assist and settings.file_import_disable_view_assist
 assert settings.batch_separate_collections and settings.file_import_separate_collections
+assert settings.batch_include_subfolders
 assert settings.remesh_auto_unwrap_checker
 settings.batch_auto_remesh = True
 settings.batch_separate_collections = True
@@ -143,11 +144,19 @@ with tempfile.TemporaryDirectory() as directory:
         assert settings.batch_stage == "PAUSED"
         assert queue.index == 1
         settings.batch_is_paused = False
+        first_collection = queue.completed_collection
+        assert first_collection is not None
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_imported_count == 2 and settings.batch_failed_count == 0
         assert settings.batch_import_progress == 100
         assert events == ["start", "finish", "start", "finish"]
         assert len([c for c in queue.owned_collections if c.name.startswith("Generated.")]) == 2
+        collection_layers = {
+            layer.collection: layer
+            for layer in context.view_layer.layer_collection.children
+        }
+        assert collection_layers[first_collection].exclude
+        assert not collection_layers[queue.collection].exclude
         for anchor, objects in queue.groups:
             assert len(objects) == 2
             result = next(obj for obj in objects if obj != anchor)

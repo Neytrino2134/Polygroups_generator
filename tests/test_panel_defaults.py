@@ -20,6 +20,7 @@ baking = scene.polygroups_baking_settings
 
 assert model.file_import_separate_collections
 assert model.batch_separate_collections
+assert model.batch_include_subfolders
 assert model.file_import_auto_smart_uv_project
 assert model.batch_auto_smart_uv_project
 assert model.remesh_auto_unwrap_checker
@@ -36,6 +37,7 @@ assert not model.file_import_auto_smart_uv_project
 model.file_import_auto_remesh = True
 assert not model.file_import_auto_smart_uv_project
 model.file_import_separate_collections = False
+model.batch_include_subfolders = False
 seams.smart_seam_auto_relax = False
 seams.seam_relax_iterations = 9
 generator.checker_scale = 12.0
@@ -43,6 +45,7 @@ finalization.checker_overlay_opacity = 0.7
 baking.disable_highpoly_after_bake = False
 assert bpy.ops.object.airetopo_restore_panel_defaults() == {"FINISHED"}
 assert model.file_import_separate_collections
+assert model.batch_include_subfolders
 assert model.file_import_auto_remesh
 assert model.file_import_auto_smart_uv_project
 assert seams.smart_seam_auto_relax

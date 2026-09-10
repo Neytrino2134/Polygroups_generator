@@ -9,7 +9,11 @@ from ..core.remesh_defaults import apply_quad_remesher_defaults_once, get_remesh
 from ..core.remesh_job import RemeshJob, VoxelRemeshJob, remesh_backend
 from ..core.import_timing import ImportTiming
 from .apply_weld import apply_weld_to_objects
-from .rename_objects import get_next_object_index, rename_and_move_objects
+from .rename_objects import (
+    get_next_object_index,
+    layer_collection_paths,
+    rename_and_move_objects,
+)
 from .unwrap_angle_based import smart_project_all
 
 
@@ -56,6 +60,7 @@ class ImportQueue:
         self.meshes = []
         self.mesh_index = 0
         self.collection = None
+        self.completed_collection = None
         self.owned_objects = set()
         self.owned_collections = set()
         self.owned_meshes = set()
@@ -73,6 +78,7 @@ class ImportQueue:
         self.voxel_size = getattr(settings, prefix + "_voxel_size")
         self.clear_material = getattr(settings, prefix + "_clear_material")
         self.separate = getattr(settings, prefix + "_separate_collections")
+        self.disable_completed_collection = not file_selection and self.separate
         self.disable_view_assist = getattr(settings, prefix + "_disable_view_assist")
         auto_smart_uv_property = prefix + "_auto_smart_uv_project"
         self.auto_smart_uv_project = bool(
@@ -168,6 +174,14 @@ class ImportQueue:
                 self.update_timing()
                 settings.batch_stage = "PAUSED"
                 return
+            if self.disable_completed_collection and self.completed_collection is not None:
+                for path in layer_collection_paths(
+                    self.view_layer.layer_collection,
+                    self.completed_collection,
+                ):
+                    path[-1].exclude = True
+                self.view_layer.update()
+                self.completed_collection = None
             self.file_objects = []
             self.meshes = []
             self.result_meshes = []
@@ -342,6 +356,7 @@ class ImportQueue:
     def complete_file(self, success):
         self.timing.complete_file(success)
         if success:
+            self.completed_collection = self.collection
             self.settings.batch_current_progress = 100
             self.settings.batch_imported_count += 1
             self.settings.batch_imported_object_count += len(self.meshes)

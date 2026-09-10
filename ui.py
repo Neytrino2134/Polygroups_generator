@@ -2863,171 +2863,89 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
 
         action_row = column.row(align=True)
         action_row.operator(
-            "object.polygroups_check_mesh",
-            text=t(context, "check_mesh"),
+            "object.polygroups_start_mesh_check",
+            text=t(context, "mesh_check_start_step_scan"),
             icon="VIEWZOOM",
         )
         action_row.operator(
+            "object.polygroups_scan_and_fix_all",
+            text=t(context, "mesh_check_scan_fix_all"),
+            icon="TOOL_SETTINGS",
+        )
+        column.operator(
             "object.polygroups_create_mesh_backup",
             text=t(context, "create_bkp"),
             icon="DUPLICATE",
         )
 
-        has_results = settings.mesh_check_status != "Not checked"
-        has_any_issue = any(
-            (
-                settings.mesh_check_inconsistent_normals,
-                settings.mesh_check_inward_normals,
-                settings.mesh_check_ngons,
-                settings.mesh_check_nonmanifold_edges,
-                settings.mesh_check_boundary_loops,
-                settings.mesh_check_loose_vertices,
-                settings.mesh_check_loose_edges,
-                settings.mesh_check_zero_area_faces,
-                settings.mesh_check_duplicate_vertices,
-                settings.mesh_check_thin_protrusions,
-            )
-        )
-        if not has_results:
-            status_icon = "INFO"
-        elif has_any_issue:
-            status_icon = "ERROR"
-        else:
-            status_icon = "CHECKMARK"
-        column.label(text=t(context, "mesh_check_status", value=settings.mesh_check_status), icon=status_icon)
-
-        def draw_issue_row(text_key, value, operator_id=None, operator_text_key=None, icon="ERROR"):
-            if not value:
-                return
-            row = column.row(align=True)
-            row.label(text=t(context, text_key, value=value), icon=icon)
-            if operator_id:
-                row.operator(
-                    operator_id,
-                    text=t(context, operator_text_key),
-                )
-
-        def draw_protrusion_buttons(row):
-            row.operator(
-                "object.polygroups_select_thin_protrusions",
-                text=t(context, "select_thin_protrusions"),
-            )
-            row.operator(
-                "object.polygroups_delete_thin_protrusions",
-                text=t(context, "delete_thin_protrusions"),
-            )
-
-        if has_results and has_any_issue:
-            normal_total = (
-                settings.mesh_check_inconsistent_normals
-                + settings.mesh_check_inward_normals
-            )
-            draw_issue_row(
-                "mesh_check_normal_issues",
-                normal_total,
-                "object.polygroups_fix_mesh_normals",
-                "fix_normals",
-            )
-            draw_issue_row(
-                "mesh_check_ngons",
-                settings.mesh_check_ngons,
-                "object.polygroups_triangulate_ngons",
-                "triangulate_ngons",
-            )
-
-            if settings.mesh_check_nonmanifold_edges:
-                row = column.row(align=True)
-                row.label(
-                    text=t(
-                        context,
-                        "mesh_check_nonmanifold_edges",
-                        value=settings.mesh_check_nonmanifold_edges,
-                    ),
-                    icon="ERROR",
-                )
-                row.operator(
-                    "object.polygroups_clean_mesh",
-                    text=t(context, "clean_mesh"),
-                )
-                draw_protrusion_buttons(row)
-
-            draw_issue_row(
-                "mesh_check_boundary_loops",
-                settings.mesh_check_boundary_loops,
-                "object.polygroups_fill_nonmanifold",
-                "fill_nonmanifold",
-            )
-
-            loose_total = settings.mesh_check_loose_vertices + settings.mesh_check_loose_edges
-            draw_issue_row(
-                "mesh_check_loose_geometry",
-                loose_total,
-                "object.polygroups_delete_loose_geometry",
-                "delete_loose",
-            )
-
-            cleanup_total = (
-                settings.mesh_check_zero_area_faces
-                + settings.mesh_check_duplicate_vertices
-            )
-            draw_issue_row(
-                "mesh_check_cleanup_issues",
-                cleanup_total,
-                "object.polygroups_clean_mesh",
-                "clean_mesh",
-            )
-
-            if settings.mesh_check_thin_protrusions:
-                row = column.row(align=True)
-                row.label(
-                    text=t(
-                        context,
-                        "mesh_check_thin_protrusions",
-                        value=settings.mesh_check_thin_protrusions,
-                    ),
-                    icon="ERROR",
-                )
-                draw_protrusion_buttons(row)
-
         column.separator()
-        column.prop(
-            settings,
-            "show_all_mesh_fix_operators",
-            text=t(context, "show_all_fix_operators"),
-            toggle=True,
-            icon="HIDE_OFF" if settings.show_all_mesh_fix_operators else "HIDE_ON",
+        column.label(
+            text=t(context, "mesh_check_status", value=settings.mesh_check_status),
+            icon="CHECKMARK" if settings.mesh_check_stage_state == "COMPLETE" else "INFO",
         )
-        if settings.show_all_mesh_fix_operators:
-            all_box = column.box()
-            all_column = all_box.column(align=True)
 
-            row = all_column.row(align=True)
-            row.operator(
-                "object.polygroups_fix_mesh_normals",
-                text=t(context, "fix_normals"),
-            )
-            row.operator(
-                "object.polygroups_triangulate_ngons",
-                text=t(context, "triangulate_ngons"),
-            )
+        normal_total = settings.mesh_check_inconsistent_normals + settings.mesh_check_inward_normals
+        stages = (
+            ("FIN_FACES", "mesh_check_stage_fin_faces", settings.mesh_check_thin_protrusions, "FACESEL"),
+            ("LOOSE_EDGES", "mesh_check_stage_loose_edges", settings.mesh_check_loose_edges, "EDGESEL"),
+            ("ISOLATED_VERTICES", "mesh_check_stage_isolated_vertices", settings.mesh_check_loose_vertices, "VERTEXSEL"),
+            ("NGONS", "mesh_check_stage_ngons", settings.mesh_check_ngons, "MOD_TRIANGULATE"),
+            ("OPEN_BOUNDARIES", "mesh_check_stage_open_boundaries", settings.mesh_check_boundary_loops, "MESH_GRID"),
+            ("NORMALS", "mesh_check_stage_normals", normal_total, "NORMALS_FACE"),
+        )
+        scanned_stages = set(filter(None, settings.mesh_check_scanned_stages.split(",")))
 
-            row = all_column.row(align=True)
-            row.operator(
-                "object.polygroups_fill_nonmanifold",
-                text=t(context, "fill_nonmanifold"),
+        for index, (stage, label_key, issue_count, stage_icon) in enumerate(stages, start=1):
+            is_active = settings.mesh_check_active_stage == stage
+            was_scanned = stage in scanned_stages
+            box = column.box()
+            header = box.row(align=True)
+            header.label(
+                text=f"{index}. {t(context, label_key)}",
+                icon="RADIOBUT_ON" if is_active else stage_icon,
             )
-            row.operator(
-                "object.polygroups_delete_loose_geometry",
-                text=t(context, "delete_loose"),
+            scan = header.operator(
+                "object.polygroups_scan_mesh_stage",
+                text=t(context, "mesh_check_scan"),
+                icon="VIEWZOOM",
             )
+            scan.stage = stage
 
-            row = all_column.row(align=True)
-            draw_protrusion_buttons(row)
-            row.operator(
-                "object.polygroups_clean_mesh",
-                text=t(context, "clean_mesh"),
-                icon="BRUSH_DATA",
-            )
+            if was_scanned:
+                result_row = box.row(align=True)
+                result_row.label(
+                    text=t(context, "mesh_check_found", value=issue_count),
+                    icon="ERROR" if issue_count else "CHECKMARK",
+                )
+            else:
+                box.label(text=t(context, "mesh_check_not_scanned"), icon="QUESTION")
+
+            if is_active and was_scanned:
+                actions = box.row(align=True)
+                actions.enabled = bool(issue_count)
+                fix = actions.operator(
+                    "object.polygroups_fix_mesh_stage",
+                    text=t(context, "mesh_check_fix"),
+                    icon="TOOL_SETTINGS",
+                )
+                fix.stage = stage
+
+                navigation = box.row(align=True)
+                navigation.operator(
+                    "object.polygroups_next_mesh_check_stage",
+                    text=(
+                        t(context, "mesh_check_skip_next")
+                        if issue_count else t(context, "mesh_check_next")
+                    ),
+                    icon="FORWARD",
+                )
+                undo = navigation.row(align=True)
+                undo.enabled = settings.mesh_check_can_undo
+                undo.operator(
+                    "object.polygroups_undo_mesh_check_fix",
+                    text=t(context, "mesh_check_undo_fix"),
+                    icon="LOOP_BACK",
+                )
 
     def draw_fab_rename(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
@@ -3302,6 +3220,25 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 )
             if settings.last_output_path:
                 column.label(text=t(context, "render_last_output", value=settings.last_output_path), icon="FILE_IMAGE")
+
+        content = draw_topic(layout, context, "render_5", 'Animation', "RENDER_ANIMATION")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.prop(settings, "animation_frame_count", text=t(context, "animation_length"))
+            column.prop(settings, "animation_fps", text=t(context, "animation_fps"))
+            column.prop(settings, "animation_quality", text=t(context, "animation_quality"))
+            row = column.row(align=True)
+            row.enabled = not settings.is_running and context.active_object is not None
+            row.operator("object.polygroups_prepare_turnaround_animation",
+                         text=t(context, "animation_prepare"), icon="ORIENTATION_GIMBAL")
+            render_row = column.row(align=True)
+            render_row.enabled = not settings.is_running and bool(settings.animation_collection_name)
+            render_row.operator("object.polygroups_render_turnaround_animation",
+                                text=t(context, "animation_render"), icon="RENDER_ANIMATION")
+            column.label(text=t(context, "animation_status", value=settings.animation_status))
+            if settings.animation_last_output:
+                column.label(text=t(context, "animation_output", value=settings.animation_last_output), icon="FILE_MOVIE")
 
 
 class WM_OT_airetopo_toggle_view_assists(bpy.types.Operator):

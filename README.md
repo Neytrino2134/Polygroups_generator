@@ -50,13 +50,13 @@ Object Mode's Apply menu (`Ctrl+A`) includes **Apply Cutter Seams**, using the s
   - Vertex Seam Path in the toolbar (beside Knife Seam / Quick Knife Seam) connects clicked vertices A → B → C. Only the latest endpoint remains selected. Space/Esc/right-click finishes the chain without removing completed seams; each segment has its own Undo step. The tool displays the start point, a cursor guide, and hints, and uses Blender's vertex picking with the current X-Ray setting.
 - `Import`
   - `Import Files`: imports several selected files one by one through Blender's file browser, with its own auto rename and Weld options.
-  - `Batch Import`: imports supported mesh files from a folder one by one, with separate auto rename and Weld options.
+  - `Batch Import`: imports supported mesh files from a folder one by one, with nested folders included by default and separate auto rename and Weld options.
   - `Scan Folder`: counts supported mesh files in the selected batch folder without importing them.
   - `Auto Remesh`: enabled by default in Import and Batch Import with HIGH and Clear Material selected. Choose the mutually exclusive Quad backend (LOW/MID/HIGH counts from add-on preferences) or Blender's native Voxel Remesh modifier (default voxel size `0.003`). Each file completes Import → Rename → Weld → Remesh before the next file starts; Rename and Weld follow their checkboxes.
   - The panel shows the file count, completed/failed/remaining counts, current file, processing stage, and overall progress.
   - Timers show total active time, current file time, and approximate remaining time based on the average of successfully completed files. Pauses are excluded; the estimate appears after the first completed file.
   - `Pause` waits until the current file finishes; `Resume` continues. `Stop` finishes the current file and keeps results. `Cancel` (or Esc) aborts remeshing and removes objects created by the current import run.
-  - `Each file in a separate collection` groups the imported file and its remeshed objects in `Generated.001`, `Generated.002`, etc. Automatic arrangement moves each file's objects together.
+  - `Each file in a separate collection` groups the imported file and its remeshed objects in `Generated.001`, `Generated.002`, etc. Before the next batch file starts, the completed collection is excluded from the current View Layer; the final collection stays enabled. Automatic arrangement moves each file's objects together.
 - `Remesh`
   - All add-on Remesh buttons and Auto Remesh during import disable Quad Remesher's `Detect Hard Edges by angle` before every engine run, including when it was manually enabled again.
   - Proxies selected Quad Remesher controls when the `quad_remesher` add-on is installed and enabled.
