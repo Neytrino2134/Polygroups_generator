@@ -42,6 +42,20 @@ void main()
 """
 
 
+def _modal_active(window_manager=None):
+    """Return true while Blender may be mutating live edit-mode data.
+
+    Draw handlers can run in the middle of UV transforms. Reading an edit
+    BMesh from such a handler is unsafe because the modal operator may replace
+    its UV/custom-data storage between redraws.
+    """
+    window_manager = window_manager or getattr(bpy.context, "window_manager", None)
+    return bool(
+        window_manager
+        and any(window.modal_operators for window in window_manager.windows)
+    )
+
+
 def checker_geometry(obj):
     """Return world positions and active-UV coordinates for mesh triangles."""
     if obj is None or obj.type != "MESH":
@@ -128,6 +142,11 @@ def _cache_key(obj):
 
 def _checker_batch(obj):
     global _BATCH_CACHE, _CACHE_ID_POINTERS, _EDIT_CACHE_CHECK_AT
+    # This function is normally called by a draw handler. Never inspect the
+    # live Edit BMesh while G/R/S, UV Rip, undo, or another modal operator is
+    # changing it. The next redraw after the modal finishes rebuilds the cache.
+    if obj.mode == "EDIT" and _modal_active():
+        return None
     if (
         obj.mode == "EDIT"
         and _BATCH_CACHE is not None
@@ -234,6 +253,11 @@ def draw_checker_overlay():
         return
     obj = context.active_object
     if obj is None or obj.type != "MESH" or obj.mode not in {"OBJECT", "EDIT"}:
+        return
+    # Hide the checker for the duration of an edit-mode modal operation. This
+    # avoids both BMesh reads and GPU-batch reconstruction from transient UV
+    # data; it reappears automatically on the first safe redraw.
+    if obj.mode == "EDIT" and _modal_active(context.window_manager):
         return
     if exceeds_polygon_limit(obj, settings.checker_overlay_max_polygons):
         return

@@ -24,6 +24,13 @@ heavy = SimpleNamespace(type="MESH", data=SimpleNamespace(polygons=range(500001)
 assert overlay.exceeds_polygon_limit(heavy, 500000)
 assert not overlay.exceeds_polygon_limit(heavy, 0)
 
+# A draw callback must not touch the live Edit BMesh during any modal
+# operation. UV transforms are modal even though they run in another area.
+idle_window = SimpleNamespace(modal_operators=[])
+busy_window = SimpleNamespace(modal_operators=[object()])
+assert not overlay._modal_active(SimpleNamespace(windows=[idle_window]))
+assert overlay._modal_active(SimpleNamespace(windows=[idle_window, busy_window]))
+
 # Unrelated dependency-graph updates must not discard a potentially expensive batch.
 class FakeID:
     def __init__(self, pointer):
