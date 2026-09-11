@@ -45,14 +45,14 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_import_section": ("topic_import_0", "topic_import_1", "topic_import_2"),
     "show_batch_import_section": tuple(f"topic_batch_{index}" for index in range(5)),
     "show_model_preparation_section": tuple(f"topic_prepare_{index}" for index in range(4)),
-    "show_seam_preparation_section": (),
-    "show_polygroups_section": (),
+    "show_seam_preparation_section": tuple(f"topic_seam_prep_{index}" for index in range(8)),
+    "show_polygroups_section": tuple(f"topic_polygroups_{index}" for index in range(3)),
     "show_remesh_section": ("topic_remesh_0", "topic_remesh_1"),
     "show_resculpting_section": ("topic_sculpt_0", "topic_sculpt_1"),
-    "show_seam_finalization_section": tuple(f"topic_seam_final_{index}" for index in range(5)),
+    "show_seam_finalization_section": tuple(f"topic_seam_final_{index}" for index in range(6)),
     "show_uv_preparation_section": ("topic_uv_0", "topic_uv_1"),
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
-    "show_ai_generation_section": (),
+    "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
     "show_render_section": tuple(f"topic_render_{index}" for index in range(6)),
 }
@@ -106,7 +106,7 @@ def _redraw_view3d(_self, context):
         return
     for window in window_manager.windows:
         for area in window.screen.areas:
-            if area.type == "VIEW_3D":
+            if area.type in {"VIEW_3D", "IMAGE_EDITOR"}:
                 area.tag_redraw()
 
 
@@ -356,6 +356,18 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         min=1,
         soft_max=10,
     )
+    batch_auto_save: bpy.props.BoolProperty(
+        name="Auto Save",
+        description="Save the current blend file after a configured number of successfully imported meshes",
+        default=False,
+    )
+    batch_auto_save_interval: bpy.props.IntProperty(
+        name="Every Successful Meshes",
+        description="Save after this many source mesh objects finish the complete import pipeline",
+        default=5,
+        min=1,
+        soft_max=100,
+    )
     batch_is_running: bpy.props.BoolProperty(
         name="Running",
         default=False,
@@ -502,6 +514,17 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_prepare_1: bpy.props.BoolProperty(default=False)
     topic_prepare_2: bpy.props.BoolProperty(default=False)
     topic_prepare_3: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_0: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_1: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_2: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_3: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_4: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_5: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_6: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_7: bpy.props.BoolProperty(default=False)
+    topic_polygroups_0: bpy.props.BoolProperty(default=False)
+    topic_polygroups_1: bpy.props.BoolProperty(default=False)
+    topic_polygroups_2: bpy.props.BoolProperty(default=False)
     topic_bake_0: bpy.props.BoolProperty(default=False)
     topic_bake_1: bpy.props.BoolProperty(default=False)
     topic_bake_2: bpy.props.BoolProperty(default=False)
@@ -516,6 +539,10 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_seam_final_2: bpy.props.BoolProperty(default=False)
     topic_seam_final_3: bpy.props.BoolProperty(default=False)
     topic_seam_final_4: bpy.props.BoolProperty(default=False)
+    topic_seam_final_5: bpy.props.BoolProperty(default=False)
+    topic_ai_0: bpy.props.BoolProperty(default=False)
+    topic_ai_1: bpy.props.BoolProperty(default=False)
+    topic_ai_2: bpy.props.BoolProperty(default=False)
     topic_render_0: bpy.props.BoolProperty(default=False)
     topic_render_1: bpy.props.BoolProperty(default=False)
     topic_render_2: bpy.props.BoolProperty(default=False)
@@ -592,6 +619,17 @@ class POLYGROUPS_PG_knife_seam_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_preparation_settings(bpy.types.PropertyGroup):
+    show_seams_uv_editor: bpy.props.BoolProperty(
+        name="Show Seams in UV Editor",
+        description="Draw mesh seam edges on both sides of UV island cuts",
+        default=False,
+        update=_redraw_view3d,
+    )
+    uv_seam_path_auto_rip: bpy.props.BoolProperty(
+        name="Auto Rip",
+        description="Split UVs automatically after every UV Seam Path segment",
+        default=True,
+    )
     show_seams_object_mode: bpy.props.BoolProperty(
         name="Show Seams in Object Mode",
         description="Display seam edges on the active mesh while working in Object Mode",
@@ -1161,6 +1199,16 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
         ),
         default="NEW",
     )
+    face_selector_shift_shape: bpy.props.EnumProperty(
+        name="Shift Selection",
+        description="Selection gesture used while Shift is held in Face Selector",
+        items=(
+            ("BOX", "Box", "Shift-drag a box to add polygons", "MESH_PLANE", 0),
+            ("CIRCLE", "Circle", "Shift-drag a circle brush to add polygons", "MESH_CIRCLE", 1),
+            ("LASSO", "Lasso", "Shift-drag a lasso to add polygons", "GP_SELECT_STROKES", 2),
+        ),
+        default="BOX",
+    )
     small_island_protect_sharp: bpy.props.BoolProperty(name="Protect Sharp Edges", default=True)
     small_island_protect_materials: bpy.props.BoolProperty(name="Protect Material Boundaries", default=False)
     small_island_selected_area: bpy.props.BoolProperty(
@@ -1190,6 +1238,20 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
+    uv_seam_path_auto_unwrap: bpy.props.BoolProperty(
+        name="Auto Unwrap UV Island",
+        description="Unwrap and separate the edited UV island when the UV Seam Path chain is finished",
+        default=True,
+    )
+    uv_seam_path_margin: bpy.props.FloatProperty(
+        name="Island Gap",
+        description="Gap between island parts created by UV Seam Path",
+        default=0.01,
+        min=0.0,
+        max=0.25,
+        soft_max=0.05,
+        precision=4,
+    )
     show_checker_solid_mode: bpy.props.BoolProperty(
         name="Show Checker in Solid Mode",
         description="Overlay a UV checker on the active mesh while preserving Solid mode lighting and MatCap",

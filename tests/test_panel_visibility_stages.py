@@ -18,6 +18,15 @@ from polygroups_generator.properties import SUBSECTION_VISIBILITY_PROPERTIES
 
 settings = bpy.context.scene.airetopo_panel_visibility_settings
 settings.single_section_mode = False
+
+# Every section that draws collapsible groups must expose the header +/- controls.
+for section_name in (
+    "show_seam_preparation_section",
+    "show_polygroups_section",
+    "show_ai_generation_section",
+):
+    assert SECTION_SUBSECTION_PROPERTIES[section_name], f"Missing subsections for {section_name}"
+
 for property_name in SECTION_VISIBILITY_PROPERTIES + SUBSECTION_VISIBILITY_PROPERTIES:
     setattr(settings, property_name, False)
 

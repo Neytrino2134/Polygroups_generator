@@ -1198,6 +1198,37 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
         if content is not None:
+            save_row = content.row(align=True)
+            save_row.enabled = not settings.batch_is_running
+            save_row.operator(
+                "object.polygroups_save_blend_file",
+                text=t(context, "save_file"),
+                icon="FILE_TICK",
+            )
+            save_hint = content.row()
+            save_hint.alert = not bool(bpy.data.filepath)
+            save_hint.label(
+                text=t(context, "batch_save_before_start"),
+                icon="INFO" if bpy.data.filepath else "ERROR",
+            )
+
+            auto_save_row = content.row(align=True)
+            auto_save_row.enabled = not settings.batch_is_running
+            auto_save_row.prop(
+                settings,
+                "batch_auto_save",
+                text=t(context, "batch_auto_save"),
+                toggle=True,
+            )
+            interval = auto_save_row.row(align=True)
+            interval.enabled = settings.batch_auto_save
+            interval.prop(
+                settings,
+                "batch_auto_save_interval",
+                text=t(context, "batch_auto_save_every"),
+            )
+
+            content.separator()
             operator_row = content.row(align=True)
             operator_row.enabled = not settings.batch_is_running
             operator_row.operator_context = "EXEC_DEFAULT"
@@ -1348,7 +1379,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 "seam_overlay_skipped",
             )
 
-        content = draw_collapsible_box(layout, seam_settings, "show_selection_group", t(context, "seam_group_selection"), "FACESEL")
+        content = draw_topic(layout, context, "seam_prep_0", "seam_group_selection", "FACESEL")
         if content is not None:
             tools_column = content.column(align=True)
             tools_column.prop(seam_settings, "prefer_linked_seam", text=t(context, "prefer_linked_seam"))
@@ -1373,7 +1404,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             )
             smooth_operator.iterations = seam_settings.selection_smooth_iterations
 
-        content = draw_collapsible_box(layout, seam_settings, "show_mesh_edit_group", t(context, "model_preparation_group_mesh_edit"), "EDITMODE_HLT")
+        content = draw_topic(layout, context, "seam_prep_1", "model_preparation_group_mesh_edit", "EDITMODE_HLT")
         if content is not None:
             content.operator(
                 "mesh.polygroups_delete_and_fill",
@@ -1381,7 +1412,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 icon="MESH_DATA",
             )
 
-        content = draw_collapsible_box(layout, seam_settings, "show_mark_clear_group", t(context, "seam_group_mark_clear"), "EDGE_SEAM")
+        content = draw_topic(layout, context, "seam_prep_2", "seam_group_mark_clear", "EDGE_SEAM")
         if content is not None:
             tools_column = content.column(align=True)
             tools_column.operator(
@@ -1419,7 +1450,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             tools_column.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), **icon_kwargs("unpin_vertices", "X"))
             tools_column.prop(seam_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
 
-        content = draw_collapsible_box(layout, seam_settings, "show_smart_mark_seams_group", t(context, "seam_group_smart_mark"), "EDGE_SEAM")
+        content = draw_topic(layout, context, "seam_prep_3", "seam_group_smart_mark", "EDGE_SEAM")
         if content is not None:
             tools_column = content.column(align=True)
             tools_column.prop(seam_settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
@@ -1465,7 +1496,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             )
 
         settings = context.scene.polygroups_generator_settings
-        content = draw_collapsible_box(layout, settings, "show_small_islands", t(context, "small_islands_group"), "EDGE_SEAM")
+        content = draw_topic(layout, context, "seam_prep_4", "small_islands_group", "EDGE_SEAM")
         if content is not None:
             content.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
             content.prop(settings, "small_island_selected_area", text=t(context, "small_islands_selected"))
@@ -1482,7 +1513,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
             if settings.small_island_status:
                 content.label(text=settings.small_island_status)
 
-        content = draw_collapsible_box(layout, seam_settings, "show_mark_clear_tools_group", t(context, "seam_group_mark_clear_tools"), "TOOL_SETTINGS")
+        content = draw_topic(layout, context, "seam_prep_5", "seam_group_mark_clear_tools", "TOOL_SETTINGS")
         if content is not None:
             tools_column = content.column(align=True)
             tools_column.prop(seam_settings, "seam_eraser_clear_mode", expand=True)
@@ -1498,7 +1529,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 button = tools_column.operator("mesh.polygroups_select_seam_tool", text=t(context, key), **icon_kwargs(icon_key, "X"))
                 button.tool_id = tool_id
 
-        content = draw_collapsible_box(layout, seam_settings, "show_check_group", t(context, "seam_group_check"), "VIEWZOOM")
+        content = draw_topic(layout, context, "seam_prep_6", "seam_group_check", "VIEWZOOM")
         if content is not None:
             draw_seam_gap_controls(content, context, seam_settings)
             content.separator(type="LINE")
@@ -1534,7 +1565,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 text=t(context, "seam_relax"), icon="MOD_SMOOTH",
             )
 
-        content = draw_collapsible_box(layout, seam_settings, "show_cut_group", t(context, "seam_group_cut"), "MOD_BEVEL")
+        content = draw_topic(layout, context, "seam_prep_7", "seam_group_cut", "MOD_BEVEL")
         if content is not None:
             connect_column = content.column(align=True)
             connect_column.prop(seam_settings, "seam_path_pin", text=t(context, "mark_as_pinned"))
@@ -1973,7 +2004,7 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_generator_settings
-        content = draw_collapsible_box(layout, settings, "show_group_generation", t(context, "generate_polygroups"), "MATERIAL")
+        content = draw_topic(layout, context, "polygroups_0", "generate_polygroups", "MATERIAL")
         if content is not None:
             column = content.column(align=True)
             draw_material_mode_buttons(column, context, settings)
@@ -1995,7 +2026,7 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
                 icon="TEXTURE",
             )
 
-        content = draw_collapsible_box(layout, settings, "show_group_uv", t(context, "small_islands_uv"), "UV")
+        content = draw_topic(layout, context, "polygroups_1", "small_islands_uv", "UV")
         if content is not None:
             column = content.column(align=True)
             column.operator(
@@ -2009,7 +2040,7 @@ class VIEW3D_PT_polygroups_tools(bpy.types.Panel):
                 icon="UV",
             )
 
-        content = draw_collapsible_box(layout, settings, "show_group_materials", t(context, "small_islands_manage"), "MATERIAL")
+        content = draw_topic(layout, context, "polygroups_2", "small_islands_manage", "MATERIAL")
         if content is not None:
             column = content.column(align=True)
             column.operator(
@@ -2266,6 +2297,11 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
                 icon="UV",
             )
             smart_column.prop(
+                context.scene.polygroups_seam_preparation_settings,
+                "smart_seam_angle_limit",
+                text=t(context, "smart_seam_angle_limit"),
+            )
+            smart_column.prop(
                 context.scene.polygroups_seam_finalization_settings,
                 "smart_uv_unwrap_auto_pack",
                 text=t(context, "auto_pack"),
@@ -2359,33 +2395,15 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
         layout = self.layout
         openai_settings = context.scene.airetopo_ai_generation_settings
 
-        prompt_library_content = draw_collapsible_box(
-            layout,
-            openai_settings,
-            "show_prompt_library_settings",
-            t(context, "prompt_library"),
-            "TEXT",
-        )
+        prompt_library_content = draw_topic(layout, context, "ai_0", "prompt_library", "TEXT")
         if prompt_library_content is not None:
             self.draw_prompt_library(context, prompt_library_content)
 
-        openai_content = draw_collapsible_box(
-            layout,
-            openai_settings,
-            "show_openai_image_settings",
-            t(context, "openai_image"),
-            "IMAGE_DATA",
-        )
+        openai_content = draw_topic(layout, context, "ai_1", "openai_image", "IMAGE_DATA")
         if openai_content is not None:
             self.draw_openai_image(context, openai_content)
 
-        google_content = draw_collapsible_box(
-            layout,
-            openai_settings,
-            "show_google_image_settings",
-            t(context, "google_image"),
-            "IMAGE_DATA",
-        )
+        google_content = draw_topic(layout, context, "ai_2", "google_image", "IMAGE_DATA")
         if google_content is not None:
             self.draw_google_image(context, google_content)
 
@@ -2755,6 +2773,20 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
                 text=t(context, "average_islands_scale"),
                 icon="UV_SYNC_SELECT",
             )
+
+        content = draw_topic(layout, context, "seam_final_5", t(context, "uv_seam_tools"), "EDGE_SEAM")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(display_settings, "show_seams_uv_editor",
+                        text=t(context, "show_seams_uv_editor"), toggle=True, icon="EDGE_SEAM")
+            column.prop(display_settings, "uv_seam_path_auto_rip",
+                        text=t(context, "uv_seam_path_auto_rip"), toggle=True, icon="UV")
+            column.operator(
+                "wm.polygroups_activate_uv_seam_path",
+                text=t(context, "activate_uv_seam_path"),
+                icon="UV",
+            )
+            column.label(text=t(context, "uv_seam_path_panel_hint"), icon="INFO")
 
 
 class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
@@ -3364,6 +3396,16 @@ def draw_edge_menu(self, context):
     layout.operator("mesh.polygroups_clear_all_pins", text=t(context, "clear_all_pins"), **icon_kwargs("unpin_vertices", "X"))
 
 
+def draw_delete_menu(self, context):
+    """Add the topology-preserving patch replacement to Edit Mesh Delete (X)."""
+    self.layout.separator()
+    self.layout.operator(
+        "mesh.polygroups_delete_and_fill",
+        text=t(context, "delete_and_fill"),
+        icon="MESH_GRID",
+    )
+
+
 def draw_outliner_header(self, context):
     """Compact duplicates of Management controls in the Outliner header."""
     row = self.layout.row(align=True)
@@ -3517,6 +3559,7 @@ def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.VIEW3D_MT_edit_mesh_edges.append(draw_edge_menu)
+    bpy.types.VIEW3D_MT_edit_mesh_delete.append(draw_delete_menu)
     bpy.types.VIEW3D_MT_object_apply.append(draw_object_apply_menu)
     bpy.types.VIEW3D_MT_shading_pie.append(draw_view_assists_shading_pie)
     bpy.types.OUTLINER_HT_header.prepend(draw_outliner_header)
@@ -3530,6 +3573,7 @@ def unregister():
     bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)
     bpy.types.VIEW3D_MT_shading_pie.remove(draw_view_assists_shading_pie)
     bpy.types.VIEW3D_MT_object_apply.remove(draw_object_apply_menu)
+    bpy.types.VIEW3D_MT_edit_mesh_delete.remove(draw_delete_menu)
     bpy.types.VIEW3D_MT_edit_mesh_edges.remove(draw_edge_menu)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

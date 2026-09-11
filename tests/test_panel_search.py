@@ -21,7 +21,7 @@ matches = {
 }
 seams = matches["VIEW3D_PT_polygroups_seam_preparation"]
 assert seams.section_match
-assert any("show_mark_clear" in key for key in seams.groups)
+assert any("topic_seam_prep_2" in key for key in seams.groups)
 assert not matches["VIEW3D_PT_polygroups_remesh"].section_match
 assert not matches["VIEW3D_PT_polygroups_model_preparation"].section_match
 

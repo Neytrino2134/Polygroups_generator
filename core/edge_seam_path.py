@@ -4,7 +4,7 @@ from itertools import count
 from statistics import median
 
 
-def find_edge_path(bm, start, end, matrix):
+def find_edge_path(bm, start, end, matrix, allowed_edges=None, vertex_positions=None):
     """A* with incoming-edge states: length plus a penalty for each turn.
 
     Opposite edges in regular quad fans continue the same row even on a curved
@@ -18,14 +18,19 @@ def find_edge_path(bm, start, end, matrix):
 
     def position(vert):
         if vert not in positions:
-            positions[vert] = matrix @ vert.co
+            positions[vert] = (
+                vertex_positions[vert]
+                if vertex_positions is not None and vert in vertex_positions
+                else matrix @ vert.co
+            )
         return positions[vert]
 
     def adjacent(vert):
         if vert not in neighbors:
             neighbors[vert] = sorted(
                 [(edge.other_vert(vert), edge) for edge in vert.link_edges
-                 if not edge.hide and not edge.other_vert(vert).hide],
+                 if (not edge.hide and not edge.other_vert(vert).hide
+                     and (allowed_edges is None or edge in allowed_edges))],
                 key=lambda item: item[0].index,
             )
         return neighbors[vert]

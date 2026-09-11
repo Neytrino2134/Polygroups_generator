@@ -6,6 +6,7 @@ import bpy
 
 TOOL_ID = "polygroups_generator.small_islands_merger_tool"
 SELECTOR_TOOL_ID = "polygroups_generator.island_selector_tool"
+FACE_SELECTOR_TOOL_ID = "polygroups_generator.face_selector_tool"
 
 
 def _linked_seam_islands(seed_faces):
@@ -61,6 +62,9 @@ class _IslandGestureMixin:
     merge_after_selection = True
     use_uv_islands = False
     selection_mode_property = None
+    force_add = False
+    expand_selection = True
+    status_text = "Drag to select seam islands; release to analyze and merge"
 
     @classmethod
     def poll(cls, context):
@@ -74,7 +78,7 @@ class _IslandGestureMixin:
             getattr(context.scene.polygroups_generator_settings, self.selection_mode_property)
             if self.selection_mode_property else "NEW"
         )
-        if self.selection_mode_property and event.shift:
+        if self.force_add or (self.selection_mode_property and event.shift):
             selection_mode = "ADD"
         self._native_mode = "ADD" if selection_mode == "ADD" else "SET"
         self._points = [(event.mouse_region_x, event.mouse_region_y)]
@@ -104,7 +108,7 @@ class _IslandGestureMixin:
         if self.shape == "CIRCLE":
             self._native_circle(self._points[0])
         context.window_manager.modal_handler_add(self)
-        context.workspace.status_text_set("Drag to select seam islands; release to analyze and merge")
+        context.workspace.status_text_set(self.status_text)
         return {"RUNNING_MODAL"}
 
     def _native_circle(self, point):
@@ -170,7 +174,9 @@ class _IslandGestureMixin:
             self.report({"WARNING"}, "No polygons touched")
             self._restore_selection(context)
             return {"CANCELLED"}
-        if self.use_uv_islands:
+        if not self.expand_selection:
+            selected_faces = seeds
+        elif self.use_uv_islands:
             uv_layer = bm.loops.layers.uv.active
             selected_faces = _linked_uv_islands(seeds, uv_layer)
         else:
@@ -269,3 +275,96 @@ class MESH_OT_polygroups_island_selector_gesture(
     merge_after_selection = False
     use_uv_islands = True
     selection_mode_property = "island_selector_selection_mode"
+
+
+class MESH_OT_polygroups_face_selector_gesture(
+    _IslandGestureMixin,
+    bpy.types.Operator,
+):
+    bl_idname = "mesh.polygroups_face_selector_gesture"
+    bl_label = "Face Selector Add Gesture"
+    bl_description = "Add polygons with the configured Box, Circle, or Lasso gesture"
+    bl_options = {"UNDO"}
+
+    shape: bpy.props.EnumProperty(
+        name="Selection",
+        items=(
+            ("BOX", "Box", "Add polygons touched by a box"),
+            ("CIRCLE", "Circle", "Add polygons painted with a circle"),
+            ("LASSO", "Lasso", "Add polygons touched by a lasso"),
+        ),
+        default="BOX",
+    )
+    radius: bpy.props.IntProperty(name="Radius", default=30, min=2, max=500, subtype="PIXEL")
+    settings_property = "face_selector_shift_shape"
+    merge_after_selection = False
+    force_add = True
+    expand_selection = False
+    status_text = "Face Selector: release to add polygons; Esc/RMB cancels"
+
+
+class MESH_OT_polygroups_face_selector_click(bpy.types.Operator):
+    bl_idname = "mesh.polygroups_face_selector_click"
+    bl_label = "Face Selector Step"
+    bl_description = "Click a face to grow the selection; Ctrl-click to shrink it"
+    bl_options = {"UNDO"}
+
+    action: bpy.props.EnumProperty(
+        items=(
+            ("MORE", "Select More", "Select the clicked face and grow the selection"),
+            ("LESS", "Select Less", "Shrink the current face selection"),
+        ),
+        default="MORE",
+        options={"SKIP_SAVE"},
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return (context.mode == "EDIT_MESH" and context.active_object is not None
+                and context.active_object.type == "MESH"
+                and len(context.objects_in_mode) == 1
+                and context.area is not None and context.area.type == "VIEW_3D"
+                and context.region is not None and context.region.type == "WINDOW")
+
+    def execute(self, context):
+        if self.action != "LESS":
+            return {"CANCELLED"}
+        context.tool_settings.mesh_select_mode = (False, False, True)
+        bm = bmesh.from_edit_mesh(context.active_object.data)
+        if not any(face.select and not face.hide for face in bm.faces):
+            return {"CANCELLED"}
+        bpy.ops.mesh.select_less(use_face_step=True)
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        if self.action == "LESS":
+            return self.execute(context)
+
+        obj = context.active_object
+        context.tool_settings.mesh_select_mode = (False, False, True)
+        bm = bmesh.from_edit_mesh(obj.data)
+        bm.faces.ensure_lookup_table()
+        selected_before = {face.index for face in bm.faces if face.select and not face.hide}
+
+        bpy.ops.mesh.select_all(action="DESELECT")
+        bpy.ops.view3d.select(
+            location=(event.mouse_region_x, event.mouse_region_y),
+            deselect_all=True,
+        )
+        bm = bmesh.from_edit_mesh(obj.data)
+        bm.faces.ensure_lookup_table()
+        picked = [face for face in bm.faces if face.select and not face.hide]
+        if len(picked) != 1:
+            for face in bm.faces:
+                face.select_set(face.index in selected_before)
+            bm.select_flush_mode()
+            bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+            return {"CANCELLED"}
+
+        if picked[0].index in selected_before:
+            for face in bm.faces:
+                face.select_set(face.index in selected_before)
+            bm.select_flush_mode()
+            bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+        bpy.ops.mesh.select_more(use_face_step=True)
+        return {"FINISHED"}

@@ -11,7 +11,7 @@ import bpy
 ADDONS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ADDONS))
 
-from polygroups_generator.ui import draw_edge_menu
+from polygroups_generator.ui import draw_delete_menu, draw_edge_menu
 
 addon_utils.enable("polygroups_generator")
 
@@ -45,4 +45,10 @@ assert layout.operators[:2] == [
 assert layout.properties[1][0] == bpy.context.scene.polygroups_seam_finalization_settings
 assert layout.properties[1][1] == "auto_unwrap_after_seam"
 assert layout.properties[1][2]["toggle"] is True
+
+delete_layout = Layout()
+draw_delete_menu(SimpleNamespace(layout=delete_layout), bpy.context)
+assert delete_layout.operators == [
+    ("mesh.polygroups_delete_and_fill", "Delete and Fill"),
+]
 print("EDGE_MENU_OK", flush=True)

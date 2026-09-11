@@ -24,5 +24,11 @@ assert obj.mode == "OBJECT"
 assert obj.data.uv_layers.active is not None
 assert any(edge.use_seam for edge in obj.data.edges)
 
+# Island Selector exposes this Object operator while the mesh is in Edit Mode.
+bpy.ops.object.mode_set(mode="EDIT")
+assert bpy.ops.object.polygroups_smart_uv_unwrap() == {"FINISHED"}
+assert obj.mode == "EDIT"
+bpy.ops.object.mode_set(mode="OBJECT")
+
 addon_utils.disable(ROOT.name, default_set=True)
 print("SMART_UV_UNWRAP_OK", flush=True)

@@ -21,15 +21,20 @@ baking = scene.polygroups_baking_settings
 assert model.file_import_separate_collections
 assert model.batch_separate_collections
 assert model.batch_include_subfolders
+assert not model.batch_auto_save
+assert model.batch_auto_save_interval == 5
 assert model.file_import_auto_smart_uv_project
 assert model.batch_auto_smart_uv_project
 assert model.remesh_auto_unwrap_checker
 assert seams.smart_seam_create_edges
 assert seams.smart_seam_auto_relax
+assert seams.uv_seam_path_auto_rip
 assert seams.seam_relax_mode == "SMART"
 assert seams.seam_relax_iterations == 2
 assert generator.checker_scale == 80.0
 assert abs(finalization.checker_overlay_opacity - 0.1) < 1.0e-6
+assert finalization.uv_seam_path_auto_unwrap
+assert abs(finalization.uv_seam_path_margin - 0.01) < 1.0e-6
 assert baking.disable_highpoly_after_bake
 
 model.file_import_auto_remesh = False

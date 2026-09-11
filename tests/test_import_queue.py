@@ -31,6 +31,7 @@ assert settings.batch_auto_smart_uv_project and settings.file_import_auto_smart_
 assert settings.batch_disable_view_assist and settings.file_import_disable_view_assist
 assert settings.batch_separate_collections and settings.file_import_separate_collections
 assert settings.batch_include_subfolders
+assert not settings.batch_auto_save and settings.batch_auto_save_interval == 5
 assert settings.remesh_auto_unwrap_checker
 settings.batch_auto_remesh = True
 settings.batch_separate_collections = True
@@ -107,6 +108,7 @@ with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / f"model{index}.obj"
         path.write_text('o Test\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n')
         paths.append(str(path))
+    bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory) / "batch_import_test.blend"))
     # Starting a folder import must ignore remembered file-browser selections.
     settings.batch_import_directory = directory
     settings.batch_import_format = "OBJ"
@@ -129,24 +131,31 @@ with tempfile.TemporaryDirectory() as directory:
         context.scene.polygroups_seam_finalization_settings.show_checker_solid_mode = True
         context.scene.polygroups_seam_preparation_settings.show_seams_object_mode = True
         settings.remesh_auto_unwrap_checker = True
-        queue = queue_module.ImportQueue(context, paths, False, report)
-        queue.begin()
-        assert not context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam
-        assert not context.scene.polygroups_seam_finalization_settings.smart_uv_unwrap_auto_pack
-        assert not context.scene.polygroups_seam_finalization_settings.show_checker_solid_mode
-        assert not context.scene.polygroups_seam_preparation_settings.show_seams_object_mode
-        assert not settings.remesh_auto_unwrap_checker
-        advance_until(queue, lambda: queue.stage == "WAIT_REMESH")
-        settings.batch_is_paused = True
-        advance_until(queue, lambda: queue.stage == "NEXT")
-        assert settings.batch_imported_count == 1
-        queue.step(context)
-        assert settings.batch_stage == "PAUSED"
-        assert queue.index == 1
-        settings.batch_is_paused = False
-        first_collection = queue.completed_collection
-        assert first_collection is not None
-        advance_until(queue, lambda: queue.finished)
+        settings.batch_auto_save = True
+        settings.batch_auto_save_interval = 2
+        save_mock = Mock(return_value={"FINISHED"})
+        with patch.object(queue_module, "save_current_blend_file", save_mock):
+            queue = queue_module.ImportQueue(context, paths, False, report)
+            queue.begin()
+            assert not context.scene.polygroups_seam_finalization_settings.auto_unwrap_after_seam
+            assert not context.scene.polygroups_seam_finalization_settings.smart_uv_unwrap_auto_pack
+            assert not context.scene.polygroups_seam_finalization_settings.show_checker_solid_mode
+            assert not context.scene.polygroups_seam_preparation_settings.show_seams_object_mode
+            assert not settings.remesh_auto_unwrap_checker
+            advance_until(queue, lambda: queue.stage == "WAIT_REMESH")
+            settings.batch_is_paused = True
+            advance_until(queue, lambda: queue.stage == "NEXT")
+            assert settings.batch_imported_count == 1
+            assert save_mock.call_count == 0
+            queue.step(context)
+            assert settings.batch_stage == "PAUSED"
+            assert queue.index == 1
+            settings.batch_is_paused = False
+            first_collection = queue.completed_collection
+            assert first_collection is not None
+            advance_until(queue, lambda: queue.finished)
+            assert save_mock.call_count == 1
+        settings.batch_auto_save = False
         assert settings.batch_imported_count == 2 and settings.batch_failed_count == 0
         assert settings.batch_import_progress == 100
         assert events == ["start", "finish", "start", "finish"]

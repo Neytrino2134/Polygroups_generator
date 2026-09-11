@@ -5,7 +5,14 @@ import bpy
 from ..core.edge_seam_path import find_edge_path
 from ..localization import t
 from ..pin_edges import pin_layer, set_pinned
-from .connect_vertex_seam import edit_meshes, selected_vertices, invoke_seam_click, cursor_erase_held
+from .connect_vertex_seam import (
+    cursor_ctrl_held,
+    cursor_erase_held,
+    cursor_shift_held,
+    edit_meshes,
+    invoke_seam_click,
+    selected_vertices,
+)
 from .unwrap_angle_based import auto_uv_after_seam_change
 
 TOOL_ID = "polygroups_generator.edge_seam_path_tool"
@@ -224,7 +231,7 @@ def draw_smart_seam_cursor(_context, _tool, xy):
     _draw_labeled_seam_cursor(
         "Smart Seams Generator",
         xy,
-        "Ctrl + Click: Generate smart seams",
+        "Click: Generate smart seams",
     )
 
 
@@ -232,7 +239,7 @@ def draw_longitudinal_seam_cursor(_context, _tool, xy):
     _draw_labeled_seam_cursor(
         "Longitudinal Seam",
         xy,
-        "Ctrl + Click: Draw longitudinal seams",
+        "Click: Draw longitudinal seams",
     )
 
 
@@ -242,6 +249,21 @@ def draw_island_selector_cursor(_context, _tool, xy):
         return
     draw_colored_crosshair(context, xy, (1.0, 0.55, 0.08, 1.0))
     draw_tool_badge(context, "Island Selector", xy, "Click: Select island")
+
+
+def draw_face_selector_cursor(_context, _tool, xy):
+    context = bpy.context
+    if context.mode != "EDIT_MESH" or context.region_data is None:
+        return
+    settings = context.scene.polygroups_generator_settings
+    if cursor_ctrl_held(context):
+        hint = "Ctrl + Click: Select Less"
+    elif cursor_shift_held(context):
+        hint = f"Shift + Drag: Add {settings.face_selector_shift_shape.title()}"
+    else:
+        hint = "Click: Select More"
+    draw_colored_crosshair(context, xy, (1.0, 0.55, 0.08, 1.0))
+    draw_tool_badge(context, "Face Selector", xy, hint)
 
 
 def draw_small_islands_merger_cursor(_context, _tool, xy):

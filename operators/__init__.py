@@ -41,6 +41,14 @@ from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam
 from .connect_vertex_seam import MESH_OT_polygroups_seam_cursor_modifier
 from .connect_vertex_seam import MESH_OT_polygroups_connect_vertex_seam_click
 from .edge_seam_path import MESH_OT_polygroups_edge_seam_path, MESH_OT_polygroups_edge_seam_path_click
+from .uv_seam_path import (
+    IMAGE_OT_polygroups_uv_island_select,
+    IMAGE_OT_polygroups_uv_vertex_select,
+    IMAGE_OT_polygroups_uv_seam_path_exit,
+    IMAGE_OT_polygroups_uv_seam_tool_state,
+    IMAGE_OT_polygroups_uv_seam_path_click,
+    WM_OT_polygroups_activate_uv_seam_path,
+)
 from .edge_merger import MESH_OT_polygroups_edge_merger_click
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_fab_selection
@@ -151,6 +159,8 @@ from .small_islands import (
 )
 from .small_islands_tool import MESH_OT_polygroups_small_islands_merger_gesture
 from .small_islands_tool import MESH_OT_polygroups_island_selector_gesture
+from .small_islands_tool import MESH_OT_polygroups_face_selector_click
+from .small_islands_tool import MESH_OT_polygroups_face_selector_gesture
 from .pin_edges import MESH_OT_polygroups_pin_selected_seams, MESH_OT_polygroups_unpin_selected_edges, MESH_OT_polygroups_clear_all_pins
 from .smart_angle_seams import MESH_OT_polygroups_mark_smart_angle_seams
 from .smart_angle_seams import MESH_OT_polygroups_smart_seams_generator_click
@@ -175,6 +185,8 @@ CLASSES = (
     MESH_OT_polygroups_analyze_and_merge_seams,
     MESH_OT_polygroups_small_islands_merger_gesture,
     MESH_OT_polygroups_island_selector_gesture,
+    MESH_OT_polygroups_face_selector_click,
+    MESH_OT_polygroups_face_selector_gesture,
     MESH_OT_polygroups_edge_merger_click,
     MESH_OT_polygroups_pin_selected_seams,
     MESH_OT_polygroups_unpin_selected_edges,
@@ -274,6 +286,12 @@ CLASSES = (
     MESH_OT_polygroups_edge_seam_eraser_click,
     MESH_OT_polygroups_edge_seam_path,
     MESH_OT_polygroups_edge_seam_path_click,
+    IMAGE_OT_polygroups_uv_island_select,
+    IMAGE_OT_polygroups_uv_vertex_select,
+    IMAGE_OT_polygroups_uv_seam_path_exit,
+    IMAGE_OT_polygroups_uv_seam_tool_state,
+    IMAGE_OT_polygroups_uv_seam_path_click,
+    WM_OT_polygroups_activate_uv_seam_path,
     MESH_OT_polygroups_mark_selection_boundary_seam,
     MESH_OT_polygroups_check_seam_gaps,
     MESH_OT_polygroups_check_and_close_seam_gaps,

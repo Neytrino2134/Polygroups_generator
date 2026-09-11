@@ -4,7 +4,7 @@
 
 Before surface detection, any selected vertex, edge or face seeds a Select Linked operation delimited by existing seams. The operator expands the selection through visible faces without crossing a seam, then works on the resulting complete islands. Multiple selected seeds may select multiple islands. Area-weighted bilateral normal filtering suppresses small bumps. Adjacent regions merge according to their average orientation and Surface Angle; small regions are absorbed and a boundary-length optimization reduces fragmentation. Selection borders and mesh borders become seams.
 
-The Edit Mesh toolbar also contains Smart Seams Generator. Each left click clears the previous selection, uses Blender's native visible-vertex picking at the cursor, selects the picked vertex's seam-bounded island, and immediately runs Generate Smart Seams. A click that does not hit exactly one visible vertex restores the previous selection. Right click returns to Blender's Select tool. The active tool header exposes the same generation and routing settings.
+The Edit Mesh toolbar also contains Smart Seams Generator. Each left click clears the previous selection, uses Blender's native visible-vertex picking at the cursor, selects the picked vertex's seam-bounded island, and immediately runs Generate Smart Seams. A click that does not hit exactly one visible vertex restores the previous selection. Right click returns to Blender's Select tool. The active tool header starts with Surface Angle and exposes the same generation and routing settings.
 
 ## Direction-aware path search
 

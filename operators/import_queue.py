@@ -38,6 +38,13 @@ def redraw(context):
                 area.tag_redraw()
 
 
+def save_current_blend_file():
+    """Save without opening a file browser; Batch Import must remain modal."""
+    if not bpy.data.filepath:
+        return {"CANCELLED"}
+    return bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
+
+
 def move_to_collection(objects, collection):
     for obj in objects:
         if obj.name not in collection.objects:
@@ -98,6 +105,10 @@ class ImportQueue:
         self.arrange = settings.batch_auto_arrange_objects
         self.arrange_options = (settings.batch_arrange_spacing,
                                 settings.batch_arrange_mode, settings.batch_arrange_rows)
+        self.auto_save = bool(not file_selection and settings.batch_auto_save)
+        self.auto_save_interval = max(1, settings.batch_auto_save_interval)
+        self.successful_meshes_since_save = 0
+        self.auto_save_unsaved_warned = False
         self.finished = False
         self.timer = None
 
@@ -127,6 +138,12 @@ class ImportQueue:
         settings.batch_current_file = ""
         settings.batch_last_error = ""
         settings.batch_stage = "QUEUED"
+        if self.auto_save and not bpy.data.filepath:
+            self.report(
+                {"WARNING"},
+                "Batch Auto Save is enabled, but the blend file has not been saved yet",
+            )
+            self.auto_save_unsaved_warned = True
         self.update_timing()
 
     def update_timing(self):
@@ -304,6 +321,7 @@ class ImportQueue:
             if self.arrange:
                 self.arrange_groups()
             self.complete_file(success=True)
+            self.auto_save_successful_meshes()
         settings.batch_stage = self.stage
 
     def replace_remesh_material(self, obj):
@@ -363,6 +381,32 @@ class ImportQueue:
         self.index += 1
         self.stage = "NEXT"
         self.settings.batch_stage = "NEXT"
+
+    def auto_save_successful_meshes(self):
+        if not self.auto_save:
+            return
+        self.successful_meshes_since_save += len(self.meshes)
+        if self.successful_meshes_since_save < self.auto_save_interval:
+            return
+        if not bpy.data.filepath:
+            if not self.auto_save_unsaved_warned:
+                self.report(
+                    {"WARNING"},
+                    "Batch Auto Save skipped: save the blend file first",
+                )
+                self.auto_save_unsaved_warned = True
+            return
+        try:
+            result = save_current_blend_file()
+        except Exception as error:
+            self.report({"WARNING"}, f"Batch Auto Save failed: {error}")
+            return
+        if "FINISHED" not in result:
+            self.report({"WARNING"}, "Batch Auto Save did not finish")
+            return
+        self.successful_meshes_since_save %= self.auto_save_interval
+        self.auto_save_unsaved_warned = False
+        self.report({"INFO"}, "Batch Import progress saved")
 
     def update_progress(self, remesh_progress=None):
         fraction = 0.0

@@ -39,6 +39,7 @@ Object Mode's Apply menu (`Ctrl+A`) includes **Apply Cutter Seams**, using the s
   - Knife Seam's Stable View Cut shows start/end points, a live cut segment, the extended cutting-plane guide, and on-screen hints. Click the end point, then Enter/Space to cut; Esc/right-click cancels.
   - Knife Seam's Knife Mode menu (in the panel and toolbar settings) switches between Plane Cut and Multi-Point Knife. Multi-Point Knife uses the standard interactive Knife: click several points, use right-click to start another line, then Space/Enter applies all cuts and marks them as seams. Esc cancels. Cutting and seam marking share one Undo step.
   - Smooth Face Selection for relaxing selected face regions in Edit Mode.
+  - Face Selector in the Edit Mesh toolbar grows a face selection with each click and shrinks it with Ctrl-click. Hold Shift to add polygons with the selected Box, Circle, or Lasso gesture. Its tool settings expose Select Linked (Seam), Delete and Fill, Generate Smart Seams, Pin Selected Seams, Merge Small Islands, Create Longitudinal Seam, and Clear Inside Edges Seam. Delete and Fill is also available from the standard Edit Mesh Delete (`X`) menu.
   - Mark Selected Edges Seam for selected edges in Edit Mode.
   - Mark Selection Boundary Seam for selected faces in Edit Mode.
   - Clear Selected Edges Seam removes seams only from selected edges.
@@ -56,6 +57,7 @@ Object Mode's Apply menu (`Ctrl+A`) includes **Apply Cutter Seams**, using the s
   - The panel shows the file count, completed/failed/remaining counts, current file, processing stage, and overall progress.
   - Timers show total active time, current file time, and approximate remaining time based on the average of successfully completed files. Pauses are excluded; the estimate appears after the first completed file.
   - `Pause` waits until the current file finishes; `Resume` continues. `Stop` finishes the current file and keeps results. `Cancel` (or Esc) aborts remeshing and removes objects created by the current import run.
+  - `Start Import` includes a Save File action and a reminder to save the blend file first. Optional Auto Save writes the current blend file after every configured number of source mesh objects successfully completes the full batch pipeline. An unsaved blend is never interrupted by a Save As dialog during the queue; Auto Save waits until the file has a path and reports a warning instead.
   - `Each file in a separate collection` groups the imported file and its remeshed objects in `Generated.001`, `Generated.002`, etc. Before the next batch file starts, the completed collection is excluded from the current View Layer; the final collection stays enabled. Automatic arrangement moves each file's objects together.
 - `Remesh`
   - All add-on Remesh buttons and Auto Remesh during import disable Quad Remesher's `Detect Hard Edges by angle` before every engine run, including when it was manually enabled again.

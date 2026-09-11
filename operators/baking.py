@@ -1341,7 +1341,7 @@ class OBJECT_OT_polygroups_calculate_auto_cage(bpy.types.Operator):
 class OBJECT_OT_polygroups_save_blend_file(bpy.types.Operator):
     bl_idname = "object.polygroups_save_blend_file"
     bl_label = "Save Blend File"
-    bl_description = "Save the current blend file so baked textures can be written next to it"
+    bl_description = "Save the current blend file; opens Save As if it has not been saved yet"
     bl_options = {"REGISTER"}
 
     def execute(self, context):

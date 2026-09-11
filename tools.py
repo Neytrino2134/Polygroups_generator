@@ -5,7 +5,12 @@ from bpy.types import WorkSpaceTool
 
 from .localization import t
 from .operators.connect_vertex_seam import TOOL_ID as VERTEX_SEAM_TOOL_ID
-from .operators.connect_vertex_seam import draw_vertex_seam_cursor, _cursor_ctrl, _cursor_erase
+from .operators.connect_vertex_seam import (
+    _cursor_ctrl,
+    _cursor_erase,
+    _cursor_shift,
+    draw_vertex_seam_cursor,
+)
 from .operators.edge_seam_path import TOOL_ID as EDGE_SEAM_TOOL_ID
 from .operators.edge_merger import TOOL_ID as EDGE_MERGER_TOOL_ID, draw_edge_merger_cursor
 from .operators.edge_seam_path import (
@@ -14,14 +19,21 @@ from .operators.edge_seam_path import (
     draw_longitudinal_seam_cursor,
     draw_smart_seam_cursor,
     draw_island_selector_cursor,
+    draw_face_selector_cursor,
     draw_small_islands_merger_cursor,
     register_hover_cache,
     unregister_hover_cache,
+)
+from .operators.uv_seam_path import (
+    TOOL_ID as UV_SEAM_PATH_TOOL_ID,
+    clear_uv_seam_path_sessions,
+    draw_uv_seam_path_cursor,
 )
 from .operators.smart_angle_seams import TOOL_ID as SMART_SEAMS_TOOL_ID
 from .operators.mark_longitudinal_seam import TOOL_ID as LONGITUDINAL_SEAM_TOOL_ID
 from .operators.small_islands_tool import TOOL_ID as SMALL_ISLANDS_MERGER_TOOL_ID
 from .operators.small_islands_tool import SELECTOR_TOOL_ID as ISLAND_SELECTOR_TOOL_ID
+from .operators.small_islands_tool import FACE_SELECTOR_TOOL_ID
 
 
 DRAW_CUTTER_GRID_TOOL_ID = "polygroups_generator.draw_cutter_grid_tool"
@@ -805,12 +817,46 @@ class VIEW3D_WST_polygroups_edge_seam_path(WorkSpaceTool):
         layout.label(text="Ctrl+LMB: mark path   Ctrl+Shift+LMB: erase path")
 
 
+class IMAGE_WST_polygroups_uv_seam_path(WorkSpaceTool):
+    bl_space_type = "IMAGE_EDITOR"
+    bl_context_mode = "UV"
+    bl_idname = UV_SEAM_PATH_TOOL_ID
+    bl_label = "UV Seam Path"
+    bl_description = "Click selects a UV island; Ctrl-click creates a low-turn seam path"
+    bl_icon = "ops.mesh.dupli_extrude_cursor"
+    bl_cursor = "NONE"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        ("image.polygroups_uv_seam_tool_state",
+         {"type": "MOUSEMOVE", "value": "ANY", "any": True}, None),
+        ("image.polygroups_uv_seam_path_click",
+         {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
+        ("image.polygroups_uv_island_select",
+         {"type": "LEFTMOUSE", "value": "PRESS", "shift": True}, None),
+        ("image.polygroups_uv_vertex_select",
+         {"type": "LEFTMOUSE", "value": "RELEASE"}, None),
+        ("image.polygroups_uv_seam_path_exit",
+         {"type": "RIGHTMOUSE", "value": "PRESS"}, None),
+    )
+    draw_cursor = staticmethod(draw_uv_seam_path_cursor)
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        settings = context.scene.polygroups_seam_preparation_settings
+        layout.prop(settings, "show_seams_uv_editor",
+                    text=t(context, "show_seams_uv_editor"), toggle=True, icon="EDGE_SEAM")
+        layout.prop(settings, "uv_seam_path_auto_rip",
+                    text=t(context, "uv_seam_path_auto_rip"), toggle=True, icon="UV")
+        layout.label(text=t(context, "uv_seam_path_hint"))
+
+
 class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
     bl_space_type = "VIEW_3D"
     bl_context_mode = "EDIT_MESH"
     bl_idname = SMART_SEAMS_TOOL_ID
     bl_label = "Smart Seams Generator"
-    bl_description = "Ctrl-click a vertex to select its seam-bounded island and generate smart seams"
+    bl_description = "Click a vertex to select its seam-bounded island and generate smart seams"
     bl_icon = "ops.mesh.mark_seam"
     bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
@@ -819,20 +865,20 @@ class VIEW3D_WST_polygroups_smart_seams_generator(WorkSpaceTool):
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("name", "builtin.select_box")]}),
         ("mesh.polygroups_smart_seams_generator_click",
-         {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
+         {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
     draw_cursor = staticmethod(draw_smart_seam_cursor)
 
     @staticmethod
     def draw_settings(context, layout, tool):
         settings = context.scene.polygroups_seam_preparation_settings
+        layout.prop(settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
         layout.prop(settings, "smart_seam_pin_generated", text=t(context, "pin_generated"), toggle=True)
         _draw_seam_auto_uv_settings(context, layout)
         layout.prop(settings, "smart_seam_create_edges")
         if settings.smart_seam_create_edges:
             layout.prop(settings, "smart_seam_edge_preference")
         _draw_smart_auto_relax_settings(context, layout)
-        layout.prop(settings, "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
         layout.prop(settings, "smart_seam_filter_iterations")
         layout.prop(settings, "smart_seam_min_area")
         layout.prop(settings, "smart_seam_smoothness")
@@ -846,7 +892,7 @@ class VIEW3D_WST_polygroups_longitudinal_seam(WorkSpaceTool):
     bl_context_mode = "EDIT_MESH"
     bl_idname = LONGITUDINAL_SEAM_TOOL_ID
     bl_label = "Longitudinal Seam"
-    bl_description = "Ctrl-click a vertex to select its seam-bounded island and create a longitudinal seam"
+    bl_description = "Click a vertex to select its seam-bounded island and create a longitudinal seam"
     bl_icon = "ops.mesh.mark_seam"
     bl_cursor = "NONE"
     bl_options = {"KEYMAP_FALLBACK"}
@@ -855,7 +901,7 @@ class VIEW3D_WST_polygroups_longitudinal_seam(WorkSpaceTool):
         ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
          {"properties": [("name", "builtin.select_box")]}),
         ("mesh.polygroups_longitudinal_seam_tool_click",
-         {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True}, None),
+         {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
     draw_cursor = staticmethod(draw_longitudinal_seam_cursor)
 
@@ -925,12 +971,110 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
     def draw_settings(context, layout, tool):
         props = tool.operator_properties("mesh.polygroups_island_selector_gesture")
         settings = context.scene.polygroups_generator_settings
+        layout.operator(
+            "object.polygroups_smart_uv_unwrap",
+            text=t(context, "smart_uv_unwrap"),
+            icon="UV",
+        )
         layout.prop(settings, "island_selector_shape", expand=True)
         layout.prop(settings, "island_selector_selection_mode", expand=True)
         if settings.island_selector_shape == "CIRCLE":
             layout.prop(props, "radius")
         layout.separator(type="LINE")
         layout.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
+        merge_row = layout.row(align=True)
+        merge = merge_row.operator(
+            "mesh.polygroups_merge_small_islands",
+            text=t(context, "small_islands_merge"),
+            icon="AUTOMERGE_ON",
+        )
+        merge.preview = False
+        merge_row.prop(
+            settings,
+            "small_island_selected_area",
+            text=t(context, "only_selected"),
+            toggle=True,
+        )
+        layout.operator(
+            "mesh.polygroups_clear_inside_edges_seam",
+            text=t(context, "clear_inside_edges_seam"),
+            icon="X",
+        )
+        layout.label(text="Shift + LMB: Add linked island")
+
+
+class VIEW3D_WST_polygroups_face_selector(WorkSpaceTool):
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "EDIT_MESH"
+    bl_idname = FACE_SELECTOR_TOOL_ID
+    bl_label = "Face Selector"
+    bl_description = (
+        "Click a face to select and grow; click the selected area to grow again; "
+        "Ctrl-click shrinks; Shift-drag adds polygons"
+    )
+    bl_icon = "ops.generic.select"
+    bl_cursor = "NONE"
+    bl_options = {"KEYMAP_FALLBACK"}
+    bl_widget = None
+    bl_keymap = (
+        ("wm.tool_set_by_id", {"type": "RIGHTMOUSE", "value": "PRESS"},
+         {"properties": [("name", "builtin.select_box")]}),
+        ("mesh.polygroups_face_selector_click",
+         {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
+         {"properties": [("action", "LESS")]}),
+        ("mesh.polygroups_face_selector_gesture",
+         {"type": "LEFTMOUSE", "value": "PRESS", "shift": True}, None),
+        ("mesh.polygroups_face_selector_click",
+         {"type": "LEFTMOUSE", "value": "DOUBLE_CLICK"},
+         {"properties": [("action", "MORE")]}),
+        ("mesh.polygroups_face_selector_click",
+         {"type": "LEFTMOUSE", "value": "PRESS"},
+         {"properties": [("action", "MORE")]}),
+        ("mesh.polygroups_seam_cursor_modifier",
+         {"type": "MOUSEMOVE", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier",
+         {"type": "LEFT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier",
+         {"type": "RIGHT_CTRL", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier",
+         {"type": "LEFT_SHIFT", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier",
+         {"type": "RIGHT_SHIFT", "value": "ANY", "any": True}, None),
+        ("mesh.polygroups_seam_cursor_modifier",
+         {"type": "WINDOW_DEACTIVATE", "value": "ANY", "any": True}, None),
+    )
+    draw_cursor = staticmethod(draw_face_selector_cursor)
+
+    @staticmethod
+    def draw_settings(context, layout, tool):
+        settings = context.scene.polygroups_generator_settings
+        props = tool.operator_properties("mesh.polygroups_face_selector_gesture")
+        layout.prop(settings, "face_selector_shift_shape", expand=True)
+        if settings.face_selector_shift_shape == "CIRCLE":
+            layout.prop(props, "radius")
+        layout.separator(type="LINE")
+
+        linked = layout.operator(
+            "mesh.select_linked",
+            text=t(context, "select_linked_seam"),
+            icon="LINKED",
+        )
+        linked.delimit = {"SEAM"}
+        layout.operator(
+            "mesh.polygroups_delete_and_fill",
+            text=t(context, "delete_and_fill"),
+            icon="MESH_GRID",
+        )
+        layout.operator(
+            "mesh.polygroups_mark_smart_angle_seams",
+            text=t(context, "mark_smart_angle_seams"),
+            icon="UV",
+        )
+        layout.operator(
+            "mesh.polygroups_pin_selected_seams",
+            text=t(context, "pin_selected_seams"),
+            **icon_kwargs("pin_vertices", "PINNED"),
+        )
         merge = layout.operator(
             "mesh.polygroups_merge_small_islands",
             text=t(context, "small_islands_merge"),
@@ -938,11 +1082,16 @@ class VIEW3D_WST_polygroups_island_selector(WorkSpaceTool):
         )
         merge.preview = False
         layout.operator(
+            "mesh.polygroups_mark_longitudinal_seam",
+            text=t(context, "create_longitudinal_seam"),
+            icon="EDGE_SEAM",
+        )
+        layout.operator(
             "mesh.polygroups_clear_inside_edges_seam",
             text=t(context, "clear_inside_edges_seam"),
             icon="X",
         )
-        layout.label(text="Shift + LMB: Add linked island")
+        layout.label(text="LMB: More   Ctrl+LMB: Less   Shift+drag: Add")
 
 
 class VIEW3D_WST_polygroups_edge_merger(WorkSpaceTool):
@@ -1040,13 +1189,15 @@ def draw_seam_status(self, context):
     elif tool is not None and tool.idname == QUICK_KNIFE_SEAM_TOOL_ID:
         self.layout.label(text="Quick Knife Seam  |  Click and drag: split mesh and mark seam")
     elif tool is not None and tool.idname == SMART_SEAMS_TOOL_ID:
-        self.layout.label(text="Smart Seams Generator  |  Ctrl+Click: generate smart seams")
+        self.layout.label(text="Smart Seams Generator  |  Click: generate smart seams")
     elif tool is not None and tool.idname == LONGITUDINAL_SEAM_TOOL_ID:
-        self.layout.label(text="Longitudinal Seam  |  Ctrl+Click: create a longitudinal seam")
+        self.layout.label(text="Longitudinal Seam  |  Click: create a longitudinal seam")
     elif tool is not None and tool.idname == SMALL_ISLANDS_MERGER_TOOL_ID:
         self.layout.label(text="Small Islands Merger  |  Click and drag: select and merge small islands")
     elif tool is not None and tool.idname == ISLAND_SELECTOR_TOOL_ID:
         self.layout.label(text="Island Selector  |  Click: select island   Shift+Click: add island")
+    elif tool is not None and tool.idname == FACE_SELECTOR_TOOL_ID:
+        self.layout.label(text="Face Selector  |  Click: more   Ctrl+Click: less   Shift+drag: add")
     elif tool is not None and tool.idname == EDGE_MERGER_TOOL_ID:
         self.layout.label(text="Edge Merger  |  Click: merge edge at center")
     elif tool is not None and tool.idname == EDGE_SEAM_TOOL_ID:
@@ -1068,6 +1219,8 @@ def register():
     VIEW3D_WST_polygroups_quick_knife_seam.bl_icon = tool_icon("quick_knife_seam", "ops.mesh.bisect")
     VIEW3D_WST_polygroups_connect_vertex_seam.bl_icon = tool_icon("connect_vertex_seam", "ops.mesh.dupli_extrude_cursor")
     VIEW3D_WST_polygroups_edge_seam_path.bl_icon = tool_icon("edge_seam_path", "ops.mesh.dupli_extrude_cursor")
+    IMAGE_WST_polygroups_uv_seam_path.bl_icon = tool_icon(
+        "edge_seam_path", "ops.mesh.dupli_extrude_cursor")
     VIEW3D_WST_polygroups_smart_seams_generator.bl_icon = tool_icon("smart_seams_generator", "ops.mesh.mark_seam")
     VIEW3D_WST_polygroups_longitudinal_seam.bl_icon = tool_icon("longitudinal_seam", "ops.mesh.mark_seam")
     VIEW3D_WST_polygroups_small_islands_merger.bl_icon = "ops.generic.select_box"
@@ -1155,8 +1308,14 @@ def register():
         group=False,
     )
     bpy.utils.register_tool(
-        VIEW3D_WST_polygroups_island_selector,
+        VIEW3D_WST_polygroups_face_selector,
         after={LONGITUDINAL_SEAM_TOOL_ID},
+        separator=False,
+        group=False,
+    )
+    bpy.utils.register_tool(
+        VIEW3D_WST_polygroups_island_selector,
+        after={FACE_SELECTOR_TOOL_ID},
         separator=False,
         group=False,
     )
@@ -1175,6 +1334,12 @@ def register():
 
     bpy.utils.register_tool(VIEW3D_WST_polygroups_seam_eraser, after={EDGE_MERGER_TOOL_ID}, separator=True)
     bpy.utils.register_tool(VIEW3D_WST_polygroups_edge_seam_eraser, after={AREA_TOOL_ID})
+    bpy.utils.register_tool(
+        IMAGE_WST_polygroups_uv_seam_path,
+        after={"builtin.cursor"},
+        separator=True,
+        group=False,
+    )
     scene = getattr(bpy.context, "scene", None)
     if scene is not None:
         update_dynamic_seam_tool_icons(scene.polygroups_seam_preparation_settings, bpy.context)
@@ -1184,6 +1349,7 @@ def register():
 def unregister():
     unregister_hover_cache()
     stop_erasers()
+    clear_uv_seam_path_sessions()
     bpy.types.STATUSBAR_HT_header.remove(draw_seam_status)
     # Switching tools removes Blender's cursor callback before unregister_tool
     # removes the definition and keymap (it does not remove the callback itself).
@@ -1198,13 +1364,26 @@ def unregister():
                 if bpy.context.mode != "EDIT_MESH":
                     continue
                 tool = window.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
-                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID, SMART_SEAMS_TOOL_ID, LONGITUDINAL_SEAM_TOOL_ID, SMALL_ISLANDS_MERGER_TOOL_ID, ISLAND_SELECTOR_TOOL_ID, EDGE_MERGER_TOOL_ID, AREA_TOOL_ID, PATH_TOOL_ID}:
+                if tool is not None and tool.idname in {VERTEX_SEAM_TOOL_ID, EDGE_SEAM_TOOL_ID, SMART_SEAMS_TOOL_ID, LONGITUDINAL_SEAM_TOOL_ID, SMALL_ISLANDS_MERGER_TOOL_ID, ISLAND_SELECTOR_TOOL_ID, FACE_SELECTOR_TOOL_ID, EDGE_MERGER_TOOL_ID, AREA_TOOL_ID, PATH_TOOL_ID}:
                     bpy.ops.wm.tool_set_by_id(name="builtin.select_box")
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type != "IMAGE_EDITOR":
+                continue
+            region = next((r for r in area.regions if r.type == "WINDOW"), None)
+            if region is None:
+                continue
+            with bpy.context.temp_override(window=window, area=area, region=region):
+                tool = window.workspace.tools.from_space_image_mode("UV", create=False)
+                if tool is not None and tool.idname == UV_SEAM_PATH_TOOL_ID:
+                    bpy.ops.wm.tool_set_by_id(name="builtin.select", space_type="IMAGE_EDITOR")
+    bpy.utils.unregister_tool(IMAGE_WST_polygroups_uv_seam_path)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_eraser)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_seam_eraser)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_merger)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_small_islands_merger)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_island_selector)
+    bpy.utils.unregister_tool(VIEW3D_WST_polygroups_face_selector)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_longitudinal_seam)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_smart_seams_generator)
     bpy.utils.unregister_tool(VIEW3D_WST_polygroups_edge_seam_path)
@@ -1221,3 +1400,4 @@ def unregister():
     bpy.utils.unregister_class(VIEW3D_MT_polygroups_cutter_tool_type)
     _cursor_ctrl.clear()
     _cursor_erase.clear()
+    _cursor_shift.clear()

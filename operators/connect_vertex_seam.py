@@ -12,6 +12,7 @@ TOOL_ID = "polygroups_generator.connect_vertex_seam_tool"
 # Only modifier flags are cached; never mesh data or undo-sensitive references.
 _cursor_ctrl = {}
 _cursor_erase = {}
+_cursor_shift = {}
 
 
 def cursor_ctrl_held(context):
@@ -22,13 +23,21 @@ def cursor_erase_held(context):
     return _cursor_erase.get((context.window.as_pointer(), context.area.as_pointer()), False)
 
 
+def cursor_shift_held(context):
+    return _cursor_shift.get((context.window.as_pointer(), context.area.as_pointer()), False)
+
+
 def update_cursor_ctrl(context, event):
     key = (context.window.as_pointer(), context.area.as_pointer())
     held = bool(event.ctrl) and event.type != "WINDOW_DEACTIVATE"
+    shift = bool(event.shift) and event.type != "WINDOW_DEACTIVATE"
     erase = held and bool(event.shift)
-    if _cursor_ctrl.get(key, False) != held or _cursor_erase.get(key, False) != erase:
+    if (_cursor_ctrl.get(key, False) != held
+            or _cursor_erase.get(key, False) != erase
+            or _cursor_shift.get(key, False) != shift):
         _cursor_ctrl[key] = held
         _cursor_erase[key] = erase
+        _cursor_shift[key] = shift
         context.area.tag_redraw()
 
 
@@ -40,7 +49,9 @@ class MESH_OT_polygroups_seam_cursor_modifier(bpy.types.Operator):
 
     def invoke(self, context, event):
         tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
-        if tool is not None and tool.idname in {
+        if tool is not None and tool.idname == "polygroups_generator.face_selector_tool":
+            context.tool_settings.mesh_select_mode = (False, False, True)
+        elif tool is not None and tool.idname in {
             "polygroups_generator.connect_vertex_seam_tool",
             "polygroups_generator.edge_seam_path_tool",
             "polygroups_generator.edge_seam_eraser_tool",
