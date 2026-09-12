@@ -17,6 +17,7 @@ addon_utils.enable("quad_remesher", default_set=True)
 from polygroups_generator.operators import import_queue as queue_module
 from polygroups_generator.operators import batch_import
 from polygroups_generator.core.remesh_job import remesh_backend, RemeshJob
+from polygroups_generator.localization import t
 
 context = bpy.context
 settings = context.scene.polygroups_model_preparation_settings
@@ -28,10 +29,23 @@ assert settings.batch_remesh_method == "QUAD" and settings.file_import_remesh_me
 assert abs(settings.batch_voxel_size - 0.003) < 1e-7
 assert abs(settings.file_import_voxel_size - 0.003) < 1e-7
 assert settings.batch_auto_smart_uv_project and settings.file_import_auto_smart_uv_project
+assert settings.batch_auto_unwrap_method == "SMART"
+assert settings.file_import_auto_unwrap_method == "SMART"
+assert settings.batch_import_mode == "AUTO"
 assert settings.batch_disable_view_assist and settings.file_import_disable_view_assist
 assert settings.batch_separate_collections and settings.file_import_separate_collections
 assert settings.batch_include_subfolders
 assert not settings.batch_auto_save and settings.batch_auto_save_interval == 5
+assert settings.batch_stage_2_enabled
+assert settings.batch_stage_3_enabled and settings.batch_stage_4_enabled
+assert settings.batch_stage_5_enabled
+for number in (3, 4):
+    for name in ("auto_remesh", "auto_unwrap", "use_materials",
+                 "prepare_polygroups", "material_seams"):
+        assert getattr(settings, f"batch_stage_{number}_{name}")
+settings.batch_stage_3_enabled = False
+settings.batch_stage_4_enabled = False
+settings.batch_stage_5_enabled = False
 assert settings.remesh_auto_unwrap_checker
 settings.batch_auto_remesh = True
 settings.batch_separate_collections = True
@@ -61,6 +75,12 @@ with patch.object(batch_import.time, "monotonic", side_effect=[1.0, 1.05, 1.25])
     assert modal_queue.step.call_count == 2
 modal(modal_operator, context, SimpleNamespace(type="MOUSEMOVE"))
 assert modal_queue.step.call_count == 2
+settings.batch_stage = "PAUSED"
+settings.batch_is_paused = True
+assert modal(modal_operator, context, SimpleNamespace(type="ESC")) == {"RUNNING_MODAL"}
+assert not settings.batch_cancel_requested and modal_queue.step.call_count == 2
+settings.batch_stage = "IMPORT"
+settings.batch_is_paused = False
 modal(modal_operator, context, SimpleNamespace(type="ESC"))
 assert settings.batch_cancel_requested and modal_queue.step.call_count == 3
 settings.batch_cancel_requested = False
@@ -143,12 +163,20 @@ with tempfile.TemporaryDirectory() as directory:
             assert not context.scene.polygroups_seam_preparation_settings.show_seams_object_mode
             assert not settings.remesh_auto_unwrap_checker
             advance_until(queue, lambda: queue.stage == "WAIT_REMESH")
+            assert settings.batch_remesh_progress == 0
+            assert queue.cursor.secondary_percent == 0
+            assert queue.cursor.status_line == t(context, "import_cursor_processing")
+            queue.step(context)
+            assert 33 <= settings.batch_remesh_progress <= 34
+            assert queue.cursor.secondary_percent == settings.batch_remesh_progress
             settings.batch_is_paused = True
             advance_until(queue, lambda: queue.stage == "NEXT")
+            assert settings.batch_remesh_progress == 100
             assert settings.batch_imported_count == 1
             assert save_mock.call_count == 0
             queue.step(context)
             assert settings.batch_stage == "PAUSED"
+            assert queue.cursor.status_line == t(context, "import_cursor_paused")
             assert queue.index == 1
             settings.batch_is_paused = False
             first_collection = queue.completed_collection
@@ -170,6 +198,7 @@ with tempfile.TemporaryDirectory() as directory:
             assert len(objects) == 2
             result = next(obj for obj in objects if obj != anchor)
             assert result.data.uv_layers.active is not None
+            assert any(edge.use_seam for edge in result.data.edges)
             assert list(anchor.data.materials) == [source_material]
             assert len(result.data.materials) == 1
             gray = result.active_material
@@ -187,6 +216,43 @@ with tempfile.TemporaryDirectory() as directory:
         assert set(bpy.data.objects) == existing
 
         assert not any(mat.name.startswith("Remesh Gray") for mat in bpy.data.materials)
+
+        # Step mode completes the current file before pausing. Do Next processes
+        # exactly one file with settings edited during the pause; Do Next All
+        # then releases every remaining file in this run.
+        settings.batch_import_mode = "PAUSE_EACH"
+        settings.batch_auto_arrange_objects = False
+        settings.batch_clear_material = True
+        events.clear()
+        step_queue = queue_module.ImportQueue(
+            context,
+            [paths[0], paths[1], paths[0]],
+            False,
+            report,
+        )
+        queue_module.ACTIVE_QUEUE = step_queue
+        step_queue.begin()
+        advance_until(step_queue, lambda: settings.batch_stage == "PAUSED")
+        assert settings.batch_imported_count == 1 and step_queue.index == 1
+        assert len(step_queue.groups) == 1 and step_queue.job is None
+
+        settings.batch_clear_material = False
+        assert bpy.ops.object.polygroups_import_control(action="NEXT_ONE") == {"FINISHED"}
+        advance_until(step_queue, lambda: settings.batch_stage == "PAUSED")
+        assert settings.batch_imported_count == 2 and step_queue.index == 2
+        second_result = step_queue.groups[1][1][-1]
+        assert list(second_result.data.materials) == [source_material]
+
+        assert bpy.ops.object.polygroups_import_control(action="NEXT_ALL") == {"FINISHED"}
+        advance_until(step_queue, lambda: step_queue.finished)
+        assert settings.batch_imported_count == 3 and step_queue.index == 3
+        assert len(step_queue.groups) == 3
+        queue_module.ACTIVE_QUEUE = None
+        step_queue.finished = False
+        step_queue.finish(context, "CANCELLED", rollback=True)
+        settings.batch_import_mode = "AUTO"
+        settings.batch_auto_arrange_objects = True
+
         settings.batch_clear_material = False
         events.clear()
         queue = queue_module.ImportQueue(context, paths, False, report)
@@ -254,6 +320,52 @@ with tempfile.TemporaryDirectory() as directory:
         assert len(queue.groups[0][1]) == 1
         assert queue.groups[0][0].data.uv_layers.active is None
         assert not queue.groups[0][0].data.materials
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+    # Each enabled pass consumes the preceding pass's mesh. A disabled middle
+    # pass is bypassed, so LOW consumes the first pass's result directly.
+    chain = []
+
+    class ChainedJob:
+        def __init__(self, backend, report):
+            pass
+
+        def start(self, context):
+            self.source = context.active_object
+            chain.append(("start", self.source, context.scene.qremesher.target_count))
+
+        def poll(self):
+            return True, 1.0
+
+        def finish(self, context):
+            result = self.source.copy()
+            result.data = self.source.data.copy()
+            result.name = "Retopo_" + self.source.name
+            context.scene.collection.objects.link(result)
+            self.source.hide_set(True)
+            chain.append(("finish", result, None))
+
+        def abort(self):
+            pass
+
+    settings.batch_auto_remesh = True
+    settings.batch_auto_smart_uv_project = True
+    settings.batch_clear_material = False
+    settings.batch_auto_arrange_objects = False
+    settings.batch_stage_3_enabled = False
+    settings.batch_stage_4_enabled = True
+    settings.batch_stage_4_auto_unwrap = False
+    with patch.object(queue_module, "RemeshJob", ChainedJob):
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.finished)
+        assert settings.batch_failed_count == 0
+        assert [item[0] for item in chain] == ["start", "finish"] * 2
+        assert chain[2][1] == chain[1][1]
+        assert chain[2][2] == dict(queue_module.get_remesh_preset_counts(context))["LOW"]
+        assert len(queue.groups[0][1]) == 3
+        assert queue.cursor is None
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)
 

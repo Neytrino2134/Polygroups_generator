@@ -152,7 +152,13 @@ def unwrap_all_angle_based(context, average_islands=False):
     return True
 
 
-def smart_project_all(context, obj=None, angle_limit=1.1519173063162575, island_margin=0.02):
+def smart_project_all(
+    context,
+    obj=None,
+    angle_limit=1.1519173063162575,
+    island_margin=0.02,
+    mark_seams_from_islands=False,
+):
     """Run Blender's native Smart UV Project on all faces of one mesh."""
     obj = obj or context.active_object
     if obj is None or obj.type != "MESH":
@@ -166,7 +172,17 @@ def smart_project_all(context, obj=None, angle_limit=1.1519173063162575, island_
     try:
         bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
         bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.uv.smart_project(angle_limit=angle_limit, island_margin=island_margin)
+        result = bpy.ops.uv.smart_project(angle_limit=angle_limit, island_margin=island_margin)
+        if "FINISHED" not in result:
+            return False
+        if mark_seams_from_islands:
+            try:
+                bpy.ops.uv.select_all(action="SELECT")
+            except Exception:
+                pass
+            result = bpy.ops.uv.seams_from_islands(mark_seams=True, mark_sharp=False)
+            if "FINISHED" not in result:
+                return False
     finally:
         if original_mode != "EDIT" and obj.mode == "EDIT":
             try:
@@ -174,6 +190,50 @@ def smart_project_all(context, obj=None, angle_limit=1.1519173063162575, island_
             except Exception:
                 bpy.ops.object.mode_set(mode="OBJECT")
     return True
+
+
+def smart_uv_unwrap_all(context, obj=None):
+    """Generate smart seams and unwrap one mesh using the add-on workflow."""
+    obj = obj or context.active_object
+    if obj is None or obj.type != "MESH":
+        return False, False
+
+    original_mode = obj.mode
+    seam_settings = context.scene.polygroups_seam_finalization_settings
+    context.view_layer.objects.active = obj
+    obj.hide_set(False)
+    if original_mode != "EDIT":
+        bpy.ops.object.mode_set(mode="EDIT")
+
+    packed = False
+    try:
+        bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
+        bpy.ops.mesh.select_all(action="SELECT")
+        auto_unwrap = seam_settings.auto_unwrap_after_seam
+        seam_settings.auto_unwrap_after_seam = False
+        try:
+            result = bpy.ops.mesh.polygroups_mark_smart_angle_seams()
+        finally:
+            seam_settings.auto_unwrap_after_seam = auto_unwrap
+        if "FINISHED" not in result:
+            return False, False
+
+        unwrap_all_angle_based(
+            context,
+            average_islands=seam_settings.auto_average_islands_scale_after_unwrap,
+        )
+        if seam_settings.smart_uv_unwrap_auto_pack:
+            bpy.ops.uv.select_all(action="SELECT")
+            bpy.ops.uv.pack_islands()
+            packed = True
+    finally:
+        if original_mode != "EDIT" and obj.mode == "EDIT":
+            try:
+                bpy.ops.object.mode_set(mode=original_mode)
+            except Exception:
+                bpy.ops.object.mode_set(mode="OBJECT")
+
+    return True, packed
 
 
 class OBJECT_OT_polygroups_unwrap_angle_based(bpy.types.Operator):
@@ -244,40 +304,9 @@ class OBJECT_OT_polygroups_smart_uv_unwrap(bpy.types.Operator):
         return obj is not None and obj.type == "MESH"
 
     def execute(self, context):
-        obj = context.active_object
-        original_mode = obj.mode
-        seam_settings = context.scene.polygroups_seam_finalization_settings
-        context.view_layer.objects.active = obj
-        obj.hide_set(False)
-        if original_mode != "EDIT":
-            bpy.ops.object.mode_set(mode="EDIT")
-        try:
-            bpy.ops.mesh.select_mode(use_extend=False, use_expand=False, type="FACE")
-            bpy.ops.mesh.select_all(action="SELECT")
-            auto_unwrap = seam_settings.auto_unwrap_after_seam
-            seam_settings.auto_unwrap_after_seam = False
-            try:
-                result = bpy.ops.mesh.polygroups_mark_smart_angle_seams()
-            finally:
-                seam_settings.auto_unwrap_after_seam = auto_unwrap
-            if "FINISHED" not in result:
-                return {"CANCELLED"}
-
-            unwrap_all_angle_based(
-                context,
-                average_islands=seam_settings.auto_average_islands_scale_after_unwrap,
-            )
-            packed = False
-            if seam_settings.smart_uv_unwrap_auto_pack:
-                bpy.ops.uv.select_all(action="SELECT")
-                bpy.ops.uv.pack_islands()
-                packed = True
-        finally:
-            if original_mode != "EDIT" and obj.mode == "EDIT":
-                try:
-                    bpy.ops.object.mode_set(mode=original_mode)
-                except Exception:
-                    bpy.ops.object.mode_set(mode="OBJECT")
+        success, packed = smart_uv_unwrap_all(context)
+        if not success:
+            return {"CANCELLED"}
         suffix = " and packed islands" if packed else ""
         self.report({"INFO"}, f"Generated smart seams and unwrapped UVs{suffix}")
         return {"FINISHED"}

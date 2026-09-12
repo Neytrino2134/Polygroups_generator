@@ -14,6 +14,19 @@ IMPORT_REMESH_METHOD_ITEMS = (
     ("VOXEL", "Voxel", "Use Blender's native Remesh modifier in Voxel mode"),
 )
 
+IMPORT_AUTO_UNWRAP_METHOD_ITEMS = (
+    (
+        "SMART",
+        "Smart UV Unwrap",
+        "Generate smart seams and unwrap with the add-on's Smart UV Unwrap workflow",
+    ),
+    (
+        "CLASSIC",
+        "Smart UV Project",
+        "Use Blender's Smart UV Project and mark UV island borders as seams",
+    ),
+)
+
 
 CUTTER_COLLECTION_NAME = "Seam Cutters"
 CUTTER_PROP = "polygroups_object_seam_cutter"
@@ -50,7 +63,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_remesh_section": ("topic_remesh_0", "topic_remesh_1"),
     "show_resculpting_section": ("topic_sculpt_0", "topic_sculpt_1"),
     "show_seam_finalization_section": tuple(f"topic_seam_final_{index}" for index in range(6)),
-    "show_uv_preparation_section": ("topic_uv_0", "topic_uv_1"),
+    "show_uv_preparation_section": ("topic_uv_0", "topic_uv_2", "topic_uv_1"),
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
@@ -292,9 +305,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=True,
     )
     file_import_auto_smart_uv_project: bpy.props.BoolProperty(
-        name="Auto Unwrap Smart UV Project",
-        description="Unwrap imported results with Blender's native Smart UV Project",
+        name="Auto Unwrap",
+        description="Automatically unwrap imported remesh results",
         default=True,
+    )
+    file_import_auto_unwrap_method: bpy.props.EnumProperty(
+        name="Unwrap Method",
+        description="Method used to unwrap imported remesh results",
+        items=IMPORT_AUTO_UNWRAP_METHOD_ITEMS,
+        default="SMART",
     )
     batch_auto_rename_objects: bpy.props.BoolProperty(
         name="Auto Rename Objects",
@@ -317,9 +336,28 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=True,
     )
     batch_auto_smart_uv_project: bpy.props.BoolProperty(
-        name="Auto Unwrap Smart UV Project",
-        description="Unwrap each imported result with Blender's native Smart UV Project",
+        name="Auto Unwrap",
+        description="Automatically unwrap each imported remesh result",
         default=True,
+    )
+    batch_auto_unwrap_method: bpy.props.EnumProperty(
+        name="Unwrap Method",
+        description="Method used to unwrap each imported remesh result",
+        items=IMPORT_AUTO_UNWRAP_METHOD_ITEMS,
+        default="SMART",
+    )
+    batch_import_mode: bpy.props.EnumProperty(
+        name="Import Mode",
+        description="Continue automatically or pause after each completed file",
+        items=(
+            ("AUTO", "Auto Import", "Process every queued file without stopping"),
+            (
+                "PAUSE_EACH",
+                "Pause After Each",
+                "Finish the current file completely, then pause before importing the next file",
+            ),
+        ),
+        default="AUTO",
     )
     batch_include_subfolders: bpy.props.BoolProperty(
         name="Include Subfolders",
@@ -362,8 +400,8 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=False,
     )
     batch_auto_save_interval: bpy.props.IntProperty(
-        name="Every Successful Meshes",
-        description="Save after this many source mesh objects finish the complete import pipeline",
+        name="Every Successful Imports",
+        description="Save after this many source files finish the complete import pipeline successfully",
         default=5,
         min=1,
         soft_max=100,
@@ -413,10 +451,6 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_auto_remesh: bpy.props.BoolProperty(
         name="Auto Remesh",
         default=True,
-        update=_import_auto_remesh_update(
-            "batch_auto_remesh",
-            "batch_auto_smart_uv_project",
-        ),
     )
     batch_clear_material: bpy.props.BoolProperty(
         name="Clear Material",
@@ -432,6 +466,32 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=0.003, min=0.000001, soft_max=1.0, precision=4, unit="LENGTH",
     )
     batch_separate_collections: bpy.props.BoolProperty(default=True)
+    batch_stage_2_enabled: bpy.props.BoolProperty(
+        name="Stage 2: First Remesh", default=True,
+        description="Run the first remesh and Smart UV pass",
+    )
+    batch_stage_3_enabled: bpy.props.BoolProperty(
+        name="Stage 3: Second Remesh", default=True,
+        description="Remesh the result of the preceding enabled stage at MID density",
+    )
+    batch_stage_3_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
+    batch_stage_3_use_materials: bpy.props.BoolProperty(name="Use Materials", default=True)
+    batch_stage_3_prepare_polygroups: bpy.props.BoolProperty(name="Prepare Poly Groups", default=True)
+    batch_stage_3_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
+    batch_stage_3_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap Angle Based", default=True)
+    batch_stage_4_enabled: bpy.props.BoolProperty(
+        name="Stage 4: Third Remesh", default=True,
+        description="Remesh the result of the preceding enabled stage at LOW density",
+    )
+    batch_stage_4_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
+    batch_stage_4_use_materials: bpy.props.BoolProperty(name="Use Materials", default=True)
+    batch_stage_4_prepare_polygroups: bpy.props.BoolProperty(name="Prepare Poly Groups", default=True)
+    batch_stage_4_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
+    batch_stage_4_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap Angle Based", default=True)
+    batch_stage_5_enabled: bpy.props.BoolProperty(
+        name="Stage 5: UV Packing", default=True,
+        description="Pack final UV islands with UVPackmaster",
+    )
     batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     batch_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     batch_cancel_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
@@ -469,6 +529,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         min=0.0,
         max=100.0,
         subtype="PERCENTAGE",
+    )
+    batch_remesh_progress: bpy.props.FloatProperty(
+        name="Current Remesh Progress",
+        description="Progress of the currently running remesh action",
+        default=0.0,
+        min=0.0,
+        max=100.0,
+        subtype="PERCENTAGE",
+        options={"SKIP_SAVE"},
     )
     batch_import_progress: bpy.props.FloatProperty(
         name="Progress",
@@ -532,6 +601,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_bake_4: bpy.props.BoolProperty(default=False)
     topic_uv_0: bpy.props.BoolProperty(default=False)
     topic_uv_1: bpy.props.BoolProperty(default=False)
+    topic_uv_2: bpy.props.BoolProperty(default=False)
     topic_sculpt_0: bpy.props.BoolProperty(default=False)
     topic_sculpt_1: bpy.props.BoolProperty(default=False)
     topic_seam_final_0: bpy.props.BoolProperty(default=False)
@@ -1238,6 +1308,31 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
+    narrow_island_source: bpy.props.EnumProperty(
+        name="Analyze",
+        items=(
+            ('UV', 'UV Islands', 'Respect UV discontinuities and seams'),
+            ('MESH', 'Mesh / Seams', 'Use mesh boundaries and existing seams'),
+        ),
+        default='UV',
+    )
+    narrow_island_width: bpy.props.IntProperty(
+        name="Thin Width (face rows)", default=3, min=1, max=12,
+    )
+    narrow_island_min_faces: bpy.props.IntProperty(
+        name="Minimum Part Faces", default=8, min=2, max=10000,
+    )
+    narrow_island_min_length: bpy.props.IntProperty(
+        name="Minimum Branch Depth", default=3, min=1, max=100,
+    )
+    narrow_island_selected_only: bpy.props.BoolProperty(
+        name="Selected Islands Only", default=False,
+        description="Analyze whole islands touched by selected faces",
+    )
+    narrow_island_create_edges: bpy.props.BoolProperty(
+        name="Create New Edges", default=False,
+        description="Allow diagonal cuts through polygons for straighter narrow-island seams",
+    )
     uv_seam_path_auto_unwrap: bpy.props.BoolProperty(
         name="Auto Unwrap UV Island",
         description="Unwrap and separate the edited UV island when the UV Seam Path chain is finished",

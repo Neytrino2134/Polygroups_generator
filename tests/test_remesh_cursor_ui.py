@@ -39,6 +39,8 @@ def run():
         cursor = RemeshCursor(context)
         update_remesh_cursor(context, SimpleNamespace(mouse_x=region.x+region.width//2, mouse_y=region.y+region.height//2))
         cursor.percent = 42
+        cursor.secondary_percent = 67
+        cursor.status_line = "Processing"
     yield 0.5
     assert draws and not errors, errors
     with context.temp_override(window=window):

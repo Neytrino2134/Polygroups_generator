@@ -49,7 +49,7 @@ window_manager = SimpleNamespace(
     or {"RUNNING_MODAL"},
     fileselect_add=lambda operator: calls.append(("files", operator)),
 )
-invoke_context = SimpleNamespace(window_manager=window_manager)
+invoke_context = SimpleNamespace(window_manager=window_manager, window=None)
 drop_operator = SimpleNamespace(
     use_file_selection=True,
     properties=Properties(True),
@@ -107,7 +107,9 @@ for property_name in (
     "file_import_remesh_preset",
     "file_import_clear_material",
     "file_import_auto_smart_uv_project",
+    "file_import_auto_unwrap_method",
     "file_import_separate_collections",
+    "smart_seam_angle_limit",
 ):
     assert property_name in layout.properties, property_name
 

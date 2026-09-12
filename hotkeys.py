@@ -514,6 +514,22 @@ def register_keymaps():
             KEYMAP_ITEMS.append((number_map, item))
 
     if _preference_value(preferences, "enable_collection_navigation_hotkeys", True):
+        global_navigation_map = keyconfig.keymaps.new(name="Window", space_type="EMPTY")
+        for key, action in (
+            ("EQUAL", "NEXT"),
+            ("MINUS", "PREVIOUS"),
+        ):
+            item = global_navigation_map.keymap_items.new(
+                "object.polygroups_generated_collection",
+                key,
+                "PRESS",
+                ctrl=True,
+                head=True,
+                repeat=False,
+            )
+            item.properties.action = action
+            KEYMAP_ITEMS.append((global_navigation_map, item))
+
         for name, space_type in (
             ("Outliner", "OUTLINER"),
             ("User Interface", "EMPTY"),

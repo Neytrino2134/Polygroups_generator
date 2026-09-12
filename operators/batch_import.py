@@ -336,6 +336,8 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         return {"RUNNING_MODAL"}
 
     def invoke(self, context, event):
+        from ..core.remesh_cursor import update_remesh_cursor
+        update_remesh_cursor(context, event)
         if self.use_file_selection:
             return ImportHelper.invoke_popup(self, context)
         return self.execute(context)
@@ -349,6 +351,8 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
             self._finish(context)
             return {"FINISHED"}
         if event.type == "ESC":
+            if self._queue.settings.batch_stage == "PAUSED":
+                return {"RUNNING_MODAL"}
             self._queue.settings.batch_cancel_requested = True
         elif event.type != "TIMER":
             return {"PASS_THROUGH"}

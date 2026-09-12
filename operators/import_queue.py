@@ -14,7 +14,9 @@ from .rename_objects import (
     layer_collection_paths,
     rename_and_move_objects,
 )
-from .unwrap_angle_based import smart_project_all
+from .unwrap_angle_based import smart_project_all, smart_uv_unwrap_all
+from ..core.remesh_cursor import RemeshCursor
+from ..localization import t
 
 
 ACTIVE_QUEUE = None
@@ -78,6 +80,8 @@ class ImportQueue:
         self.rename_index = get_next_object_index()
         settings = self.settings
         prefix = "file_import" if file_selection else "batch"
+        self.file_selection = file_selection
+        self.prefix = prefix
         self.rename = getattr(settings, prefix + "_auto_rename_objects")
         self.weld = getattr(settings, prefix + "_apply_weld")
         self.auto_remesh = getattr(settings, prefix + "_auto_remesh")
@@ -89,28 +93,71 @@ class ImportQueue:
         self.disable_view_assist = getattr(settings, prefix + "_disable_view_assist")
         auto_smart_uv_property = prefix + "_auto_smart_uv_project"
         self.auto_smart_uv_project = bool(
-            self.auto_remesh and getattr(settings, auto_smart_uv_property)
+            getattr(settings, auto_smart_uv_property)
+            and (self.auto_remesh or not file_selection)
         )
-        if not self.auto_remesh:
+        self.auto_unwrap_method = getattr(settings, prefix + "_auto_unwrap_method")
+        if file_selection and not self.auto_remesh:
             setattr(settings, auto_smart_uv_property, False)
         self.quad_count = dict(get_remesh_preset_counts(context))[
             getattr(settings, prefix + "_remesh_preset")
         ]
-        self.backend = (
-            remesh_backend(context)
-            if self.auto_remesh and self.remesh_method == "QUAD"
-            else None
-        )
         self.weld_distance = settings.weld_distance
         self.arrange = settings.batch_auto_arrange_objects
         self.arrange_options = (settings.batch_arrange_spacing,
                                 settings.batch_arrange_mode, settings.batch_arrange_rows)
         self.auto_save = bool(not file_selection and settings.batch_auto_save)
         self.auto_save_interval = max(1, settings.batch_auto_save_interval)
-        self.successful_meshes_since_save = 0
+        self.successful_imports_since_save = 0
         self.auto_save_unsaved_warned = False
+        self.pause_after_each = bool(
+            not file_selection and settings.batch_import_mode == "PAUSE_EACH"
+        )
+        self.pause_after_next_file = False
         self.finished = False
         self.timer = None
+        self.cursor = None
+        self.saved_remesh_settings = None
+
+    def restore_remesh_settings(self):
+        if self.saved_remesh_settings is None:
+            return
+        use_materials, prepare, seams = self.saved_remesh_settings
+        if hasattr(self.scene, "qremesher"):
+            self.scene.qremesher.use_materials = use_materials
+        self.settings.remesh_pregenerate_polygroups = prepare
+        self.settings.remesh_auto_generate_seams = seams
+        self.saved_remesh_settings = None
+
+    def refresh_processing_settings(self, context):
+        """Apply settings edited while paused to the next queued file."""
+        settings = self.settings
+        prefix = self.prefix
+        self.rename = getattr(settings, prefix + "_auto_rename_objects")
+        self.weld = getattr(settings, prefix + "_apply_weld")
+        self.auto_remesh = getattr(settings, prefix + "_auto_remesh")
+        self.remesh_method = getattr(settings, prefix + "_remesh_method")
+        self.voxel_size = getattr(settings, prefix + "_voxel_size")
+        self.clear_material = getattr(settings, prefix + "_clear_material")
+        self.separate = getattr(settings, prefix + "_separate_collections")
+        self.disable_completed_collection = not self.file_selection and self.separate
+        self.auto_smart_uv_project = bool(
+            getattr(settings, prefix + "_auto_smart_uv_project")
+            and (self.auto_remesh or not self.file_selection)
+        )
+        self.auto_unwrap_method = getattr(settings, prefix + "_auto_unwrap_method")
+        self.quad_count = dict(get_remesh_preset_counts(context))[
+            getattr(settings, prefix + "_remesh_preset")
+        ]
+        self.weld_distance = settings.weld_distance
+        self.arrange = settings.batch_auto_arrange_objects
+        self.arrange_options = (
+            settings.batch_arrange_spacing,
+            settings.batch_arrange_mode,
+            settings.batch_arrange_rows,
+        )
+        self.auto_save = bool(not self.file_selection and settings.batch_auto_save)
+        self.auto_save_interval = max(1, settings.batch_auto_save_interval)
 
     def begin(self):
         self.timing = ImportTiming()
@@ -135,6 +182,7 @@ class ImportQueue:
         settings.batch_remaining_count = len(self.files)
         settings.batch_import_progress = 0
         settings.batch_current_progress = 0
+        settings.batch_remesh_progress = 0
         settings.batch_current_file = ""
         settings.batch_last_error = ""
         settings.batch_stage = "QUEUED"
@@ -169,6 +217,7 @@ class ImportQueue:
             bpy.ops.object.mode_set(mode="OBJECT")
         for selected in context.selected_objects:
             selected.select_set(False)
+        obj.hide_viewport = False
         obj.hide_set(False)
         obj.select_set(True)
         context.view_layer.objects.active = obj
@@ -190,7 +239,9 @@ class ImportQueue:
                 self.timing.pause()
                 self.update_timing()
                 settings.batch_stage = "PAUSED"
+                self.update_cursor()
                 return
+            self.refresh_processing_settings(context)
             if self.disable_completed_collection and self.completed_collection is not None:
                 for path in layer_collection_paths(
                     self.view_layer.layer_collection,
@@ -202,10 +253,14 @@ class ImportQueue:
             self.file_objects = []
             self.meshes = []
             self.result_meshes = []
+            self.pass_sources = []
+            self.pass_outputs = []
+            self.pass_index = 0
             self.mesh_index = 0
             self.collection = None
             settings.batch_current_file = os.path.basename(self.files[self.index])
             settings.batch_current_progress = 0
+            settings.batch_remesh_progress = 0
             self.timing.start_file()
             self.update_timing()
             self.stage = "IMPORT"
@@ -217,8 +272,10 @@ class ImportQueue:
             if self.job:
                 self.job.abort()
                 self.job = None
-                if self.mesh_index < len(self.meshes):
-                    self.meshes[self.mesh_index].hide_set(False)
+                if self.mesh_index < len(self.pass_sources):
+                    self.pass_sources[self.mesh_index].hide_viewport = False
+                    self.pass_sources[self.mesh_index].hide_set(False)
+            self.restore_remesh_settings()
             settings.batch_last_error = f"{settings.batch_current_file}: {error}"
             self.report({"WARNING"}, settings.batch_last_error)
             settings.batch_failed_count += 1
@@ -265,37 +322,92 @@ class ImportQueue:
                 self.rename_index += len(self.meshes)
             self.stage = "WELD"
         elif self.stage == "WELD":
+            if self.cursor is None:
+                self.cursor = RemeshCursor(context, label="Import")
             if self.weld:
                 count = apply_weld_to_objects(context, self.meshes, self.weld_distance, self.report)
                 if count != len(self.meshes):
                     raise RuntimeError("Weld failed for one or more meshes")
-            self.stage = "REMESH" if self.auto_remesh else "COMPLETE"
+            self.pass_sources = list(self.meshes)
+            self.passes = []
+            if self.file_selection:
+                if self.auto_remesh:
+                    self.passes.append((1, self.remesh_method, self.quad_count,
+                                        self.auto_smart_uv_project, self.auto_unwrap_method))
+            else:
+                if settings.batch_stage_2_enabled:
+                    self.passes.append((2, self.remesh_method if self.auto_remesh else None,
+                                        self.quad_count, self.auto_smart_uv_project,
+                                        self.auto_unwrap_method))
+                for number, preset in ((3, "MID"), (4, "LOW")):
+                    if getattr(settings, f"batch_stage_{number}_enabled"):
+                        self.passes.append((
+                            number,
+                            "QUAD" if getattr(settings, f"batch_stage_{number}_auto_remesh") else None,
+                            dict(get_remesh_preset_counts(context))[preset],
+                            getattr(settings, f"batch_stage_{number}_auto_unwrap"),
+                            "ANGLE",
+                        ))
+            self.stage = "PASS_SETUP"
+        elif self.stage == "PASS_SETUP":
+            if self.pass_index >= len(self.passes):
+                self.stage = "PACK" if not self.file_selection and settings.batch_stage_5_enabled else "COMPLETE"
+            else:
+                self.pass_number, self.pass_method, self.pass_quad_count, self.pass_unwrap, self.pass_unwrap_method = self.passes[self.pass_index]
+                self.pass_outputs = []
+                self.mesh_index = 0
+                if self.pass_number >= 3 and self.pass_method == "QUAD":
+                    remesh_backend(context)
+                    self.saved_remesh_settings = (
+                        self.scene.qremesher.use_materials,
+                        settings.remesh_pregenerate_polygroups,
+                        settings.remesh_auto_generate_seams,
+                    )
+                self.stage = "REMESH" if self.pass_method else "UNWRAP_PASS"
         elif self.stage == "REMESH":
-            source = self.meshes[self.mesh_index]
+            settings.batch_remesh_progress = 0
+            source = self.pass_sources[self.mesh_index]
             self.select_source(context, source)
-            if self.remesh_method == "QUAD":
+            if self.pass_method == "QUAD":
                 apply_quad_remesher_defaults_once(self.scene)
-                self.scene.qremesher.target_count = self.quad_count
-                self.job = RemeshJob(self.backend, self.report)
+                self.scene.qremesher.target_count = self.pass_quad_count
+                if self.pass_number >= 3:
+                    self.scene.qremesher.use_materials = getattr(
+                        settings, f"batch_stage_{self.pass_number}_use_materials"
+                    )
+                    settings.remesh_pregenerate_polygroups = getattr(
+                        settings, f"batch_stage_{self.pass_number}_prepare_polygroups"
+                    )
+                    settings.remesh_auto_generate_seams = getattr(
+                        settings, f"batch_stage_{self.pass_number}_material_seams"
+                    )
+                self.job = RemeshJob(remesh_backend(context), self.report)
             else:
                 self.job = VoxelRemeshJob(self.voxel_size, self.report)
             self.job.start(context)
+            if getattr(self.job, "cursor", None) is not None:
+                self.job.cursor.close()
+                self.job.cursor = None
             self.stage = "WAIT_REMESH"
         elif self.stage == "WAIT_REMESH":
             done, progress = self.job.poll()
+            settings.batch_remesh_progress = max(
+                settings.batch_remesh_progress,
+                100.0 if done else 100.0 * max(0.0, min(1.0, progress or 0.0)),
+            )
             self.update_progress(progress)
             if not done:
                 return
-            source = self.meshes[self.mesh_index]
+            source = self.pass_sources[self.mesh_index]
             self.select_source(context, source)
             before = set(self.owned_objects)
             self.tracked(lambda: self.job.finish(context))
             outputs = list(self.owned_objects - before)
             output_meshes = [obj for obj in outputs if obj.type == "MESH"]
             if not output_meshes:
-                raise RuntimeError(f"{self.remesh_method.title()} Remesh did not create a mesh")
-            self.result_meshes.extend(output_meshes)
-            if self.clear_material:
+                raise RuntimeError(f"{self.pass_method.title()} Remesh did not create a mesh")
+            self.pass_outputs.extend(output_meshes)
+            if self.pass_number in (1, 2) and self.clear_material:
                 for obj in outputs:
                     if obj.type == "MESH":
                         self.replace_remesh_material(obj)
@@ -310,13 +422,38 @@ class ImportQueue:
                 move_to_collection(outputs, self.collection)
             self.job = None
             self.mesh_index += 1
-            self.stage = "REMESH" if self.mesh_index < len(self.meshes) else "COMPLETE"
-        elif self.stage == "COMPLETE":
-            if self.auto_smart_uv_project:
-                for obj in self.result_meshes:
+            self.stage = "REMESH" if self.mesh_index < len(self.pass_sources) else "UNWRAP_PASS"
+        elif self.stage == "UNWRAP_PASS":
+            self.restore_remesh_settings()
+            targets = self.pass_outputs or self.pass_sources
+            if self.pass_unwrap:
+                for obj in targets:
                     self.select_source(context, obj)
-                    if not smart_project_all(context, obj):
-                        raise RuntimeError(f"Smart UV Project failed for {obj.name}")
+                    if self.pass_unwrap_method == "SMART":
+                        success, _packed = smart_uv_unwrap_all(context, obj)
+                        if not success:
+                            raise RuntimeError(f"Smart UV Unwrap failed for {obj.name}")
+                    elif self.pass_unwrap_method == "CLASSIC":
+                        if not smart_project_all(context, obj, mark_seams_from_islands=True):
+                            raise RuntimeError(f"Smart UV Project failed for {obj.name}")
+                    else:
+                        if "FINISHED" not in bpy.ops.object.polygroups_unwrap_angle_based():
+                            raise RuntimeError(f"Angle Based unwrap failed for {obj.name}")
+                        if "FINISHED" not in bpy.ops.object.polygroups_apply_checker_material():
+                            raise RuntimeError(f"Applying checker material failed for {obj.name}")
+            self.pass_sources = targets
+            self.result_meshes = targets
+            self.pass_index += 1
+            self.stage = "PASS_SETUP"
+        elif self.stage == "PACK":
+            for obj in self.pass_sources:
+                self.select_source(context, obj)
+                if obj.data.uv_layers.active is None:
+                    raise RuntimeError(f"No UV map to pack on {obj.name}")
+                if "FINISHED" not in bpy.ops.object.polygroups_uvpackmaster_pack():
+                    raise RuntimeError(f"UVPackmaster Pack failed for {obj.name}")
+            self.stage = "COMPLETE"
+        elif self.stage == "COMPLETE":
             self.groups.append((self.meshes[0], list(self.file_objects)))
             if self.arrange:
                 self.arrange_groups()
@@ -381,12 +518,17 @@ class ImportQueue:
         self.index += 1
         self.stage = "NEXT"
         self.settings.batch_stage = "NEXT"
+        if self.index < len(self.files) and (
+            self.pause_after_each or self.pause_after_next_file
+        ):
+            self.settings.batch_is_paused = True
+        self.pause_after_next_file = False
 
     def auto_save_successful_meshes(self):
         if not self.auto_save:
             return
-        self.successful_meshes_since_save += len(self.meshes)
-        if self.successful_meshes_since_save < self.auto_save_interval:
+        self.successful_imports_since_save += 1
+        if self.successful_imports_since_save < self.auto_save_interval:
             return
         if not bpy.data.filepath:
             if not self.auto_save_unsaved_warned:
@@ -404,17 +546,22 @@ class ImportQueue:
         if "FINISHED" not in result:
             self.report({"WARNING"}, "Batch Auto Save did not finish")
             return
-        self.successful_meshes_since_save %= self.auto_save_interval
+        self.successful_imports_since_save %= self.auto_save_interval
         self.auto_save_unsaved_warned = False
         self.report({"INFO"}, "Batch Import progress saved")
 
     def update_progress(self, remesh_progress=None):
-        fraction = 0.0
-        if self.stage not in {"NEXT", "IMPORT"}:
-            fraction = {"RENAME": 0.1, "WELD": 0.2, "REMESH": 0.3,
-                        "WAIT_REMESH": 0.3, "COMPLETE": 0.99}[self.stage]
-        if self.stage in {"REMESH", "WAIT_REMESH"} and self.meshes:
-            fraction = 0.3 + 0.69 * (self.mesh_index + (remesh_progress or 0)) / len(self.meshes)
+        fraction = {"NEXT": 0.0, "IMPORT": 0.0, "RENAME": 0.05,
+                    "WELD": 0.10, "PACK": 0.93, "COMPLETE": 0.99}.get(self.stage, 0.15)
+        if self.stage in {"PASS_SETUP", "REMESH", "WAIT_REMESH", "UNWRAP_PASS"}:
+            count = max(1, len(getattr(self, "passes", ())))
+            completed = min(self.pass_index, count)
+            within = 0.0
+            if self.stage in {"REMESH", "WAIT_REMESH"} and self.pass_sources:
+                within = 0.85 * (self.mesh_index + (remesh_progress or 0)) / len(self.pass_sources)
+            elif self.stage == "UNWRAP_PASS":
+                within = 0.9
+            fraction = 0.15 + 0.77 * (completed + within) / count
         if self.stage != "NEXT":
             self.settings.batch_current_progress = max(
                 self.settings.batch_current_progress, 100 * fraction,
@@ -423,6 +570,18 @@ class ImportQueue:
         value = 100 * (self.index + fraction) / len(self.files)
         self.settings.batch_import_progress = max(self.settings.batch_import_progress, value)
         self.settings.batch_remaining_count = len(self.files) - self.index
+        self.update_cursor()
+
+    def update_cursor(self):
+        if self.cursor is not None:
+            self.cursor.percent = self.settings.batch_import_progress
+            self.cursor.label = f"Import {self.index + 1}/{len(self.files)}"
+            self.cursor.secondary_percent = self.settings.batch_remesh_progress
+            self.cursor.status_line = t(
+                bpy.context,
+                "import_cursor_paused" if self.settings.batch_stage == "PAUSED"
+                else "import_cursor_processing",
+            )
 
     def finish(self, context, status, rollback=False):
         if self.finished:
@@ -430,6 +589,10 @@ class ImportQueue:
         if self.job:
             self.job.abort()
             self.job = None
+        self.restore_remesh_settings()
+        if self.cursor is not None:
+            self.cursor.close()
+            self.cursor = None
         if rollback:
             for obj in self.owned_objects & set(bpy.data.objects):
                 bpy.data.objects.remove(obj, do_unlink=True)
@@ -446,6 +609,7 @@ class ImportQueue:
             self.settings.batch_imported_object_count = 0
             self.settings.batch_import_progress = 0
             self.settings.batch_current_progress = 0
+            self.settings.batch_remesh_progress = 0
             self.settings.batch_remaining_count = len(self.files)
             for obj in self.original_selection:
                 if obj in set(bpy.data.objects):
@@ -469,6 +633,8 @@ class OBJECT_OT_polygroups_import_control(bpy.types.Operator):
     bl_description = "Pause/stop after the current file; cancel removes this run's imported objects"
     action: bpy.props.EnumProperty(items=(
         ("PAUSE", "Pause / Resume", "Pause after the current file or resume the queue"),
+        ("NEXT_ONE", "Do Next", "Process one more file, then pause again"),
+        ("NEXT_ALL", "Do Next All", "Resume and process every remaining file"),
         ("STOP", "Stop", "Finish the current file and keep imported results"),
         ("CANCEL", "Cancel", "Abort remeshing and remove all objects created by this import run"),
     ))
@@ -481,6 +647,13 @@ class OBJECT_OT_polygroups_import_control(bpy.types.Operator):
         settings = ACTIVE_QUEUE.settings
         if self.action == "PAUSE":
             settings.batch_is_paused = not settings.batch_is_paused
+        elif self.action == "NEXT_ONE":
+            ACTIVE_QUEUE.pause_after_next_file = True
+            settings.batch_is_paused = False
+        elif self.action == "NEXT_ALL":
+            ACTIVE_QUEUE.pause_after_each = False
+            ACTIVE_QUEUE.pause_after_next_file = False
+            settings.batch_is_paused = False
         elif self.action == "STOP":
             settings.batch_stop_requested = True
         else:

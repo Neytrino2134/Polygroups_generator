@@ -48,13 +48,18 @@ def _convex(face):
 
 
 def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
-                corridor_width=2.0, edge_preference=0.6, protected=()):
+                corridor_width=2.0, edge_preference=0.6, protected=(),
+                coordinates=None, ridge_weight=0.6, deviation_weight=3.0,
+                require_shorter=False):
     """Route only internal seams; selection boundaries and junctions are anchors.
 
     Diagonals use native BMesh face splitting, including warped convex quads.
     No vertices are moved. As with Connect Vertex Path, polygon tessellation may change.
     """
     protected = set(protected)
+    co = coordinates if coordinates is not None else lambda vertex: vertex.co
+    def edge_length(edge):
+        return (co(edge.verts[1]) - co(edge.verts[0])).length
     bm.verts.index_update()
     bm.edges.index_update()
     eligible = {e for e in bm.edges if e.seam and e not in protected and not e.hide
@@ -69,7 +74,7 @@ def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
         bm.edges.index_update()
         start, end = vertices[0], vertices[-1]
         original = set(old_edges)
-        scale = sorted(e.calc_length() for e in old_edges)[len(old_edges)//2]
+        scale = sorted(edge_length(e) for e in old_edges)[len(old_edges)//2]
         if scale < 1e-12:
             continue
         radius = max(0.1, corridor_width) * scale
@@ -94,7 +99,7 @@ def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
                 if edge not in local_edges:
                     continue
                 other = edge.other_vert(v)
-                candidate = distance + edge.calc_length()
+                candidate = distance + edge_length(edge)
                 if candidate <= radius and candidate < distances.get(other, float('inf')):
                     distances[other] = candidate
                     heapq.heappush(queue, (candidate, next(serial), other))
@@ -113,15 +118,15 @@ def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
                 return
             if isinstance(face, tuple):
                 _, _, crossing, factor = face
-                point = crossing.verts[0].co.lerp(crossing.verts[1].co, factor)
-                length = (point-a.co).length + (b.co-point).length
+                point = co(crossing.verts[0]).lerp(co(crossing.verts[1]), factor)
+                length = (point-co(a)).length + (co(b)-point).length
             else:
-                length = (b.co-a.co).length
+                length = (co(b)-co(a)).length
             if length <= scale*1e-8:
                 return
             deviation = (distances[a] + distances[b]) / (2*radius)
-            fit = 0.6*(1-(ridge[a]+ridge[b])*0.5)
-            cost = length*(1 + 3*deviation*deviation + fit + (edge_preference if face else 0))
+            fit = ridge_weight*(1-(ridge[a]+ridge[b])*0.5)
+            cost = length*(1 + deviation_weight*deviation*deviation + fit + (edge_preference if face else 0))
             graph[a].append((b, cost, face))
             graph[b].append((a, cost, face))
         for edge in sorted(local_edges, key=lambda e: e.index):
@@ -132,6 +137,12 @@ def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
                 if len(face.verts) < 4 or len(face.verts) > 32 or not _convex(face):
                     continue
                 vs = list(face.verts)
+                if coordinates is not None:
+                    turns = [(co(vs[i])-co(vs[i-1])).cross(co(vs[(i+1)%len(vs)])-co(vs[i]))
+                             for i in range(len(vs))]
+                    normal = max(turns, key=lambda turn: turn.length_squared)
+                    if normal.length_squared < 1e-24 or any(turn.dot(normal) < -1e-12 for turn in turns):
+                        continue
                 for i, a in enumerate(vs):
                     for b in vs[i+1:]:
                         if bm.edges.get((a,b)) is None:
@@ -149,8 +160,12 @@ def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
                 if a not in allowed or b not in allowed or bm.edges.get((a,b)) is not None:
                     continue
                 c, d = edge.verts
-                n = f.normal + g.normal
-                ab, cd, ac = b.co-a.co, d.co-c.co, c.co-a.co
+                n = ((co(c)-co(a)).cross(co(d)-co(a)) if coordinates is not None
+                     else f.normal + g.normal)
+                if n.length_squared < 1e-24:
+                    continue
+                n.normalize()
+                ab, cd, ac = co(b)-co(a), co(d)-co(c), co(c)-co(a)
                 denominator = ab.cross(cd).dot(n)
                 if abs(denominator) < scale*scale*1e-10:
                     continue
@@ -164,7 +179,7 @@ def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
         def turn(prev, v, nxt):
             if prev is None:
                 return 0.0
-            dot = (v.co-prev.co).normalized().dot((nxt.co-v.co).normalized())
+            dot = (co(v)-co(prev)).normalized().dot((co(nxt)-co(v)).normalized())
             return scale*turn_weight*(1-max(-1.0,min(1.0,dot)))**2
         # State includes incoming direction, unlike ordinary shortest edge paths.
         first = (None, start)
@@ -219,6 +234,17 @@ def route_seams(bm, surface_angle, create_edges=False, turn_weight=2.5,
                        for i,(a,b,face) in enumerate(route))
         if new_cost >= old_cost - scale*1e-6:
             continue
+        if require_shorter:
+            new_length = 0.0
+            for a, b, face in route:
+                if isinstance(face, tuple):
+                    _, _, crossing, factor = face
+                    point = co(crossing.verts[0]).lerp(co(crossing.verts[1]), factor)
+                    new_length += (point-co(a)).length + (co(b)-point).length
+                else:
+                    new_length += (co(b)-co(a)).length
+            if new_length > sum(edge_length(e) for e in old_edges) + scale*1e-6:
+                continue
         new_edges = []
         for a,b,face in route:
             edge = bm.edges.get((a,b))

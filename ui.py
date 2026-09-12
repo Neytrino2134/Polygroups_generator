@@ -1010,7 +1010,7 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
 
 def draw_import_remesh_options(layout, context, settings, prefix):
     column = layout.column(align=True)
-    column.enabled = not settings.batch_is_running
+    column.enabled = not settings.batch_is_running or settings.batch_stage == "PAUSED"
     column.prop(settings, prefix + "_auto_remesh", text="Auto Remesh")
     enabled = getattr(settings, prefix + "_auto_remesh")
     method_row = column.row(align=True)
@@ -1037,7 +1037,33 @@ def draw_import_remesh_options(layout, context, settings, prefix):
             prefix + "_auto_smart_uv_project",
             text=t(context, "auto_smart_uv_project"),
         )
+        unwrap_method_row = column.row(align=True)
+        unwrap_method_row.enabled = getattr(settings, prefix + "_auto_smart_uv_project")
+        unwrap_method_row.prop(
+            settings,
+            prefix + "_auto_unwrap_method",
+            text=t(context, "import_unwrap_method"),
+            expand=True,
+        )
+        if getattr(settings, prefix + "_auto_unwrap_method") == "SMART":
+            surface_angle_row = column.row(align=True)
+            surface_angle_row.enabled = getattr(settings, prefix + "_auto_smart_uv_project")
+            surface_angle_row.prop(
+                context.scene.polygroups_seam_preparation_settings,
+                "smart_seam_angle_limit",
+                text=t(context, "smart_seam_angle_limit"),
+            )
     column.prop(settings, prefix + "_separate_collections", text=t(context, "import_separate_collections"))
+
+
+def draw_batch_stage_heading(layout, title, settings=None, property_name=None):
+    row = layout.row(align=True)
+    if property_name:
+        row.enabled = not settings.batch_is_running or settings.batch_stage == "PAUSED"
+        row.prop(settings, property_name, text=title)
+    else:
+        row.label(text=title)
+    layout.separator(type="LINE")
 
 
 def draw_import_progress(layout, context, settings):
@@ -1046,6 +1072,8 @@ def draw_import_progress(layout, context, settings):
                  text=f'{t(context, "import_total_progress")}: {settings.batch_import_progress:.1f}%')
     box.progress(factor=settings.batch_current_progress / 100, type="BAR",
                  text=f'{t(context, "import_current_progress")}: {settings.batch_current_progress:.1f}%')
+    box.progress(factor=settings.batch_remesh_progress / 100, type="BAR",
+                 text=f'{t(context, "import_remesh_progress")}: {settings.batch_remesh_progress:.1f}%')
     box.label(text=t(context, "import_elapsed_time", value=format_duration(settings.batch_elapsed_seconds)))
     box.label(text=t(context, "import_current_time", value=format_duration(settings.batch_current_seconds)))
     if settings.batch_imported_count:
@@ -1073,11 +1101,25 @@ def draw_import_progress(layout, context, settings):
             box.label(text=t(context, "import_pausing"))
         row = box.row(align=True)
         row.enabled = not settings.batch_cancel_requested
-        pause = row.row(align=True)
-        pause.enabled = not settings.batch_stop_requested
-        pause.operator("object.polygroups_import_control",
-                       text=t(context, "import_resume" if settings.batch_is_paused else "import_pause"),
-                       icon="PLAY" if settings.batch_is_paused else "PAUSE").action = "PAUSE"
+        controls = row.row(align=True)
+        controls.enabled = not settings.batch_stop_requested
+        if settings.batch_stage == "PAUSED":
+            controls.operator(
+                "object.polygroups_import_control",
+                text=t(context, "import_do_next"),
+                icon="FRAME_NEXT",
+            ).action = "NEXT_ONE"
+            controls.operator(
+                "object.polygroups_import_control",
+                text=t(context, "import_do_next_all"),
+                icon="PLAY",
+            ).action = "NEXT_ALL"
+        else:
+            controls.operator(
+                "object.polygroups_import_control",
+                text=t(context, "import_resume" if settings.batch_is_paused else "import_pause"),
+                icon="PLAY" if settings.batch_is_paused else "PAUSE",
+            ).action = "PAUSE"
         row.operator("object.polygroups_import_control", text=t(context, "import_stop")).action = "STOP"
         row.operator("object.polygroups_import_control", text=t(context, "import_cancel"), icon="CANCEL").action = "CANCEL"
 
@@ -1170,14 +1212,90 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 text=t(context, "scan_folder"),
                 icon="VIEWZOOM",
             )
+            content.progress(
+                factor=1.0 if settings.batch_stage == "QUEUED" else 0.0,
+                type="BAR",
+                text=t(context, "scanned_files_found", value=settings.batch_total_count),
+            )
 
         content = draw_topic(layout, context, "batch_1", t(context, "import_group_processing"), "MODIFIER")
         if content is not None:
-            content.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
-            content.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
-            content.prop(settings, "batch_disable_view_assist",
-                         text=t(context, "disable_view_assist"))
-            draw_import_remesh_options(content, context, settings, "batch")
+            editable = not settings.batch_is_running or settings.batch_stage == "PAUSED"
+            outside = content.column(align=True)
+            outside.enabled = editable
+            outside.prop(settings, "batch_disable_view_assist", text=t(context, "disable_view_assist"))
+            outside.prop(settings, "batch_separate_collections", text=t(context, "import_separate_collections"))
+            auto_save_row = content.row(align=True)
+            auto_save_row.enabled = editable
+            auto_save_row.prop(
+                settings,
+                "batch_auto_save",
+                text=t(context, "batch_auto_save"),
+                toggle=True,
+            )
+            interval = auto_save_row.row(align=True)
+            interval.enabled = settings.batch_auto_save
+            interval.prop(
+                settings,
+                "batch_auto_save_interval",
+                text=t(context, "batch_auto_save_every"),
+            )
+
+            content.separator()
+            content.label(text=t(context, "batch_stages"), icon="MODIFIER")
+            draw_batch_stage_heading(content, t(context, "batch_stage_basics"))
+            basics = content.column(align=True)
+            basics.enabled = editable
+            basics.prop(settings, "batch_auto_rename_objects", text=t(context, "auto_rename_objects"))
+            basics.prop(settings, "batch_apply_weld", text=t(context, "apply_weld"))
+
+            draw_batch_stage_heading(content, t(context, "batch_stage_first"),
+                                     settings, "batch_stage_2_enabled")
+            first = content.column(align=True)
+            first.enabled = editable and settings.batch_stage_2_enabled
+            first.prop(settings, "batch_auto_remesh", text="Auto Remesh")
+            first_remesh_options = first.column(align=True)
+            first_remesh_options.enabled = settings.batch_auto_remesh
+            method = first_remesh_options.row(align=True)
+            method.prop(settings, "batch_remesh_method", expand=True)
+            if settings.batch_remesh_method == "QUAD":
+                first_remesh_options.prop(settings, "batch_remesh_preset", expand=True)
+            else:
+                first_remesh_options.prop(settings, "batch_voxel_size", text=t(context, "voxel_size"))
+            first_remesh_options.prop(settings, "batch_clear_material", text="Clear Material")
+            first.prop(settings, "batch_auto_smart_uv_project", text=t(context, "auto_smart_uv_project"))
+            unwrap_method = first.row()
+            unwrap_method.enabled = settings.batch_auto_smart_uv_project
+            unwrap_method.prop(settings, "batch_auto_unwrap_method", text=t(context, "import_unwrap_method"))
+            if settings.batch_auto_unwrap_method == "SMART":
+                angle = first.row()
+                angle.enabled = settings.batch_auto_smart_uv_project
+                angle.prop(context.scene.polygroups_seam_preparation_settings,
+                           "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
+
+            for number, preset, title in (
+                (3, "MID", t(context, "batch_stage_second")),
+                (4, "LOW", t(context, "batch_stage_third")),
+            ):
+                draw_batch_stage_heading(content, title, settings, f"batch_stage_{number}_enabled")
+                stage = content.column(align=True)
+                stage.enabled = editable and getattr(settings, f"batch_stage_{number}_enabled")
+                stage.prop(settings, f"batch_stage_{number}_auto_remesh", text="Auto Remesh (Quad)")
+                stage.label(text=f'{preset}: {dict(get_remesh_preset_counts(context))[preset]:,} quads')
+                remesh_options = stage.column(align=True)
+                remesh_options.enabled = getattr(settings, f"batch_stage_{number}_auto_remesh")
+                remesh_options.prop(settings, f"batch_stage_{number}_use_materials", text=t(context, "use_materials"))
+                remesh_options.prop(settings, f"batch_stage_{number}_prepare_polygroups", text=t(context, "batch_prepare_polygroups"))
+                remesh_options.prop(settings, f"batch_stage_{number}_material_seams", text=t(context, "batch_material_seams"))
+                stage.prop(settings, f"batch_stage_{number}_auto_unwrap", text=t(context, "batch_angle_checker"))
+
+            draw_batch_stage_heading(content, t(context, "batch_stage_packing"),
+                                     settings, "batch_stage_5_enabled")
+            pack = content.column(align=True)
+            pack.enabled = editable and settings.batch_stage_5_enabled
+            installed, enabled, available = uvpackmaster_status(context)
+            pack.label(text=t(context, "batch_pack_available" if available else "batch_pack_missing"),
+                       icon="CHECKMARK" if available else "ERROR")
 
         content = draw_topic(layout, context, "batch_2", t(context, "arrange_objects"), "SNAP_EDGE")
         if content is not None:
@@ -1198,6 +1316,15 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
         if content is not None:
+            import_mode_row = content.row(align=True)
+            import_mode_row.enabled = not settings.batch_is_running
+            import_mode_row.prop(
+                settings,
+                "batch_import_mode",
+                text=t(context, "batch_import_mode"),
+                expand=True,
+            )
+
             save_row = content.row(align=True)
             save_row.enabled = not settings.batch_is_running
             save_row.operator(
@@ -1210,22 +1337,6 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             save_hint.label(
                 text=t(context, "batch_save_before_start"),
                 icon="INFO" if bpy.data.filepath else "ERROR",
-            )
-
-            auto_save_row = content.row(align=True)
-            auto_save_row.enabled = not settings.batch_is_running
-            auto_save_row.prop(
-                settings,
-                "batch_auto_save",
-                text=t(context, "batch_auto_save"),
-                toggle=True,
-            )
-            interval = auto_save_row.row(align=True)
-            interval.enabled = settings.batch_auto_save
-            interval.prop(
-                settings,
-                "batch_auto_save_interval",
-                text=t(context, "batch_auto_save_every"),
             )
 
             content.separator()
@@ -2313,6 +2424,40 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
                 icon="UV",
             )
             content.separator()
+
+        content = draw_topic(layout, context, "uv_2", "narrow_island_splitter", "UV_EDGESEL")
+        if content is not None:
+            narrow = context.scene.polygroups_seam_finalization_settings
+            column = content.column(align=True)
+            column.prop(narrow, "narrow_island_source", text=t(context, "narrow_island_source"))
+            column.prop(narrow, "narrow_island_width", text=t(context, "narrow_island_width"))
+            column.prop(narrow, "narrow_island_min_faces", text=t(context, "narrow_island_min_faces"))
+            column.prop(narrow, "narrow_island_min_length", text=t(context, "narrow_island_min_length"))
+            column.prop(narrow, "narrow_island_selected_only", text=t(context, "narrow_island_selected_only"))
+            column.prop(narrow, "narrow_island_create_edges", text=t(context, "narrow_island_create_edges"))
+            column.separator()
+            column.operator_context = 'EXEC_DEFAULT'
+            for action, label, icon in (
+                ('PREVIEW', 'narrow_island_preview', 'VIEWZOOM'),
+                ('SEAMS', 'narrow_island_mark_seams', 'EDGE_SEAM'),
+                ('SPLIT', 'narrow_island_split_uv', 'UV'),
+            ):
+                row = column.row(align=True)
+                row.operator_context = 'EXEC_DEFAULT'
+                row.enabled = action != 'SPLIT' or narrow.narrow_island_source == 'UV'
+                button = row.operator(
+                    'mesh.polygroups_split_narrow_islands', text=t(context, label), icon=icon,
+                )
+                button.source = narrow.narrow_island_source
+                button.action = action
+                button.width = narrow.narrow_island_width
+                button.min_faces = narrow.narrow_island_min_faces
+                button.min_length = narrow.narrow_island_min_length
+                button.selected_only = narrow.narrow_island_selected_only
+                button.create_edges = narrow.narrow_island_create_edges
+            if narrow.narrow_island_create_edges:
+                column.label(text=t(context, 'narrow_island_diagonal_hint'), icon='INFO')
+            column.label(text=t(context, 'narrow_island_pack_hint'), icon='INFO')
 
         content = draw_topic(layout, context, "uv_1", 'UVPackmaster Packing', "UV_SYNC_SELECT")
         if content is not None:
@@ -3422,6 +3567,12 @@ def draw_outliner_header(self, context):
         icon="TRIA_RIGHT",
     )
     following.action = "NEXT"
+    isolate = row.operator(
+        "object.polygroups_generated_collection",
+        text="",
+        icon="OUTLINER_COLLECTION",
+    )
+    isolate.action = "ISOLATE"
     row.separator()
     hide_highpoly = row.operator(
         "object.polygroups_object_visibility",
@@ -3496,6 +3647,19 @@ def draw_object_select_tool_actions(self, context):
     layout = self.layout
     layout.separator()
     remesh_row = layout.row(align=True)
+    previous = remesh_row.operator(
+        "object.polygroups_generated_collection",
+        text="Prev",
+        icon="TRIA_LEFT",
+    )
+    previous.action = "PREVIOUS"
+    following = remesh_row.operator(
+        "object.polygroups_generated_collection",
+        text="Next",
+        icon="TRIA_RIGHT",
+    )
+    following.action = "NEXT"
+    remesh_row.separator()
     remesh_row.label(text="Remesh:")
     for label, quad_count in get_remesh_preset_counts(context):
         operator = remesh_row.operator(
@@ -3523,7 +3687,9 @@ def draw_object_select_tool_actions(self, context):
 
 
 def draw_view_assists_shading_pie(self, context):
-    """Add the combined overlay toggle to Blender's standard Z shading pie."""
+    """Add independent Object Mode overlay toggles to the standard Z shading pie."""
+    if context.mode != "OBJECT":
+        return
     scene = getattr(context, "scene", None)
     if scene is None:
         return
@@ -3531,16 +3697,20 @@ def draw_view_assists_shading_pie(self, context):
     checker_settings = getattr(scene, "polygroups_seam_finalization_settings", None)
     if seam_settings is None or checker_settings is None:
         return
-    enabled = bool(
-        seam_settings.show_seams_object_mode
-        and checker_settings.show_checker_solid_mode
-    )
     pie = self.layout.menu_pie()
-    pie.operator(
-        "wm.airetopo_toggle_view_assists",
-        text=t(context, "toggle_view_assists"),
-        icon="HIDE_OFF" if enabled else "HIDE_ON",
-        depress=enabled,
+    pie.prop(
+        seam_settings,
+        "show_seams_object_mode",
+        text=t(context, "show_seams_object_mode"),
+        icon="EDGE_SEAM",
+        toggle=True,
+    )
+    pie.prop(
+        checker_settings,
+        "show_checker_solid_mode",
+        text=t(context, "show_checker_solid_mode"),
+        icon="TEXTURE",
+        toggle=True,
     )
 
 

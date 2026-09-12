@@ -1,3 +1,7 @@
+from .split_narrow_islands import (
+    MESH_OT_polygroups_split_narrow_islands,
+    IMAGE_PT_polygroups_narrow_islands,
+)
 from .seam_eraser import MESH_OT_polygroups_seam_eraser_resize
 from .seam_eraser import MESH_OT_polygroups_seam_eraser, MESH_OT_polygroups_edge_seam_eraser_click
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
@@ -175,6 +179,8 @@ from .dev_restart import (
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
+    MESH_OT_polygroups_split_narrow_islands,
+    IMAGE_PT_polygroups_narrow_islands,
     WM_OT_airetopo_detach_group,
     WM_OT_airetopo_group_window_control,
     WM_OT_airetopo_dev_restart,
@@ -372,6 +378,8 @@ def register():
 
 
 def unregister():
+    from .narrow_cut_preview import clear_preview
+    clear_preview()
     from .detached_groups import cleanup_windows
     cleanup_windows()
     import bpy

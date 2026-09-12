@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
 addon_utils.enable(ROOT.name, default_set=True)
 
+from polygroups_generator.operators.unwrap_angle_based import smart_project_all
+
 bpy.ops.mesh.primitive_cube_add()
 obj = bpy.context.active_object
 seams = bpy.context.scene.polygroups_seam_preparation_settings
@@ -22,6 +24,13 @@ finalization.smart_uv_unwrap_auto_pack = True
 assert bpy.ops.object.polygroups_smart_uv_unwrap() == {"FINISHED"}
 assert obj.mode == "OBJECT"
 assert obj.data.uv_layers.active is not None
+assert any(edge.use_seam for edge in obj.data.edges)
+
+# The classic import method must turn Smart UV Project island borders into
+# mesh seams so the Object Mode seam overlay can display them.
+for edge in obj.data.edges:
+    edge.use_seam = False
+assert smart_project_all(bpy.context, obj, mark_seams_from_islands=True)
 assert any(edge.use_seam for edge in obj.data.edges)
 
 # Island Selector exposes this Object operator while the mesh is in Edit Mode.

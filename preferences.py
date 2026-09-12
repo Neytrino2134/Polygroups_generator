@@ -470,7 +470,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     )
     enable_collection_navigation_hotkeys: bpy.props.BoolProperty(
         name="Collection Navigation Hotkeys",
-        description="Use Ctrl+Numpad Plus/Minus in Outliner and the AI Retopo sidebar",
+        description="Use global Ctrl+=/Ctrl+- or Ctrl+Numpad Plus/Minus to navigate Generated collections",
         default=True,
         update=_update_hotkeys,
     )
