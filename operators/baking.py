@@ -73,7 +73,7 @@ def _source_meshes(context, target):
     return [
         obj
         for obj in context.selected_objects
-        if obj != target and obj.type == "MESH"
+        if obj != target and obj.type == "MESH" and not obj.get("polygroups_smart_cage")
     ]
 
 
@@ -262,6 +262,9 @@ def calculate_auto_cage(context, target, sources, settings):
 
 
 def _apply_auto_cage_if_enabled(context, target, sources, settings, report):
+    if getattr(settings, "use_smart_cage", False) or getattr(settings, "autogenerate_smart_cage", False):
+        from .smart_cage import prepare_bake
+        return prepare_bake(context, target, sources, settings, report)
     if not settings.use_auto_cage:
         return True
 
@@ -809,6 +812,19 @@ def _apply_bake_background(pixels, coverage, resolution, mode):
     return output
 
 
+def _fill_normal_background(pixels, coverage):
+    """Use a flat tangent-space normal wherever the bake has no coverage."""
+    output = array("f", pixels)
+    for pixel_index, mask in enumerate(coverage):
+        index = pixel_index * 4
+        background = 1.0 - mask
+        output[index] = output[index] * mask + 0.5 * background
+        output[index + 1] = output[index + 1] * mask + 0.5 * background
+        output[index + 2] = output[index + 2] * mask + background
+        output[index + 3] = 1.0
+    return output
+
+
 def _finalize_bake_images(target, settings):
     base_image = _find_current_bake_image(
         target, BAKE_BASE_COLOR_NODE, BAKE_BASE_COLOR_IMAGE_PROP,
@@ -833,14 +849,15 @@ def _finalize_bake_images(target, settings):
     )
     _write_pixels(alpha_image, _alpha_map_pixels(coverage))
 
-    for image in (base_image, normal_image):
-        if image is None or not _image_is_readable(image, resolution):
-            continue
-        pixels = _read_image_pixels(image, resolution)
+    if base_image is not None and _image_is_readable(base_image, resolution):
+        pixels = _read_image_pixels(base_image, resolution)
         _write_pixels(
-            image,
+            base_image,
             _apply_bake_background(pixels, coverage, resolution, settings.bake_background_mode),
         )
+    if normal_image is not None and _image_is_readable(normal_image, resolution):
+        pixels = _read_image_pixels(normal_image, resolution)
+        _write_pixels(normal_image, _fill_normal_background(pixels, coverage))
     return alpha_image
 
 
@@ -1236,6 +1253,9 @@ def _configure_bake_settings(context, settings, bake_type):
     bake = scene.render.bake
     bake.use_selected_to_active = settings.use_selected_to_active
     bake.cage_extrusion = settings.cage_extrusion
+    smart = getattr(settings, "use_smart_cage", False) or getattr(settings, "autogenerate_smart_cage", False)
+    bake.use_cage = bool(smart and settings.use_selected_to_active)
+    bake.cage_object = settings.smart_cage_object if bake.use_cage else None
     bake.max_ray_distance = settings.ray_distance
     bake.margin = settings.bake_margin
     if hasattr(bake, "margin_type"):
@@ -1467,9 +1487,7 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
         base_pixels = _apply_bake_background(
             base_pixels, merged_coverage, resolution, settings.bake_background_mode,
         )
-        normal_pixels = _apply_bake_background(
-            normal_pixels, merged_coverage, resolution, settings.bake_background_mode,
-        )
+        normal_pixels = _fill_normal_background(normal_pixels, merged_coverage)
 
         pack_objects = [pack["object"] for pack in packs]
         pack_name = _merged_pack_name(pack_objects)

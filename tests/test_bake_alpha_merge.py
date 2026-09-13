@@ -59,6 +59,19 @@ extended = baking._apply_bake_background(
 for index in range(0, len(extended), 4):
     assert close(tuple(extended[index:index + 4]), (0.2, 0.4, 0.8, 1.0))
 
+# Normal maps always use the flat tangent-space normal outside coverage,
+# including partially covered pixels at antialiased edges.
+normal_background = baking._fill_normal_background(
+    array("f", [1, 0.5, 0.5, 1, 0, 0, 0, 0, 1, 0.5, 0.5, 1]),
+    array("f", [1, 0, 0.5]),
+)
+assert close(tuple(normal_background[0:4]), (1, 0.5, 0.5, 1))
+assert close(tuple(normal_background[4:8]), (0.5, 0.5, 1, 1))
+assert close(tuple(normal_background[8:12]), (0.75, 0.5, 0.75, 1))
+
+merged_normal = baking._fill_normal_background(normal, coverage)
+assert close(tuple(merged_normal[4:8]), (0.5, 0.5, 1, 1))
+
 settings = bpy.context.scene.polygroups_baking_settings
 assert settings.bake_background_mode == "EXTEND"
 
@@ -88,6 +101,21 @@ assert close(tuple(alpha_pixels[0:4]), (1.0, 1.0, 1.0, 1.0))
 assert close(tuple(alpha_pixels[4:8]), (0.0, 0.0, 0.0, 1.0))
 final_base = baking._read_image_pixels(base_node.image, (16, 16))
 assert close(tuple(final_base[4:8]), (0.0, 0.0, 0.0, 1.0))
+
+# Reprocess a raw normal-only bake with both background settings. Neither
+# setting may turn the uncovered normal pixel black or extend the red edge.
+settings.bake_base_color = False
+settings.bake_normal = True
+normal_image = target.active_material.node_tree.nodes[baking.BAKE_NORMAL_NODE].image
+raw_normal = array("f", [0.0]) * (16 * 16 * 4)
+raw_normal[0:4] = array("f", [1.0, 0.5, 0.5, 1.0])
+for mode in ("BLACK", "EXTEND"):
+    settings.bake_background_mode = mode
+    baking._write_pixels(normal_image, raw_normal)
+    baking._finalize_bake_images(target, settings)
+    final_normal = baking._read_image_pixels(normal_image, (16, 16))
+    assert close(tuple(final_normal[0:4]), (1.0, 0.5, 0.5, 1.0))
+    assert close(tuple(final_normal[4:8]), (0.5, 0.5, 1.0, 1.0))
 
 with tempfile.TemporaryDirectory() as directory:
     project = Path(directory) / "alpha_bake_test.blend"

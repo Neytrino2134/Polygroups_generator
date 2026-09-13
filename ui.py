@@ -2222,8 +2222,9 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         content = draw_topic(layout, context, "bake_1", 'Cage Settings', "MOD_SHRINKWRAP")
         if content is not None:
             column = content.column(align=True)
-            column.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
             auto_cage_box = column.box()
+            auto_cage_box.label(text="Auto Cage", icon="MOD_SHRINKWRAP")
+            auto_cage_box.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
             auto_cage_box.prop(settings, "use_auto_cage", text=t(context, "auto_cage"))
             auto_cage_column = auto_cage_box.column(align=True)
             auto_cage_column.prop(settings, "auto_cage_coverage", text=t(context, "auto_cage_coverage"), slider=True)
@@ -2238,6 +2239,37 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 icon="MOD_SHRINKWRAP",
             )
             auto_cage_box.label(text=t(context, "auto_cage_status", value=settings.auto_cage_status), icon="INFO")
+            smart = column.box()
+            smart.label(text="Smart Cage Object", icon="MOD_DISPLACE")
+            smart.prop(settings, "use_smart_cage")
+            smart.prop(settings, "autogenerate_smart_cage")
+            smart.prop(settings, "smart_cage_object")
+            smart.prop(settings, "smart_cage_margin")
+            smart.prop(settings, "smart_cage_started_clearance")
+            smart.prop(settings, "smart_cage_max")
+            smart.prop(settings, "smart_cage_smoothing", slider=True)
+            smart.prop(settings, "smart_cage_iterations")
+            smart.prop(settings, "smart_cage_samples")
+            smart.prop(settings, "smart_cage_avoid_self")
+            smart.operator("object.polygroups_generate_smart_cage", icon="MOD_DISPLACE")
+            cage = settings.smart_cage_object
+            if cage is not None:
+                modifier = cage.modifiers.get("Smart Cage Displace")
+                if modifier is not None:
+                    smart.prop(settings, "smart_cage_live_thickness")
+                trim = cage.modifiers.get("Smart Cage Extra Clearance")
+                if trim is not None:
+                    smart.prop(settings, "smart_cage_live_clearance")
+                reducer = cage.modifiers.get("Smart Cage Reduce Self Intersections")
+                if reducer is not None:
+                    smart.prop(settings, "smart_cage_reduce_self")
+                smart.label(text="Weight Paint: Smart Cage Weights")
+                smart.label(text="Diagnostics: Highpoly / Self Intersections")
+                smart.operator("object.polygroups_validate_smart_cage", icon="CHECKMARK")
+            smart.label(text="Last validation (refresh after edits):", icon="INFO")
+            for status_part in settings.smart_cage_status.split(" | "):
+                smart.label(text=status_part)
+            smart.label(text="Solver settings apply on Generate; validate after edits")
             column.prop(settings, "ray_distance", text=t(context, "ray_distance"))
 
         content = draw_topic(layout, context, "bake_2", 'Bake Settings', "RENDER_STILL")

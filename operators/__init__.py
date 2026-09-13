@@ -23,6 +23,7 @@ from .ai_generation import OBJECT_OT_airetopo_select_material_image
 from .baking import OBJECT_OT_polygroups_bake_selected_to_active
 from .baking import OBJECT_OT_polygroups_bake_task
 from .baking import OBJECT_OT_polygroups_calculate_auto_cage
+from .smart_cage import OBJECT_OT_polygroups_generate_smart_cage, OBJECT_OT_polygroups_validate_smart_cage
 from .baking import OBJECT_OT_polygroups_clear_bake_temp_images
 from .baking import OBJECT_OT_polygroups_merge_bake_textures
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
@@ -235,6 +236,8 @@ CLASSES = (
     OBJECT_OT_polygroups_prepare_highpoly_bake_materials,
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_calculate_auto_cage,
+    OBJECT_OT_polygroups_generate_smart_cage,
+    OBJECT_OT_polygroups_validate_smart_cage,
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_bake_task,
     OBJECT_OT_polygroups_prepare_and_bake,

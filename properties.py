@@ -1780,6 +1780,25 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     stop_requested: bpy.props.BoolProperty(name="Stop Requested", default=False, options={"HIDDEN"})
 
 
+def _smart_cage_strength_get(modifier_name):
+    def get(self):
+        cage = self.smart_cage_object
+        modifier = cage.modifiers.get(modifier_name) if cage else None
+        return modifier.strength if modifier else 0.0
+    return get
+
+
+def _smart_cage_strength_set(modifier_name):
+    def set(self, value):
+        cage = self.smart_cage_object
+        modifier = cage.modifiers.get(modifier_name) if cage else None
+        if modifier:
+            if modifier_name == "Smart Cage Reduce Self Intersections":
+                value = max(-1.0, min(0.0, value))
+            modifier.strength = value
+    return set
+
+
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     bake_task_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     bake_task_stage: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
@@ -1804,10 +1823,10 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     )
     bake_background_mode: bpy.props.EnumProperty(
         name="Bake Background",
-        description="How transparent pixels are filled after preserving the bake coverage as a separate alpha map",
+        description="How Base Color background pixels are filled; Normal backgrounds always use a neutral normal",
         items=(
-            ("BLACK", "Black", "Fill pixels outside the baked surface with black"),
-            ("EXTEND", "Edge Extend", "Extend colors from the nearest baked edge into the background"),
+            ("BLACK", "Black", "Fill Base Color pixels outside the baked surface with black"),
+            ("EXTEND", "Edge Extend", "Extend Base Color from the nearest baked edge into the background"),
         ),
         default="EXTEND",
     )
@@ -1891,6 +1910,47 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         name="AutoCage Status",
         default="Not calculated",
     )
+    use_smart_cage: bpy.props.BoolProperty(name="Use Smart Cage Object", default=False,
+        description="Использовать выбранный и проверенный Smart Cage при запекании вместо обычного выдавливания Auto Cage")
+    autogenerate_smart_cage: bpy.props.BoolProperty(name="Autogenerate Smart Cage", default=False,
+        description="Перед каждым запеканием создать новый Smart Cage; прежние объекты и нарисованные веса сохранятся")
+    smart_cage_object: bpy.props.PointerProperty(name="Cage Object", type=bpy.types.Object,
+        description="Объект cage для запекания; создаётся кнопкой Generate и должен соответствовать активному lowpoly")
+    smart_cage_margin: bpy.props.FloatProperty(name="Minimum Clearance", default=0.001,
+        description="Минимальный базовый отступ от lowpoly в мировых единицах; отдельный модификатор Displace, по умолчанию 0.001",
+        min=0.000001, soft_max=0.1, precision=5, unit="LENGTH")
+    smart_cage_started_clearance: bpy.props.FloatProperty(name="Started Clearance", default=0.05,
+        description="Сила адаптивного Smart Cage Displace при генерации; веса стартуют с 0.001 и растут там, где не покрыт highpoly",
+        min=0.000001, soft_max=1.0, precision=4, unit="LENGTH")
+    smart_cage_max: bpy.props.FloatProperty(name="Maximum Offset", default=0.0,
+        min=0.0, soft_max=1.0, precision=4, unit="LENGTH",
+        description="Верхний предел общего отступа в мировых единицах; 0 означает автоматический предел по размеру lowpoly")
+    smart_cage_smoothing: bpy.props.FloatProperty(name="Weight Smoothing", default=0.35,
+        description="Насколько решатель распределяет нужное увеличение весов на соседние вершины; применяется при Generate",
+        min=0.0, max=1.0, subtype="FACTOR")
+    smart_cage_iterations: bpy.props.IntProperty(name="Solver Iterations", default=20, min=1, max=100,
+        description="Максимум шагов постепенного увеличения весов; больше шагов дают решателю больше времени, но замедляют Generate")
+    smart_cage_samples: bpy.props.IntProperty(name="Coverage Samples", default=20000, min=100, max=500000,
+        description="Сколько точек поверхности highpoly проверить на покрытие; больше точек повышают точность и время расчёта")
+    smart_cage_avoid_self: bpy.props.BoolProperty(name="Avoid Self Intersections", default=True,
+        description="Ограничивать расширение cage в щелях и местах, где его части могут пересечь друг друга")
+    smart_cage_status: bpy.props.StringProperty(name="Smart Cage Status", default="Not generated",
+        description="Результат последней проверки; после изменения весов или толщины нажмите Validate Smart Cage")
+    smart_cage_live_thickness: bpy.props.FloatProperty(name="Live Cage Thickness",
+        description="Текущая сила адаптивного Displace на готовом cage; меняется сразу, шаг ввода 0.001, после правки проверьте cage",
+        step=0.1, precision=3, options=set(),
+        get=_smart_cage_strength_get("Smart Cage Displace"),
+        set=_smart_cage_strength_set("Smart Cage Displace"))
+    smart_cage_live_clearance: bpy.props.FloatProperty(name="Live Extra Clearance",
+        description="Дополнительный равномерный отступ готового cage; меняется сразу, шаг ввода 0.001, может ухудшить зазоры",
+        step=0.1, precision=3, options=set(),
+        get=_smart_cage_strength_get("Smart Cage Extra Clearance"),
+        set=_smart_cage_strength_set("Smart Cage Extra Clearance"))
+    smart_cage_reduce_self: bpy.props.FloatProperty(name="Reduce Self Intersections",
+        description="Отрицательная сила отдельного Displace для вершин Smart Cage Self Intersections; от 0 до -1, шаг 0.001",
+        min=-1.0, max=0.0, step=0.1, precision=3, options=set(),
+        get=_smart_cage_strength_get("Smart Cage Reduce Self Intersections"),
+        set=_smart_cage_strength_set("Smart Cage Reduce Self Intersections"))
     image_prefix: bpy.props.StringProperty(
         name="Image Prefix",
         description="Prefix for generated bake images",
