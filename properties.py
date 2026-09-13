@@ -470,8 +470,13 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Stage 2: First Remesh", default=True,
         description="Run the first remesh and Smart UV pass",
     )
+    batch_narrow_island_enabled: bpy.props.BoolProperty(
+        name="Stage 3: Narrow Island Splitter", default=True,
+        description="Split narrow UV islands after the first remesh and before the second",
+    )
+    # Keep existing RNA identifiers so saved .blend files retain remesh/pack choices.
     batch_stage_3_enabled: bpy.props.BoolProperty(
-        name="Stage 3: Second Remesh", default=True,
+        name="Stage 4: Second Remesh", default=True,
         description="Remesh the result of the preceding enabled stage at MID density",
     )
     batch_stage_3_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
@@ -480,7 +485,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_stage_3_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
     batch_stage_3_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap Angle Based", default=True)
     batch_stage_4_enabled: bpy.props.BoolProperty(
-        name="Stage 4: Third Remesh", default=True,
+        name="Stage 5: Third Remesh", default=True,
         description="Remesh the result of the preceding enabled stage at LOW density",
     )
     batch_stage_4_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
@@ -489,7 +494,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_stage_4_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
     batch_stage_4_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap Angle Based", default=True)
     batch_stage_5_enabled: bpy.props.BoolProperty(
-        name="Stage 5: UV Packing", default=True,
+        name="Stage 6: UV Packing", default=True,
         description="Pack final UV islands with UVPackmaster",
     )
     batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
@@ -1317,7 +1322,15 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         default='UV',
     )
     narrow_island_width: bpy.props.IntProperty(
-        name="Thin Width (face rows)", default=3, min=1, max=12,
+        name="Thin Width (face rows)", default=5, min=1, max=12,
+    )
+    narrow_island_max_width_percent: bpy.props.FloatProperty(
+        name="Max Physical Width (%)", default=35.0, min=0.0, max=100.0, precision=1,
+        description="Maximum thickness compared with the widest part of each island; zero disables this filter",
+    )
+    narrow_island_min_area_percent: bpy.props.FloatProperty(
+        name="Minimum Island Area (%)", default=2.0, min=0.0, max=100.0, precision=1,
+        description="Skip the whole cut if its result is smaller than this share of the original island; zero disables the filter",
     )
     narrow_island_min_faces: bpy.props.IntProperty(
         name="Minimum Part Faces", default=8, min=2, max=10000,
@@ -1330,8 +1343,12 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         description="Analyze whole islands touched by selected faces",
     )
     narrow_island_create_edges: bpy.props.BoolProperty(
-        name="Create New Edges", default=False,
+        name="Create New Edges", default=True,
         description="Allow diagonal cuts through polygons for straighter narrow-island seams",
+    )
+    narrow_island_smart_relax: bpy.props.BoolProperty(
+        name="Smart Relax", default=True,
+        description="Relax newly generated seams after applying cuts; moves mesh vertices but leaves existing seams unchanged",
     )
     uv_seam_path_auto_unwrap: bpy.props.BoolProperty(
         name="Auto Unwrap UV Island",

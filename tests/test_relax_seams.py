@@ -14,6 +14,7 @@ addon_utils.enable(ROOT.name, default_set=True)
 from polygroups_generator.operators.relax_seams import (
     _seam_adjacency,
     _smart_protected_vertices,
+    relax_seams,
 )
 
 # A zigzag seam across a planar strip relaxes while its endpoints remain fixed.
@@ -40,6 +41,39 @@ assert bpy.ops.mesh.polygroups_relax_seams() == {"FINISHED"}
 after = [vertex.co.copy() for vertex in bmesh.from_edit_mesh(mesh).verts]
 assert after[5] == before[5] and after[9] == before[9]
 assert any((after[index] - before[index]).length > 1e-5 for index in (6, 7, 8))
+bpy.ops.object.mode_set(mode="OBJECT")
+
+# Restrict an automatic pass to its new seam, even when old seams share the mesh.
+verts = [(x, y, 0) for y in range(4) for x in range(5)]
+for row in (1, 2):
+    for x, offset in enumerate((0, 0.3, -0.3, 0.3, 0)):
+        verts[row * 5 + x] = (x, row + offset, 0)
+faces = [(y * 5 + x, y * 5 + x + 1, (y + 1) * 5 + x + 1, (y + 1) * 5 + x)
+         for y in range(3) for x in range(4)]
+mesh = bpy.data.meshes.new("Restricted Relax Seams")
+mesh.from_pydata(verts, [], faces)
+obj = bpy.data.objects.new("Restricted Relax Seams", mesh)
+bpy.context.collection.objects.link(obj)
+bpy.ops.object.select_all(action='DESELECT')
+bpy.context.view_layer.objects.active = obj
+obj.select_set(True)
+for edge in mesh.edges:
+    for row in (1, 2):
+        if set(edge.vertices).issubset(set(range(row * 5, row * 5 + 5))):
+            edge.use_seam = True
+bpy.ops.object.mode_set(mode="EDIT")
+bm = bmesh.from_edit_mesh(mesh)
+before = [vertex.co.copy() for vertex in bm.verts]
+generated = {edge for edge in bm.edges
+             if all(5 <= vert.index < 10 for vert in edge.verts)}
+moved, _protected = relax_seams(
+    bpy.context, 'SMART', 2, radians(90), 0, False,
+    select_result=False, relax_edges=generated,
+)
+after = [vertex.co.copy() for vertex in bm.verts]
+assert moved == 3
+assert any((after[index] - before[index]).length > 1e-5 for index in (6, 7, 8))
+assert all(after[index] == before[index] for index in range(10, 15))
 bpy.ops.object.mode_set(mode="OBJECT")
 
 # Smart mode protects a junction and one seam-edge ring around it.

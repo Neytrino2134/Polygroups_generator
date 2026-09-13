@@ -17,10 +17,13 @@ narrow = scene.polygroups_seam_finalization_settings
 assert 'topic_uv_2' in SECTION_SUBSECTION_PROPERTIES['show_uv_preparation_section']
 assert not visibility.topic_uv_2
 assert narrow.narrow_island_source == 'UV'
-assert narrow.narrow_island_width == 3
+assert narrow.narrow_island_width == 5
+assert narrow.narrow_island_max_width_percent == 35.0
+assert narrow.narrow_island_min_area_percent == 2.0
 assert narrow.narrow_island_min_faces == 8
 assert narrow.narrow_island_min_length == 3
-assert not narrow.narrow_island_create_edges
+assert narrow.narrow_island_create_edges
+assert narrow.narrow_island_smart_relax
 
 
 class Layout:
@@ -74,15 +77,20 @@ assert all(enabled and context == 'EXEC_DEFAULT' for _, enabled, context in butt
 
 narrow.narrow_island_source = 'MESH'
 narrow.narrow_island_width = 5
+narrow.narrow_island_max_width_percent = 22.0
+narrow.narrow_island_min_area_percent = 3.0
 narrow.narrow_island_min_faces = 12
 narrow.narrow_island_min_length = 4
 narrow.narrow_island_selected_only = True
 narrow.narrow_island_create_edges = True
+narrow.narrow_island_smart_relax = True
 buttons = draw_buttons()
 assert [enabled for _, enabled, _ in buttons] == [True, True, False]
 assert all(button.create_edges for button, _, _ in buttons)
+assert all(button.smart_relax for button, _, _ in buttons)
 assert all((button.source, button.width, button.min_faces,
-            button.min_length, button.selected_only) == ('MESH', 5, 12, 4, True)
+            button.min_length, button.selected_only, button.max_width_percent,
+            button.min_island_area_percent) == ('MESH', 5, 12, 4, True, 22.0, 3.0)
            for button, _, _ in buttons)
 
 search = ui._probe_panel(ui.VIEW3D_PT_polygroups_uv_preparation,

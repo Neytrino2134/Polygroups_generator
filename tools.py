@@ -56,6 +56,44 @@ CUTTER_TOOL_ORDER = (
     DRAW_CUTTER_GRID_TOOL_ID,
 )
 
+CUTTER_TYPE_BY_TOOL_ID = {
+    DRAW_CUTTER_TOOL_ID: "PLANE",
+    DRAW_CUTTER_LOCAL_RING_TOOL_ID: "LOCAL_RING",
+    DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID: "LOCAL_CONTOUR",
+    DRAW_CUTTER_ARC_TOOL_ID: "ARC",
+    DRAW_CUTTER_PATH_TOOL_ID: "PATH",
+    DRAW_CUTTER_DRAW_TOOL_ID: "DRAW",
+    DRAW_CUTTER_GRID_TOOL_ID: "GRID_PLANE",
+}
+CUTTER_HINT_KEYS = {
+    "PLANE": ("cutter_hint_plane", "cutter_hint_axis_lock"),
+    "LOCAL_RING": ("cutter_hint_ring", "cutter_hint_axis_lock"),
+    "LOCAL_CONTOUR": (
+        "cutter_hint_contour_click", "cutter_hint_contour_draw",
+        "cutter_hint_contour_path", "cutter_hint_contour_edit",
+    ),
+    "ARC": ("cutter_hint_arc",),
+    "PATH": ("cutter_hint_path", "cutter_hint_path_finish"),
+    "DRAW": ("cutter_hint_draw",),
+    "GRID_PLANE": ("cutter_hint_grid_base", "cutter_hint_grid_height"),
+}
+
+
+def active_cutter_type(context):
+    if context.mode != "OBJECT":
+        return None
+    try:
+        tool = context.workspace.tools.from_space_view3d_mode("OBJECT", create=False)
+    except (AttributeError, TypeError):
+        return None
+    return CUTTER_TYPE_BY_TOOL_ID.get(getattr(tool, "idname", None))
+
+
+def draw_cutter_tool_hints(context, layout, cutter_type):
+    keys = CUTTER_HINT_KEYS.get(cutter_type, ())
+    if keys:
+        layout.label(text="  |  ".join(t(context, key) for key in keys), icon="INFO")
+
 
 def _draw_seam_auto_uv_settings(context, layout):
     """Draw section 8 Auto UV settings in an Edit Mode tool header."""
@@ -612,15 +650,20 @@ class VIEW3D_WST_polygroups_draw_cutter_local_contour(WorkSpaceTool):
     bl_context_mode = "OBJECT"
     bl_idname = DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID
     bl_label = "Cutter Tweak: Local Contour"
-    bl_description = "Select normally; hold Ctrl and click across a local mesh section to draw a fitted contour cutter"
+    bl_description = "Ctrl+click twice for a section, Ctrl+drag to draw, Ctrl+Shift+click for a path"
     bl_icon = "ops.mesh.primitive_cylinder_add_gizmo"
     bl_cursor = "DEFAULT"
     bl_options = {"KEYMAP_FALLBACK"}
     bl_widget = None
     bl_keymap = (
         (
-            "object.polygroups_draw_cutter_local_contour",
-            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True},
+            "object.polygroups_local_contour_gesture",
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True, "shift": False},
+            {"properties": [("use_event_as_start", True)]},
+        ),
+        (
+            "object.polygroups_local_contour_gesture",
+            {"type": "LEFTMOUSE", "value": "PRESS", "ctrl": True, "shift": True},
             {"properties": [("use_event_as_start", True)]},
         ),
     )
@@ -628,6 +671,7 @@ class VIEW3D_WST_polygroups_draw_cutter_local_contour(WorkSpaceTool):
     @staticmethod
     def draw_settings(context, layout, tool):
         _draw_cutter_tool_settings(context, layout, tool, "LOCAL_CONTOUR")
+        layout.operator("object.polygroups_finalize_local_contour", text="Finalize Contour", icon="CHECKMARK")
 
 
 class VIEW3D_WST_polygroups_draw_cutter_path(WorkSpaceTool):
@@ -1179,6 +1223,11 @@ class VIEW3D_WST_polygroups_edge_seam_eraser(WorkSpaceTool):
 
 
 def draw_seam_status(self, context):
+    if context.mode == "OBJECT":
+        cutter_type = active_cutter_type(context)
+        if cutter_type is not None:
+            draw_cutter_tool_hints(context, self.layout, cutter_type)
+        return
     if context.mode != "EDIT_MESH":
         return
     tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)

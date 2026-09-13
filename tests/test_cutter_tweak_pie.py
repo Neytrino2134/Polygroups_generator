@@ -11,6 +11,7 @@ sys.path.insert(0, str(root.parent))
 addon_utils.enable(root.name, default_set=True)
 
 from polygroups_generator import hotkeys
+from polygroups_generator import tools
 from polygroups_generator.tools import CUTTER_TOOL_ORDER
 
 preferences = bpy.context.preferences.addons[root.name].preferences
@@ -61,11 +62,52 @@ class Layout:
     def separator(self):
         self.tools.append(None)
 
-
 layout = Layout()
 hotkeys.VIEW3D_MT_airetopo_cutter_tweak_pie.draw(SimpleNamespace(layout=layout), bpy.context)
 assert len(layout.tools) == 8
+assert layout.tools[-1] is None
 assert {operator.name for operator in layout.tools if operator} == set(CUTTER_TOOL_ORDER)
+
+
+class CutterToolMenuLayout:
+    def __init__(self):
+        self.names = []
+
+    def operator(self, _identifier, **_kwargs):
+        operator = SimpleNamespace(name="")
+        self.names.append(operator)
+        return operator
+
+
+tool_menu = CutterToolMenuLayout()
+tools.VIEW3D_MT_polygroups_cutter_tool_type.draw(
+    SimpleNamespace(layout=tool_menu), bpy.context,
+)
+assert {operator.name for operator in tool_menu.names} == set(CUTTER_TOOL_ORDER)
+assert len(CUTTER_TOOL_ORDER) == 7  # Path/Draw are gestures of Local Contour.
+
+for cutter_type in tools.CUTTER_TYPE_BY_TOOL_ID.values():
+    labels = []
+    hint_layout = SimpleNamespace(label=lambda **kwargs: labels.append(kwargs["text"]))
+    tools.draw_cutter_tool_hints(bpy.context, hint_layout, cutter_type)
+    assert labels, cutter_type
+assert len(tools.CUTTER_HINT_KEYS["LOCAL_CONTOUR"]) == 4
+fake_workspace = SimpleNamespace(tools=SimpleNamespace(
+    from_space_view3d_mode=lambda *_args, **_kwargs: SimpleNamespace(
+        idname=tools.DRAW_CUTTER_LOCAL_CONTOUR_TOOL_ID,
+    ),
+))
+assert tools.active_cutter_type(SimpleNamespace(mode="OBJECT", workspace=fake_workspace)) == "LOCAL_CONTOUR"
+status_labels = []
+status_layout = SimpleNamespace(label=lambda **kwargs: status_labels.append(kwargs["text"]))
+tools.draw_seam_status(
+    SimpleNamespace(layout=status_layout),
+    SimpleNamespace(mode="OBJECT", workspace=fake_workspace,
+                    preferences=bpy.context.preferences),
+)
+assert len(status_labels) == 1
+for key in tools.CUTTER_HINT_KEYS["LOCAL_CONTOUR"]:
+    assert tools.t(bpy.context, key) in status_labels[0]
 
 for property_name in (
     "show_preferences_info", "show_preferences_updates", "show_preferences_icons",

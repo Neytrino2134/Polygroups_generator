@@ -124,6 +124,35 @@ work.free()
 bm.free()
 
 # Exercise preview/apply on the same staircase without relying on detection.
+# A valid original cut can become too small when straightened. The area
+# threshold must reject that candidate, never fall back to its staircase.
+bm, cuts, graph = fixture()
+work, refined, new_graph, new_pairs, _, created = module.refine_cuts(
+    bm, cuts, graph, create_edges=True)
+assert created
+_, _, old_pairs = module.island_graph(bm)
+def part_areas(mesh, adjacency, pairs, cut):
+    separated = {node: {other for other in neighbors
+                        if not (pairs[frozenset((node, other))] & cut)}
+                 for node, neighbors in adjacency.items()}
+    areas = module.island_face_areas(mesh, adjacency, 'UV')
+    parts = module.components(adjacency, separated)
+    return sorted(sum(areas[face] for face in part) / sum(areas.values()) * 100
+                  for part in parts), parts
+old_shares, old_parts = part_areas(bm, graph, old_pairs, cuts)
+new_shares, _ = part_areas(work, new_graph, new_pairs, refined)
+print('AREA SHARES', old_shares, new_shares)
+assert new_shares[0] < old_shares[0]
+area_limit = (old_shares[0] + new_shares[0]) / 2
+try:
+    module.refine_cuts(bm, cuts, graph, create_edges=True,
+                       min_island_area_percent=area_limit)
+    raise AssertionError('Area validation should reject this shortened cut')
+except module.UndersizedRerouteError as error:
+    assert error.source_faces == frozenset(graph)
+work.free()
+bm.free()
+
 bpy.utils.register_class(module.MESH_OT_polygroups_split_narrow_islands)
 original_plan = module.plan_cuts
 try:
@@ -147,11 +176,37 @@ try:
         assert len(live.faces) == count
         secondary = live.loops.layers.uv['DetailUV']
         assert [tuple(loop[secondary].uv) for f in live.faces for loop in f.loops] == uv_before
-        assert bpy.ops.mesh.polygroups_split_narrow_islands(action='SPLIT', create_edges=True) == {'FINISHED'}
+        assert bpy.ops.mesh.polygroups_split_narrow_islands(action='SPLIT', create_edges=True, smart_relax=False) == {'FINISHED'}
         live = bmesh.from_edit_mesh(obj.data)
         assert len(live.faces) > count
         adjacency, _, _ = module.island_graph(live)
         assert len(module.components(adjacency, adjacency)) == 2
+finally:
+    module.plan_cuts = original_plan
+
+bm, cuts, graph = fixture()
+obj = bpy.context.active_object
+if obj.mode == 'EDIT':
+    bpy.ops.object.mode_set(mode='OBJECT')
+bm.to_mesh(obj.data)
+original_seams = tuple(edge.use_seam for edge in obj.data.edges)
+_, _, pairs = module.island_graph(bm)
+cut_pairs = {pair for pair, edge_indices in pairs.items() if edge_indices & cuts}
+small_part = min(old_parts, key=len)
+region = (small_part, {(a, b) for a, b in map(tuple, cut_pairs) if a in small_part or b in small_part})
+bm.free()
+def area_sensitive_plan(mesh, *args):
+    adjacency, _, paired = module.island_graph(mesh)
+    return cuts, [region], adjacency, paired
+module.plan_cuts = area_sensitive_plan
+try:
+    for action in ('PREVIEW', 'SEAMS'):
+        assert bpy.ops.mesh.polygroups_split_narrow_islands(
+            source='UV', action=action, create_edges=True, smart_relax=False,
+            min_island_area_percent=area_limit,
+        ) == {'FINISHED'}
+        assert tuple(edge.use_seam for edge in obj.data.edges) == original_seams
+        assert obj.mode == 'OBJECT'
 finally:
     module.plan_cuts = original_plan
 print('NARROW ROUTING PASSED')

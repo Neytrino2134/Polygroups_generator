@@ -3,8 +3,17 @@ import bpy
 import bmesh
 from mathutils import Vector
 
-from ..core.narrow_regions import components, find_narrow_regions
+from ..core.narrow_regions import components, filter_small_parts, find_narrow_regions, metric_distances
 from ..core.smart_seam_routing import route_seams
+from .relax_seams import relax_seams
+
+
+class UndersizedRerouteError(ValueError):
+    """The optimized path would make an island smaller than the area limit."""
+
+    def __init__(self, source_faces):
+        super().__init__('Shortened cut would create an undersized island')
+        self.source_faces = frozenset(source_faces)
 
 
 def uv_continuous(edge, layer):
@@ -43,8 +52,59 @@ def island_graph(bm, source='UV'):
     return graph, boundary, edges
 
 
+def physical_widths(bm, graph, edges, source):
+    """Face-centre geodesic distance from the boundary in UV or mesh space."""
+    layer = bm.loops.layers.uv.active
+    if source == 'UV':
+        centers = {index: (
+            sum(loop[layer].uv.x for loop in bm.faces[index].loops) / len(bm.faces[index].loops),
+            sum(loop[layer].uv.y for loop in bm.faces[index].loops) / len(bm.faces[index].loops),
+        ) for index in graph}
+    else:
+        centers = {index: tuple(bm.faces[index].calc_center_median()) for index in graph}
+    internal = set().union(*edges.values()) if edges else set()
+    boundary_seeds = {}
+    for index in graph:
+        face = bm.faces[index]
+        center = centers[index]
+        for loop in face.loops:
+            if loop.edge.index in internal:
+                continue
+            if source == 'UV':
+                a = tuple(loop[layer].uv)
+                b = tuple(loop.link_loop_next[layer].uv)
+            else:
+                a = tuple(loop.vert.co)
+                b = tuple(loop.link_loop_next.vert.co)
+            vector = tuple(end - start for start, end in zip(a, b))
+            squared = sum(value * value for value in vector)
+            factor = min(1.0, max(0.0,
+                         sum((value - start) * direction
+                             for value, start, direction in zip(center, a, vector)) / squared)) if squared > 1e-24 else 0.0
+            distance = sum((value - start - factor * direction) ** 2
+                           for value, start, direction in zip(center, a, vector)) ** 0.5
+            boundary_seeds[index] = min(boundary_seeds.get(index, float('inf')), distance)
+    return metric_distances(boundary_seeds, graph, centers, set(graph)), centers
+
+
+def island_face_areas(bm, graph, source):
+    if source != 'UV':
+        return {index: bm.faces[index].calc_area() for index in graph}
+    layer = bm.loops.layers.uv.active
+    areas = {}
+    for index in graph:
+        loops = list(bm.faces[index].loops)
+        doubled = sum(
+            first[layer].uv.x * second[layer].uv.y - second[layer].uv.x * first[layer].uv.y
+            for first, second in zip(loops, loops[1:] + loops[:1])
+        )
+        areas[index] = abs(doubled) * 0.5
+    return areas
+
+
 def plan_cuts(bm, source='UV', width=3, min_faces=8, min_length=3,
-              selected_only=False, uv_selection=False):
+              selected_only=False, uv_selection=False, max_width_percent=35.0,
+              min_island_area_percent=2.0):
     graph, boundary, edges = island_graph(bm, source)
     faces = {index: bm.faces[index] for index in graph}
     layer = bm.loops.layers.uv.active
@@ -57,7 +117,16 @@ def plan_cuts(bm, source='UV', width=3, min_faces=8, min_length=3,
         included = set().union(*(part for part in islands if part & selected))
         graph = {node: neighbors for node, neighbors in graph.items() if node in included}
         boundary &= included
-    regions = find_narrow_regions(graph, boundary, width, min_faces, min_length)
+    metric_depth, centers = physical_widths(bm, graph, edges, source) if max_width_percent else (None, None)
+    regions = find_narrow_regions(
+        graph, boundary, width, min_faces, min_length,
+        metric_depth=metric_depth, centers=centers,
+        max_width_percent=max_width_percent,
+    )
+    if min_island_area_percent:
+        regions = filter_small_parts(
+            graph, regions, island_face_areas(bm, graph, source), min_island_area_percent,
+        )
     cuts = set()
     for _, attachments in regions:
         for pair in attachments:
@@ -65,7 +134,8 @@ def plan_cuts(bm, source='UV', width=3, min_faces=8, min_length=3,
     return cuts, regions, graph, edges
 
 
-def refine_cuts(bm, cuts, graph, source='UV', create_edges=False):
+def refine_cuts(bm, cuts, graph, source='UV', create_edges=False,
+                min_island_area_percent=0.0):
     """Return a disposable optimized mesh; the input mesh is never modified.
 
     Keep original island boundaries as routing barriers, including UV-only
@@ -136,12 +206,20 @@ def refine_cuts(bm, cuts, graph, source='UV', create_edges=False):
                     for a, neighbors in adjacency.items()}
         before = split_graph(full_graph, pair_edges, cuts)
         after = split_graph(new_graph, new_pairs, refined)
+        new_areas = island_face_areas(work, new_graph, source) if min_island_area_percent else None
         for label, island in enumerate(islands, 1):
             old_parts = components(island, before)
             new_faces = {face.index for face in work.faces if face[island_tag] == label}
             new_parts = components(new_faces, after)
             if len(old_parts) != len(new_parts) or min(map(len, new_parts)) < min(2, min(map(len, old_parts))):
                 raise ValueError(f'Shortened cut did not preserve island separation ({list(map(len, old_parts))} -> {list(map(len, new_parts))})')
+            if new_areas:
+                total_area = sum(new_areas[face] for face in new_faces)
+                if total_area > 1e-20 and any(
+                    sum(new_areas[face] for face in part) < total_area * min_island_area_percent / 100.0
+                    for part in new_parts
+                ):
+                    raise UndersizedRerouteError(island)
         work.faces.layers.int.remove(island_tag)
         work.faces.layers.int.remove(selection)
         return work, refined, new_graph, new_pairs, rerouted, created
@@ -192,14 +270,24 @@ class MESH_OT_polygroups_split_narrow_islands(bpy.types.Operator):
         ('PREVIEW', 'Preview Cuts', 'Select candidate edges without changing seams or UV coordinates'),
         ('SEAMS', 'Mark Seams', 'Mark optimized cuts; Create New Edges allows diagonal face splits'),
         ('SPLIT', 'Split UV Islands', 'Mark seams and move detached UV pieces beside the layout; pack afterwards')])
-    width: bpy.props.IntProperty(name='Thin Width (face rows)', default=3, min=1, max=12)
+    width: bpy.props.IntProperty(name='Thin Width (face rows)', default=5, min=1, max=12)
     min_faces: bpy.props.IntProperty(name='Minimum Part Faces', default=8, min=2, max=10000)
     min_length: bpy.props.IntProperty(name='Minimum Branch Depth', default=3, min=1, max=100,
         description='Distance in face steps from the attachment; for a bridge measured from its nearest end')
+    max_width_percent: bpy.props.FloatProperty(
+        name='Max Physical Width (%)', default=35.0, min=0.0, max=100.0, precision=1,
+        description='Maximum local thickness relative to the widest part of each island; 0 disables the physical-width filter',
+    )
+    min_island_area_percent: bpy.props.FloatProperty(
+        name='Minimum Island Area (%)', default=2.0, min=0.0, max=100.0, precision=1,
+        description='Skip the entire cut, including its staircase fallback, if a separated part is smaller than this share of its source island; 0 disables',
+    )
     selected_only: bpy.props.BoolProperty(name='Selected Islands Only', default=False,
         description='Analyze complete islands touched by selected faces; selection does not create artificial boundaries')
-    create_edges: bpy.props.BoolProperty(name='Create New Edges', default=False,
+    create_edges: bpy.props.BoolProperty(name='Create New Edges', default=True,
         description='Allow diagonal cuts through convex polygons and across adjacent triangles; preview does not modify topology')
+    smart_relax: bpy.props.BoolProperty(name='Smart Relax', default=True,
+        description='Relax only the generated seam chains on the mesh surface after applying cuts; moves mesh vertices')
 
     @classmethod
     def poll(cls, context):
@@ -212,7 +300,7 @@ class MESH_OT_polygroups_split_narrow_islands(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self, width=390)
 
     def draw(self, context):
-        for name in ('source', 'action', 'width', 'min_faces', 'min_length', 'selected_only', 'create_edges'):
+        for name in ('source', 'action', 'width', 'max_width_percent', 'min_island_area_percent', 'min_faces', 'min_length', 'selected_only', 'create_edges', 'smart_relax'):
             self.layout.prop(self, name)
         self.layout.label(text='Width is approximate; preview before splitting.', icon='INFO')
         if self.action == 'SPLIT':
@@ -241,21 +329,44 @@ class MESH_OT_polygroups_split_narrow_islands(bpy.types.Operator):
                 bm, self.source, self.width, self.min_faces, self.min_length,
                 self.selected_only, self.source == 'UV' and edit
                 and context.area is not None and context.area.type == 'IMAGE_EDITOR'
-                and not context.tool_settings.use_uv_select_sync)
+                and not context.tool_settings.use_uv_select_sync,
+                self.max_width_percent, self.min_island_area_percent)
             if not cuts:
-                self.report({'INFO'}, 'No narrow parts found; increase width or lower minimum size/depth')
+                self.report({'INFO'}, 'No eligible narrow parts; adjust Face Rows, Physical Width, or Minimum Island Area')
                 return {'FINISHED'}
-            raw_cuts = set(cuts)
             rerouted = created = 0
-            try:
-                optimized, optimized_cuts, optimized_graph, optimized_pairs, rerouted, created = refine_cuts(
-                    bm, cuts, graph, self.source, self.create_edges,
-                )
-            except (ValueError, RuntimeError) as error:
-                self.report({'WARNING'}, f'Using original cuts: {error}')
-            else:
-                bm.free()
-                bm, cuts, graph, edges = optimized, optimized_cuts, optimized_graph, optimized_pairs
+            skipped = 0
+            areas = None
+            while cuts:
+                raw_cuts = set(cuts)
+                try:
+                    optimized, optimized_cuts, optimized_graph, optimized_pairs, rerouted, created = refine_cuts(
+                        bm, cuts, graph, self.source, self.create_edges,
+                        self.min_island_area_percent,
+                    )
+                except UndersizedRerouteError as error:
+                    if areas is None:
+                        areas = island_face_areas(bm, graph, self.source)
+                    affected = [region for region in regions if region[0] & error.source_faces]
+                    if not affected:
+                        cuts.clear()
+                        break
+                    smallest = min(affected, key=lambda region: (
+                        sum(areas[face] for face in region[0]), min(region[0])))
+                    regions.remove(smallest)
+                    skipped += 1
+                    cuts = {index for _, attachments in regions for pair in attachments
+                            for index in edges[frozenset(pair)]}
+                except (ValueError, RuntimeError) as error:
+                    self.report({'WARNING'}, f'Using original cuts: {error}')
+                    break
+                else:
+                    bm.free()
+                    bm, cuts, graph, edges = optimized, optimized_cuts, optimized_graph, optimized_pairs
+                    break
+            if not cuts:
+                self.report({'INFO'}, f'No cut satisfies Minimum Island Area; skipped {skipped} candidate(s)')
+                return {'FINISHED'}
             if self.action == 'PREVIEW':
                 if not edit:
                     bpy.ops.object.mode_set(mode='EDIT')
@@ -304,6 +415,24 @@ class MESH_OT_polygroups_split_narrow_islands(bpy.types.Operator):
                     finally:
                         if edit:
                             bpy.ops.object.mode_set(mode='EDIT')
+                if self.smart_relax:
+                    if not edit:
+                        bpy.ops.object.mode_set(mode='EDIT')
+                    try:
+                        relaxed_mesh = bmesh.from_edit_mesh(obj.data)
+                        relaxed_mesh.edges.ensure_lookup_table()
+                        generated = {relaxed_mesh.edges[index] for index in cuts}
+                        settings = context.scene.polygroups_seam_preparation_settings
+                        relax_seams(
+                            context, 'SMART', settings.seam_relax_iterations,
+                            settings.seam_relax_corner_angle,
+                            settings.seam_relax_protection_radius,
+                            settings.seam_relax_use_corner_angle,
+                            select_result=False, relax_edges=generated,
+                        )
+                    finally:
+                        if not edit:
+                            bpy.ops.object.mode_set(mode='OBJECT')
             verb = 'proposed' if self.action == 'PREVIEW' else 'created'
             self.report({'INFO'}, f'{len(regions)} narrow parts, {len(cuts)} cut edges; {rerouted} paths improved, {created} new edges {verb}')
         except ValueError as error:

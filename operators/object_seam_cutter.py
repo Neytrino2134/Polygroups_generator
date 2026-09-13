@@ -1137,6 +1137,7 @@ def _is_target_mesh_candidate(obj):
         obj is not None
         and obj.type == "MESH"
         and not obj.get(CUTTER_PROP)
+        and not obj.get("polygroups_local_contour_sketch")
         and not _is_cutter_name(obj)
     )
 

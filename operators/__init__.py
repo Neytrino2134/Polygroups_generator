@@ -103,6 +103,12 @@ from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_arc
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_draw
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_local_ring
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_local_contour
+from .local_contour_sketch import (
+    OBJECT_OT_polygroups_draw_local_contour_path,
+    OBJECT_OT_polygroups_draw_local_contour_draw,
+    OBJECT_OT_polygroups_local_contour_gesture,
+    OBJECT_OT_polygroups_finalize_local_contour,
+)
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_path
 from .object_seam_cutter import OBJECT_OT_polygroups_draw_cutter_plane
 from .cutter_grid import OBJECT_OT_polygroups_draw_cutter_grid, OBJECT_OT_polygroups_generate_cutter_grid
@@ -336,6 +342,10 @@ CLASSES = (
     OBJECT_OT_polygroups_draw_cutter_arc,
     OBJECT_OT_polygroups_draw_cutter_local_ring,
     OBJECT_OT_polygroups_draw_cutter_local_contour,
+    OBJECT_OT_polygroups_draw_local_contour_path,
+    OBJECT_OT_polygroups_draw_local_contour_draw,
+    OBJECT_OT_polygroups_local_contour_gesture,
+    OBJECT_OT_polygroups_finalize_local_contour,
     OBJECT_OT_polygroups_draw_cutter_path,
     OBJECT_OT_polygroups_draw_cutter_draw,
     OBJECT_OT_polygroups_convert_draw_strokes_to_cutter_paths,

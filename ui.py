@@ -1273,6 +1273,22 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 angle.prop(context.scene.polygroups_seam_preparation_settings,
                            "smart_seam_angle_limit", text=t(context, "smart_seam_angle_limit"))
 
+            draw_batch_stage_heading(content, t(context, "batch_stage_narrow"),
+                                     settings, "batch_narrow_island_enabled")
+            narrow_stage = content.column(align=True)
+            narrow_stage.enabled = editable and settings.batch_narrow_island_enabled
+            narrow = context.scene.polygroups_seam_finalization_settings
+            for property_name, label in (
+                ("narrow_island_width", "narrow_island_width"),
+                ("narrow_island_max_width_percent", "narrow_island_max_width_percent"),
+                ("narrow_island_min_area_percent", "narrow_island_min_area_percent"),
+                ("narrow_island_min_faces", "narrow_island_min_faces"),
+                ("narrow_island_min_length", "narrow_island_min_length"),
+                ("narrow_island_create_edges", "narrow_island_create_edges"),
+                ("narrow_island_smart_relax", "narrow_island_smart_relax"),
+            ):
+                narrow_stage.prop(narrow, property_name, text=t(context, label))
+
             for number, preset, title in (
                 (3, "MID", t(context, "batch_stage_second")),
                 (4, "LOW", t(context, "batch_stage_third")),
@@ -1991,10 +2007,11 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
         )
         tool_operator.name = "polygroups_generator.draw_cutter_local_contour_tool"
         layout.operator(
-            "object.polygroups_draw_cutter_local_contour",
+            "object.polygroups_local_contour_gesture",
             text=t(context, "draw_cutter_local_contour"),
             **icon_kwargs("draw_cutter_local_contour", "MESH_CIRCLE"),
         )
+        layout.operator("object.polygroups_finalize_local_contour", text=t(context, "finalize_local_contour"), icon="CHECKMARK")
         tool_operator = layout.operator(
             "wm.tool_set_by_id",
             text=t(context, "select_draw_cutter_path"),
@@ -2431,10 +2448,13 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             column = content.column(align=True)
             column.prop(narrow, "narrow_island_source", text=t(context, "narrow_island_source"))
             column.prop(narrow, "narrow_island_width", text=t(context, "narrow_island_width"))
+            column.prop(narrow, "narrow_island_max_width_percent", text=t(context, "narrow_island_max_width_percent"))
+            column.prop(narrow, "narrow_island_min_area_percent", text=t(context, "narrow_island_min_area_percent"))
             column.prop(narrow, "narrow_island_min_faces", text=t(context, "narrow_island_min_faces"))
             column.prop(narrow, "narrow_island_min_length", text=t(context, "narrow_island_min_length"))
             column.prop(narrow, "narrow_island_selected_only", text=t(context, "narrow_island_selected_only"))
             column.prop(narrow, "narrow_island_create_edges", text=t(context, "narrow_island_create_edges"))
+            column.prop(narrow, "narrow_island_smart_relax", text=t(context, "narrow_island_smart_relax"))
             column.separator()
             column.operator_context = 'EXEC_DEFAULT'
             for action, label, icon in (
@@ -2451,10 +2471,13 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
                 button.source = narrow.narrow_island_source
                 button.action = action
                 button.width = narrow.narrow_island_width
+                button.max_width_percent = narrow.narrow_island_max_width_percent
+                button.min_island_area_percent = narrow.narrow_island_min_area_percent
                 button.min_faces = narrow.narrow_island_min_faces
                 button.min_length = narrow.narrow_island_min_length
                 button.selected_only = narrow.narrow_island_selected_only
                 button.create_edges = narrow.narrow_island_create_edges
+                button.smart_relax = narrow.narrow_island_smart_relax
             if narrow.narrow_island_create_edges:
                 column.label(text=t(context, 'narrow_island_diagonal_hint'), icon='INFO')
             column.label(text=t(context, 'narrow_island_pack_hint'), icon='INFO')

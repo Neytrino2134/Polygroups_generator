@@ -46,7 +46,7 @@ def _smart_protected_vertices(adjacency, angle_limit, radius, use_corner_angle=T
 
 def relax_seams(context, mode, iterations, angle_limit, protection_radius,
                 use_corner_angle=True, select_result=True,
-                selected_area_only=False):
+                selected_area_only=False, relax_edges=None):
     obj = context.edit_object
     bm = bmesh.from_edit_mesh(obj.data)
     bm.verts.ensure_lookup_table()
@@ -59,8 +59,13 @@ def relax_seams(context, mode, iterations, angle_limit, protection_radius,
         protected = _smart_protected_vertices(
             adjacency, angle_limit, protection_radius, use_corner_angle,
         )
+    seam_edge_set = set(seam_edges)
+    allowed_edges = set(relax_edges) if relax_edges is not None else None
     movable = [vert for vert, neighbors in adjacency.items()
-               if len(neighbors) == 2 and vert not in protected]
+               if len(neighbors) == 2 and vert not in protected
+               and (allowed_edges is None or all(
+                   edge in allowed_edges for edge in vert.link_edges
+                   if edge in seam_edge_set))]
 
     if select_result:
         for vert in bm.verts:
@@ -74,6 +79,9 @@ def relax_seams(context, mode, iterations, angle_limit, protection_radius,
         for edge in selected_edges:
             edge.select_set(True)
         context.tool_settings.mesh_select_mode = (False, True, False)
+
+    if not movable:
+        return 0, len(protected)
 
     surface = BVHTree.FromBMesh(bm)
     for _iteration in range(max(1, int(iterations))):

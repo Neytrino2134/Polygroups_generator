@@ -319,7 +319,6 @@ SEAM_TOOL_GROUPS = {
     "KNIFE": ("polygroups_generator.knife_seam_tool", "polygroups_generator.quick_knife_seam_tool"),
 }
 
-
 class MESH_OT_airetopo_cycle_seam_tool(bpy.types.Operator):
     bl_idname = "mesh.airetopo_cycle_seam_tool"
     bl_label = "Cycle Seam Tools"

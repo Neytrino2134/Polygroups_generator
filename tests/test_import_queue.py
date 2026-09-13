@@ -37,6 +37,7 @@ assert settings.batch_separate_collections and settings.file_import_separate_col
 assert settings.batch_include_subfolders
 assert not settings.batch_auto_save and settings.batch_auto_save_interval == 5
 assert settings.batch_stage_2_enabled
+assert settings.batch_narrow_island_enabled
 assert settings.batch_stage_3_enabled and settings.batch_stage_4_enabled
 assert settings.batch_stage_5_enabled
 for number in (3, 4):
@@ -356,16 +357,52 @@ with tempfile.TemporaryDirectory() as directory:
     settings.batch_stage_3_enabled = False
     settings.batch_stage_4_enabled = True
     settings.batch_stage_4_auto_unwrap = False
-    with patch.object(queue_module, "RemeshJob", ChainedJob):
+    settings.batch_narrow_island_enabled = True
+    original_split = queue_module.ImportQueue.split_narrow_island
+
+    def traced_split(queue, scene_context, obj):
+        chain.append(("narrow", obj, None))
+        return original_split(queue, scene_context, obj)
+
+    with (patch.object(queue_module, "RemeshJob", ChainedJob),
+          patch.object(queue_module.ImportQueue, "split_narrow_island", traced_split)):
         queue = queue_module.ImportQueue(context, paths[:1], False, report)
         queue.begin()
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_failed_count == 0
-        assert [item[0] for item in chain] == ["start", "finish"] * 2
+        assert [item[0] for item in chain] == ["start", "finish", "narrow", "start", "finish"]
         assert chain[2][1] == chain[1][1]
-        assert chain[2][2] == dict(queue_module.get_remesh_preset_counts(context))["LOW"]
+        assert chain[3][1] == chain[1][1]
+        assert chain[3][2] == dict(queue_module.get_remesh_preset_counts(context))["LOW"]
         assert len(queue.groups[0][1]) == 3
         assert queue.cursor is None
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+    # Without the first remesh, the splitter still precedes later passes.
+    settings.batch_stage_2_enabled = False
+    settings.batch_stage_4_enabled = False
+    settings.batch_stage_5_enabled = False
+    narrow_sources = []
+
+    def record_narrow(queue, scene_context, obj):
+        narrow_sources.append(obj)
+
+    with patch.object(queue_module.ImportQueue, "split_narrow_island", record_narrow):
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.finished)
+        assert settings.batch_failed_count == 0
+        assert len(narrow_sources) == 1
+        assert narrow_sources[0] == queue.meshes[0]
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+        settings.batch_narrow_island_enabled = False
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.finished)
+        assert len(narrow_sources) == 1
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)
 

@@ -222,6 +222,28 @@ class ImportQueue:
         obj.select_set(True)
         context.view_layer.objects.active = obj
 
+    def split_narrow_island(self, context, obj):
+        self.select_source(context, obj)
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+            self.owned_meshes.add(obj.data)
+        narrow = self.scene.polygroups_seam_finalization_settings
+        source = 'UV' if obj.data.uv_layers.active is not None else 'MESH'
+        action = 'SPLIT' if source == 'UV' else 'SEAMS'
+        result = bpy.ops.mesh.polygroups_split_narrow_islands(
+            source=source, action=action,
+            width=narrow.narrow_island_width,
+            max_width_percent=narrow.narrow_island_max_width_percent,
+            min_island_area_percent=narrow.narrow_island_min_area_percent,
+            min_faces=narrow.narrow_island_min_faces,
+            min_length=narrow.narrow_island_min_length,
+            selected_only=False,
+            create_edges=narrow.narrow_island_create_edges,
+            smart_relax=narrow.narrow_island_smart_relax,
+        )
+        if 'FINISHED' not in result:
+            raise RuntimeError(f'Narrow Island Splitter failed for {obj.name}')
+
     def step(self, context):
         settings = self.settings
         self.update_timing()
@@ -348,7 +370,9 @@ class ImportQueue:
                             getattr(settings, f"batch_stage_{number}_auto_unwrap"),
                             "ANGLE",
                         ))
-            self.stage = "PASS_SETUP"
+            self.stage = ("NARROW_SPLIT" if not self.file_selection
+                          and settings.batch_narrow_island_enabled
+                          and not settings.batch_stage_2_enabled else "PASS_SETUP")
         elif self.stage == "PASS_SETUP":
             if self.pass_index >= len(self.passes):
                 self.stage = "PACK" if not self.file_selection and settings.batch_stage_5_enabled else "COMPLETE"
@@ -444,7 +468,17 @@ class ImportQueue:
             self.pass_sources = targets
             self.result_meshes = targets
             self.pass_index += 1
-            self.stage = "PASS_SETUP"
+            if (not self.file_selection and self.pass_number == 2
+                    and settings.batch_narrow_island_enabled):
+                self.mesh_index = 0
+                self.stage = "NARROW_SPLIT"
+            else:
+                self.stage = "PASS_SETUP"
+        elif self.stage == "NARROW_SPLIT":
+            obj = self.pass_sources[self.mesh_index]
+            self.split_narrow_island(context, obj)
+            self.mesh_index += 1
+            self.stage = "NARROW_SPLIT" if self.mesh_index < len(self.pass_sources) else "PASS_SETUP"
         elif self.stage == "PACK":
             for obj in self.pass_sources:
                 self.select_source(context, obj)
