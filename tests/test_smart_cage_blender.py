@@ -20,6 +20,12 @@ settings.smart_cage_samples = 4000
 settings.smart_cage_iterations = 30
 settings.smart_cage_margin = .01
 settings.smart_cage_started_clearance = .3
+settings.use_auto_cage = True
+assert settings.use_auto_cage and not settings.autogenerate_smart_cage
+settings.autogenerate_smart_cage = True
+assert settings.autogenerate_smart_cage and not settings.use_auto_cage
+settings.use_auto_cage = True
+assert settings.use_auto_cage and not settings.autogenerate_smart_cage
 
 def sphere(name, radius, scale=(1, 1, 1)):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=radius)
@@ -34,6 +40,7 @@ for scale in [(1, 1, 1), (2, .7, 1.3)]:
     high = sphere("High", 1.12, scale)
     original = [v.co.copy() for v in low.data.vertices]
     cage = smart_cage.generate(bpy.context, low, [high], settings)
+    assert cage.display_type == "SOLID" and not cage.show_in_front
     assert len(cage.data.vertices) == len(low.data.vertices)
     assert all(a == b.co for a, b in zip(original, low.data.vertices))
     assert smart_cage.validate(bpy.context, cage, low, [high], settings), settings.smart_cage_status
@@ -42,19 +49,43 @@ for scale in [(1, 1, 1), (2, .7, 1.3)]:
     bpy.context.view_layer.update()
     assert not smart_cage.validate(bpy.context, cage, low, [high], settings)
     assert "100.00%" not in settings.smart_cage_status
-    # Manual edits survive validation, and a fresh Generate preserves the old cage.
+    warnings = []
+    assert smart_cage.prepare_bake(bpy.context, low, [high], settings,
+                                   lambda level, message: warnings.append((level, message)))
+    assert warnings and warnings[-1][0] == {"WARNING"}
+    assert settings.smart_cage_object == cage
+    if scale == (1, 1, 1):
+        # An imperfect cage must still reach Cycles baking.
+        material = bpy.data.materials.new("Imperfect Cage Bake")
+        material.use_nodes = True
+        low.data.materials.append(material)
+        image = bpy.data.images.new("Imperfect Cage Result", width=8, height=8)
+        node = material.node_tree.nodes.new("ShaderNodeTexImage")
+        node.image = image
+        material.node_tree.nodes.active = node
+        bpy.ops.object.select_all(action="DESELECT")
+        low.select_set(True)
+        high.select_set(True)
+        bpy.context.view_layer.objects.active = low
+        baking._configure_bake_settings(bpy.context, settings, "NORMAL")
+        assert bpy.ops.object.bake(type="NORMAL") == {"FINISHED"}
+    # A new Generate replaces the old cage and resets modifier strength/weights.
+    previous_name = cage.name
     new = smart_cage.generate(bpy.context, low, [high], settings)
-    assert new != cage and cage.name in bpy.data.objects
-    assert cage.modifiers[smart_cage.MODIFIER].strength == 0
+    assert new.name == previous_name and bpy.data.objects[previous_name] == new
+    assert abs(new.modifiers[smart_cage.MODIFIER].strength - settings.smart_cage_started_clearance) < 1e-6
     bpy.ops.object.select_all(action="DESELECT")
     for obj in (low, high, new):
         obj.select_set(True)
     bpy.context.view_layer.objects.active = low
     assert baking._source_meshes(bpy.context, low) == [high]
+    settings.autogenerate_smart_cage = True
+    settings.smart_cage_object = None
     assert smart_cage.prepare_bake(bpy.context, low, [high], settings, lambda *_: None)
+    assert settings.smart_cage_object == new
     baking._configure_bake_settings(bpy.context, settings, "NORMAL")
     assert bpy.context.scene.render.bake.cage_object == new
-    settings.use_smart_cage = False
+    settings.use_auto_cage = True
     baking._configure_bake_settings(bpy.context, settings, "NORMAL")
     assert not bpy.context.scene.render.bake.use_cage
     assert bpy.context.scene.render.bake.cage_object is None
@@ -203,8 +234,9 @@ low.location.x += 2
 bpy.context.view_layer.update()
 assert (cage.matrix_world.translation - old_location).length < 1e-8
 next_cage = smart_cage.generate(bpy.context, low, [high], settings)
-assert next_cage.name == "Retopo_04_Highpoly_Generated_Cage.002"
+assert next_cage.name == "Retopo_04_Highpoly_Generated_Cage.001"
 assert next_cage.parent is None and tuple(next_cage.users_collection) == (generated,)
+assert len(smart_cage.matching_cages(bpy.context, low)) == 1
 
 # Generate with only a lowpoly selected uses AutoBake's exact collection lookup.
 low.location.x = 0
@@ -221,6 +253,7 @@ assert bpy.ops.object.polygroups_generate_smart_cage() == {"FINISHED"}
 assert matched_high.select_get() and low.select_get()
 assert not matched_high.hide_viewport and not matched_high.hide_render
 assert settings.smart_cage_object.get("smart_cage_sources")["0"] == matched_high
+assert len(smart_cage.matching_cages(bpy.context, low)) == 1
 
 missing = sphere("Retopo_05_Highpoly_Generated.002", 1)
 for owner in tuple(missing.users_collection):
@@ -233,4 +266,22 @@ previous_cage = settings.smart_cage_object
 assert bpy.ops.object.polygroups_generate_smart_cage() == {"CANCELLED"}
 assert settings.smart_cage_object == previous_cage
 assert list(bpy.context.selected_objects) == [missing]
+
+# Both bake entry points share this mode gate: automatic cage lookup/generation
+# for Smart and extrusion calculation for Auto.
+low = sphere("Mode Low", 1)
+high = sphere("Mode High", 1.01)
+settings.smart_cage_object = None
+settings.autogenerate_smart_cage = True
+assert baking._apply_auto_cage_if_enabled(bpy.context, low, [high], settings, lambda *_: None)
+smart_object = settings.smart_cage_object
+assert smart_object == smart_cage.find_cage(bpy.context, low, settings)
+assert len(smart_cage.matching_cages(bpy.context, low)) == 1
+baking._configure_bake_settings(bpy.context, settings, "NORMAL")
+assert bpy.context.scene.render.bake.cage_object == smart_object
+settings.use_auto_cage = True
+assert baking._apply_auto_cage_if_enabled(bpy.context, low, [high], settings, lambda *_: None)
+baking._configure_bake_settings(bpy.context, settings, "NORMAL")
+assert not bpy.context.scene.render.bake.use_cage
+assert bpy.context.scene.render.bake.cage_object is None
 print("SMART_CAGE_TESTS_OK")

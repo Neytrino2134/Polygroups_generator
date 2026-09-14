@@ -1438,6 +1438,25 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         name="Decimate",
         default=False,
     )
+    show_smart_lods_settings: bpy.props.BoolProperty(name="Smart LODs", default=False)
+    smart_lods_count: bpy.props.IntProperty(
+        name="LOD Count", description="Number of generated LOD meshes",
+        default=4, min=1, max=4,
+    )
+    smart_lods_target_1: bpy.props.IntProperty(name="LOD.1", default=1500, min=1)
+    smart_lods_target_2: bpy.props.IntProperty(name="LOD.2", default=1000, min=1)
+    smart_lods_target_3: bpy.props.IntProperty(name="LOD.3", default=500, min=1)
+    smart_lods_target_4: bpy.props.IntProperty(name="LOD.4", default=150, min=1)
+    smart_lods_final_decimate: bpy.props.BoolProperty(
+        name="Final Decimate Fallback",
+        description="If seam-aware decimation cannot reach a triangle limit, add an unrestricted Decimate pass",
+        default=False,
+    )
+    smart_lods_triangulate_all: bpy.props.BoolProperty(
+        name="Triangulate All LODs",
+        description="Apply triangulation to every generated LOD mesh",
+        default=False,
+    )
     show_mesh_check_settings: bpy.props.BoolProperty(
         name="Check Mesh",
         default=False,
@@ -1459,6 +1478,14 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         name="Ratio",
         description="Decimate ratio for non-seam areas",
         default=0.4,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+    )
+    smart_decimate_seams_ratio: bpy.props.FloatProperty(
+        name="Seams Decimate Ratio",
+        description="Decimate ratio for seam vertices",
+        default=0.9,
         min=0.0,
         max=1.0,
         subtype="FACTOR",
@@ -1799,6 +1826,20 @@ def _smart_cage_strength_set(modifier_name):
     return set
 
 
+def _auto_cage_mode_update(self, _context):
+    if self.use_auto_cage:
+        self.autogenerate_smart_cage = False
+        self.use_smart_cage = False
+
+
+def _smart_cage_mode_update(self, _context):
+    if self.autogenerate_smart_cage:
+        self.use_auto_cage = False
+        self.use_smart_cage = True
+    else:
+        self.use_smart_cage = False
+
+
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     bake_task_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     bake_task_stage: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
@@ -1852,6 +1893,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         name="AutoCage",
         description="Automatically calculate cage extrusion from selected highpoly and active lowpoly before baking",
         default=False,
+        update=_auto_cage_mode_update,
     )
     auto_cage_coverage: bpy.props.FloatProperty(
         name="Coverage",
@@ -1913,7 +1955,8 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     use_smart_cage: bpy.props.BoolProperty(name="Use Smart Cage Object", default=False,
         description="Использовать выбранный и проверенный Smart Cage при запекании вместо обычного выдавливания Auto Cage")
     autogenerate_smart_cage: bpy.props.BoolProperty(name="Autogenerate Smart Cage", default=False,
-        description="Перед каждым запеканием создать новый Smart Cage; прежние объекты и нарисованные веса сохранятся")
+        description="Использовать Smart Cage при запекании; если для lowpoly нет cage, создать его автоматически",
+        update=_smart_cage_mode_update)
     smart_cage_object: bpy.props.PointerProperty(name="Cage Object", type=bpy.types.Object,
         description="Объект cage для запекания; создаётся кнопкой Generate и должен соответствовать активному lowpoly")
     smart_cage_margin: bpy.props.FloatProperty(name="Minimum Clearance", default=0.001,

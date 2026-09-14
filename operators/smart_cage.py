@@ -33,6 +33,23 @@ def cage_collection(target, context):
     return collection or next(iter(target.users_collection), context.collection)
 
 
+def matching_cages(context, target):
+    """Only cages made for this lowpoly in its own collection are eligible."""
+    owner = cage_collection(target, context)
+    return [obj for obj in owner.objects
+            if obj.type == "MESH" and obj.get(TAG)
+            and obj.get("smart_cage_target_object") == target]
+
+
+def find_cage(context, target, settings):
+    cages = matching_cages(context, target)
+    preferred = settings.smart_cage_object
+    if preferred in cages:
+        return preferred
+    return next((obj for obj in cages if obj.name == cage_name(target)),
+                cages[0] if cages else None)
+
+
 def geometry(context, obj):
     evaluated = obj.evaluated_get(context.evaluated_depsgraph_get())
     mesh = evaluated.to_mesh()
@@ -245,6 +262,7 @@ def generate(context, target, sources, settings):
         raise ValueError("Select highpoly meshes and make lowpoly active")
     if target.matrix_world.to_3x3().determinant() <= 1e-12:
         raise ValueError("Apply negative scale / correct zero scale on lowpoly before generating")
+    previous_cages = matching_cages(context, target)
     evaluated = target.evaluated_get(context.evaluated_depsgraph_get())
     mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=context.evaluated_depsgraph_get())
     cage = None
@@ -265,8 +283,8 @@ def generate(context, target, sources, settings):
         cage["smart_cage_target"] = target.name
         cage["smart_cage_target_object"] = target
         cage["smart_cage_sources"] = {str(i): source for i, source in enumerate(sources)}
-        cage.display_type = "WIRE"
-        cage.show_in_front = True
+        cage.display_type = "SOLID"
+        cage.show_in_front = False
         cage.hide_render = True
         cage.color = (0.1, 0.8, 1.0, 1.0)
         margin = settings.smart_cage_margin
@@ -315,8 +333,13 @@ def generate(context, target, sources, settings):
         cage["smart_cage_margin"] = margin
         context.view_layer.update()
         validate(context, cage, target, sources, settings)
+        for old in previous_cages:
+            old_mesh = old.data
+            bpy.data.objects.remove(old, do_unlink=True)
+            if old_mesh.users == 0:
+                bpy.data.meshes.remove(old_mesh)
+        cage.name = cage_name(target)
         settings.smart_cage_object = cage
-        settings.use_smart_cage = True
         return cage
     except Exception:
         if cage is not None:
@@ -328,17 +351,18 @@ def generate(context, target, sources, settings):
 
 def prepare_bake(context, target, sources, settings, report):
     try:
-        if settings.autogenerate_smart_cage:
-            generate(context, target, sources, settings)
-        cage = settings.smart_cage_object
-        if cage is None or not cage.get(TAG) or cage.get("smart_cage_target_object") != target:
-            raise ValueError("Generate a Smart Cage for this lowpoly first")
+        cage = find_cage(context, target, settings)
+        if cage is None:
+            cage = generate(context, target, sources, settings)
+        settings.smart_cage_object = cage
         for obj in (target, cage, *sources):
             for mod in obj.modifiers:
                 if mod.show_viewport != mod.show_render or (mod.type == "SUBSURF" and mod.levels != mod.render_levels):
                     raise ValueError(f"Match viewport/render modifier settings on {obj.name} before validating for bake")
         if not validate(context, cage, target, sources, settings):
-            raise ValueError("Smart Cage has unresolved constraints. " + settings.smart_cage_status)
+            report({"WARNING"},
+                   "Smart Cage has unresolved constraints; baking may contain artifacts. "
+                   + settings.smart_cage_status)
         return True
     except (ValueError, RuntimeError) as error:
         settings.smart_cage_status = str(error)
@@ -374,6 +398,7 @@ class OBJECT_OT_polygroups_generate_smart_cage(bpy.types.Operator):
         except (ValueError, RuntimeError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
+        settings.autogenerate_smart_cage = True
         self.report({"INFO"}, settings.smart_cage_status)
         return {"FINISHED"}
 

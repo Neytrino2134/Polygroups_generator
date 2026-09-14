@@ -2222,54 +2222,51 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
         content = draw_topic(layout, context, "bake_1", 'Cage Settings', "MOD_SHRINKWRAP")
         if content is not None:
             column = content.column(align=True)
+            column.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
             auto_cage_box = column.box()
-            auto_cage_box.label(text="Auto Cage", icon="MOD_SHRINKWRAP")
-            auto_cage_box.prop(settings, "cage_extrusion", text=t(context, "cage_extrusion"))
-            auto_cage_box.prop(settings, "use_auto_cage", text=t(context, "auto_cage"))
-            auto_cage_column = auto_cage_box.column(align=True)
-            auto_cage_column.prop(settings, "auto_cage_coverage", text=t(context, "auto_cage_coverage"), slider=True)
-            auto_cage_column.prop(settings, "auto_cage_margin", text=t(context, "auto_cage_margin"))
-            auto_cage_column.prop(settings, "auto_cage_margin_percent", text=t(context, "auto_cage_margin_percent"), slider=True)
-            auto_cage_column.prop(settings, "auto_cage_safe_zone", text=t(context, "auto_cage_safe_zone"), slider=True)
-            auto_cage_column.prop(settings, "auto_cage_max", text=t(context, "auto_cage_max"))
-            auto_cage_column.prop(settings, "auto_cage_sample_limit", text=t(context, "auto_cage_samples"))
-            auto_cage_column.operator(
-                "object.polygroups_calculate_auto_cage",
-                text=t(context, "calculate_auto_cage"),
-                icon="MOD_SHRINKWRAP",
-            )
-            auto_cage_box.label(text=t(context, "auto_cage_status", value=settings.auto_cage_status), icon="INFO")
+            auto_cage_box.prop(settings, "use_auto_cage", text="Auto Cage")
+            if settings.use_auto_cage:
+                auto_cage_column = auto_cage_box.column(align=True)
+                auto_cage_column.prop(settings, "auto_cage_coverage", text=t(context, "auto_cage_coverage"), slider=True)
+                auto_cage_column.prop(settings, "auto_cage_margin", text=t(context, "auto_cage_margin"))
+                auto_cage_column.prop(settings, "auto_cage_margin_percent", text=t(context, "auto_cage_margin_percent"), slider=True)
+                auto_cage_column.prop(settings, "auto_cage_safe_zone", text=t(context, "auto_cage_safe_zone"), slider=True)
+                auto_cage_column.prop(settings, "auto_cage_max", text=t(context, "auto_cage_max"))
+                auto_cage_column.prop(settings, "auto_cage_sample_limit", text=t(context, "auto_cage_samples"))
+                auto_cage_column.operator("object.polygroups_calculate_auto_cage",
+                                          text=t(context, "calculate_auto_cage"), icon="MOD_SHRINKWRAP")
+                auto_cage_column.label(text=t(context, "auto_cage_status", value=settings.auto_cage_status), icon="INFO")
             smart = column.box()
-            smart.label(text="Smart Cage Object", icon="MOD_DISPLACE")
-            smart.prop(settings, "use_smart_cage")
-            smart.prop(settings, "autogenerate_smart_cage")
-            smart.prop(settings, "smart_cage_object")
-            smart.prop(settings, "smart_cage_margin")
-            smart.prop(settings, "smart_cage_started_clearance")
-            smart.prop(settings, "smart_cage_max")
-            smart.prop(settings, "smart_cage_smoothing", slider=True)
-            smart.prop(settings, "smart_cage_iterations")
-            smart.prop(settings, "smart_cage_samples")
-            smart.prop(settings, "smart_cage_avoid_self")
-            smart.operator("object.polygroups_generate_smart_cage", icon="MOD_DISPLACE")
-            cage = settings.smart_cage_object
-            if cage is not None:
-                modifier = cage.modifiers.get("Smart Cage Displace")
-                if modifier is not None:
-                    smart.prop(settings, "smart_cage_live_thickness")
-                trim = cage.modifiers.get("Smart Cage Extra Clearance")
-                if trim is not None:
-                    smart.prop(settings, "smart_cage_live_clearance")
-                reducer = cage.modifiers.get("Smart Cage Reduce Self Intersections")
-                if reducer is not None:
-                    smart.prop(settings, "smart_cage_reduce_self")
-                smart.label(text="Weight Paint: Smart Cage Weights")
-                smart.label(text="Diagnostics: Highpoly / Self Intersections")
-                smart.operator("object.polygroups_validate_smart_cage", icon="CHECKMARK")
-            smart.label(text="Last validation (refresh after edits):", icon="INFO")
-            for status_part in settings.smart_cage_status.split(" | "):
-                smart.label(text=status_part)
-            smart.label(text="Solver settings apply on Generate; validate after edits")
+            smart.prop(settings, "autogenerate_smart_cage", text="Smart Cage Object")
+            if settings.autogenerate_smart_cage:
+                smart_body = smart.column(align=True)
+                smart_body.prop(settings, "smart_cage_object")
+                smart_body.prop(settings, "smart_cage_margin")
+                smart_body.prop(settings, "smart_cage_started_clearance")
+                smart_body.prop(settings, "smart_cage_max")
+                smart_body.prop(settings, "smart_cage_smoothing", slider=True)
+                smart_body.prop(settings, "smart_cage_iterations")
+                smart_body.prop(settings, "smart_cage_samples")
+                smart_body.prop(settings, "smart_cage_avoid_self")
+                smart_body.operator("object.polygroups_generate_smart_cage", icon="MOD_DISPLACE")
+                cage = settings.smart_cage_object
+                if cage is not None:
+                    modifier = cage.modifiers.get("Smart Cage Displace")
+                    if modifier is not None:
+                        smart_body.prop(settings, "smart_cage_live_thickness")
+                    trim = cage.modifiers.get("Smart Cage Extra Clearance")
+                    if trim is not None:
+                        smart_body.prop(settings, "smart_cage_live_clearance")
+                    reducer = cage.modifiers.get("Smart Cage Reduce Self Intersections")
+                    if reducer is not None:
+                        smart_body.prop(settings, "smart_cage_reduce_self")
+                    smart_body.label(text="Weight Paint: Smart Cage Weights")
+                    smart_body.label(text="Diagnostics: Highpoly / Self Intersections")
+                    smart_body.operator("object.polygroups_validate_smart_cage", icon="CHECKMARK")
+                smart_body.label(text="Last validation (refresh after edits):", icon="INFO")
+                for status_part in settings.smart_cage_status.split(" | "):
+                    smart_body.label(text=status_part)
+                smart_body.label(text="Solver settings apply on Generate; validate after edits")
             column.prop(settings, "ray_distance", text=t(context, "ray_distance"))
 
         content = draw_topic(layout, context, "bake_2", 'Bake Settings', "RENDER_STILL")
@@ -3018,6 +3015,12 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         if decimate_content is not None:
             self.draw_decimate(context, decimate_content)
 
+        lods_content = draw_collapsible_box(
+            layout, settings, "show_smart_lods_settings", "Smart LODs", "MOD_DECIM",
+        )
+        if lods_content is not None:
+            self.draw_smart_lods(context, lods_content)
+
         check_content = draw_collapsible_box(
             layout,
             settings,
@@ -3073,21 +3076,38 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             "smart_decimate_duplicate_and_apply",
             text=t(context, "duplicate_and_apply_decimate"),
         )
-        row = column.row(align=True)
-        smart_decimate_operator = row.operator(
+        column.prop(
+            settings,
+            "smart_decimate_ratio",
+            text=t(context, "ratio"),
+            slider=True,
+        )
+        column.prop(
+            settings,
+            "smart_decimate_seams_ratio",
+            text=t(context, "seams_decimate_ratio"),
+            slider=True,
+        )
+        smart_decimate_operator = column.operator(
             "object.polygroups_smart_decimate",
             text=t(context, "smart_decimate"),
             icon="MOD_DECIM",
         )
-        row.prop(
-            settings,
-            "smart_decimate_ratio",
-            text=t(context, "ratio"),
-        )
         smart_decimate_operator.ratio = settings.smart_decimate_ratio
+        smart_decimate_operator.seams_ratio = settings.smart_decimate_seams_ratio
         smart_decimate_operator.duplicate_and_apply = (
             settings.smart_decimate_duplicate_and_apply
         )
+
+    def draw_smart_lods(self, context, layout):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        column = layout.column(align=True)
+        column.prop(settings, "smart_lods_count")
+        for index in range(1, settings.smart_lods_count + 1):
+            column.prop(settings, f"smart_lods_target_{index}", text=f"LOD.{index} Tris")
+        column.prop(settings, "smart_lods_final_decimate")
+        column.prop(settings, "smart_lods_triangulate_all")
+        column.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")
 
     def draw_mesh_check(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
@@ -3741,6 +3761,47 @@ def draw_object_select_tool_actions(self, context):
     )
 
 
+def draw_edit_select_tool_actions(self, context):
+    """Seam actions beside native Edit Mode Box Select and Tweak settings."""
+    if context.mode != "EDIT_MESH":
+        return
+    tool = context.workspace.tools.from_space_view3d_mode("EDIT_MESH", create=False)
+    if tool is None or tool.idname not in {"builtin.select", "builtin.select_box"}:
+        return
+
+    settings = context.scene.polygroups_generator_settings
+    layout = self.layout
+    layout.separator()
+    merge_row = layout.row(align=True)
+    merge_row.operator(
+        "mesh.polygroups_merge_small_islands",
+        text=t(context, "small_islands_merge"),
+        icon="AUTOMERGE_ON",
+    ).preview = False
+    merge_row.prop(settings, "small_island_threshold", text=t(context, "small_islands_threshold"))
+    layout.operator(
+        "mesh.polygroups_check_seam_gaps",
+        text=t(context, "check_seam_gaps"),
+        icon="VIEWZOOM",
+    ).mode = "SELECT"
+    layout.operator(
+        "mesh.polygroups_relax_seams",
+        text=t(context, "cutter_auto_fix_smart_relax_seams"),
+        icon="MOD_SMOOTH",
+    ).mode_override = "SMART"
+    pin_row = layout.row(align=True)
+    pin_row.operator(
+        "mesh.polygroups_pin_selected_seams",
+        text=t(context, "pin_selected_seams"),
+        **icon_kwargs("pin_vertices", "PINNED"),
+    )
+    pin_row.operator(
+        "mesh.polygroups_unpin_selected_edges",
+        text=t(context, "unpin_selected"),
+        **icon_kwargs("unpin_vertices", "UNPINNED"),
+    )
+
+
 def draw_view_assists_shading_pie(self, context):
     """Add independent Object Mode overlay toggles to the standard Z shading pie."""
     if context.mode != "OBJECT":
@@ -3790,9 +3851,11 @@ def register():
     bpy.types.OUTLINER_HT_header.prepend(draw_outliner_header)
     bpy.types.VIEW3D_HT_header.append(draw_view_assists_header)
     bpy.types.VIEW3D_HT_tool_header.append(draw_object_select_tool_actions)
+    bpy.types.VIEW3D_HT_tool_header.prepend(draw_edit_select_tool_actions)
 
 
 def unregister():
+    bpy.types.VIEW3D_HT_tool_header.remove(draw_edit_select_tool_actions)
     bpy.types.VIEW3D_HT_tool_header.remove(draw_object_select_tool_actions)
     bpy.types.VIEW3D_HT_header.remove(draw_view_assists_header)
     bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)

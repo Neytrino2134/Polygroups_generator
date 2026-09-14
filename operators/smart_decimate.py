@@ -1,8 +1,10 @@
 import bpy
+import re
 
 
 SMART_DECIMATE_GROUP_NAME = "AI Retopo UV Seam Protect"
 SMART_DECIMATE_MODIFIER_NAME = "Smart Decimate"
+SEAMS_DECIMATE_MODIFIER_NAME = "Seams Decimate"
 SMART_DECIMATE_DUPLICATE_SUFFIX = "_SmartDecimated"
 
 
@@ -33,15 +35,22 @@ def _select_seam_edges(obj):
     mesh.update()
 
 
+def _decimated_name(name):
+    match = re.search(r"\.\d+$", name)
+    if match:
+        return f"{name[:match.start()]}{SMART_DECIMATE_DUPLICATE_SUFFIX}{match.group()}"
+    return f"{name}{SMART_DECIMATE_DUPLICATE_SUFFIX}"
+
+
 def _duplicate_mesh_object(context, obj):
     duplicate = obj.copy()
     duplicate.data = obj.data.copy()
     duplicate.animation_data_clear()
-    duplicate.name = f"{obj.name}{SMART_DECIMATE_DUPLICATE_SUFFIX}"
-    duplicate.data.name = f"{obj.data.name}{SMART_DECIMATE_DUPLICATE_SUFFIX}"
+    duplicate.name = _decimated_name(obj.name)
+    duplicate.data.name = _decimated_name(obj.data.name)
 
-    target_collection = context.collection or context.scene.collection
-    target_collection.objects.link(duplicate)
+    for collection in obj.users_collection or (context.scene.collection,):
+        collection.objects.link(duplicate)
 
     return duplicate
 
@@ -49,13 +58,21 @@ def _duplicate_mesh_object(context, obj):
 class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
     bl_idname = "object.polygroups_smart_decimate"
     bl_label = "Smart Decimate"
-    bl_description = "Protect UV seam vertices with a vertex group, then add an inverted Decimate modifier"
+    bl_description = "Decimate seam vertices and non-seam areas with separate ratios"
     bl_options = {"REGISTER", "UNDO"}
 
     ratio: bpy.props.FloatProperty(
         name="Ratio",
         description="Decimate ratio for non-seam areas",
         default=0.4,
+        min=0.0,
+        max=1.0,
+        subtype="FACTOR",
+    )
+    seams_ratio: bpy.props.FloatProperty(
+        name="Seams Decimate Ratio",
+        description="Decimate ratio for seam vertices",
+        default=0.9,
         min=0.0,
         max=1.0,
         subtype="FACTOR",
@@ -109,6 +126,15 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
         group.add(seam_vertex_indices, 1.0, "REPLACE")
         obj.vertex_groups.active_index = group.index
 
+        seams_modifier = obj.modifiers.get(SEAMS_DECIMATE_MODIFIER_NAME)
+        if seams_modifier is None or seams_modifier.type != "DECIMATE":
+            seams_modifier = obj.modifiers.new(SEAMS_DECIMATE_MODIFIER_NAME, "DECIMATE")
+        seams_modifier.decimate_type = "COLLAPSE"
+        seams_modifier.ratio = self.seams_ratio
+        seams_modifier.vertex_group = group.name
+        seams_modifier.invert_vertex_group = False
+        seams_modifier.vertex_group_factor = 1.0
+
         modifier = obj.modifiers.get(SMART_DECIMATE_MODIFIER_NAME)
         if modifier is None or modifier.type != "DECIMATE":
             modifier = obj.modifiers.new(SMART_DECIMATE_MODIFIER_NAME, "DECIMATE")
@@ -119,11 +145,16 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
         modifier.invert_vertex_group = True
         modifier.vertex_group_factor = 1.0
 
+        # Keep the seam pass before the non-seam pass, including on repeated runs.
+        while obj.modifiers.find(seams_modifier.name) > obj.modifiers.find(modifier.name):
+            bpy.ops.object.modifier_move_up(modifier=seams_modifier.name)
+
         _select_seam_edges(obj)
 
         applied_suffix = ""
         if self.duplicate_and_apply:
             try:
+                bpy.ops.object.modifier_apply(modifier=seams_modifier.name)
                 bpy.ops.object.modifier_apply(modifier=modifier.name)
                 applied_suffix = ", applied to duplicate"
             except RuntimeError as error:
@@ -135,7 +166,7 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
         self.report(
             {"INFO"},
             (
-                f"Smart Decimate added: protected {len(seam_vertex_indices)} seam "
+                f"Seams Decimate and Smart Decimate added: {len(seam_vertex_indices)} seam "
                 f"vertex/vertices from {len(seam_edges)} seam edge(s){applied_suffix}"
             ),
         )

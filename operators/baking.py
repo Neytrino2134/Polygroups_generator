@@ -262,7 +262,7 @@ def calculate_auto_cage(context, target, sources, settings):
 
 
 def _apply_auto_cage_if_enabled(context, target, sources, settings, report):
-    if getattr(settings, "use_smart_cage", False) or getattr(settings, "autogenerate_smart_cage", False):
+    if getattr(settings, "autogenerate_smart_cage", False):
         from .smart_cage import prepare_bake
         return prepare_bake(context, target, sources, settings, report)
     if not settings.use_auto_cage:
@@ -1253,7 +1253,7 @@ def _configure_bake_settings(context, settings, bake_type):
     bake = scene.render.bake
     bake.use_selected_to_active = settings.use_selected_to_active
     bake.cage_extrusion = settings.cage_extrusion
-    smart = getattr(settings, "use_smart_cage", False) or getattr(settings, "autogenerate_smart_cage", False)
+    smart = getattr(settings, "autogenerate_smart_cage", False)
     bake.use_cage = bool(smart and settings.use_selected_to_active)
     bake.cage_object = settings.smart_cage_object if bake.use_cage else None
     bake.max_ray_distance = settings.ray_distance
@@ -1652,7 +1652,7 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             if self.target.mode != "OBJECT":
                 bpy.ops.object.mode_set(mode="OBJECT")
             if not _apply_auto_cage_if_enabled(context, self.target, self.sources, self.settings, self.report):
-                return self._finish(context, False, "AutoCage preparation failed")
+                return self._finish(context, False, "Cage preparation failed")
             self.material, self.base_node, self.normal_node = _ensure_bake_material(self.target, self.settings)
             self.target.active_material = self.material
             _select_sources_and_target(context, self.sources, self.target)

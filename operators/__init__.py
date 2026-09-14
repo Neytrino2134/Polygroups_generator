@@ -158,6 +158,7 @@ from .safety_checks import OBJECT_OT_polygroups_skip_generate_polygroups
 from .safety_checks import OBJECT_OT_polygroups_skip_quad_remesh
 from .smooth_face_selection import MESH_OT_polygroups_smooth_face_selection
 from .smart_decimate import OBJECT_OT_polygroups_smart_decimate
+from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods
 from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_unwrap
@@ -339,6 +340,7 @@ CLASSES = (
     MESH_OT_polygroups_quick_knife_seam,
     MESH_OT_polygroups_select_seam_tool,
     OBJECT_OT_polygroups_smart_decimate,
+    OBJECT_OT_polygroups_generate_smart_lods,
     OBJECT_OT_polygroups_draw_cutter_plane,
     OBJECT_OT_polygroups_draw_cutter_grid,
     OBJECT_OT_polygroups_generate_cutter_grid,

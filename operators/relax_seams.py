@@ -106,6 +106,16 @@ class MESH_OT_polygroups_relax_seams(bpy.types.Operator):
     bl_description = "Relax seam chains while preserving endpoints and protected junctions"
     bl_options = {"REGISTER", "UNDO"}
 
+    mode_override: bpy.props.EnumProperty(
+        name="Relax Mode",
+        items=(
+            ("SETTINGS", "Use Settings", "Use the seam relaxation panel mode"),
+            ("SMART", "Smart Relax", "Preserve protected seam junctions and corners"),
+        ),
+        default="SETTINGS",
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
+
     @classmethod
     def poll(cls, context):
         return context.mode == "EDIT_MESH" and context.edit_object is not None
@@ -114,7 +124,7 @@ class MESH_OT_polygroups_relax_seams(bpy.types.Operator):
         settings = context.scene.polygroups_seam_preparation_settings
         moved, protected = relax_seams(
             context,
-            settings.seam_relax_mode,
+            settings.seam_relax_mode if self.mode_override == "SETTINGS" else self.mode_override,
             settings.seam_relax_iterations,
             settings.seam_relax_corner_angle,
             settings.seam_relax_protection_radius,
