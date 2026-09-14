@@ -3,12 +3,21 @@
 import os
 
 import bpy
+import bmesh
 from bpy.app.handlers import persistent
 
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once, get_remesh_preset_counts
 from ..core.remesh_job import RemeshJob, VoxelRemeshJob, remesh_backend
 from ..core.import_timing import ImportTiming
 from .apply_weld import apply_weld_to_objects
+from .small_islands import plan_merge
+from .relax_seams import relax_seams
+from .object_seam_cutter import (
+    _delete_loose_geometry_for_autofix,
+    _fill_open_nonmanifold_boundaries,
+    _remove_fin_faces_for_autofix,
+    _triangulate_ngons_for_autofix,
+)
 from .rename_objects import (
     get_next_object_index,
     layer_collection_paths,
@@ -74,6 +83,8 @@ class ImportQueue:
         self.owned_collections = set()
         self.owned_meshes = set()
         self.owned_gray_materials = set()
+        self.owned_bake_materials = set()
+        self.owned_bake_images = set()
         self.groups = []
         self.original_selection = list(context.selected_objects)
         self.original_active = context.view_layer.objects.active
@@ -118,6 +129,76 @@ class ImportQueue:
         self.timer = None
         self.cursor = None
         self.saved_remesh_settings = None
+        self.saved_bake_settings = None
+        self.bake_snapshot = None
+
+    def restore_bake_settings(self):
+        if self.saved_bake_settings is None:
+            return
+        use_auto, autogenerate_smart, use_smart, save_textures, selected_to_active = self.saved_bake_settings
+        bake = self.scene.polygroups_baking_settings
+        bake.autogenerate_smart_cage = False
+        bake.use_auto_cage = False
+        if autogenerate_smart:
+            bake.autogenerate_smart_cage = True
+        elif use_auto:
+            bake.use_auto_cage = True
+        else:
+            bake.use_smart_cage = use_smart
+        bake.auto_save_textures_after_bake = save_textures
+        bake.use_selected_to_active = selected_to_active
+        self.saved_bake_settings = None
+
+    def collect_bake_created(self):
+        if self.bake_snapshot is None:
+            return
+        target, objects, meshes, materials, images = self.bake_snapshot
+        created_objects = {
+            obj for obj in set(bpy.data.objects) - objects
+            if obj.get("polygroups_smart_cage")
+            and obj.get("smart_cage_target_object") == target
+        }
+        self.owned_objects.update(created_objects)
+        self.file_objects.extend(obj for obj in created_objects if obj not in self.file_objects)
+        self.owned_meshes.update(obj.data for obj in created_objects if obj.data not in meshes)
+        target_materials = {material for material in target.data.materials if material is not None}
+        self.owned_bake_materials.update(target_materials - materials)
+        for material in target_materials:
+            if material.node_tree is None:
+                continue
+            self.owned_bake_images.update(
+                node.image for node in material.node_tree.nodes
+                if node.type == "TEX_IMAGE" and node.image is not None and node.image not in images
+            )
+        self.bake_snapshot = None
+
+    def start_auto_bake(self, context, target):
+        self.select_source(context, target)
+        if not bpy.data.filepath:
+            raise RuntimeError("Save the blend file before Auto Bake so textures have an output folder")
+        if target.data.uv_layers.active is None:
+            raise RuntimeError(f"Auto Bake needs a UV map on {target.name}")
+        bake = self.scene.polygroups_baking_settings
+        if self.saved_bake_settings is None:
+            self.saved_bake_settings = (
+                bake.use_auto_cage, bake.autogenerate_smart_cage, bake.use_smart_cage,
+                bake.auto_save_textures_after_bake, bake.use_selected_to_active,
+            )
+        bake.autogenerate_smart_cage = False
+        bake.use_auto_cage = False
+        if self.settings.batch_autobake_cage_mode == "SMART":
+            bake.autogenerate_smart_cage = True
+        else:
+            bake.use_auto_cage = True
+        bake.auto_save_textures_after_bake = True
+        bake.use_selected_to_active = True
+        self.bake_snapshot = (
+            target, set(bpy.data.objects), set(bpy.data.meshes),
+            set(bpy.data.materials), set(bpy.data.images),
+        )
+        result = bpy.ops.object.polygroups_checked_prepare_and_bake("EXEC_DEFAULT")
+        if "CANCELLED" in result:
+            raise RuntimeError(f"Auto Bake could not start for {target.name}")
 
     def restore_remesh_settings(self):
         if self.saved_remesh_settings is None:
@@ -222,32 +303,115 @@ class ImportQueue:
         obj.select_set(True)
         context.view_layer.objects.active = obj
 
-    def split_narrow_island(self, context, obj):
+    def split_narrow_island(self, context, obj, second=False):
         self.select_source(context, obj)
         if obj.data.users > 1:
             obj.data = obj.data.copy()
             self.owned_meshes.add(obj.data)
-        narrow = self.scene.polygroups_seam_finalization_settings
+        narrow = (self.settings if second
+                  else self.scene.polygroups_seam_finalization_settings)
+        prefix = "batch_second_narrow_island_" if second else "narrow_island_"
         source = 'UV' if obj.data.uv_layers.active is not None else 'MESH'
         action = 'SPLIT' if source == 'UV' else 'SEAMS'
         result = bpy.ops.mesh.polygroups_split_narrow_islands(
             source=source, action=action,
-            width=narrow.narrow_island_width,
-            max_width_percent=narrow.narrow_island_max_width_percent,
-            min_island_area_percent=narrow.narrow_island_min_area_percent,
-            min_faces=narrow.narrow_island_min_faces,
-            min_length=narrow.narrow_island_min_length,
+            width=getattr(narrow, prefix + "width"),
+            max_width_percent=getattr(narrow, prefix + "max_width_percent"),
+            min_island_area_percent=getattr(narrow, prefix + "min_area_percent"),
+            min_faces=getattr(narrow, prefix + "min_faces"),
+            min_length=getattr(narrow, prefix + "min_length"),
             selected_only=False,
-            create_edges=narrow.narrow_island_create_edges,
-            smart_relax=narrow.narrow_island_smart_relax,
+            create_edges=getattr(narrow, prefix + "create_edges"),
+            smart_relax=getattr(narrow, prefix + "smart_relax"),
         )
         if 'FINISHED' not in result:
             raise RuntimeError(f'Narrow Island Splitter failed for {obj.name}')
 
+    def merge_small_islands(self, context, obj, second=False):
+        self.select_source(context, obj)
+        settings = self.settings
+        prefix = "batch_second_small_island_" if second else "batch_small_island_"
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            removed, _total, _small, _merged = plan_merge(
+                bm,
+                getattr(settings, prefix + "threshold"),
+                protect_sharp=getattr(settings, prefix + "protect_sharp"),
+                protect_materials=getattr(settings, prefix + "protect_materials"),
+                protect_pinned=getattr(settings, prefix + "protect_pinned"),
+            )
+            if removed:
+                if obj.data.users > 1:
+                    obj.data = obj.data.copy()
+                    self.owned_meshes.add(obj.data)
+                bm.edges.ensure_lookup_table()
+                for index in removed:
+                    bm.edges[index].seam = False
+                bm.to_mesh(obj.data)
+                obj.data.update()
+        finally:
+            bm.free()
+
+    def smart_relax_edges(self, context, obj):
+        self.select_source(context, obj)
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+            self.owned_meshes.add(obj.data)
+        seam_settings = self.scene.polygroups_seam_preparation_settings
+        bpy.ops.object.mode_set(mode="EDIT")
+        try:
+            relax_seams(
+                context, "SMART",
+                seam_settings.seam_relax_iterations,
+                seam_settings.seam_relax_corner_angle,
+                seam_settings.seam_relax_protection_radius,
+                use_corner_angle=seam_settings.seam_relax_use_corner_angle,
+                select_result=False,
+                selected_area_only=False,
+            )
+        finally:
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+    def autofix_second_pass(self, context, obj):
+        self.select_source(context, obj)
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+            self.owned_meshes.add(obj.data)
+        settings = self.settings
+        if settings.batch_stage_3_autofix_fin_loose:
+            _remove_fin_faces_for_autofix(context, obj)
+            _delete_loose_geometry_for_autofix(context, obj)
+        if settings.batch_stage_3_autofix_close_nonmanifold:
+            _fill_open_nonmanifold_boundaries(obj)
+        if settings.batch_stage_3_autofix_triangulate_ngons:
+            _triangulate_ngons_for_autofix(obj)
+
+    def first_cleanup_stage(self):
+        if self.file_selection:
+            return "PASS_SETUP"
+        if self.settings.batch_narrow_island_enabled:
+            return "NARROW_SPLIT"
+        if self.settings.batch_small_islands_enabled:
+            return "SMALL_ISLANDS"
+        return "PASS_SETUP"
+
+    def second_cleanup_stage(self):
+        if self.file_selection:
+            return "PASS_SETUP"
+        if self.settings.batch_second_narrow_island_enabled:
+            return "SECOND_NARROW_SPLIT"
+        if self.settings.batch_second_small_islands_enabled:
+            return "SECOND_SMALL_ISLANDS"
+        return "PASS_SETUP"
+
     def step(self, context):
         settings = self.settings
         self.update_timing()
-        if settings.batch_cancel_requested:
+        if settings.batch_cancel_requested and not (
+            self.stage == "BAKE_WAIT"
+            and self.scene.polygroups_baking_settings.bake_task_is_running
+        ):
             self.finish(context, "CANCELLED", rollback=True)
             return
         if self.stage == "NEXT":
@@ -279,6 +443,8 @@ class ImportQueue:
             self.pass_outputs = []
             self.pass_index = 0
             self.mesh_index = 0
+            self.second_cleanup_done = False
+            self.bake_snapshot = None
             self.collection = None
             settings.batch_current_file = os.path.basename(self.files[self.index])
             settings.batch_current_progress = 0
@@ -298,6 +464,8 @@ class ImportQueue:
                     self.pass_sources[self.mesh_index].hide_viewport = False
                     self.pass_sources[self.mesh_index].hide_set(False)
             self.restore_remesh_settings()
+            self.collect_bake_created()
+            self.restore_bake_settings()
             settings.batch_last_error = f"{settings.batch_current_file}: {error}"
             self.report({"WARNING"}, settings.batch_last_error)
             settings.batch_failed_count += 1
@@ -361,8 +529,9 @@ class ImportQueue:
                     self.passes.append((2, self.remesh_method if self.auto_remesh else None,
                                         self.quad_count, self.auto_smart_uv_project,
                                         self.auto_unwrap_method))
-                for number, preset in ((3, "MID"), (4, "LOW")):
+                for number in (3, 4):
                     if getattr(settings, f"batch_stage_{number}_enabled"):
+                        preset = getattr(settings, f"batch_stage_{number}_remesh_preset")
                         self.passes.append((
                             number,
                             "QUAD" if getattr(settings, f"batch_stage_{number}_auto_remesh") else None,
@@ -370,12 +539,23 @@ class ImportQueue:
                             getattr(settings, f"batch_stage_{number}_auto_unwrap"),
                             "ANGLE",
                         ))
-            self.stage = ("NARROW_SPLIT" if not self.file_selection
-                          and settings.batch_narrow_island_enabled
-                          and not settings.batch_stage_2_enabled else "PASS_SETUP")
+            self.stage = (self.first_cleanup_stage()
+                          if not self.file_selection and not settings.batch_stage_2_enabled
+                          else "PASS_SETUP")
         elif self.stage == "PASS_SETUP":
-            if self.pass_index >= len(self.passes):
-                self.stage = "PACK" if not self.file_selection and settings.batch_stage_5_enabled else "COMPLETE"
+            if (not self.file_selection and not self.second_cleanup_done
+                    and (self.pass_index >= len(self.passes)
+                         or self.passes[self.pass_index][0] == 4)):
+                self.second_cleanup_done = True
+                self.mesh_index = 0
+                self.stage = self.second_cleanup_stage()
+            elif self.pass_index >= len(self.passes):
+                if not self.file_selection and settings.batch_stage_5_enabled:
+                    self.stage = "PACK"
+                else:
+                    self.mesh_index = 0
+                    self.stage = ("BAKE_SETUP" if not self.file_selection and settings.batch_autobake_enabled
+                                  else "COMPLETE")
             else:
                 self.pass_number, self.pass_method, self.pass_quad_count, self.pass_unwrap, self.pass_unwrap_method = self.passes[self.pass_index]
                 self.pass_outputs = []
@@ -387,7 +567,9 @@ class ImportQueue:
                         settings.remesh_pregenerate_polygroups,
                         settings.remesh_auto_generate_seams,
                     )
-                self.stage = "REMESH" if self.pass_method else "UNWRAP_PASS"
+                self.stage = ("REMESH" if self.pass_method else
+                              "AUTOFIX_SECOND" if not self.file_selection and self.pass_number == 3
+                              and settings.batch_stage_3_autofix_enabled else "UNWRAP_PASS")
         elif self.stage == "REMESH":
             settings.batch_remesh_progress = 0
             source = self.pass_sources[self.mesh_index]
@@ -430,6 +612,11 @@ class ImportQueue:
             output_meshes = [obj for obj in outputs if obj.type == "MESH"]
             if not output_meshes:
                 raise RuntimeError(f"{self.pass_method.title()} Remesh did not create a mesh")
+            if (not self.file_selection and self.pass_number in (3, 4)
+                    and getattr(settings, f"batch_stage_{self.pass_number}_smart_relax_edges")
+                    and self.pass_method == "QUAD"):
+                for obj in output_meshes:
+                    self.smart_relax_edges(context, obj)
             self.pass_outputs.extend(output_meshes)
             if self.pass_number in (1, 2) and self.clear_material:
                 for obj in outputs:
@@ -446,7 +633,17 @@ class ImportQueue:
                 move_to_collection(outputs, self.collection)
             self.job = None
             self.mesh_index += 1
-            self.stage = "REMESH" if self.mesh_index < len(self.pass_sources) else "UNWRAP_PASS"
+            if self.mesh_index < len(self.pass_sources):
+                self.stage = "REMESH"
+            else:
+                self.mesh_index = 0
+                self.stage = ("AUTOFIX_SECOND" if not self.file_selection and self.pass_number == 3
+                              and settings.batch_stage_3_autofix_enabled else "UNWRAP_PASS")
+        elif self.stage == "AUTOFIX_SECOND":
+            targets = self.pass_outputs or self.pass_sources
+            self.autofix_second_pass(context, targets[self.mesh_index])
+            self.mesh_index += 1
+            self.stage = "AUTOFIX_SECOND" if self.mesh_index < len(targets) else "UNWRAP_PASS"
         elif self.stage == "UNWRAP_PASS":
             self.restore_remesh_settings()
             targets = self.pass_outputs or self.pass_sources
@@ -468,17 +665,44 @@ class ImportQueue:
             self.pass_sources = targets
             self.result_meshes = targets
             self.pass_index += 1
-            if (not self.file_selection and self.pass_number == 2
-                    and settings.batch_narrow_island_enabled):
+            if not self.file_selection and self.pass_number == 2:
                 self.mesh_index = 0
-                self.stage = "NARROW_SPLIT"
+                self.stage = self.first_cleanup_stage()
+            elif not self.file_selection and self.pass_number == 3:
+                self.second_cleanup_done = True
+                self.mesh_index = 0
+                self.stage = self.second_cleanup_stage()
             else:
                 self.stage = "PASS_SETUP"
         elif self.stage == "NARROW_SPLIT":
             obj = self.pass_sources[self.mesh_index]
             self.split_narrow_island(context, obj)
             self.mesh_index += 1
-            self.stage = "NARROW_SPLIT" if self.mesh_index < len(self.pass_sources) else "PASS_SETUP"
+            self.stage = ("NARROW_SPLIT" if self.mesh_index < len(self.pass_sources)
+                          else "SMALL_ISLANDS" if settings.batch_small_islands_enabled
+                          else "PASS_SETUP")
+            if self.stage == "SMALL_ISLANDS":
+                self.mesh_index = 0
+        elif self.stage == "SMALL_ISLANDS":
+            obj = self.pass_sources[self.mesh_index]
+            self.merge_small_islands(context, obj)
+            self.mesh_index += 1
+            self.stage = "SMALL_ISLANDS" if self.mesh_index < len(self.pass_sources) else "PASS_SETUP"
+        elif self.stage == "SECOND_NARROW_SPLIT":
+            obj = self.pass_sources[self.mesh_index]
+            self.split_narrow_island(context, obj, second=True)
+            self.mesh_index += 1
+            self.stage = ("SECOND_NARROW_SPLIT" if self.mesh_index < len(self.pass_sources)
+                          else "SECOND_SMALL_ISLANDS" if settings.batch_second_small_islands_enabled
+                          else "PASS_SETUP")
+            if self.stage == "SECOND_SMALL_ISLANDS":
+                self.mesh_index = 0
+        elif self.stage == "SECOND_SMALL_ISLANDS":
+            obj = self.pass_sources[self.mesh_index]
+            self.merge_small_islands(context, obj, second=True)
+            self.mesh_index += 1
+            self.stage = ("SECOND_SMALL_ISLANDS" if self.mesh_index < len(self.pass_sources)
+                          else "PASS_SETUP")
         elif self.stage == "PACK":
             for obj in self.pass_sources:
                 self.select_source(context, obj)
@@ -486,7 +710,24 @@ class ImportQueue:
                     raise RuntimeError(f"No UV map to pack on {obj.name}")
                 if "FINISHED" not in bpy.ops.object.polygroups_uvpackmaster_pack():
                     raise RuntimeError(f"UVPackmaster Pack failed for {obj.name}")
-            self.stage = "COMPLETE"
+            self.mesh_index = 0
+            self.stage = "BAKE_SETUP" if settings.batch_autobake_enabled else "COMPLETE"
+        elif self.stage == "BAKE_SETUP":
+            self.start_auto_bake(context, self.pass_sources[self.mesh_index])
+            self.stage = "BAKE_WAIT"
+        elif self.stage == "BAKE_WAIT":
+            bake = self.scene.polygroups_baking_settings
+            if bake.bake_task_is_running:
+                return
+            self.collect_bake_created()
+            if bake.bake_task_stage != "DONE":
+                raise RuntimeError(f"Auto Bake failed: {bake.bake_task_message}")
+            self.mesh_index += 1
+            if self.mesh_index < len(self.pass_sources):
+                self.stage = "BAKE_SETUP"
+            else:
+                self.restore_bake_settings()
+                self.stage = "COMPLETE"
         elif self.stage == "COMPLETE":
             self.groups.append((self.meshes[0], list(self.file_objects)))
             if self.arrange:
@@ -586,8 +827,14 @@ class ImportQueue:
 
     def update_progress(self, remesh_progress=None):
         fraction = {"NEXT": 0.0, "IMPORT": 0.0, "RENAME": 0.05,
-                    "WELD": 0.10, "PACK": 0.93, "COMPLETE": 0.99}.get(self.stage, 0.15)
-        if self.stage in {"PASS_SETUP", "REMESH", "WAIT_REMESH", "UNWRAP_PASS"}:
+                    "WELD": 0.10, "PACK": 0.93, "BAKE_SETUP": 0.94,
+                    "COMPLETE": 0.99}.get(self.stage, 0.15)
+        if self.stage == "BAKE_WAIT":
+            bake = self.scene.polygroups_baking_settings
+            fraction = 0.94 + 0.045 * (
+                self.mesh_index + bake.bake_task_progress / 100.0
+            ) / max(1, len(self.pass_sources))
+        if self.stage in {"PASS_SETUP", "REMESH", "WAIT_REMESH", "AUTOFIX_SECOND", "UNWRAP_PASS"}:
             count = max(1, len(getattr(self, "passes", ())))
             completed = min(self.pass_index, count)
             within = 0.0
@@ -595,6 +842,8 @@ class ImportQueue:
                 within = 0.85 * (self.mesh_index + (remesh_progress or 0)) / len(self.pass_sources)
             elif self.stage == "UNWRAP_PASS":
                 within = 0.9
+            elif self.stage == "AUTOFIX_SECOND":
+                within = 0.85 + 0.05 * self.mesh_index / max(1, len(self.pass_outputs or self.pass_sources))
             fraction = 0.15 + 0.77 * (completed + within) / count
         if self.stage != "NEXT":
             self.settings.batch_current_progress = max(
@@ -624,6 +873,8 @@ class ImportQueue:
             self.job.abort()
             self.job = None
         self.restore_remesh_settings()
+        self.collect_bake_created()
+        self.restore_bake_settings()
         if self.cursor is not None:
             self.cursor.close()
             self.cursor = None
@@ -636,6 +887,12 @@ class ImportQueue:
             for material in self.owned_gray_materials & set(bpy.data.materials):
                 if material.users == 0:
                     bpy.data.materials.remove(material)
+            for material in self.owned_bake_materials & set(bpy.data.materials):
+                if material.users == 0:
+                    bpy.data.materials.remove(material)
+            for image in self.owned_bake_images & set(bpy.data.images):
+                if image.users == 0:
+                    bpy.data.images.remove(image)
             for collection in self.owned_collections & set(bpy.data.collections):
                 if not collection.objects and not collection.children:
                     bpy.data.collections.remove(collection)

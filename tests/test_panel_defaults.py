@@ -39,6 +39,25 @@ assert model.batch_auto_unwrap_method == "SMART"
 assert model.batch_remesh_progress == 0
 assert all(getattr(model, f"batch_stage_{stage}_enabled") for stage in (2, 3, 4, 5))
 assert model.batch_narrow_island_enabled
+assert model.batch_second_narrow_island_enabled
+assert model.batch_second_small_islands_enabled
+assert model.batch_second_narrow_island_width == 5
+assert model.batch_second_small_island_threshold == 3.0
+assert not model.batch_autobake_enabled
+assert model.batch_autobake_cage_mode == "AUTO"
+assert model.batch_stage_3_remesh_preset == "MID"
+assert model.batch_stage_3_autofix_enabled
+assert model.batch_stage_3_autofix_fin_loose
+assert model.batch_stage_3_autofix_close_nonmanifold
+assert model.batch_stage_3_autofix_triangulate_ngons
+assert model.batch_stage_4_remesh_preset == "LOW"
+assert not model.batch_stage_3_smart_relax_edges
+assert not model.batch_stage_4_smart_relax_edges
+assert model.batch_small_islands_enabled
+assert model.batch_small_island_threshold == 3.0
+assert model.batch_small_island_protect_pinned
+assert model.batch_small_island_protect_sharp
+assert not model.batch_small_island_protect_materials
 assert all(getattr(model, f"batch_stage_{stage}_{option}")
            for stage in (3, 4)
            for option in ("auto_remesh", "auto_unwrap", "use_materials",
@@ -69,7 +88,24 @@ assert not model.file_import_auto_smart_uv_project
 model.file_import_auto_unwrap_method = "CLASSIC"
 model.batch_import_mode = "PAUSE_EACH"
 model.batch_stage_4_enabled = False
+model.batch_stage_3_remesh_preset = "HIGH"
+model.batch_stage_3_autofix_enabled = False
+model.batch_stage_3_autofix_fin_loose = False
+model.batch_stage_3_autofix_close_nonmanifold = False
+model.batch_stage_3_autofix_triangulate_ngons = False
+model.batch_stage_4_remesh_preset = "MID"
+model.batch_stage_3_smart_relax_edges = True
+model.batch_stage_4_smart_relax_edges = True
 model.batch_narrow_island_enabled = False
+model.batch_second_narrow_island_enabled = False
+model.batch_second_small_islands_enabled = False
+model.batch_second_narrow_island_width = 9
+model.batch_second_small_island_threshold = 12.0
+model.batch_autobake_enabled = True
+model.batch_autobake_cage_mode = "SMART"
+model.batch_small_islands_enabled = False
+model.batch_small_island_threshold = 12.0
+model.batch_small_island_protect_sharp = False
 model.file_import_separate_collections = False
 model.batch_include_subfolders = False
 seams.smart_seam_auto_relax = False
@@ -91,7 +127,24 @@ assert model.file_import_auto_smart_uv_project
 assert model.file_import_auto_unwrap_method == "SMART"
 assert model.batch_import_mode == "AUTO"
 assert model.batch_stage_4_enabled
+assert model.batch_stage_3_remesh_preset == "MID"
+assert model.batch_stage_3_autofix_enabled
+assert model.batch_stage_3_autofix_fin_loose
+assert model.batch_stage_3_autofix_close_nonmanifold
+assert model.batch_stage_3_autofix_triangulate_ngons
+assert model.batch_stage_4_remesh_preset == "LOW"
+assert not model.batch_stage_3_smart_relax_edges
+assert not model.batch_stage_4_smart_relax_edges
 assert model.batch_narrow_island_enabled
+assert model.batch_second_narrow_island_enabled
+assert model.batch_second_small_islands_enabled
+assert model.batch_second_narrow_island_width == 5
+assert model.batch_second_small_island_threshold == 3.0
+assert not model.batch_autobake_enabled
+assert model.batch_autobake_cage_mode == "AUTO"
+assert model.batch_small_islands_enabled
+assert model.batch_small_island_threshold == 3.0
+assert model.batch_small_island_protect_sharp
 assert seams.smart_seam_auto_relax
 assert seams.seam_relax_iterations == 2
 assert generator.checker_scale == 80.0

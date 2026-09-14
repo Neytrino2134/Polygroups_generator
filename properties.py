@@ -483,28 +483,128 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Stage 3: Narrow Island Splitter", default=True,
         description="Split narrow UV islands after the first remesh and before the second",
     )
+    batch_small_islands_enabled: bpy.props.BoolProperty(
+        name="Stage 4: Small Islands Merger", default=True,
+        description="Merge small seam islands before the second remesh pass",
+    )
+    batch_small_island_threshold: bpy.props.FloatProperty(
+        name="Area Threshold (%)", default=3.0, min=1.0, max=49.0,
+        description="Percentage of the largest seam island area in each connected mesh component",
+    )
+    batch_small_island_protect_pinned: bpy.props.BoolProperty(
+        name="Ignore Pinned Edges", default=True,
+        description="Never remove pinned seams during the batch merge",
+    )
+    batch_small_island_protect_sharp: bpy.props.BoolProperty(
+        name="Protect Sharp Edges", default=True,
+    )
+    batch_small_island_protect_materials: bpy.props.BoolProperty(
+        name="Protect Material Boundaries", default=False,
+    )
     # Keep existing RNA identifiers so saved .blend files retain remesh/pack choices.
     batch_stage_3_enabled: bpy.props.BoolProperty(
-        name="Stage 4: Second Remesh", default=True,
-        description="Remesh the result of the preceding enabled stage at MID density",
+        name="Stage 5: Second Remesh", default=True,
+        description="Remesh the result of the preceding enabled stage at the selected density",
     )
     batch_stage_3_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
+    batch_stage_3_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
     batch_stage_3_use_materials: bpy.props.BoolProperty(name="Use Materials", default=True)
     batch_stage_3_prepare_polygroups: bpy.props.BoolProperty(name="Prepare Poly Groups", default=True)
     batch_stage_3_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
+    batch_stage_3_smart_relax_edges: bpy.props.BoolProperty(
+        name="Smart Relax Edges", default=False,
+        description="Smart-relax the generated result's seam edges before UV unwrapping",
+    )
+    batch_stage_3_autofix_enabled: bpy.props.BoolProperty(
+        name="Autofix", default=True,
+        description="Repair the second remesh result before Angle Based UV unwrapping",
+    )
+    batch_stage_3_autofix_fin_loose: bpy.props.BoolProperty(
+        name="Remove Fin Faces and Loose Geometry", default=True,
+        description="Remove thin protruding fin faces, wire edges, and loose vertices",
+    )
+    batch_stage_3_autofix_close_nonmanifold: bpy.props.BoolProperty(
+        name="Close Open Boundaries", default=True,
+        description="Fill open non-manifold boundary loops",
+    )
+    batch_stage_3_autofix_triangulate_ngons: bpy.props.BoolProperty(
+        name="Triangulate N-gons", default=True,
+        description="Triangulate faces with more than four sides",
+    )
     batch_stage_3_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap Angle Based", default=True)
+    batch_second_narrow_island_enabled: bpy.props.BoolProperty(
+        name="Stage 6: Narrow Island Splitter", default=True,
+        description="Split narrow islands after the second remesh pass",
+    )
+    batch_second_narrow_island_width: bpy.props.IntProperty(
+        name="Thin Width (face rows)", default=5, min=1, max=12,
+    )
+    batch_second_narrow_island_max_width_percent: bpy.props.FloatProperty(
+        name="Max Physical Width (%)", default=35.0, min=0.0, max=100.0, precision=1,
+        description="Maximum thickness compared with the widest part of each island; zero disables this filter",
+    )
+    batch_second_narrow_island_min_area_percent: bpy.props.FloatProperty(
+        name="Minimum Island Area (%)", default=2.0, min=0.0, max=100.0, precision=1,
+        description="Skip the cut if its result is smaller than this share of the island; zero disables the filter",
+    )
+    batch_second_narrow_island_min_faces: bpy.props.IntProperty(
+        name="Minimum Part Faces", default=8, min=2, max=10000,
+    )
+    batch_second_narrow_island_min_length: bpy.props.IntProperty(
+        name="Minimum Branch Depth", default=3, min=1, max=100,
+    )
+    batch_second_narrow_island_create_edges: bpy.props.BoolProperty(
+        name="Create New Edges", default=True,
+    )
+    batch_second_narrow_island_smart_relax: bpy.props.BoolProperty(
+        name="Smart Relax", default=True,
+    )
+    batch_second_small_islands_enabled: bpy.props.BoolProperty(
+        name="Stage 7: Small Islands Merger", default=True,
+        description="Merge small seam islands after the second narrow island pass",
+    )
+    batch_second_small_island_threshold: bpy.props.FloatProperty(
+        name="Area Threshold (%)", default=3.0, min=1.0, max=49.0,
+        description="Percentage of the largest seam island area in each connected mesh component",
+    )
+    batch_second_small_island_protect_pinned: bpy.props.BoolProperty(
+        name="Ignore Pinned Edges", default=True,
+    )
+    batch_second_small_island_protect_sharp: bpy.props.BoolProperty(
+        name="Protect Sharp Edges", default=True,
+    )
+    batch_second_small_island_protect_materials: bpy.props.BoolProperty(
+        name="Protect Material Boundaries", default=False,
+    )
     batch_stage_4_enabled: bpy.props.BoolProperty(
-        name="Stage 5: Third Remesh", default=True,
-        description="Remesh the result of the preceding enabled stage at LOW density",
+        name="Stage 8: Third Remesh", default=True,
+        description="Remesh the result of the preceding enabled stage at the selected density",
     )
     batch_stage_4_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
+    batch_stage_4_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="LOW")
     batch_stage_4_use_materials: bpy.props.BoolProperty(name="Use Materials", default=True)
     batch_stage_4_prepare_polygroups: bpy.props.BoolProperty(name="Prepare Poly Groups", default=True)
     batch_stage_4_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
+    batch_stage_4_smart_relax_edges: bpy.props.BoolProperty(
+        name="Smart Relax Edges", default=False,
+        description="Smart-relax the generated result's seam edges before UV unwrapping",
+    )
     batch_stage_4_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap Angle Based", default=True)
     batch_stage_5_enabled: bpy.props.BoolProperty(
-        name="Stage 6: UV Packing", default=True,
+        name="Stage 9: UV Packing", default=True,
         description="Pack final UV islands with UVPackmaster",
+    )
+    batch_autobake_enabled: bpy.props.BoolProperty(
+        name="Stage 10: Auto Bake", default=False,
+        description="Bake final remeshes from their matching highpoly sources and save textures",
+    )
+    batch_autobake_cage_mode: bpy.props.EnumProperty(
+        name="Cage Mode",
+        items=(
+            ("AUTO", "Auto Cage", "Calculate cage extrusion automatically"),
+            ("SMART", "Smart Cage Object", "Find or generate a Smart Cage object for each lowpoly"),
+        ),
+        default="AUTO",
     )
     batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     batch_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})

@@ -1057,6 +1057,7 @@ def draw_import_remesh_options(layout, context, settings, prefix):
 
 
 def draw_batch_stage_heading(layout, title, settings=None, property_name=None):
+    layout.separator(type="LINE")
     row = layout.row(align=True)
     if property_name:
         row.enabled = not settings.batch_is_running or settings.batch_stage == "PAUSED"
@@ -1289,21 +1290,73 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             ):
                 narrow_stage.prop(narrow, property_name, text=t(context, label))
 
-            for number, preset, title in (
-                (3, "MID", t(context, "batch_stage_second")),
-                (4, "LOW", t(context, "batch_stage_third")),
+            draw_batch_stage_heading(content, t(context, "batch_stage_small_islands"),
+                                     settings, "batch_small_islands_enabled")
+            small_stage = content.column(align=True)
+            small_stage.enabled = editable and settings.batch_small_islands_enabled
+            for property_name, label in (
+                ("batch_small_island_threshold", "small_islands_threshold"),
+                ("batch_small_island_protect_pinned", "small_islands_pinned"),
+                ("batch_small_island_protect_sharp", "small_islands_sharp"),
+                ("batch_small_island_protect_materials", "small_islands_materials"),
+            ):
+                small_stage.prop(settings, property_name, text=t(context, label))
+
+            for number, title in (
+                (3, t(context, "batch_stage_second")),
+                (4, t(context, "batch_stage_third")),
             ):
                 draw_batch_stage_heading(content, title, settings, f"batch_stage_{number}_enabled")
                 stage = content.column(align=True)
                 stage.enabled = editable and getattr(settings, f"batch_stage_{number}_enabled")
                 stage.prop(settings, f"batch_stage_{number}_auto_remesh", text="Auto Remesh (Quad)")
-                stage.label(text=f'{preset}: {dict(get_remesh_preset_counts(context))[preset]:,} quads')
                 remesh_options = stage.column(align=True)
                 remesh_options.enabled = getattr(settings, f"batch_stage_{number}_auto_remesh")
+                preset = getattr(settings, f"batch_stage_{number}_remesh_preset")
+                remesh_options.prop(settings, f"batch_stage_{number}_remesh_preset", expand=True)
+                remesh_options.label(text=f'{preset}: {dict(get_remesh_preset_counts(context))[preset]:,} quads')
                 remesh_options.prop(settings, f"batch_stage_{number}_use_materials", text=t(context, "use_materials"))
                 remesh_options.prop(settings, f"batch_stage_{number}_prepare_polygroups", text=t(context, "batch_prepare_polygroups"))
                 remesh_options.prop(settings, f"batch_stage_{number}_material_seams", text=t(context, "batch_material_seams"))
+                remesh_options.prop(settings, f"batch_stage_{number}_smart_relax_edges", text="Smart Relax Edges")
+                if number == 3:
+                    stage.prop(settings, "batch_stage_3_autofix_enabled", text=t(context, "batch_second_autofix"))
+                    autofix = stage.column(align=True)
+                    autofix.enabled = settings.batch_stage_3_autofix_enabled
+                    autofix.prop(settings, "batch_stage_3_autofix_fin_loose", text=t(context, "batch_second_autofix_fin_loose"))
+                    autofix.prop(settings, "batch_stage_3_autofix_close_nonmanifold", text=t(context, "batch_second_autofix_close_nonmanifold"))
+                    autofix.prop(settings, "batch_stage_3_autofix_triangulate_ngons", text=t(context, "batch_second_autofix_triangulate_ngons"))
                 stage.prop(settings, f"batch_stage_{number}_auto_unwrap", text=t(context, "batch_angle_checker"))
+
+                if number == 3:
+                    draw_batch_stage_heading(content, t(context, "batch_stage_second_narrow"),
+                                             settings, "batch_second_narrow_island_enabled")
+                    second_narrow = content.column(align=True)
+                    second_narrow.enabled = editable and settings.batch_second_narrow_island_enabled
+                    for suffix, label in (
+                        ("width", "narrow_island_width"),
+                        ("max_width_percent", "narrow_island_max_width_percent"),
+                        ("min_area_percent", "narrow_island_min_area_percent"),
+                        ("min_faces", "narrow_island_min_faces"),
+                        ("min_length", "narrow_island_min_length"),
+                        ("create_edges", "narrow_island_create_edges"),
+                        ("smart_relax", "narrow_island_smart_relax"),
+                    ):
+                        second_narrow.prop(settings, f"batch_second_narrow_island_{suffix}",
+                                           text=t(context, label))
+
+                    draw_batch_stage_heading(content, t(context, "batch_stage_second_small_islands"),
+                                             settings, "batch_second_small_islands_enabled")
+                    second_small = content.column(align=True)
+                    second_small.enabled = editable and settings.batch_second_small_islands_enabled
+                    for suffix, label in (
+                        ("threshold", "small_islands_threshold"),
+                        ("protect_pinned", "small_islands_pinned"),
+                        ("protect_sharp", "small_islands_sharp"),
+                        ("protect_materials", "small_islands_materials"),
+                    ):
+                        second_small.prop(settings, f"batch_second_small_island_{suffix}",
+                                          text=t(context, label))
 
             draw_batch_stage_heading(content, t(context, "batch_stage_packing"),
                                      settings, "batch_stage_5_enabled")
@@ -1312,6 +1365,12 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             installed, enabled, available = uvpackmaster_status(context)
             pack.label(text=t(context, "batch_pack_available" if available else "batch_pack_missing"),
                        icon="CHECKMARK" if available else "ERROR")
+
+            draw_batch_stage_heading(content, t(context, "batch_stage_autobake"),
+                                     settings, "batch_autobake_enabled")
+            autobake = content.column(align=True)
+            autobake.enabled = editable and settings.batch_autobake_enabled
+            autobake.prop(settings, "batch_autobake_cage_mode", expand=True)
 
         content = draw_topic(layout, context, "batch_2", t(context, "arrange_objects"), "SNAP_EDGE")
         if content is not None:

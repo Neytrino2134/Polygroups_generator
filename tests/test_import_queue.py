@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 import addon_utils
 import bpy
+import bmesh
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
@@ -38,8 +39,27 @@ assert settings.batch_include_subfolders
 assert not settings.batch_auto_save and settings.batch_auto_save_interval == 5
 assert settings.batch_stage_2_enabled
 assert settings.batch_narrow_island_enabled
+assert settings.batch_small_islands_enabled
+assert settings.batch_small_island_threshold == 3.0
+assert settings.batch_small_island_protect_pinned
+assert settings.batch_small_island_protect_sharp
+assert not settings.batch_small_island_protect_materials
 assert settings.batch_stage_3_enabled and settings.batch_stage_4_enabled
+assert settings.batch_stage_3_remesh_preset == "MID"
+assert settings.batch_stage_3_autofix_enabled
+assert settings.batch_stage_3_autofix_fin_loose
+assert settings.batch_stage_3_autofix_close_nonmanifold
+assert settings.batch_stage_3_autofix_triangulate_ngons
+assert settings.batch_stage_4_remesh_preset == "LOW"
+assert settings.batch_second_narrow_island_enabled
+assert settings.batch_second_small_islands_enabled
+assert settings.batch_second_narrow_island_width == 5
+assert settings.batch_second_small_island_threshold == 3.0
+assert not settings.batch_stage_3_smart_relax_edges
+assert not settings.batch_stage_4_smart_relax_edges
 assert settings.batch_stage_5_enabled
+assert not settings.batch_autobake_enabled
+assert settings.batch_autobake_cage_mode == "AUTO"
 for number in (3, 4):
     for name in ("auto_remesh", "auto_unwrap", "use_materials",
                  "prepare_polygroups", "material_seams"):
@@ -47,6 +67,9 @@ for number in (3, 4):
 settings.batch_stage_3_enabled = False
 settings.batch_stage_4_enabled = False
 settings.batch_stage_5_enabled = False
+settings.batch_stage_3_autofix_enabled = False
+settings.batch_second_narrow_island_enabled = False
+settings.batch_second_small_islands_enabled = False
 assert settings.remesh_auto_unwrap_checker
 settings.batch_auto_remesh = True
 settings.batch_separate_collections = True
@@ -359,42 +382,152 @@ with tempfile.TemporaryDirectory() as directory:
     settings.batch_stage_4_auto_unwrap = False
     settings.batch_narrow_island_enabled = True
     original_split = queue_module.ImportQueue.split_narrow_island
+    original_merge = queue_module.ImportQueue.merge_small_islands
 
     def traced_split(queue, scene_context, obj):
         chain.append(("narrow", obj, None))
         return original_split(queue, scene_context, obj)
 
+    def traced_merge(queue, scene_context, obj):
+        chain.append(("small", obj, None))
+        return original_merge(queue, scene_context, obj)
+
     with (patch.object(queue_module, "RemeshJob", ChainedJob),
-          patch.object(queue_module.ImportQueue, "split_narrow_island", traced_split)):
+          patch.object(queue_module.ImportQueue, "split_narrow_island", traced_split),
+          patch.object(queue_module.ImportQueue, "merge_small_islands", traced_merge)):
         queue = queue_module.ImportQueue(context, paths[:1], False, report)
         queue.begin()
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_failed_count == 0
-        assert [item[0] for item in chain] == ["start", "finish", "narrow", "start", "finish"]
+        assert [item[0] for item in chain] == ["start", "finish", "narrow", "small", "start", "finish"]
         assert chain[2][1] == chain[1][1]
         assert chain[3][1] == chain[1][1]
-        assert chain[3][2] == dict(queue_module.get_remesh_preset_counts(context))["LOW"]
+        assert chain[4][1] == chain[1][1]
+        assert chain[4][2] == dict(queue_module.get_remesh_preset_counts(context))["LOW"]
         assert len(queue.groups[0][1]) == 3
         assert queue.cursor is None
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)
 
+    # The two later passes use their own selectable density presets.
+    settings.batch_stage_2_enabled = False
+    settings.batch_stage_3_enabled = True
+    settings.batch_stage_4_enabled = True
+    settings.batch_stage_3_auto_unwrap = False
+    settings.batch_stage_4_auto_unwrap = False
+    settings.batch_stage_5_enabled = False
+    settings.batch_narrow_island_enabled = False
+    settings.batch_small_islands_enabled = False
+    settings.batch_stage_3_remesh_preset = "LOW"
+    settings.batch_stage_4_remesh_preset = "HIGH"
+    settings.batch_stage_3_smart_relax_edges = True
+    settings.batch_stage_4_smart_relax_edges = True
+    settings.batch_stage_3_autofix_enabled = True
+    chain.clear()
+
+    def traced_relax(queue, scene_context, obj):
+        chain.append(("relax", obj, None))
+
+    def traced_autofix(queue, scene_context, obj):
+        chain.append(("autofix", obj, None))
+
+    with (patch.object(queue_module, "RemeshJob", ChainedJob),
+          patch.object(queue_module.ImportQueue, "smart_relax_edges", traced_relax),
+          patch.object(queue_module.ImportQueue, "autofix_second_pass", traced_autofix)):
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.stage == "UNWRAP_PASS" and queue.pass_number == 3)
+        assert [item[0] for item in chain] == ["start", "finish", "relax", "autofix"]
+        advance_until(queue, lambda: queue.finished)
+        assert settings.batch_failed_count == 0
+        assert [item[0] for item in chain] == [
+            "start", "finish", "relax", "autofix", "start", "finish", "relax",
+        ]
+        assert chain[2][1] == chain[1][1]
+        assert chain[3][1] == chain[1][1]
+        assert chain[6][1] == chain[5][1]
+        assert [item[2] for item in chain if item[0] == "start"] == [
+            dict(queue_module.get_remesh_preset_counts(context))[preset]
+            for preset in ("LOW", "HIGH")
+        ]
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+    settings.batch_stage_3_smart_relax_edges = False
+    settings.batch_stage_4_smart_relax_edges = False
+    settings.batch_stage_3_autofix_enabled = False
+
+    # The second narrow/merge pair runs between the MID and LOW remesh passes.
+    settings.batch_second_narrow_island_enabled = True
+    settings.batch_second_small_islands_enabled = True
+    settings.batch_second_narrow_island_width = 7
+    settings.batch_second_small_island_threshold = 8.0
+    assert context.scene.polygroups_seam_finalization_settings.narrow_island_width == 5
+    assert settings.batch_small_island_threshold == 3.0
+    chain.clear()
+
+    def traced_second_split(queue, scene_context, obj, second=False):
+        chain.append(("narrow2" if second else "narrow", obj, None))
+        return original_split(queue, scene_context, obj, second=second)
+
+    def traced_second_merge(queue, scene_context, obj, second=False):
+        chain.append(("small2" if second else "small", obj, None))
+        return original_merge(queue, scene_context, obj, second=second)
+
+    with (patch.object(queue_module, "RemeshJob", ChainedJob),
+          patch.object(queue_module.ImportQueue, "split_narrow_island", traced_second_split),
+          patch.object(queue_module.ImportQueue, "merge_small_islands", traced_second_merge)):
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.finished)
+        assert settings.batch_failed_count == 0
+        assert [item[0] for item in chain] == [
+            "start", "finish", "narrow2", "small2", "start", "finish",
+        ]
+        assert chain[2][1] == chain[1][1] == chain[3][1] == chain[4][1]
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+        # When the second remesh is disabled, the new stages still precede the third.
+        settings.batch_stage_3_enabled = False
+        chain.clear()
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.finished)
+        assert settings.batch_failed_count == 0
+        assert [item[0] for item in chain] == ["narrow2", "small2", "start", "finish"]
+        assert chain[0][1] == chain[1][1] == chain[2][1]
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+    settings.batch_second_narrow_island_enabled = False
+    settings.batch_second_small_islands_enabled = False
+
     # Without the first remesh, the splitter still precedes later passes.
     settings.batch_stage_2_enabled = False
+    settings.batch_stage_3_enabled = False
     settings.batch_stage_4_enabled = False
     settings.batch_stage_5_enabled = False
+    settings.batch_narrow_island_enabled = True
+    settings.batch_small_islands_enabled = True
     narrow_sources = []
+    small_sources = []
 
     def record_narrow(queue, scene_context, obj):
         narrow_sources.append(obj)
 
-    with patch.object(queue_module.ImportQueue, "split_narrow_island", record_narrow):
+    def record_small(queue, scene_context, obj):
+        small_sources.append(obj)
+
+    with (patch.object(queue_module.ImportQueue, "split_narrow_island", record_narrow),
+          patch.object(queue_module.ImportQueue, "merge_small_islands", record_small)):
         queue = queue_module.ImportQueue(context, paths[:1], False, report)
         queue.begin()
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_failed_count == 0
         assert len(narrow_sources) == 1
         assert narrow_sources[0] == queue.meshes[0]
+        assert small_sources == narrow_sources
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)
 
@@ -403,8 +536,141 @@ with tempfile.TemporaryDirectory() as directory:
         queue.begin()
         advance_until(queue, lambda: queue.finished)
         assert len(narrow_sources) == 1
+        assert len(small_sources) == 2
+        assert small_sources[1] == queue.meshes[0]
         queue.finished = False
         queue.finish(context, "CANCELLED", rollback=True)
+
+        settings.batch_small_islands_enabled = False
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.finished)
+        assert len(narrow_sources) == 1 and len(small_sources) == 2
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+    # The batch merger uses its own threshold and protection settings.
+    mesh = bpy.data.meshes.new("Batch Small Islands Test")
+    island_obj = bpy.data.objects.new("Batch Small Islands Test", mesh)
+    context.scene.collection.objects.link(island_obj)
+    bm = bmesh.new()
+    columns = []
+    x = 0.0
+    for width in (0.0, 10.0, 0.1):
+        x += width
+        columns.append([bm.verts.new((x, y, 0.0)) for y in (0.0, 1.0)])
+    for left, right in zip(columns, columns[1:]):
+        bm.faces.new((left[0], right[0], right[1], left[1]))
+    seam = next(edge for edge in bm.edges if edge.is_manifold)
+    seam.seam = True
+    seam.smooth = False
+    bm.to_mesh(mesh)
+    bm.free()
+    merge_queue = queue_module.ImportQueue(context, [], False, report)
+    settings.batch_small_island_protect_sharp = True
+    merge_queue.merge_small_islands(context, island_obj)
+    assert sum(edge.use_seam for edge in mesh.edges) == 1
+    settings.batch_small_island_protect_sharp = False
+    merge_queue.merge_small_islands(context, island_obj)
+    assert sum(edge.use_seam for edge in mesh.edges) == 0
+    for vertex in mesh.vertices:
+        if vertex.co.x > 10.01:
+            vertex.co.x = 10.5
+    seam_edge = next(edge for edge in mesh.edges if all(
+        abs(mesh.vertices[index].co.x - 10.0) < 1e-5 for index in edge.vertices
+    ))
+    seam_edge.use_seam = True
+    mesh.update()
+    settings.batch_small_island_threshold = 3.0
+    settings.batch_second_small_island_threshold = 8.0
+    settings.batch_second_small_island_protect_sharp = False
+    merge_queue.merge_small_islands(context, island_obj)
+    assert sum(edge.use_seam for edge in mesh.edges) == 1
+    merge_queue.merge_small_islands(context, island_obj, second=True)
+    assert sum(edge.use_seam for edge in mesh.edges) == 0
+    settings.batch_stage_3_autofix_enabled = True
+    settings.batch_stage_3_autofix_fin_loose = True
+    settings.batch_stage_3_autofix_close_nonmanifold = True
+    settings.batch_stage_3_autofix_triangulate_ngons = True
+    fixes = []
+    with (patch.object(queue_module, "_remove_fin_faces_for_autofix",
+                       side_effect=lambda *_: fixes.append("fins")),
+          patch.object(queue_module, "_delete_loose_geometry_for_autofix",
+                       side_effect=lambda *_: fixes.append("loose")),
+          patch.object(queue_module, "_fill_open_nonmanifold_boundaries",
+                       side_effect=lambda *_: fixes.append("fill")),
+          patch.object(queue_module, "_triangulate_ngons_for_autofix",
+                       side_effect=lambda *_: fixes.append("ngons"))):
+        merge_queue.autofix_second_pass(context, island_obj)
+        assert fixes == ["fins", "loose", "fill", "ngons"]
+        settings.batch_stage_3_autofix_close_nonmanifold = False
+        settings.batch_stage_3_autofix_triangulate_ngons = False
+        fixes.clear()
+        merge_queue.autofix_second_pass(context, island_obj)
+        assert fixes == ["fins", "loose"]
+    observed_relax = []
+
+    def record_relax(scene_context, mode, iterations, angle, radius, **options):
+        observed_relax.append((scene_context.mode, scene_context.active_object, mode, options))
+        return 0, 0
+
+    with patch.object(queue_module, "relax_seams", record_relax):
+        merge_queue.smart_relax_edges(context, island_obj)
+    assert observed_relax == [(
+        "EDIT_MESH", island_obj, "SMART",
+        {"use_corner_angle": context.scene.polygroups_seam_preparation_settings.seam_relax_use_corner_angle,
+         "select_result": False, "selected_area_only": False},
+    )]
+    assert island_obj.mode == "OBJECT"
+    bpy.data.objects.remove(island_obj, do_unlink=True)
+    bpy.data.meshes.remove(mesh)
+
+    # Auto Bake must finish its own modal task before the import file completes.
+    settings.batch_stage_2_enabled = False
+    settings.batch_stage_3_enabled = False
+    settings.batch_stage_4_enabled = False
+    settings.batch_stage_5_enabled = False
+    settings.batch_narrow_island_enabled = False
+    settings.batch_small_islands_enabled = False
+    settings.batch_second_narrow_island_enabled = False
+    settings.batch_second_small_islands_enabled = False
+    settings.batch_autobake_enabled = True
+    bake_settings = context.scene.polygroups_baking_settings
+    bake_targets = []
+
+    def fake_auto_bake(queue, scene_context, target):
+        bake_targets.append(target)
+        bake_settings.bake_task_is_running = True
+        bake_settings.bake_task_stage = "RUNNING"
+        bake_settings.bake_task_progress = 25.0
+
+    with patch.object(queue_module.ImportQueue, "start_auto_bake", fake_auto_bake):
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.stage == "BAKE_WAIT")
+        assert bake_targets == queue.pass_sources
+        queue.step(context)
+        assert queue.stage == "BAKE_WAIT" and settings.batch_imported_count == 0
+        bake_settings.bake_task_is_running = False
+        bake_settings.bake_task_stage = "DONE"
+        bake_settings.bake_task_progress = 100.0
+        advance_until(queue, lambda: queue.finished)
+        assert settings.batch_imported_count == 1 and settings.batch_failed_count == 0
+        queue.finished = False
+        queue.finish(context, "CANCELLED", rollback=True)
+
+        queue = queue_module.ImportQueue(context, paths[:1], False, report)
+        queue.begin()
+        advance_until(queue, lambda: queue.stage == "BAKE_WAIT")
+        settings.batch_cancel_requested = True
+        queue.step(context)
+        assert queue.stage == "BAKE_WAIT" and not queue.finished
+        bake_settings.bake_task_is_running = False
+        bake_settings.bake_task_stage = "DONE"
+        queue.step(context)
+        assert queue.finished and settings.batch_stage == "CANCELLED"
+        assert set(bpy.data.objects) == existing
+    settings.batch_autobake_enabled = False
 
     # Verify actual progress-file protocol and failure handling without launching engine.
     path = Path(directory) / "progress.txt"
