@@ -264,6 +264,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         default=True,
         options={"HIDDEN", "SKIP_SAVE"},
     )
+    redo_collection_name: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
     directory: bpy.props.StringProperty(
         subtype="DIR_PATH",
         options={"HIDDEN"},
@@ -289,19 +290,18 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         settings = context.scene.polygroups_model_preparation_settings
         layout.use_property_split = True
         layout.use_property_decorate = False
-        layout.label(text=t(context, "import_group_processing"), icon="MODIFIER")
-        layout.prop(
-            settings,
-            "file_import_auto_rename_objects",
-            text=t(context, "auto_rename_objects"),
-        )
-        layout.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
-        layout.prop(
-            settings,
-            "file_import_disable_view_assist",
-            text=t(context, "disable_view_assist"),
-        )
-        draw_import_remesh_options(layout, context, settings, "file_import")
+        layout.prop(settings, "file_import_automatic_processing",
+                    text=t(context, "import_automatic_processing"))
+        if settings.file_import_automatic_processing:
+            layout.label(text=t(context, "import_automatic_uses_batch_settings"), icon="MODIFIER")
+        else:
+            layout.label(text=t(context, "import_simple_processing"), icon="MODIFIER")
+            layout.prop(settings, "file_import_auto_rename_objects",
+                        text=t(context, "auto_rename_objects"))
+            layout.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
+            layout.prop(settings, "file_import_disable_view_assist",
+                        text=t(context, "disable_view_assist"))
+            draw_import_remesh_options(layout, context, settings, "file_import")
 
     def execute(self, context):
         from . import import_queue
@@ -311,18 +311,34 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         if import_queue.ACTIVE_QUEUE is not None or ACTIVE_REMESH is not None:
             self.report({"WARNING"}, "An import queue or Remesh is already running")
             return {"CANCELLED"}
-        file_selection = self.use_file_selection
-        directory = bpy.path.abspath(self.directory if file_selection else settings.batch_import_directory)
-        if not directory or not os.path.isdir(directory):
-            self.report({"WARNING"}, "Select a valid import folder")
-            return {"CANCELLED"}
+        redo_collection_name = getattr(self, "redo_collection_name", "")
+        file_selection = self.use_file_selection and not redo_collection_name
         try:
-            files = (collect_selected_import_files(directory, self.files, settings.batch_import_format)
-                     if file_selection else collect_import_files(
-                         directory, settings.batch_import_format, settings.batch_include_subfolders))
+            redo_collection = None
+            if redo_collection_name:
+                redo_collection = bpy.data.collections.get(redo_collection_name)
+                if import_queue.redo_source(redo_collection) is None:
+                    raise RuntimeError("Choose a Generated.N collection with its original highpoly")
+                files = [redo_collection.name]
+            else:
+                directory = bpy.path.abspath(self.directory if file_selection else settings.batch_import_directory)
+                if not directory or not os.path.isdir(directory):
+                    raise RuntimeError("Select a valid import folder")
+                files = (collect_selected_import_files(directory, self.files, settings.batch_import_format)
+                         if file_selection else collect_import_files(
+                             directory, settings.batch_import_format, settings.batch_include_subfolders))
             if not files:
                 raise RuntimeError("No supported mesh files found")
-            self._queue = import_queue.ImportQueue(context, files, file_selection, self.report)
+            if redo_collection is not None:
+                self._queue = import_queue.ImportQueue(
+                    context, files, False, self.report, redo_collection=redo_collection,
+                )
+            elif file_selection and settings.file_import_automatic_processing:
+                self._queue = import_queue.ImportQueue(
+                    context, files, True, self.report, automatic_processing=True,
+                )
+            else:
+                self._queue = import_queue.ImportQueue(context, files, file_selection, self.report)
         except Exception as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
@@ -338,7 +354,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
     def invoke(self, context, event):
         from ..core.remesh_cursor import update_remesh_cursor
         update_remesh_cursor(context, event)
-        if self.use_file_selection:
+        if self.use_file_selection and not self.redo_collection_name:
             return ImportHelper.invoke_popup(self, context)
         return self.execute(context)
 

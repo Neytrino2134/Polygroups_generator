@@ -57,7 +57,7 @@ SECTION_VISIBILITY_PROPERTIES = (
 )
 
 SECTION_SUBSECTION_PROPERTIES = {
-    "show_import_section": ("topic_import_0", "topic_import_1", "topic_import_2"),
+    "show_import_section": ("topic_import_0", "topic_import_1", "topic_import_2", "topic_import_3"),
     "show_batch_import_section": tuple(f"topic_batch_{index}" for index in range(5)),
     "show_model_preparation_section": tuple(f"topic_prepare_{index}" for index in range(4)),
     "show_seam_preparation_section": tuple(f"topic_seam_prep_{index}" for index in range(8)),
@@ -298,6 +298,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Rename selected imported files and move them to the Generated collection",
         default=True,
     )
+    file_import_automatic_processing: bpy.props.BoolProperty(
+        name="Automatic Import Processing",
+        description="Process selected files with the shared Batch Import stages and settings",
+        default=False,
+    )
     file_import_apply_weld: bpy.props.BoolProperty(
         name="Apply Weld",
         description="Apply Weld to mesh objects imported through file selection",
@@ -475,20 +480,33 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=0.003, min=0.000001, soft_max=1.0, precision=4, unit="LENGTH",
     )
     batch_separate_collections: bpy.props.BoolProperty(default=True)
+    batch_expanded_stages: bpy.props.IntProperty(
+        name="Expanded Batch Stages", default=0, min=0,
+        description="Controls which processing stages are expanded in the import panels",
+    )
     batch_stage_2_enabled: bpy.props.BoolProperty(
         name="Stage 2: First Remesh", default=True,
         description="Run the first remesh and Smart UV pass",
     )
+    batch_first_surface_angle: bpy.props.FloatProperty(
+        name="Surface Angle", default=radians(22.0),
+        min=radians(1.0), max=radians(89.0), subtype="ANGLE",
+        description="Surface angle for Stage 2 Smart UV seam generation",
+    )
     batch_narrow_island_enabled: bpy.props.BoolProperty(
         name="Stage 3: Narrow Island Splitter", default=True,
         description="Split narrow UV islands after the first remesh and before the second",
+    )
+    batch_narrow_island_max_width_percent: bpy.props.FloatProperty(
+        name="Max Physical Width (%)", default=10.0, min=0.0, max=100.0, precision=1,
+        description="Maximum thickness for the Stage 3 narrow island splitter",
     )
     batch_small_islands_enabled: bpy.props.BoolProperty(
         name="Stage 4: Small Islands Merger", default=True,
         description="Merge small seam islands before the second remesh pass",
     )
     batch_small_island_threshold: bpy.props.FloatProperty(
-        name="Area Threshold (%)", default=3.0, min=1.0, max=49.0,
+        name="Area Threshold (%)", default=5.0, min=1.0, max=49.0,
         description="Percentage of the largest seam island area in each connected mesh component",
     )
     batch_small_island_protect_pinned: bpy.props.BoolProperty(
@@ -512,7 +530,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_stage_3_prepare_polygroups: bpy.props.BoolProperty(name="Prepare Poly Groups", default=True)
     batch_stage_3_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
     batch_stage_3_smart_relax_edges: bpy.props.BoolProperty(
-        name="Smart Relax Edges", default=False,
+        name="Smart Relax Edges", default=True,
         description="Smart-relax the generated result's seam edges before UV unwrapping",
     )
     batch_stage_3_autofix_enabled: bpy.props.BoolProperty(
@@ -537,10 +555,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Split narrow islands after the second remesh pass",
     )
     batch_second_narrow_island_width: bpy.props.IntProperty(
-        name="Thin Width (face rows)", default=5, min=1, max=12,
+        name="Thin Width (face rows)", default=3, min=1, max=12,
     )
     batch_second_narrow_island_max_width_percent: bpy.props.FloatProperty(
-        name="Max Physical Width (%)", default=35.0, min=0.0, max=100.0, precision=1,
+        name="Max Physical Width (%)", default=6.0, min=0.0, max=100.0, precision=1,
         description="Maximum thickness compared with the widest part of each island; zero disables this filter",
     )
     batch_second_narrow_island_min_area_percent: bpy.props.FloatProperty(
@@ -564,7 +582,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Merge small seam islands after the second narrow island pass",
     )
     batch_second_small_island_threshold: bpy.props.FloatProperty(
-        name="Area Threshold (%)", default=3.0, min=1.0, max=49.0,
+        name="Area Threshold (%)", default=5.0, min=1.0, max=49.0,
         description="Percentage of the largest seam island area in each connected mesh component",
     )
     batch_second_small_island_protect_pinned: bpy.props.BoolProperty(
@@ -605,6 +623,9 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
             ("SMART", "Smart Cage Object", "Find or generate a Smart Cage object for each lowpoly"),
         ),
         default="AUTO",
+    )
+    batch_redo_collection_name: bpy.props.StringProperty(
+        name="Redo Collection", description="Generated.N collection selected for rebuilding",
     )
     batch_is_paused: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     batch_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
@@ -688,6 +709,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_import_0: bpy.props.BoolProperty(default=False)
     topic_import_1: bpy.props.BoolProperty(default=False)
     topic_import_2: bpy.props.BoolProperty(default=False)
+    topic_import_3: bpy.props.BoolProperty(default=False)
     topic_batch_0: bpy.props.BoolProperty(default=False)
     topic_batch_1: bpy.props.BoolProperty(default=False)
     topic_batch_2: bpy.props.BoolProperty(default=False)

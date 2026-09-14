@@ -35,6 +35,8 @@ from .baking import OBJECT_OT_polygroups_save_bake_textures
 from .batch_import import AIRETOPO_FH_gltf
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .import_queue import OBJECT_OT_polygroups_import_control
+from .import_queue import OBJECT_OT_polygroups_batch_redo_select
+from .import_queue import OBJECT_OT_polygroups_toggle_batch_stage
 from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
@@ -232,6 +234,8 @@ CLASSES = (
     OBJECT_OT_polygroups_batch_import,
     AIRETOPO_FH_gltf,
     OBJECT_OT_polygroups_import_control,
+    OBJECT_OT_polygroups_batch_redo_select,
+    OBJECT_OT_polygroups_toggle_batch_stage,
     OBJECT_OT_polygroups_arrange_batch_objects,
     OBJECT_OT_polygroups_rename_objects,
     OBJECT_OT_polygroups_check_material_textures,

@@ -40,7 +40,7 @@ assert not settings.batch_auto_save and settings.batch_auto_save_interval == 5
 assert settings.batch_stage_2_enabled
 assert settings.batch_narrow_island_enabled
 assert settings.batch_small_islands_enabled
-assert settings.batch_small_island_threshold == 3.0
+assert settings.batch_small_island_threshold == 5.0
 assert settings.batch_small_island_protect_pinned
 assert settings.batch_small_island_protect_sharp
 assert not settings.batch_small_island_protect_materials
@@ -53,9 +53,10 @@ assert settings.batch_stage_3_autofix_triangulate_ngons
 assert settings.batch_stage_4_remesh_preset == "LOW"
 assert settings.batch_second_narrow_island_enabled
 assert settings.batch_second_small_islands_enabled
-assert settings.batch_second_narrow_island_width == 5
-assert settings.batch_second_small_island_threshold == 3.0
-assert not settings.batch_stage_3_smart_relax_edges
+assert settings.batch_second_narrow_island_width == 3
+assert settings.batch_second_narrow_island_max_width_percent == 6.0
+assert settings.batch_second_small_island_threshold == 5.0
+assert settings.batch_stage_3_smart_relax_edges
 assert not settings.batch_stage_4_smart_relax_edges
 assert settings.batch_stage_5_enabled
 assert not settings.batch_autobake_enabled
@@ -463,7 +464,7 @@ with tempfile.TemporaryDirectory() as directory:
     settings.batch_second_narrow_island_width = 7
     settings.batch_second_small_island_threshold = 8.0
     assert context.scene.polygroups_seam_finalization_settings.narrow_island_width == 5
-    assert settings.batch_small_island_threshold == 3.0
+    assert settings.batch_small_island_threshold == 5.0
     chain.clear()
 
     def traced_second_split(queue, scene_context, obj, second=False):

@@ -1,6 +1,7 @@
 """Sequential import/prepare/remesh state machine, advanced by the UI timer."""
 
 import os
+import re
 
 import bpy
 import bmesh
@@ -19,6 +20,7 @@ from .object_seam_cutter import (
     _triangulate_ngons_for_autofix,
 )
 from .rename_objects import (
+    ensure_collection_visible_in_view_layer,
     get_next_object_index,
     layer_collection_paths,
     rename_and_move_objects,
@@ -29,6 +31,34 @@ from ..localization import t
 
 
 ACTIVE_QUEUE = None
+
+
+def redo_source(collection):
+    """Return the original highpoly in a numbered Generated collection."""
+    match = re.fullmatch(r"Generated\.(\d+)", collection.name) if collection else None
+    if match is None:
+        return None
+    name = f"Highpoly_Generated.{match.group(1)}"
+    return next((obj for obj in collection.objects if obj.type == "MESH" and obj.name == name), None)
+
+
+def redo_collections(view_layer):
+    from .generated_visibility import generated_paths
+    return [path[-1].collection for path in generated_paths(view_layer)
+            if redo_source(path[-1].collection) is not None]
+
+
+def selected_redo_collection(context):
+    collections = redo_collections(context.view_layer)
+    if not collections:
+        return None
+    name = context.scene.polygroups_model_preparation_settings.batch_redo_collection_name
+    selected = next((collection for collection in collections if collection.name == name), None)
+    if selected is not None:
+        return selected
+    active = context.active_object
+    return next((collection for collection in collections
+                 if active is not None and collection in active.users_collection), collections[0])
 
 
 @persistent
@@ -66,12 +96,19 @@ def move_to_collection(objects, collection):
 
 
 class ImportQueue:
-    def __init__(self, context, files, file_selection, report):
+    def __init__(self, context, files, file_selection, report, redo_collection=None,
+                 automatic_processing=False):
         self.scene = context.scene
         self.view_layer = context.view_layer
         self.settings = self.scene.polygroups_model_preparation_settings
         self.report = report
         self.files = list(files)
+        self.redo_collection = redo_collection
+        self.redo_mode = redo_collection is not None
+        self.batch_stages = not file_selection or automatic_processing or self.redo_mode
+        self.redo_backup = []
+        self.redo_backup_collection = None
+        self.redo_source_visibility = None
         self.index = 0
         self.stage = "NEXT"
         self.job = None
@@ -90,7 +127,7 @@ class ImportQueue:
         self.original_active = context.view_layer.objects.active
         self.rename_index = get_next_object_index()
         settings = self.settings
-        prefix = "file_import" if file_selection else "batch"
+        prefix = "batch" if self.batch_stages else "file_import"
         self.file_selection = file_selection
         self.prefix = prefix
         self.rename = getattr(settings, prefix + "_auto_rename_objects")
@@ -100,15 +137,17 @@ class ImportQueue:
         self.voxel_size = getattr(settings, prefix + "_voxel_size")
         self.clear_material = getattr(settings, prefix + "_clear_material")
         self.separate = getattr(settings, prefix + "_separate_collections")
-        self.disable_completed_collection = not file_selection and self.separate
+        self.disable_completed_collection = self.batch_stages and self.separate
+        if self.redo_mode:
+            self.disable_completed_collection = False
         self.disable_view_assist = getattr(settings, prefix + "_disable_view_assist")
         auto_smart_uv_property = prefix + "_auto_smart_uv_project"
         self.auto_smart_uv_project = bool(
             getattr(settings, auto_smart_uv_property)
-            and (self.auto_remesh or not file_selection)
+            and (self.auto_remesh or self.batch_stages)
         )
         self.auto_unwrap_method = getattr(settings, prefix + "_auto_unwrap_method")
-        if file_selection and not self.auto_remesh:
+        if not self.batch_stages and not self.auto_remesh:
             setattr(settings, auto_smart_uv_property, False)
         self.quad_count = dict(get_remesh_preset_counts(context))[
             getattr(settings, prefix + "_remesh_preset")
@@ -117,12 +156,12 @@ class ImportQueue:
         self.arrange = settings.batch_auto_arrange_objects
         self.arrange_options = (settings.batch_arrange_spacing,
                                 settings.batch_arrange_mode, settings.batch_arrange_rows)
-        self.auto_save = bool(not file_selection and settings.batch_auto_save)
+        self.auto_save = bool(self.batch_stages and settings.batch_auto_save)
         self.auto_save_interval = max(1, settings.batch_auto_save_interval)
         self.successful_imports_since_save = 0
         self.auto_save_unsaved_warned = False
         self.pause_after_each = bool(
-            not file_selection and settings.batch_import_mode == "PAUSE_EACH"
+            self.batch_stages and settings.batch_import_mode == "PAUSE_EACH"
         )
         self.pause_after_next_file = False
         self.finished = False
@@ -221,10 +260,12 @@ class ImportQueue:
         self.voxel_size = getattr(settings, prefix + "_voxel_size")
         self.clear_material = getattr(settings, prefix + "_clear_material")
         self.separate = getattr(settings, prefix + "_separate_collections")
-        self.disable_completed_collection = not self.file_selection and self.separate
+        self.disable_completed_collection = self.batch_stages and self.separate
+        if self.redo_mode:
+            self.disable_completed_collection = False
         self.auto_smart_uv_project = bool(
             getattr(settings, prefix + "_auto_smart_uv_project")
-            and (self.auto_remesh or not self.file_selection)
+            and (self.auto_remesh or self.batch_stages)
         )
         self.auto_unwrap_method = getattr(settings, prefix + "_auto_unwrap_method")
         self.quad_count = dict(get_remesh_preset_counts(context))[
@@ -232,12 +273,14 @@ class ImportQueue:
         ]
         self.weld_distance = settings.weld_distance
         self.arrange = settings.batch_auto_arrange_objects
+        if self.redo_mode:
+            self.arrange = False
         self.arrange_options = (
             settings.batch_arrange_spacing,
             settings.batch_arrange_mode,
             settings.batch_arrange_rows,
         )
-        self.auto_save = bool(not self.file_selection and settings.batch_auto_save)
+        self.auto_save = bool(self.batch_stages and settings.batch_auto_save)
         self.auto_save_interval = max(1, settings.batch_auto_save_interval)
 
     def begin(self):
@@ -281,6 +324,132 @@ class ImportQueue:
         self.settings.batch_average_seconds = self.timing.average()
         self.settings.batch_eta_seconds = self.timing.remaining(len(self.files) - self.index)
 
+    def prepare_redo(self, context):
+        collection = self.redo_collection
+        source = redo_source(collection)
+        if source is None or collection.name not in bpy.data.collections:
+            raise RuntimeError("The selected Generated collection has no matching highpoly")
+        if not ensure_collection_visible_in_view_layer(context, collection):
+            raise RuntimeError("The selected Generated collection is not in this View Layer")
+        self.collection = collection
+        self.meshes = [source]
+        self.file_objects = [source]
+        self.pass_sources = [source]
+        self.configure_passes(context)
+        if not any(method for _number, method, _count, _unwrap, _unwrap_method in self.passes):
+            raise RuntimeError("Enable at least one Remesh pass before rebuilding this collection")
+        self.redo_source_visibility = (source, source.hide_viewport, source.hide_get(), source.hide_render)
+        self.select_source(context, source)
+        if self.cursor is None:
+            self.cursor = RemeshCursor(context, label="Redo")
+        old_results = [obj for obj in list(collection.objects) if obj.name.startswith("Retopo_")]
+        if old_results:
+            backup = bpy.data.collections.new(f"__PolygroupsRedoBackup_{collection.name}")
+            self.redo_backup_collection = backup
+            for index, obj in enumerate(old_results):
+                links = list(obj.users_collection)
+                self.redo_backup.append((obj, obj.name, links))
+                for previous in links:
+                    previous.objects.unlink(obj)
+                backup.objects.link(obj)
+                obj.name = f"__PolygroupsRedoBackup_{collection.name}_{index:03d}"
+
+    def discard_redo_backup(self):
+        materials = set()
+        images = set()
+        for obj, _name, _links in self.redo_backup:
+            if obj.name in bpy.data.objects:
+                mesh = obj.data if obj.type == "MESH" else None
+                if mesh is not None:
+                    materials.update(material for material in mesh.materials if material is not None)
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if mesh is not None and mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+        for material in materials:
+            if material.node_tree is not None:
+                images.update(node.image for node in material.node_tree.nodes
+                              if node.type == "TEX_IMAGE" and node.image is not None)
+            if material.users == 0:
+                bpy.data.materials.remove(material)
+        for image in images:
+            if image.users == 0:
+                bpy.data.images.remove(image)
+        self.redo_backup.clear()
+        if self.redo_backup_collection is not None:
+            bpy.data.collections.remove(self.redo_backup_collection)
+            self.redo_backup_collection = None
+        if self.redo_source_visibility is not None and not self.settings.batch_autobake_enabled:
+            source, hidden_viewport, hidden_local, hidden_render = self.redo_source_visibility
+            if source.name in bpy.data.objects:
+                source.hide_viewport = hidden_viewport
+                source.hide_set(hidden_local)
+                source.hide_render = hidden_render
+        self.redo_source_visibility = None
+
+    def restore_redo_backup(self):
+        if not self.redo_mode:
+            return
+        for obj in self.owned_objects & set(bpy.data.objects):
+            bpy.data.objects.remove(obj, do_unlink=True)
+        for mesh in self.owned_meshes & set(bpy.data.meshes):
+            if mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+        for material in (self.owned_gray_materials | self.owned_bake_materials) & set(bpy.data.materials):
+            if material.users == 0:
+                bpy.data.materials.remove(material)
+        for image in self.owned_bake_images & set(bpy.data.images):
+            if image.users == 0:
+                bpy.data.images.remove(image)
+        self.owned_objects.clear()
+        self.owned_meshes.clear()
+        self.owned_gray_materials.clear()
+        self.owned_bake_materials.clear()
+        self.owned_bake_images.clear()
+        for obj, name, links in self.redo_backup:
+            if obj.name not in bpy.data.objects:
+                continue
+            obj.name = name
+            for collection in links:
+                if collection.name in bpy.data.collections:
+                    collection.objects.link(obj)
+        self.redo_backup.clear()
+        if self.redo_backup_collection is not None:
+            bpy.data.collections.remove(self.redo_backup_collection)
+            self.redo_backup_collection = None
+        if self.redo_source_visibility is not None:
+            source, hidden_viewport, hidden_local, hidden_render = self.redo_source_visibility
+            if source.name in bpy.data.objects:
+                source.hide_viewport = hidden_viewport
+                source.hide_set(hidden_local)
+                source.hide_render = hidden_render
+            self.redo_source_visibility = None
+
+    def configure_passes(self, context):
+        settings = self.settings
+        self.passes = []
+        if not self.batch_stages:
+            if self.auto_remesh:
+                self.passes.append((1, self.remesh_method, self.quad_count,
+                                    self.auto_smart_uv_project, self.auto_unwrap_method))
+        else:
+            if settings.batch_stage_2_enabled:
+                self.passes.append((2, self.remesh_method if self.auto_remesh else None,
+                                    self.quad_count, self.auto_smart_uv_project,
+                                    self.auto_unwrap_method))
+            for number in (3, 4):
+                if getattr(settings, f"batch_stage_{number}_enabled"):
+                    preset = getattr(settings, f"batch_stage_{number}_remesh_preset")
+                    self.passes.append((
+                        number,
+                        "QUAD" if getattr(settings, f"batch_stage_{number}_auto_remesh") else None,
+                        dict(get_remesh_preset_counts(context))[preset],
+                        getattr(settings, f"batch_stage_{number}_auto_unwrap"),
+                        "ANGLE",
+                    ))
+        self.stage = (self.first_cleanup_stage()
+                      if self.batch_stages and not settings.batch_stage_2_enabled
+                      else "PASS_SETUP")
+
     def tracked(self, action):
         """Track only IDs created by our synchronous action, even if it fails."""
         before_objects = set(bpy.data.objects)
@@ -316,7 +485,8 @@ class ImportQueue:
         result = bpy.ops.mesh.polygroups_split_narrow_islands(
             source=source, action=action,
             width=getattr(narrow, prefix + "width"),
-            max_width_percent=getattr(narrow, prefix + "max_width_percent"),
+            max_width_percent=(self.settings.batch_narrow_island_max_width_percent
+                               if not second else getattr(narrow, prefix + "max_width_percent")),
             min_island_area_percent=getattr(narrow, prefix + "min_area_percent"),
             min_faces=getattr(narrow, prefix + "min_faces"),
             min_length=getattr(narrow, prefix + "min_length"),
@@ -388,7 +558,7 @@ class ImportQueue:
             _triangulate_ngons_for_autofix(obj)
 
     def first_cleanup_stage(self):
-        if self.file_selection:
+        if not self.batch_stages:
             return "PASS_SETUP"
         if self.settings.batch_narrow_island_enabled:
             return "NARROW_SPLIT"
@@ -397,7 +567,7 @@ class ImportQueue:
         return "PASS_SETUP"
 
     def second_cleanup_stage(self):
-        if self.file_selection:
+        if not self.batch_stages:
             return "PASS_SETUP"
         if self.settings.batch_second_narrow_island_enabled:
             return "SECOND_NARROW_SPLIT"
@@ -451,7 +621,7 @@ class ImportQueue:
             settings.batch_remesh_progress = 0
             self.timing.start_file()
             self.update_timing()
-            self.stage = "IMPORT"
+            self.stage = "REDO_PREPARE" if self.redo_mode else "IMPORT"
             settings.batch_stage = self.stage
             return  # Give the panel a frame to display the next file.
         try:
@@ -466,6 +636,7 @@ class ImportQueue:
             self.restore_remesh_settings()
             self.collect_bake_created()
             self.restore_bake_settings()
+            self.restore_redo_backup()
             settings.batch_last_error = f"{settings.batch_current_file}: {error}"
             self.report({"WARNING"}, settings.batch_last_error)
             settings.batch_failed_count += 1
@@ -477,7 +648,9 @@ class ImportQueue:
         from .batch_import import find_import_operator
 
         settings = self.settings
-        if self.stage == "IMPORT":
+        if self.stage == "REDO_PREPARE":
+            self.prepare_redo(context)
+        elif self.stage == "IMPORT":
             filepath = self.files[self.index]
             operator = find_import_operator(os.path.splitext(filepath)[1].lower())
             if operator is None:
@@ -519,42 +692,20 @@ class ImportQueue:
                 if count != len(self.meshes):
                     raise RuntimeError("Weld failed for one or more meshes")
             self.pass_sources = list(self.meshes)
-            self.passes = []
-            if self.file_selection:
-                if self.auto_remesh:
-                    self.passes.append((1, self.remesh_method, self.quad_count,
-                                        self.auto_smart_uv_project, self.auto_unwrap_method))
-            else:
-                if settings.batch_stage_2_enabled:
-                    self.passes.append((2, self.remesh_method if self.auto_remesh else None,
-                                        self.quad_count, self.auto_smart_uv_project,
-                                        self.auto_unwrap_method))
-                for number in (3, 4):
-                    if getattr(settings, f"batch_stage_{number}_enabled"):
-                        preset = getattr(settings, f"batch_stage_{number}_remesh_preset")
-                        self.passes.append((
-                            number,
-                            "QUAD" if getattr(settings, f"batch_stage_{number}_auto_remesh") else None,
-                            dict(get_remesh_preset_counts(context))[preset],
-                            getattr(settings, f"batch_stage_{number}_auto_unwrap"),
-                            "ANGLE",
-                        ))
-            self.stage = (self.first_cleanup_stage()
-                          if not self.file_selection and not settings.batch_stage_2_enabled
-                          else "PASS_SETUP")
+            self.configure_passes(context)
         elif self.stage == "PASS_SETUP":
-            if (not self.file_selection and not self.second_cleanup_done
+            if (self.batch_stages and not self.second_cleanup_done
                     and (self.pass_index >= len(self.passes)
                          or self.passes[self.pass_index][0] == 4)):
                 self.second_cleanup_done = True
                 self.mesh_index = 0
                 self.stage = self.second_cleanup_stage()
             elif self.pass_index >= len(self.passes):
-                if not self.file_selection and settings.batch_stage_5_enabled:
+                if self.batch_stages and settings.batch_stage_5_enabled:
                     self.stage = "PACK"
                 else:
                     self.mesh_index = 0
-                    self.stage = ("BAKE_SETUP" if not self.file_selection and settings.batch_autobake_enabled
+                    self.stage = ("BAKE_SETUP" if self.batch_stages and settings.batch_autobake_enabled
                                   else "COMPLETE")
             else:
                 self.pass_number, self.pass_method, self.pass_quad_count, self.pass_unwrap, self.pass_unwrap_method = self.passes[self.pass_index]
@@ -568,7 +719,7 @@ class ImportQueue:
                         settings.remesh_auto_generate_seams,
                     )
                 self.stage = ("REMESH" if self.pass_method else
-                              "AUTOFIX_SECOND" if not self.file_selection and self.pass_number == 3
+                              "AUTOFIX_SECOND" if self.batch_stages and self.pass_number == 3
                               and settings.batch_stage_3_autofix_enabled else "UNWRAP_PASS")
         elif self.stage == "REMESH":
             settings.batch_remesh_progress = 0
@@ -612,7 +763,7 @@ class ImportQueue:
             output_meshes = [obj for obj in outputs if obj.type == "MESH"]
             if not output_meshes:
                 raise RuntimeError(f"{self.pass_method.title()} Remesh did not create a mesh")
-            if (not self.file_selection and self.pass_number in (3, 4)
+            if (self.batch_stages and self.pass_number in (3, 4)
                     and getattr(settings, f"batch_stage_{self.pass_number}_smart_relax_edges")
                     and self.pass_method == "QUAD"):
                 for obj in output_meshes:
@@ -637,7 +788,7 @@ class ImportQueue:
                 self.stage = "REMESH"
             else:
                 self.mesh_index = 0
-                self.stage = ("AUTOFIX_SECOND" if not self.file_selection and self.pass_number == 3
+                self.stage = ("AUTOFIX_SECOND" if self.batch_stages and self.pass_number == 3
                               and settings.batch_stage_3_autofix_enabled else "UNWRAP_PASS")
         elif self.stage == "AUTOFIX_SECOND":
             targets = self.pass_outputs or self.pass_sources
@@ -651,7 +802,14 @@ class ImportQueue:
                 for obj in targets:
                     self.select_source(context, obj)
                     if self.pass_unwrap_method == "SMART":
-                        success, _packed = smart_uv_unwrap_all(context, obj)
+                        seam_settings = self.scene.polygroups_seam_preparation_settings
+                        previous_angle = seam_settings.smart_seam_angle_limit
+                        if self.batch_stages and self.pass_number == 2:
+                            seam_settings.smart_seam_angle_limit = settings.batch_first_surface_angle
+                        try:
+                            success, _packed = smart_uv_unwrap_all(context, obj)
+                        finally:
+                            seam_settings.smart_seam_angle_limit = previous_angle
                         if not success:
                             raise RuntimeError(f"Smart UV Unwrap failed for {obj.name}")
                     elif self.pass_unwrap_method == "CLASSIC":
@@ -665,10 +823,10 @@ class ImportQueue:
             self.pass_sources = targets
             self.result_meshes = targets
             self.pass_index += 1
-            if not self.file_selection and self.pass_number == 2:
+            if self.batch_stages and self.pass_number == 2:
                 self.mesh_index = 0
                 self.stage = self.first_cleanup_stage()
-            elif not self.file_selection and self.pass_number == 3:
+            elif self.batch_stages and self.pass_number == 3:
                 self.second_cleanup_done = True
                 self.mesh_index = 0
                 self.stage = self.second_cleanup_stage()
@@ -858,7 +1016,7 @@ class ImportQueue:
     def update_cursor(self):
         if self.cursor is not None:
             self.cursor.percent = self.settings.batch_import_progress
-            self.cursor.label = f"Import {self.index + 1}/{len(self.files)}"
+            self.cursor.label = f"{'Redo' if self.redo_mode else 'Import'} {self.index + 1}/{len(self.files)}"
             self.cursor.secondary_percent = self.settings.batch_remesh_progress
             self.cursor.status_line = t(
                 bpy.context,
@@ -875,6 +1033,11 @@ class ImportQueue:
         self.restore_remesh_settings()
         self.collect_bake_created()
         self.restore_bake_settings()
+        if self.redo_mode:
+            if status == "DONE":
+                self.discard_redo_backup()
+            else:
+                self.restore_redo_backup()
         if self.cursor is not None:
             self.cursor.close()
             self.cursor = None
@@ -916,6 +1079,77 @@ class ImportQueue:
             self.settings.batch_eta_seconds = -1.0
         self.finished = True
         redraw(context)
+
+
+class OBJECT_OT_polygroups_toggle_batch_stage(bpy.types.Operator):
+    bl_idname = "object.polygroups_toggle_batch_stage"
+    bl_label = "Expand or Collapse Processing Stage"
+    bl_description = "Show or hide this stage's settings without changing whether it runs"
+    bl_options = {"INTERNAL"}
+
+    stage: bpy.props.IntProperty(min=1, max=10, options={"SKIP_SAVE"})
+
+    def execute(self, context):
+        settings = context.scene.polygroups_model_preparation_settings
+        settings.batch_expanded_stages ^= 1 << (self.stage - 1)
+        redraw(context)
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_batch_redo_select(bpy.types.Operator):
+    bl_idname = "object.polygroups_batch_redo_select"
+    bl_label = "Select Collection for Redo"
+    bl_description = "Switch between Generated.N collections with an original highpoly"
+    bl_options = {"REGISTER", "UNDO"}
+
+    direction: bpy.props.EnumProperty(items=(
+        ("PREVIOUS", "Previous", "Select the previous Generated collection"),
+        ("NEXT", "Next", "Select the next Generated collection"),
+    ))
+
+    @classmethod
+    def poll(cls, context):
+        return (context.mode == "OBJECT"
+                and not context.scene.polygroups_model_preparation_settings.batch_is_running
+                and bool(redo_collections(context.view_layer)))
+
+    def execute(self, context):
+        from .generated_visibility import generated_paths, reveal_active_collection_in_outliners
+
+        collections = redo_collections(context.view_layer)
+        current = selected_redo_collection(context)
+        index = collections.index(current) + (1 if self.direction == "NEXT" else -1)
+        if not 0 <= index < len(collections):
+            self.report({"INFO"}, "No collection in that direction")
+            return {"CANCELLED"}
+        target = collections[index]
+        paths = generated_paths(context.view_layer)
+        target_path = next(path for path in paths if path[-1].collection == target)
+        for path in paths:
+            if path[-1] not in target_path:
+                path[-1].exclude = True
+        for layer in target_path[1:]:
+            layer.exclude = False
+            layer.hide_viewport = False
+        target.hide_viewport = False
+        context.view_layer.update()
+        context.view_layer.active_layer_collection = target_path[-1]
+        context.scene.polygroups_model_preparation_settings.batch_redo_collection_name = target.name
+        for obj in context.selected_objects:
+            obj.select_set(False)
+        context.view_layer.objects.active = None
+        candidates = sorted(
+            (obj for obj in target.objects if obj.type == "MESH"
+             and obj.name in context.view_layer.objects
+             and obj.visible_get(view_layer=context.view_layer) and not obj.hide_select),
+            key=lambda obj: (not obj.name.startswith("Retopo_"), obj.name),
+        )
+        if candidates:
+            candidates[0].select_set(True)
+            context.view_layer.objects.active = candidates[0]
+        reveal_active_collection_in_outliners(context)
+        self.report({"INFO"}, target.name)
+        return {"FINISHED"}
 
 
 class OBJECT_OT_polygroups_import_control(bpy.types.Operator):
