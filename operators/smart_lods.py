@@ -1,6 +1,7 @@
 """Generate sequential triangle-budget LODs with two weighted Decimate passes."""
 
 import bpy
+from mathutils import Vector
 
 from .smart_decimate import (
     SEAMS_DECIMATE_MODIFIER_NAME,
@@ -139,6 +140,25 @@ def _copy_into_source_collections(source, name, context):
     return duplicate
 
 
+def _world_x_bounds(obj):
+    if not obj.data.vertices:
+        x = obj.matrix_world.translation.x
+        return x, x
+    values = [(obj.matrix_world @ Vector(corner)).x for corner in obj.bound_box]
+    return min(values), max(values)
+
+
+def _arrange_after_previous(context, obj, previous, spacing):
+    context.view_layer.update()
+    previous_max = _world_x_bounds(previous)[1]
+    current_min = _world_x_bounds(obj)[0]
+    shift = max(0.0, previous_max + spacing - current_min)
+    transform = obj.matrix_world.copy()
+    transform.translation.x += shift
+    obj.matrix_world = transform
+    context.view_layer.update()
+
+
 class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
     bl_idname = "object.polygroups_generate_smart_lods"
     bl_label = "Generate Smart LODs"
@@ -193,6 +213,8 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
                 if settings.smart_lods_triangulate_all:
                     triangulate = lod.modifiers.new("LOD Triangulate", "TRIANGULATE")
                     bpy.ops.object.modifier_apply(modifier=triangulate.name)
+                if settings.smart_lods_auto_arrange:
+                    _arrange_after_previous(context, lod, previous, settings.smart_lods_spacing)
                 actual = _triangle_count(lod, context.evaluated_depsgraph_get())
                 if actual > target:
                     over_budget.append(f"LOD.{index}: {actual}/{target} tris")

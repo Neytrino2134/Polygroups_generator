@@ -4,6 +4,7 @@ from pathlib import Path
 
 import addon_utils
 import bpy
+from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
@@ -22,6 +23,8 @@ collection.objects.link(source)
 for edge in source.data.edges:
     edge.use_seam = all(abs(source.data.vertices[i].co.y) < 1e-5 for i in edge.vertices)
 settings = bpy.context.scene.polygroups_mesh_finalization_settings
+assert not settings.smart_lods_auto_arrange
+assert abs(settings.smart_lods_spacing - 1.0) < 1e-6
 settings.smart_lods_count = 4
 for i, target in enumerate((700, 400, 200, 100), 1):
     setattr(settings, f"smart_lods_target_{i}", target)
@@ -35,6 +38,7 @@ for i, target in enumerate((700, 400, 200, 100), 1):
     assert tris <= previous_count
     assert lod.users_collection == source.users_collection
     assert len(lod.modifiers) == 0
+    assert (lod.matrix_world.translation - source.matrix_world.translation).length < 1e-6
     previous_count = tris
 assert len(source.data.loop_triangles) == source_tris
 
@@ -93,8 +97,43 @@ for i in range(1, 5):
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
 
-# A mesh without seams still gets a full-mesh LOD, also when run from Edit Mode.
+# Auto Arrange uses object bounds, so rotated and scaled meshes have a real gap.
+source.location = (2.0, 3.0, 0.0)
+source.rotation_euler.z = 0.4
+source.scale = (1.5, 0.8, 1.0)
+settings.smart_lods_auto_arrange = True
+settings.smart_lods_spacing = 1.0
+assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
+
+def x_bounds(obj):
+    coords = [(obj.matrix_world @ Vector(corner)).x for corner in obj.bound_box]
+    return min(coords), max(coords)
+
+previous = source
+for i in range(1, 5):
+    lod = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    gap = x_bounds(lod)[0] - x_bounds(previous)[1]
+    assert abs(gap - 1.0) < 1e-4, (i, gap)
+    assert abs(lod.matrix_world.translation.y - source.matrix_world.translation.y) < 1e-6
+    previous = lod
+for i in range(1, 5):
+    obj = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    mesh = obj.data
+    bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.data.meshes.remove(mesh)
+
+# The spacing control also accepts a custom gap.
 settings.smart_lods_count = 1
+settings.smart_lods_spacing = 2.5
+assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
+lod = bpy.data.objects["Mesh.002.LOD.1"]
+assert abs(x_bounds(lod)[0] - x_bounds(source)[1] - 2.5) < 1e-4
+mesh = lod.data
+bpy.data.objects.remove(lod, do_unlink=True)
+bpy.data.meshes.remove(mesh)
+
+# A mesh without seams still gets a full-mesh LOD, also when run from Edit Mode.
+settings.smart_lods_spacing = 1.0
 settings.smart_lods_target_1 = 300
 for edge in source.data.edges:
     edge.use_seam = False

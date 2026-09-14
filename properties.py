@@ -3,6 +3,8 @@ from math import radians
 
 import bpy
 
+from .core.render_resolution import preset_resolution
+
 REMESH_PRESET_ITEMS = (
     ("LOW", "LOW", "Use the LOW quad count from add-on preferences"),
     ("MID", "MID", "Use the MID quad count from add-on preferences"),
@@ -111,6 +113,13 @@ def _normalize_render_output_directory(self, context):
     value = (self.output_directory or "").strip()
     if value.startswith("//"):
         self["output_directory"] = bpy.path.abspath(value)
+
+
+def _update_render_resolution_preset(self, context):
+    del context
+    self.resolution_x, self.resolution_y = preset_resolution(
+        self.resolution_aspect_preset, self.resolution_size_preset,
+    )
 
 
 def _redraw_view3d(_self, context):
@@ -1457,6 +1466,20 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         description="Apply triangulation to every generated LOD mesh",
         default=False,
     )
+    smart_lods_auto_arrange: bpy.props.BoolProperty(
+        name="Auto Arrange LODs",
+        description="Place generated LODs side by side along the world X axis",
+        default=False,
+    )
+    smart_lods_spacing: bpy.props.FloatProperty(
+        name="Arrange Objects Spacing",
+        description="Minimum gap between the world-space bounds of successive LOD meshes",
+        default=1.0,
+        min=0.0,
+        soft_max=10.0,
+        subtype="DISTANCE",
+        unit="LENGTH",
+    )
     show_mesh_check_settings: bpy.props.BoolProperty(
         name="Check Mesh",
         default=False,
@@ -1648,23 +1671,48 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     )
     animation_fps: bpy.props.IntProperty(
         name="Frame Rate",
-        description="Frames per second for the turnaround MP4",
+        description="Frames per second for the turnaround animation",
         default=30,
         min=1,
         max=240,
     )
     animation_quality: bpy.props.EnumProperty(
         name="Video Quality",
-        description="H.264 constant-rate quality for the MP4",
+        description="Constant-rate quality for the encoded video",
         items=(("PERC_LOSSLESS", "Perceptually Lossless", "Highest practical quality"),
                ("HIGH", "High", "High quality and moderate file size"),
                ("MEDIUM", "Medium", "Balanced quality and file size")),
         default="HIGH",
     )
+    animation_keep_scene_collections: bpy.props.BoolProperty(
+        name="Keep Scene/Light/Camera Collections",
+        description="Keep collections starting with Scene, Light, or Camera and all their contents visible during animation rendering",
+        default=False,
+    )
+    animation_media_type: bpy.props.EnumProperty(
+        name="Media Type",
+        description="Save the animation as a video or a PNG image sequence",
+        items=(("VIDEO", "Video", "Encode a video file"),
+               ("IMAGE", "Image Sequence", "Save one PNG image per frame")),
+        default="VIDEO",
+    )
+    animation_container: bpy.props.EnumProperty(
+        name="Video Container",
+        description="Container for the rendered animation video",
+        items=(("MKV", "Matroska", "Matroska video (.mkv)"),
+               ("MPEG4", "MPEG-4", "MPEG-4 video (.mp4)"),
+               ("WEBM", "WebM", "WebM video (.webm)"),
+               ("QUICKTIME", "QuickTime", "QuickTime video (.mov)")),
+        default="MKV",
+    )
     animation_collection_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
     animation_object_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
     animation_status: bpy.props.StringProperty(name="Animation Status", default="Not prepared")
     animation_last_output: bpy.props.StringProperty(name="Animation Output", default="", subtype="FILE_PATH")
+    animation_progress: bpy.props.FloatProperty(
+        name="Animation Progress", default=0.0, min=0.0, max=100.0,
+        subtype="PERCENTAGE", options={"SKIP_SAVE"},
+    )
     render_engine: bpy.props.EnumProperty(
         name="Render Engine",
         description="Render engine used for batch asset previews",
@@ -1681,6 +1729,24 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         min=1,
         max=4096,
         soft_max=512,
+    )
+    resolution_aspect_preset: bpy.props.EnumProperty(
+        name="Aspect Ratio",
+        description="Aspect ratio used when selecting a resolution preset",
+        items=(("SQUARE", "1:1", "Square"),
+               ("WIDE", "16:9", "Widescreen"),
+               ("PORTRAIT", "3:4", "Portrait")),
+        default="SQUARE",
+        update=_update_render_resolution_preset,
+    )
+    resolution_size_preset: bpy.props.EnumProperty(
+        name="Resolution Preset",
+        description="Resolution along the longest image side",
+        items=(("1K", "1K", "1024 pixels on the longest side"),
+               ("2K", "2K", "2048 pixels on the longest side"),
+               ("4K", "4K", "4096 pixels on the longest side")),
+        default="1K",
+        update=_update_render_resolution_preset,
     )
     resolution_x: bpy.props.IntProperty(
         name="Resolution X",

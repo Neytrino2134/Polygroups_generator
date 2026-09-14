@@ -3107,6 +3107,10 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column.prop(settings, f"smart_lods_target_{index}", text=f"LOD.{index} Tris")
         column.prop(settings, "smart_lods_final_decimate")
         column.prop(settings, "smart_lods_triangulate_all")
+        column.prop(settings, "smart_lods_auto_arrange")
+        spacing_row = column.row()
+        spacing_row.enabled = settings.smart_lods_auto_arrange
+        spacing_row.prop(settings, "smart_lods_spacing")
         column.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")
 
     def draw_mesh_check(self, context, layout):
@@ -3397,10 +3401,17 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             column.separator()
             column.prop(settings, "render_engine", text=t(context, "render_engine"))
             column.prop(settings, "max_samples", text=t(context, "render_max_samples"))
+            column.prop(settings, "resolution_aspect_preset", text=t(context, "render_aspect_preset"), expand=True)
+            column.prop(settings, "resolution_size_preset", text=t(context, "render_size_preset"), expand=True)
             resolution_row = column.row(align=True)
             resolution_row.prop(settings, "resolution_x", text=t(context, "render_resolution_x"))
             resolution_row.prop(settings, "resolution_y", text=t(context, "render_resolution_y"))
             column.prop(settings, "resolution_scale", text=t(context, "render_resolution_scale"))
+            column.operator(
+                "render.polygroups_apply_resolution",
+                text=t(context, "render_apply_format"),
+                icon="CHECKMARK",
+            )
             column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
 
             options_row = column.row(align=True)
@@ -3479,7 +3490,15 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             column.separator()
             column.prop(settings, "animation_frame_count", text=t(context, "animation_length"))
             column.prop(settings, "animation_fps", text=t(context, "animation_fps"))
-            column.prop(settings, "animation_quality", text=t(context, "animation_quality"))
+            column.prop(settings, "animation_media_type", text=t(context, "animation_media_type"))
+            if settings.animation_media_type == "VIDEO":
+                column.prop(settings, "animation_container", text=t(context, "animation_container"))
+                column.prop(settings, "animation_quality", text=t(context, "animation_quality"))
+            column.prop(
+                settings,
+                "animation_keep_scene_collections",
+                text=t(context, "animation_keep_scene_collections"),
+            )
             row = column.row(align=True)
             row.enabled = not settings.is_running and context.active_object is not None
             row.operator("object.polygroups_prepare_turnaround_animation",
@@ -3488,6 +3507,12 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             render_row.enabled = not settings.is_running and bool(settings.animation_collection_name)
             render_row.operator("object.polygroups_render_turnaround_animation",
                                 text=t(context, "animation_render"), icon="RENDER_ANIMATION")
+            if settings.is_running or settings.animation_progress > 0:
+                column.progress(
+                    factor=settings.animation_progress / 100.0,
+                    type="BAR",
+                    text=f"{settings.animation_progress:.0f}%",
+                )
             column.label(text=t(context, "animation_status", value=settings.animation_status))
             if settings.animation_last_output:
                 column.label(text=t(context, "animation_output", value=settings.animation_last_output), icon="FILE_MOVIE")

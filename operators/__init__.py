@@ -135,6 +135,7 @@ from .render_queue import OBJECT_OT_polygroups_render_current_state
 from .render_queue import OBJECT_OT_polygroups_scan_render_queue
 from .render_queue import OBJECT_OT_polygroups_start_render_queue
 from .render_queue import OBJECT_OT_polygroups_stop_render_queue
+from .render_resolution import RENDER_OT_polygroups_apply_resolution
 from .turnaround_animation import OBJECT_OT_polygroups_prepare_turnaround_animation
 from .turnaround_animation import OBJECT_OT_polygroups_render_turnaround_animation
 from .resculpting import OBJECT_OT_polygroups_add_multires
@@ -267,6 +268,7 @@ CLASSES = (
     OBJECT_OT_polygroups_scan_render_queue,
     OBJECT_OT_polygroups_start_render_queue,
     OBJECT_OT_polygroups_stop_render_queue,
+    RENDER_OT_polygroups_apply_resolution,
     OBJECT_OT_polygroups_clear_multiview_render,
     OBJECT_OT_polygroups_mark_freestyle_edges,
     OBJECT_OT_polygroups_clear_freestyle_edges,
