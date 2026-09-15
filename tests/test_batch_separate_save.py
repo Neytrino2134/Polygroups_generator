@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory() as directory:
 
     with bpy.data.libraries.load(str(expected)) as (source, _target):
         assert "Generated.007" in source.collections
-        assert "Generated.007" in source.scenes
+        assert "Scene" in source.scenes
         assert "Highpoly_Generated.007" in source.objects
 
     working_snapshot = Path(directory) / "working_snapshot.blend"
@@ -108,6 +108,21 @@ with tempfile.TemporaryDirectory() as directory:
     assert queue.separately_saved_count == 1
     queued_collection = bpy.data.collections["Generated.001"]
     assert not queued_collection.objects
-    assert (Path(directory) / "Original blend name_Generated_001.blend").is_file()
+    queued_output = Path(directory) / "Original blend name_Generated_001.blend"
+    assert queued_output.is_file()
+    with bpy.data.libraries.load(str(queued_output)) as (source, _target):
+        assert "Generated.001" in source.collections
+        assert "Highpoly_Generated.001" in source.objects
+        assert "Highpoly_Generated.007" not in source.objects
+
+    # The separate result must open normally with its Generated.N linked into
+    # the scene, while Save As Copy keeps the working path unchanged.
+    assert bpy.ops.wm.open_mainfile(filepath=str(expected)) == {"FINISHED"}
+    assert bpy.data.collections.get("Generated.007") is not None
+    assert bpy.data.objects.get("Highpoly_Generated.007") is not None
+    assert any(
+        child.name == "Generated.007"
+        for child in bpy.context.scene.collection.children
+    )
 
 print("batch separate save test passed")

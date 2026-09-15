@@ -35,6 +35,7 @@ from .baking import OBJECT_OT_polygroups_save_bake_textures
 from .batch_import import AIRETOPO_FH_gltf
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .import_queue import OBJECT_OT_polygroups_import_control
+from .import_queue import OBJECT_OT_polygroups_reset_import_state
 from .import_queue import OBJECT_OT_polygroups_batch_redo_select
 from .import_queue import OBJECT_OT_polygroups_toggle_batch_stage
 from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
@@ -89,6 +90,7 @@ from .mesh_checks import OBJECT_OT_polygroups_start_mesh_check
 from .mesh_checks import OBJECT_OT_polygroups_triangulate_ngons
 from .mesh_checks import OBJECT_OT_polygroups_undo_mesh_check_fix
 from .mesh_checks import discard_mesh_check_backup
+from .small_loose_parts import OBJECT_OT_polygroups_small_loose_parts
 from .mesh_export import OBJECT_OT_polygroups_export_blend_assets
 from .mesh_export import OBJECT_OT_polygroups_export_selected_meshes
 from .mesh_export import OBJECT_OT_polygroups_add_blend_static_collection
@@ -234,6 +236,7 @@ CLASSES = (
     OBJECT_OT_polygroups_batch_import,
     AIRETOPO_FH_gltf,
     OBJECT_OT_polygroups_import_control,
+    OBJECT_OT_polygroups_reset_import_state,
     OBJECT_OT_polygroups_batch_redo_select,
     OBJECT_OT_polygroups_toggle_batch_stage,
     OBJECT_OT_polygroups_arrange_batch_objects,
@@ -335,6 +338,7 @@ CLASSES = (
     OBJECT_OT_polygroups_delete_thin_protrusions,
     OBJECT_OT_polygroups_clean_mesh,
     OBJECT_OT_polygroups_create_mesh_backup,
+    OBJECT_OT_polygroups_small_loose_parts,
     OBJECT_OT_polygroups_export_selected_meshes,
     OBJECT_OT_polygroups_scan_blend_assets,
     OBJECT_OT_polygroups_add_blend_static_collection,

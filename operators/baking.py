@@ -1743,6 +1743,10 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
 
     def modal(self, context, event):
         global _BAKE_CURSOR_POSITION
+        if not self.settings.bake_task_is_running:
+            return self._finish(
+                context, False, t(context, "bake_cancelled"), cancelled=True,
+            )
         if event.type == "MOUSEMOVE":
             _BAKE_CURSOR_POSITION = (event.mouse_region_x, event.mouse_region_y)
         if event.type == "ESC" and event.value == "PRESS":

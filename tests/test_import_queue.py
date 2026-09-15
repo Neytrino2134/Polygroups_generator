@@ -62,6 +62,38 @@ assert not settings.batch_stage_4_smart_relax_edges
 assert settings.batch_stage_5_enabled
 assert not settings.batch_autobake_enabled
 assert settings.batch_autobake_cage_mode == "AUTO"
+
+# A stale/lost modal queue must be recoverable from the Start Import panel.
+settings.batch_is_running = True
+settings.batch_is_paused = True
+settings.batch_stop_requested = True
+settings.batch_cancel_requested = True
+settings.batch_stage = "PAUSED"
+settings.batch_last_error = "stale"
+settings.batch_total_count = 12
+settings.batch_imported_count = 4
+settings.batch_failed_count = 1
+settings.batch_import_progress = 40.0
+context.scene.polygroups_baking_settings.bake_task_is_running = True
+context.scene.polygroups_baking_settings.bake_task_stage = "STALE"
+stale_queue = SimpleNamespace(
+    finished=False,
+    timer=None,
+    job=None,
+    finish=Mock(),
+)
+queue_module.ACTIVE_QUEUE = stale_queue
+assert bpy.ops.object.polygroups_reset_import_state() == {"FINISHED"}
+stale_queue.finish.assert_called_once()
+assert queue_module.ACTIVE_QUEUE is None
+assert not settings.batch_is_running and not settings.batch_is_paused
+assert not settings.batch_stop_requested and not settings.batch_cancel_requested
+assert settings.batch_stage == "" and settings.batch_last_error == ""
+assert settings.batch_total_count == 0 and settings.batch_imported_count == 0
+assert settings.batch_failed_count == 0 and settings.batch_import_progress == 0.0
+assert not context.scene.polygroups_baking_settings.bake_task_is_running
+assert context.scene.polygroups_baking_settings.bake_task_stage == ""
+
 for number in (3, 4):
     for name in ("auto_remesh", "auto_unwrap", "use_materials",
                  "prepare_polygroups", "material_seams"):

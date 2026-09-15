@@ -24,7 +24,7 @@ settings.batch_import_format = "OBJ"
 settings.batch_import_mode = "AUTO"
 settings.batch_auto_arrange_objects = False
 settings.batch_auto_save = False
-settings.batch_auto_smart_uv_project = False
+settings.batch_auto_smart_uv_project = True
 settings.batch_stage_2_enabled = True
 settings.batch_stage_3_enabled = False
 settings.batch_stage_4_enabled = False
@@ -74,6 +74,33 @@ class FakeJob:
 with tempfile.TemporaryDirectory() as directory:
     path = Path(directory) / "mesh.obj"
     path.write_text("o Test\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
+
+    simple_stages = []
+    settings.file_import_automatic_processing = False
+    with patch.object(import_queue, "RemeshJob", FakeJob), patch.object(
+        import_queue, "remesh_backend", lambda *_: object(),
+    ), patch.object(
+        import_queue,
+        "remove_small_loose_parts",
+        lambda *_args, **_kwargs: simple_stages.append("loose") or {"part_count": 0},
+    ), patch.object(
+        import_queue,
+        "smart_uv_unwrap_all",
+        lambda *_args, **_kwargs: simple_stages.append("unwrap") or (True, False),
+    ):
+        simple_queue = import_queue.ImportQueue(context, [str(path)], True, print)
+        simple_queue.begin()
+        for _ in range(50):
+            simple_queue.step(context)
+            if simple_queue.finished:
+                break
+        else:
+            raise AssertionError((simple_queue.stage, settings.batch_last_error))
+        assert simple_stages == ["loose", "unwrap"]
+        simple_queue.finished = False
+        simple_queue.finish(context, "CANCELLED", rollback=True)
+
+    settings.file_import_automatic_processing = True
     launcher = SimpleNamespace(
         use_file_selection=True, redo_collection_name="", directory=directory,
         files=[SimpleNamespace(name=path.name)], report=lambda *_: None,
@@ -92,7 +119,15 @@ with tempfile.TemporaryDirectory() as directory:
     with patch.object(import_queue, "RemeshJob", FakeJob), patch.object(
         import_queue, "remesh_backend", lambda *_: object(),
     ), patch.object(import_queue.ImportQueue, "merge_small_islands",
-                    lambda self, _context, _obj, **_kwargs: stages.append("small")):
+                    lambda self, _context, _obj, **_kwargs: stages.append("small")), patch.object(
+        import_queue,
+        "remove_small_loose_parts",
+        lambda *_args, **_kwargs: stages.append("loose") or {"part_count": 0},
+    ), patch.object(
+        import_queue,
+        "smart_uv_unwrap_all",
+        lambda *_args, **_kwargs: stages.append("unwrap") or (True, False),
+    ):
         queue = import_queue.ImportQueue(
             context, [str(path)], True, print, automatic_processing=True,
         )
@@ -104,7 +139,7 @@ with tempfile.TemporaryDirectory() as directory:
         else:
             raise AssertionError((queue.stage, settings.batch_last_error))
         assert settings.batch_imported_count == 1 and settings.batch_failed_count == 0
-        assert stages == ["small"]
+        assert stages == ["loose", "unwrap", "small"]
         assert queue.groups[0][0].name.startswith("Highpoly_Generated.")
         assert any(obj.name.startswith("Retopo_") for obj in queue.groups[0][1])
         queue.finished = False

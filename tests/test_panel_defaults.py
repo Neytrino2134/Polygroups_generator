@@ -34,7 +34,12 @@ assert model.batch_include_subfolders
 assert not model.batch_auto_save
 assert model.batch_auto_save_interval == 5
 assert not model.batch_save_generated_separately
+assert model.small_loose_part_metric == "BOUNDING_BOX"
+assert model.small_loose_part_threshold_percent == 8.0
 assert model.file_import_auto_smart_uv_project
+assert model.file_import_remove_small_loose_parts
+assert model.file_import_small_loose_part_metric == "BOUNDING_BOX"
+assert model.file_import_small_loose_part_threshold_percent == 8.0
 assert not model.file_import_automatic_processing
 assert model.batch_auto_smart_uv_project
 assert model.file_import_auto_unwrap_method == "SMART"
@@ -42,6 +47,9 @@ assert model.batch_auto_unwrap_method == "SMART"
 assert model.batch_remesh_progress == 0
 assert model.batch_expanded_stages == 0
 assert abs(model.batch_first_surface_angle - radians(22)) < 1.0e-6
+assert model.batch_first_remove_small_loose_parts
+assert model.batch_first_small_loose_part_metric == "BOUNDING_BOX"
+assert model.batch_first_small_loose_part_threshold_percent == 8.0
 assert model.batch_narrow_island_max_width_percent == 10.0
 assert all(getattr(model, f"batch_stage_{stage}_enabled") for stage in (2, 3, 4, 5))
 assert model.batch_narrow_island_enabled

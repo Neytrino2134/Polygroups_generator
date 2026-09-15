@@ -329,6 +329,38 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         items=IMPORT_AUTO_UNWRAP_METHOD_ITEMS,
         default="SMART",
     )
+    file_import_remove_small_loose_parts: bpy.props.BoolProperty(
+        name="Remove Small Loose Parts",
+        default=True,
+        description="Automatically remove small disconnected components before Auto Unwrap",
+    )
+    file_import_small_loose_part_threshold_percent: bpy.props.FloatProperty(
+        name="Remove Below",
+        default=8.0,
+        min=0.0,
+        max=100.0,
+        soft_max=25.0,
+        precision=1,
+        subtype="PERCENTAGE",
+        description="Remove parts smaller than this percentage of the largest disconnected part",
+    )
+    file_import_small_loose_part_metric: bpy.props.EnumProperty(
+        name="Loose Part Size",
+        description="How disconnected part size is measured before Auto Unwrap",
+        items=(
+            (
+                "BOUNDING_BOX",
+                "Bounding Box",
+                "Use bounding-box size with flat and linear geometry support",
+            ),
+            (
+                "VOLUME",
+                "Volume",
+                "Use enclosed volume; automatically use bounding-box size for open geometry",
+            ),
+        ),
+        default="BOUNDING_BOX",
+    )
     batch_auto_rename_objects: bpy.props.BoolProperty(
         name="Auto Rename Objects",
         description="Rename imported objects and move them to the Generated collection",
@@ -428,6 +460,33 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         ),
         default=False,
     )
+    small_loose_part_threshold_percent: bpy.props.FloatProperty(
+        name="Small Part Threshold",
+        description="Delete disconnected parts smaller than this percentage of the largest part",
+        default=8.0,
+        min=0.0,
+        max=100.0,
+        soft_max=25.0,
+        precision=1,
+        subtype="PERCENTAGE",
+    )
+    small_loose_part_metric: bpy.props.EnumProperty(
+        name="Size Metric",
+        description="How disconnected part size is measured",
+        items=(
+            (
+                "BOUNDING_BOX",
+                "Bounding Box",
+                "Use bounding-box size with flat and linear geometry support",
+            ),
+            (
+                "VOLUME",
+                "Volume",
+                "Use enclosed volume; automatically use bounding-box size for open geometry",
+            ),
+        ),
+        default="BOUNDING_BOX",
+    )
     batch_is_running: bpy.props.BoolProperty(
         name="Running",
         default=False,
@@ -500,6 +559,38 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Surface Angle", default=radians(22.0),
         min=radians(1.0), max=radians(89.0), subtype="ANGLE",
         description="Surface angle for Stage 2 Smart UV seam generation",
+    )
+    batch_first_remove_small_loose_parts: bpy.props.BoolProperty(
+        name="Remove Small Loose Parts",
+        default=True,
+        description="Automatically remove small disconnected components before the first Auto Unwrap",
+    )
+    batch_first_small_loose_part_threshold_percent: bpy.props.FloatProperty(
+        name="Remove Below",
+        default=8.0,
+        min=0.0,
+        max=100.0,
+        soft_max=25.0,
+        precision=1,
+        subtype="PERCENTAGE",
+        description="Remove parts smaller than this percentage of the largest disconnected part",
+    )
+    batch_first_small_loose_part_metric: bpy.props.EnumProperty(
+        name="Loose Part Size",
+        description="How disconnected part size is measured before the first Auto Unwrap",
+        items=(
+            (
+                "BOUNDING_BOX",
+                "Bounding Box",
+                "Use bounding-box size with flat and linear geometry support",
+            ),
+            (
+                "VOLUME",
+                "Volume",
+                "Use enclosed volume; automatically use bounding-box size for open geometry",
+            ),
+        ),
+        default="BOUNDING_BOX",
     )
     batch_narrow_island_enabled: bpy.props.BoolProperty(
         name="Stage 3: Narrow Island Splitter", default=True,

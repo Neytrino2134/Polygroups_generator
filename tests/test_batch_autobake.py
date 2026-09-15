@@ -77,6 +77,14 @@ try:
     assert bake.use_auto_cage and not bake.autogenerate_smart_cage
     queue.collect_bake_created()
     queue.restore_bake_settings()
+
+    # Regression: Blender 5.2 crashed when separate saving used a temporary
+    # Scene through libraries.write after the bake handoff.
+    working_path = bpy.data.filepath
+    separate_path = Path(temporary_directory.name) / "batch_autobake_Generated_001.blend"
+    import_queue.write_collection_blend(str(separate_path), collection)
+    assert separate_path.is_file()
+    assert bpy.data.filepath == working_path
 finally:
     safety_checks.bpy = real_bpy
 

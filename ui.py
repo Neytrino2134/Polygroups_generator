@@ -954,11 +954,36 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
 
         content = draw_topic(layout, context, "prepare_1", t(context, "model_preparation_group_mesh_edit"), "EDITMODE_HLT")
         if content is not None:
-            content.operator(
+            column = content.column(align=True)
+            column.operator(
                 "mesh.polygroups_delete_and_fill",
                 text=t(context, "delete_and_fill"),
                 icon="MESH_DATA",
             )
+            column.separator()
+            column.prop(
+                settings,
+                "small_loose_part_metric",
+                text=t(context, "small_loose_part_metric"),
+            )
+            column.prop(
+                settings,
+                "small_loose_part_threshold_percent",
+                text=t(context, "small_loose_part_threshold"),
+            )
+            row = column.row(align=True)
+            select_small = row.operator(
+                "object.polygroups_small_loose_parts",
+                text=t(context, "select_small_loose_parts"),
+                icon="RESTRICT_SELECT_OFF",
+            )
+            select_small.delete = False
+            delete_small = row.operator(
+                "object.polygroups_small_loose_parts",
+                text=t(context, "delete_small_loose_parts"),
+                icon="TRASH",
+            )
+            delete_small.delete = True
 
         content = draw_topic(layout, context, "prepare_2", t(context, "model_preparation_group_manage"), "OUTLINER_COLLECTION")
         if content is not None:
@@ -1032,6 +1057,24 @@ def draw_import_remesh_options(layout, context, settings, prefix):
                 text=t(context, "voxel_size"),
             )
         column.prop(settings, prefix + "_clear_material", text="Clear Material")
+        if prefix == "file_import":
+            column.prop(
+                settings,
+                "file_import_remove_small_loose_parts",
+                text=t(context, "remove_small_loose_parts"),
+            )
+            loose_cleanup = column.column(align=True)
+            loose_cleanup.enabled = settings.file_import_remove_small_loose_parts
+            loose_cleanup.prop(
+                settings,
+                "file_import_small_loose_part_metric",
+                text=t(context, "small_loose_part_metric"),
+            )
+            loose_cleanup.prop(
+                settings,
+                "file_import_small_loose_part_threshold_percent",
+                text=t(context, "small_loose_part_threshold"),
+            )
         column.prop(
             settings,
             prefix + "_auto_smart_uv_project",
@@ -1260,6 +1303,23 @@ def draw_batch_processing(content, context, settings):
         else:
             first_remesh_options.prop(settings, "batch_voxel_size", text=t(context, "voxel_size"))
         first_remesh_options.prop(settings, "batch_clear_material", text="Clear Material")
+        first.prop(
+            settings,
+            "batch_first_remove_small_loose_parts",
+            text=t(context, "remove_small_loose_parts"),
+        )
+        loose_cleanup = first.column(align=True)
+        loose_cleanup.enabled = settings.batch_first_remove_small_loose_parts
+        loose_cleanup.prop(
+            settings,
+            "batch_first_small_loose_part_metric",
+            text=t(context, "small_loose_part_metric"),
+        )
+        loose_cleanup.prop(
+            settings,
+            "batch_first_small_loose_part_threshold_percent",
+            text=t(context, "small_loose_part_threshold"),
+        )
         first.prop(settings, "batch_auto_smart_uv_project", text=t(context, "auto_smart_uv_project"))
         unwrap_method = first.row()
         unwrap_method.enabled = settings.batch_auto_smart_uv_project
@@ -1438,15 +1498,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
         if content is not None:
-            import_mode_row = content.row(align=True)
-            import_mode_row.enabled = not settings.batch_is_running
-            import_mode_row.prop(
-                settings,
-                "batch_import_mode",
-                text=t(context, "batch_import_mode"),
-                expand=True,
-            )
-
+            content.label(text=t(context, "batch_start_file_group"), icon="FILE_BLEND")
+            content.separator(type="LINE")
             save_row = content.row(align=True)
             save_row.enabled = not settings.batch_is_running
             save_row.operator(
@@ -1454,7 +1507,17 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 text=t(context, "save_file"),
                 icon="FILE_TICK",
             )
+            if not bpy.data.filepath:
+                save_hint = content.row()
+                save_hint.alert = True
+                save_hint.label(
+                    text=t(context, "batch_save_before_start"),
+                    icon="ERROR",
+                )
 
+            content.separator()
+            content.label(text=t(context, "batch_start_autosave_group"), icon="RECOVER_LAST")
+            content.separator(type="LINE")
             auto_save_row = content.row(align=True)
             auto_save_row.enabled = (
                 not settings.batch_is_running
@@ -1494,14 +1557,19 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 text=t(context, "batch_save_generated_separately_hint"),
                 icon="ERROR" if separate_hint.alert else "FILE_BLEND",
             )
-            save_hint = content.row()
-            save_hint.alert = not bool(bpy.data.filepath)
-            save_hint.label(
-                text=t(context, "batch_save_before_start"),
-                icon="INFO" if bpy.data.filepath else "ERROR",
-            )
 
             content.separator()
+            content.label(text=t(context, "batch_start_mode_group"), icon="PLAY")
+            content.separator(type="LINE")
+            import_mode_row = content.row(align=True)
+            import_mode_row.enabled = not settings.batch_is_running
+            import_mode_row.prop(
+                settings,
+                "batch_import_mode",
+                text=t(context, "batch_import_mode"),
+                expand=True,
+            )
+
             operator_row = content.row(align=True)
             operator_row.enabled = not settings.batch_is_running
             operator_row.operator_context = "EXEC_DEFAULT"
@@ -1511,6 +1579,11 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 icon="PLAY",
             )
             start_import.use_file_selection = False
+            content.operator(
+                "object.polygroups_reset_import_state",
+                text=t(context, "batch_reset_state"),
+                icon="FILE_REFRESH",
+            )
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:

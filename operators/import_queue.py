@@ -25,6 +25,7 @@ from .rename_objects import (
     layer_collection_paths,
     rename_and_move_objects,
 )
+from .small_loose_parts import remove_small_loose_parts
 from .unwrap_angle_based import smart_project_all, smart_uv_unwrap_all
 from ..core.remesh_cursor import RemeshCursor
 from ..localization import t
@@ -79,6 +80,29 @@ def redraw(context):
                 area.tag_redraw()
 
 
+def reset_batch_import_settings(settings):
+    """Return persisted/stale queue UI state to a clean idle state."""
+    settings.batch_is_running = False
+    settings.batch_is_paused = False
+    settings.batch_stop_requested = False
+    settings.batch_cancel_requested = False
+    settings.batch_stage = ""
+    settings.batch_last_error = ""
+    settings.batch_total_count = 0
+    settings.batch_imported_count = 0
+    settings.batch_imported_object_count = 0
+    settings.batch_failed_count = 0
+    settings.batch_remaining_count = 0
+    settings.batch_import_progress = 0.0
+    settings.batch_current_progress = 0.0
+    settings.batch_remesh_progress = 0.0
+    settings.batch_current_file = ""
+    settings.batch_elapsed_seconds = 0.0
+    settings.batch_current_seconds = 0.0
+    settings.batch_average_seconds = 0.0
+    settings.batch_eta_seconds = -1.0
+
+
 def save_current_blend_file():
     """Save without opening a file browser; Batch Import must remain modal."""
     if not bpy.data.filepath:
@@ -102,18 +126,21 @@ def generated_collection_output_path(blend_filepath, collection_name):
 
 
 def write_collection_blend(filepath, collection):
-    """Write a directly openable blend containing one collection and its dependencies."""
-    export_scene = bpy.data.scenes.new(collection.name)
-    try:
-        export_scene.collection.children.link(collection)
-        bpy.data.libraries.write(
-            filepath,
-            {export_scene},
-            path_remap="RELATIVE_ALL",
-            compress=True,
-        )
-    finally:
-        bpy.data.scenes.remove(export_scene)
+    """Save a directly openable copy while keeping the working file active."""
+    if collection.name not in bpy.data.collections:
+        raise RuntimeError("The Generated.N collection no longer exists")
+    # Do not use bpy.data.libraries.write with a temporary Scene here. Blender
+    # 5.2 can crash in BKE_view_layer_copy_data when that partial write runs
+    # from the modal Batch Import operator after baking. Save As Copy follows
+    # Blender's regular full-file writer and does not change bpy.data.filepath.
+    result = bpy.ops.wm.save_as_mainfile(
+        filepath=filepath,
+        copy=True,
+        relative_remap=True,
+        check_existing=False,
+    )
+    if "FINISHED" not in result:
+        raise RuntimeError("Blender did not finish saving the Generated.N copy")
 
 
 def move_to_collection(objects, collection):
@@ -179,6 +206,14 @@ class ImportQueue:
             and (self.auto_remesh or self.batch_stages)
         )
         self.auto_unwrap_method = getattr(settings, prefix + "_auto_unwrap_method")
+        if self.batch_stages:
+            self.remove_small_loose_parts = settings.batch_first_remove_small_loose_parts
+            self.small_loose_part_metric = settings.batch_first_small_loose_part_metric
+            self.small_loose_part_threshold = settings.batch_first_small_loose_part_threshold_percent
+        else:
+            self.remove_small_loose_parts = settings.file_import_remove_small_loose_parts
+            self.small_loose_part_metric = settings.file_import_small_loose_part_metric
+            self.small_loose_part_threshold = settings.file_import_small_loose_part_threshold_percent
         if not self.batch_stages and not self.auto_remesh:
             setattr(settings, auto_smart_uv_property, False)
         self.quad_count = dict(get_remesh_preset_counts(context))[
@@ -307,6 +342,14 @@ class ImportQueue:
             and (self.auto_remesh or self.batch_stages)
         )
         self.auto_unwrap_method = getattr(settings, prefix + "_auto_unwrap_method")
+        if self.batch_stages:
+            self.remove_small_loose_parts = settings.batch_first_remove_small_loose_parts
+            self.small_loose_part_metric = settings.batch_first_small_loose_part_metric
+            self.small_loose_part_threshold = settings.batch_first_small_loose_part_threshold_percent
+        else:
+            self.remove_small_loose_parts = settings.file_import_remove_small_loose_parts
+            self.small_loose_part_metric = settings.file_import_small_loose_part_metric
+            self.small_loose_part_threshold = settings.file_import_small_loose_part_threshold_percent
         self.quad_count = dict(get_remesh_preset_counts(context))[
             getattr(settings, prefix + "_remesh_preset")
         ]
@@ -623,6 +666,15 @@ class ImportQueue:
             return "SECOND_SMALL_ISLANDS"
         return "PASS_SETUP"
 
+    def pre_unwrap_stage(self):
+        if (
+            self.remove_small_loose_parts
+            and self.pass_number == (2 if self.batch_stages else 1)
+        ):
+            self.mesh_index = 0
+            return "REMOVE_SMALL_LOOSE_PARTS"
+        return "UNWRAP_PASS"
+
     def step(self, context):
         settings = self.settings
         self.update_timing()
@@ -768,7 +820,7 @@ class ImportQueue:
                     )
                 self.stage = ("REMESH" if self.pass_method else
                               "AUTOFIX_SECOND" if self.batch_stages and self.pass_number == 3
-                              and settings.batch_stage_3_autofix_enabled else "UNWRAP_PASS")
+                              and settings.batch_stage_3_autofix_enabled else self.pre_unwrap_stage())
         elif self.stage == "REMESH":
             settings.batch_remesh_progress = 0
             source = self.pass_sources[self.mesh_index]
@@ -837,12 +889,32 @@ class ImportQueue:
             else:
                 self.mesh_index = 0
                 self.stage = ("AUTOFIX_SECOND" if self.batch_stages and self.pass_number == 3
-                              and settings.batch_stage_3_autofix_enabled else "UNWRAP_PASS")
+                              and settings.batch_stage_3_autofix_enabled else self.pre_unwrap_stage())
         elif self.stage == "AUTOFIX_SECOND":
             targets = self.pass_outputs or self.pass_sources
             self.autofix_second_pass(context, targets[self.mesh_index])
             self.mesh_index += 1
             self.stage = "AUTOFIX_SECOND" if self.mesh_index < len(targets) else "UNWRAP_PASS"
+        elif self.stage == "REMOVE_SMALL_LOOSE_PARTS":
+            targets = self.pass_outputs or self.pass_sources
+            obj = targets[self.mesh_index]
+            result = remove_small_loose_parts(
+                obj,
+                metric=self.small_loose_part_metric,
+                threshold_percent=self.small_loose_part_threshold,
+            )
+            if result["part_count"]:
+                self.report(
+                    {"INFO"},
+                    f"{obj.name}: removed {result['part_count']} small loose part(s) "
+                    f"below {self.small_loose_part_threshold:g}%",
+                )
+            self.mesh_index += 1
+            self.stage = (
+                "REMOVE_SMALL_LOOSE_PARTS"
+                if self.mesh_index < len(targets)
+                else "UNWRAP_PASS"
+            )
         elif self.stage == "UNWRAP_PASS":
             self.restore_remesh_settings()
             targets = self.pass_outputs or self.pass_sources
@@ -1045,7 +1117,10 @@ class ImportQueue:
         if collection is None:
             raise RuntimeError("Separate saving could not find the completed Generated.N collection")
         output_path = generated_collection_output_path(bpy.data.filepath, collection.name)
+        working_path = bpy.data.filepath
         write_collection_blend(output_path, collection)
+        if bpy.data.filepath != working_path:
+            raise RuntimeError("Separate saving unexpectedly changed the working blend path")
 
         saved_object_count = len(self.meshes)
         removed_objects = list(collection.objects)
@@ -1109,7 +1184,10 @@ class ImportQueue:
             fraction = 0.94 + 0.045 * (
                 self.mesh_index + bake.bake_task_progress / 100.0
             ) / max(1, len(self.pass_sources))
-        if self.stage in {"PASS_SETUP", "REMESH", "WAIT_REMESH", "AUTOFIX_SECOND", "UNWRAP_PASS"}:
+        if self.stage in {
+            "PASS_SETUP", "REMESH", "WAIT_REMESH", "AUTOFIX_SECOND",
+            "REMOVE_SMALL_LOOSE_PARTS", "UNWRAP_PASS",
+        }:
             count = max(1, len(getattr(self, "passes", ())))
             completed = min(self.pass_index, count)
             within = 0.0
@@ -1117,6 +1195,10 @@ class ImportQueue:
                 within = 0.85 * (self.mesh_index + (remesh_progress or 0)) / len(self.pass_sources)
             elif self.stage == "UNWRAP_PASS":
                 within = 0.9
+            elif self.stage == "REMOVE_SMALL_LOOSE_PARTS":
+                within = 0.88 + 0.02 * self.mesh_index / max(
+                    1, len(self.pass_outputs or self.pass_sources),
+                )
             elif self.stage == "AUTOFIX_SECOND":
                 within = 0.85 + 0.05 * self.mesh_index / max(1, len(self.pass_outputs or self.pass_sources))
             fraction = 0.15 + 0.77 * (completed + within) / count
@@ -1307,4 +1389,68 @@ class OBJECT_OT_polygroups_import_control(bpy.types.Operator):
         else:
             settings.batch_cancel_requested = True
         redraw(context)
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_reset_import_state(bpy.types.Operator):
+    bl_idname = "object.polygroups_reset_import_state"
+    bl_label = "Reset Import State"
+    bl_description = "Stop stale processing and unlock Batch Import controls"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        global ACTIVE_QUEUE
+
+        if bpy.app.is_job_running("OBJECT_BAKE"):
+            self.report({"WARNING"}, "Cannot reset while Blender is actively baking")
+            return {"CANCELLED"}
+
+        queue = ACTIVE_QUEUE
+        reset_warning = ""
+        if queue is not None:
+            try:
+                queue.finish(context, "STOPPED")
+            except Exception as error:
+                reset_warning = str(error)
+                job = getattr(queue, "job", None)
+                if job is not None:
+                    try:
+                        job.abort()
+                    except Exception:
+                        pass
+                queue.finished = True
+            timer = getattr(queue, "timer", None)
+            if timer is not None:
+                try:
+                    context.window_manager.event_timer_remove(timer)
+                except Exception:
+                    pass
+                queue.timer = None
+            ACTIVE_QUEUE = None
+
+        from . import remesh_progress
+        if remesh_progress.ACTIVE_REMESH is not None:
+            try:
+                remesh_progress.stop_remesh()
+            except Exception as error:
+                reset_warning = reset_warning or str(error)
+                remesh_progress.ACTIVE_REMESH = None
+
+        reset_batch_import_settings(context.scene.polygroups_model_preparation_settings)
+        bake_settings = context.scene.polygroups_baking_settings
+        bake_settings.bake_task_is_running = False
+        bake_settings.bake_task_stage = ""
+        bake_settings.bake_task_progress = 0.0
+        bake_settings.bake_task_message = ""
+        remesh_status = context.scene.polygroups_remesh_status
+        remesh_status.is_running = False
+        remesh_status.cancel_requested = False
+        remesh_status.stage = ""
+        remesh_status.progress = 0.0
+        remesh_status.message = ""
+        redraw(context)
+        if reset_warning:
+            self.report({"WARNING"}, f"Import state reset after cleanup warning: {reset_warning}")
+        else:
+            self.report({"INFO"}, "Import processing state reset")
         return {"FINISHED"}
