@@ -1237,21 +1237,6 @@ def draw_batch_processing(content, context, settings):
     outside.enabled = editable
     outside.prop(settings, "batch_disable_view_assist", text=t(context, "disable_view_assist"))
     outside.prop(settings, "batch_separate_collections", text=t(context, "import_separate_collections"))
-    auto_save_row = content.row(align=True)
-    auto_save_row.enabled = editable
-    auto_save_row.prop(
-        settings,
-        "batch_auto_save",
-        text=t(context, "batch_auto_save"),
-        toggle=True,
-    )
-    interval = auto_save_row.row(align=True)
-    interval.enabled = settings.batch_auto_save
-    interval.prop(
-        settings,
-        "batch_auto_save_interval",
-        text=t(context, "batch_auto_save_every"),
-    )
 
     content.separator()
     content.label(text=t(context, "batch_stages"), icon="MODIFIER")
@@ -1468,6 +1453,46 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 "object.polygroups_save_blend_file",
                 text=t(context, "save_file"),
                 icon="FILE_TICK",
+            )
+
+            auto_save_row = content.row(align=True)
+            auto_save_row.enabled = (
+                not settings.batch_is_running
+                and not (
+                    settings.batch_save_generated_separately
+                    and settings.batch_separate_collections
+                )
+            )
+            auto_save_row.prop(
+                settings,
+                "batch_auto_save",
+                text=t(context, "batch_auto_save"),
+                toggle=True,
+            )
+            interval = auto_save_row.row(align=True)
+            interval.enabled = settings.batch_auto_save
+            interval.prop(
+                settings,
+                "batch_auto_save_interval",
+                text=t(context, "batch_auto_save_every"),
+            )
+
+            separate_save = content.column(align=True)
+            separate_save.enabled = not settings.batch_is_running
+            separate_save.prop(
+                settings,
+                "batch_save_generated_separately",
+                text=t(context, "batch_save_generated_separately"),
+                toggle=True,
+            )
+            separate_hint = separate_save.row()
+            separate_hint.alert = bool(
+                settings.batch_save_generated_separately
+                and (not settings.batch_separate_collections or not bpy.data.filepath)
+            )
+            separate_hint.label(
+                text=t(context, "batch_save_generated_separately_hint"),
+                icon="ERROR" if separate_hint.alert else "FILE_BLEND",
             )
             save_hint = content.row()
             save_hint.alert = not bool(bpy.data.filepath)

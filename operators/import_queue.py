@@ -86,6 +86,36 @@ def save_current_blend_file():
     return bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
 
 
+def generated_collection_output_path(blend_filepath, collection_name):
+    """Return the sibling blend path used for a numbered Generated collection."""
+    match = re.fullmatch(r"Generated\.(\d+)", collection_name or "")
+    if match is None:
+        raise ValueError("Separate saving requires a numbered Generated.N collection")
+    source = os.path.abspath(blend_filepath) if blend_filepath else ""
+    if not source:
+        raise ValueError("Save the working blend file before using separate collection saving")
+    stem, _extension = os.path.splitext(os.path.basename(source))
+    return os.path.join(
+        os.path.dirname(source),
+        f"{stem}_Generated_{match.group(1)}.blend",
+    )
+
+
+def write_collection_blend(filepath, collection):
+    """Write a directly openable blend containing one collection and its dependencies."""
+    export_scene = bpy.data.scenes.new(collection.name)
+    try:
+        export_scene.collection.children.link(collection)
+        bpy.data.libraries.write(
+            filepath,
+            {export_scene},
+            path_remap="RELATIVE_ALL",
+            compress=True,
+        )
+    finally:
+        bpy.data.scenes.remove(export_scene)
+
+
 def move_to_collection(objects, collection):
     for obj in objects:
         if obj.name not in collection.objects:
@@ -119,6 +149,8 @@ class ImportQueue:
         self.owned_objects = set()
         self.owned_collections = set()
         self.owned_meshes = set()
+        self.owned_materials = set()
+        self.owned_images = set()
         self.owned_gray_materials = set()
         self.owned_bake_materials = set()
         self.owned_bake_images = set()
@@ -160,6 +192,13 @@ class ImportQueue:
         self.auto_save_interval = max(1, settings.batch_auto_save_interval)
         self.successful_imports_since_save = 0
         self.auto_save_unsaved_warned = False
+        self.save_generated_separately = bool(
+            self.batch_stages
+            and self.separate
+            and settings.batch_save_generated_separately
+        )
+        self.separately_saved_count = 0
+        self.separately_saved_object_count = 0
         self.pause_after_each = bool(
             self.batch_stages and settings.batch_import_mode == "PAUSE_EACH"
         )
@@ -282,6 +321,11 @@ class ImportQueue:
         )
         self.auto_save = bool(self.batch_stages and settings.batch_auto_save)
         self.auto_save_interval = max(1, settings.batch_auto_save_interval)
+        self.save_generated_separately = bool(
+            self.batch_stages
+            and self.separate
+            and settings.batch_save_generated_separately
+        )
 
     def begin(self):
         self.timing = ImportTiming()
@@ -310,10 +354,10 @@ class ImportQueue:
         settings.batch_current_file = ""
         settings.batch_last_error = ""
         settings.batch_stage = "QUEUED"
-        if self.auto_save and not bpy.data.filepath:
+        if (self.auto_save or self.save_generated_separately) and not bpy.data.filepath:
             self.report(
                 {"WARNING"},
-                "Batch Auto Save is enabled, but the blend file has not been saved yet",
+                "Batch saving is enabled, but the blend file has not been saved yet",
             )
             self.auto_save_unsaved_warned = True
         self.update_timing()
@@ -455,12 +499,16 @@ class ImportQueue:
         before_objects = set(bpy.data.objects)
         before_collections = set(bpy.data.collections)
         before_meshes = set(bpy.data.meshes)
+        before_materials = set(bpy.data.materials)
+        before_images = set(bpy.data.images)
         try:
             return action()
         finally:
             self.owned_objects.update(set(bpy.data.objects) - before_objects)
             self.owned_collections.update(set(bpy.data.collections) - before_collections)
             self.owned_meshes.update(set(bpy.data.meshes) - before_meshes)
+            self.owned_materials.update(set(bpy.data.materials) - before_materials)
+            self.owned_images.update(set(bpy.data.images) - before_images)
 
     def select_source(self, context, obj):
         if context.object and context.object.mode != "OBJECT":
@@ -887,10 +935,14 @@ class ImportQueue:
                 self.restore_bake_settings()
                 self.stage = "COMPLETE"
         elif self.stage == "COMPLETE":
-            self.groups.append((self.meshes[0], list(self.file_objects)))
-            if self.arrange:
-                self.arrange_groups()
-            self.complete_file(success=True)
+            completed_object_count = len(self.meshes)
+            if self.save_generated_separately:
+                self.save_and_clear_completed_collection()
+            else:
+                self.groups.append((self.meshes[0], list(self.file_objects)))
+                if self.arrange:
+                    self.arrange_groups()
+            self.complete_file(success=True, object_count=completed_object_count)
             self.auto_save_successful_meshes()
         settings.batch_stage = self.stage
 
@@ -941,13 +993,15 @@ class ImportQueue:
                 obj.matrix_world = matrix
                 self.view_layer.update()
 
-    def complete_file(self, success):
+    def complete_file(self, success, object_count=None):
         self.timing.complete_file(success)
         if success:
             self.completed_collection = self.collection
             self.settings.batch_current_progress = 100
             self.settings.batch_imported_count += 1
-            self.settings.batch_imported_object_count += len(self.meshes)
+            self.settings.batch_imported_object_count += (
+                len(self.meshes) if object_count is None else object_count
+            )
         self.index += 1
         self.stage = "NEXT"
         self.settings.batch_stage = "NEXT"
@@ -958,6 +1012,8 @@ class ImportQueue:
         self.pause_after_next_file = False
 
     def auto_save_successful_meshes(self):
+        if self.save_generated_separately:
+            return
         if not self.auto_save:
             return
         self.successful_imports_since_save += 1
@@ -982,6 +1038,67 @@ class ImportQueue:
         self.successful_imports_since_save %= self.auto_save_interval
         self.auto_save_unsaved_warned = False
         self.report({"INFO"}, "Batch Import progress saved")
+
+    def save_and_clear_completed_collection(self):
+        """Export the successful Generated.N collection, then commit an empty placeholder."""
+        collection = self.collection
+        if collection is None:
+            raise RuntimeError("Separate saving could not find the completed Generated.N collection")
+        output_path = generated_collection_output_path(bpy.data.filepath, collection.name)
+        write_collection_blend(output_path, collection)
+
+        saved_object_count = len(self.meshes)
+        removed_objects = list(collection.objects)
+        for obj in removed_objects:
+            self.owned_objects.discard(obj)
+            bpy.data.objects.remove(obj, do_unlink=True)
+        for child in list(collection.children):
+            collection.children.unlink(child)
+
+        for mesh in list(self.owned_meshes):
+            if mesh.users == 0:
+                self.owned_meshes.discard(mesh)
+                bpy.data.meshes.remove(mesh)
+        material_sets = (
+            self.owned_materials,
+            self.owned_gray_materials,
+            self.owned_bake_materials,
+        )
+        for material in list(set().union(*material_sets)):
+            if material.users == 0:
+                for material_set in material_sets:
+                    material_set.discard(material)
+                bpy.data.materials.remove(material)
+        image_sets = (self.owned_images, self.owned_bake_images)
+        for image in list(set().union(*image_sets)):
+            if image.users == 0:
+                for image_set in image_sets:
+                    image_set.discard(image)
+                bpy.data.images.remove(image)
+
+        # This empty collection is now committed state and must survive a later queue cancel.
+        self.owned_collections.discard(collection)
+        self.file_objects = []
+        self.meshes = []
+        self.pass_sources = []
+        self.pass_outputs = []
+        self.result_meshes = []
+        self.separately_saved_count += 1
+        self.separately_saved_object_count += saved_object_count
+        try:
+            result = save_current_blend_file()
+        except Exception as error:
+            self.report(
+                {"WARNING"},
+                f"Saved {os.path.basename(output_path)}, but could not save the working file: {error}",
+            )
+        else:
+            if "FINISHED" not in result:
+                self.report(
+                    {"WARNING"},
+                    f"Saved {os.path.basename(output_path)}, but the working file save did not finish",
+                )
+        self.report({"INFO"}, f"Saved {os.path.basename(output_path)}")
 
     def update_progress(self, remesh_progress=None):
         fraction = {"NEXT": 0.0, "IMPORT": 0.0, "RENAME": 0.05,
@@ -1053,14 +1170,20 @@ class ImportQueue:
             for material in self.owned_bake_materials & set(bpy.data.materials):
                 if material.users == 0:
                     bpy.data.materials.remove(material)
+            for material in self.owned_materials & set(bpy.data.materials):
+                if material.users == 0:
+                    bpy.data.materials.remove(material)
             for image in self.owned_bake_images & set(bpy.data.images):
+                if image.users == 0:
+                    bpy.data.images.remove(image)
+            for image in self.owned_images & set(bpy.data.images):
                 if image.users == 0:
                     bpy.data.images.remove(image)
             for collection in self.owned_collections & set(bpy.data.collections):
                 if not collection.objects and not collection.children:
                     bpy.data.collections.remove(collection)
-            self.settings.batch_imported_count = 0
-            self.settings.batch_imported_object_count = 0
+            self.settings.batch_imported_count = self.separately_saved_count
+            self.settings.batch_imported_object_count = self.separately_saved_object_count
             self.settings.batch_import_progress = 0
             self.settings.batch_current_progress = 0
             self.settings.batch_remesh_progress = 0

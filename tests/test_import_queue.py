@@ -37,6 +37,7 @@ assert settings.batch_disable_view_assist and settings.file_import_disable_view_
 assert settings.batch_separate_collections and settings.file_import_separate_collections
 assert settings.batch_include_subfolders
 assert not settings.batch_auto_save and settings.batch_auto_save_interval == 5
+assert not settings.batch_save_generated_separately
 assert settings.batch_stage_2_enabled
 assert settings.batch_narrow_island_enabled
 assert settings.batch_small_islands_enabled

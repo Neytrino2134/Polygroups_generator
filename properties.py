@@ -420,6 +420,14 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         min=1,
         soft_max=100,
     )
+    batch_save_generated_separately: bpy.props.BoolProperty(
+        name="Save Generated Collections Separately",
+        description=(
+            "Save each successfully processed Generated.N collection beside the current blend file, "
+            "then leave that collection empty in the working file"
+        ),
+        default=False,
+    )
     batch_is_running: bpy.props.BoolProperty(
         name="Running",
         default=False,

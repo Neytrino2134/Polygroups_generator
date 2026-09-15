@@ -33,6 +33,7 @@ assert model.batch_separate_collections
 assert model.batch_include_subfolders
 assert not model.batch_auto_save
 assert model.batch_auto_save_interval == 5
+assert not model.batch_save_generated_separately
 assert model.file_import_auto_smart_uv_project
 assert not model.file_import_automatic_processing
 assert model.batch_auto_smart_uv_project
