@@ -70,4 +70,31 @@ assert bpy.ops.mesh.polygroups_repair_uv_stretch(
 bm = bmesh.from_edit_mesh(obj.data)
 bm.faces.ensure_lookup_table()
 assert len(bm.faces) == 1 and bm.faces[0].material_index == 1
+# A physically thin triangle with broad UVs attached to an island larger than
+# max_faces must be detected without marking its healthy neighbors.
+bm = bmesh.new()
+uv = bm.loops.layers.uv.new('UVMap')
+bottom = [bm.verts.new((x, 0, 0)) for x in range(9)]
+top = [bm.verts.new((x, 1, 0)) for x in range(9)]
+for x in range(8):
+    face = bm.faces.new((bottom[x], bottom[x+1], top[x+1], top[x]))
+    for loop in face.loops:
+        loop[uv].uv = (loop.vert.co.x, loop.vert.co.y)
+tip = bm.verts.new((.5, -.00001, 0))
+bad = bm.faces.new((bottom[1], bottom[0], tip))
+for loop, value in zip(bad.loops, ((1, 0), (0, 0), (.5, -1))):
+    loop[uv].uv = value
+bm.faces.ensure_lookup_table()
+bm.faces.index_update()
+artifacts = find_uv_artifacts(bm)
+assert {face for item in artifacts for face in item['faces']} == {bad}
+assert artifacts[0]['reason'] == 'thin_mesh_uv_expansion'
+# Uniform UV scaling cannot by itself turn this valid triangle into an artifact.
+tip.co.y = -1
+assert find_uv_artifacts(bm) == []
+tip.co.y = -.00001
+assert find_uv_artifacts(bm, selected_only=True) == []
+bad.select_set(True)
+assert len(find_uv_artifacts(bm, selected_only=True)) == 1
+bm.free()
 print('UV_ARTIFACT_CLEANUP_PASSED')

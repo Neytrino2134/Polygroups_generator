@@ -647,7 +647,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Percentage of the largest seam island area in each connected mesh component",
     )
     batch_small_island_protect_pinned: bpy.props.BoolProperty(
-        name="Ignore Pinned Edges", default=True,
+        name="Protect Pinned Edges", default=True,
         description="Never remove pinned seams during the batch merge",
     )
     batch_small_island_protect_sharp: bpy.props.BoolProperty(
@@ -726,7 +726,8 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Percentage of the largest seam island area in each connected mesh component",
     )
     batch_second_small_island_protect_pinned: bpy.props.BoolProperty(
-        name="Ignore Pinned Edges", default=True,
+        name="Protect Pinned Edges", default=True,
+        description="Never remove pinned seams during the batch merge",
     )
     batch_second_small_island_protect_sharp: bpy.props.BoolProperty(
         name="Protect Sharp Edges", default=True,
@@ -739,7 +740,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Remesh the result of the preceding enabled stage at the selected density",
     )
     batch_stage_4_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
-    batch_stage_4_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="LOW")
+    batch_stage_4_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
     batch_stage_4_use_materials: bpy.props.BoolProperty(name="Use Materials", default=True)
     batch_stage_4_prepare_polygroups: bpy.props.BoolProperty(name="Prepare Poly Groups", default=True)
     batch_stage_4_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
@@ -756,7 +757,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Pack final UV islands with UVPackmaster",
     )
     batch_autobake_enabled: bpy.props.BoolProperty(
-        name="Stage 10: Auto Bake", default=False,
+        name="Stage 10: Auto Bake", default=True,
         description="Bake final remeshes from their matching highpoly sources and save textures",
     )
     batch_autobake_cage_mode: bpy.props.EnumProperty(
@@ -1573,7 +1574,7 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
     small_island_selected_area: bpy.props.BoolProperty(
         name="Selected Area", description="Analyze only currently selected faces in Edit Mode", default=False)
     small_island_protect_pinned: bpy.props.BoolProperty(
-        name="Ignore Pinned Edges", description="Never select or remove pinned seams during analysis and merge", default=True)
+        name="Protect Pinned Edges", description="Never select or remove pinned seams during analysis and merge", default=True)
     small_island_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     material_mode: bpy.props.EnumProperty(
         name="Material Mode",
@@ -1838,6 +1839,12 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         name="Export",
         default=False,
     )
+    smart_decimate_triangle_limit: bpy.props.IntProperty(
+        name="Triangle Limit",
+        description="Automatically fit decimate ratios to this triangle budget; 0 uses manual ratios",
+        default=0,
+        min=0,
+    )
     smart_decimate_ratio: bpy.props.FloatProperty(
         name="Ratio",
         description="Decimate ratio for non-seam areas",
@@ -1964,6 +1971,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         name="Active Check Stage",
         items=(
             ("FIN_FACES", "Dangling Fin Polygons", "Find weakly attached fin-like polygons"),
+            ("DOUBLE_WALLS", "Zero-Thickness Double Walls", "Find coincident faces with opposite normals"),
             ("LOOSE_EDGES", "Loose Edges", "Find edges that do not belong to a face"),
             ("ISOLATED_VERTICES", "Isolated Vertices", "Find vertices not connected to an edge"),
             ("NGONS", "N-gons", "Find polygons with more than four sides"),
@@ -2000,6 +2008,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     mesh_check_zero_area_faces: bpy.props.IntProperty(default=0, min=0)
     mesh_check_duplicate_vertices: bpy.props.IntProperty(default=0, min=0)
     mesh_check_thin_protrusions: bpy.props.IntProperty(default=0, min=0)
+    mesh_check_double_walls: bpy.props.IntProperty(default=0, min=0)
 
 
 class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
@@ -2299,7 +2308,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     use_auto_cage: bpy.props.BoolProperty(
         name="AutoCage",
         description="Automatically calculate cage extrusion from selected highpoly and active lowpoly before baking",
-        default=False,
+        default=True,
         update=_auto_cage_mode_update,
     )
     auto_cage_coverage: bpy.props.FloatProperty(

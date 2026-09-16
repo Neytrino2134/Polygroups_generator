@@ -1,11 +1,13 @@
 """Detection and cleanup of tiny malformed UV islands."""
 import math
+from statistics import median
 
 import bmesh
 import bpy
 
 from .split_narrow_islands import island_graph
 from ..core.narrow_regions import components
+from ..core.double_walls import double_wall_groups
 
 
 def _triangle_metrics(triangle, uv):
@@ -38,8 +40,15 @@ def find_uv_artifacts(bm, max_faces=7, stretch_threshold=8.0,
     islands = components(graph, graph)
     result = []
     triangles_by_face = {}
+    metrics_by_face = {}
+    densities = []
     for triangle in bm.calc_loop_triangles():
         triangles_by_face.setdefault(triangle[0].face.index, []).append(triangle)
+        physical, mapped, stretch = _triangle_metrics(triangle, uv)
+        metrics_by_face.setdefault(triangle[0].face.index, []).append((physical, mapped, stretch))
+        if physical > 1e-20 and mapped > 1e-20 and math.isfinite(mapped / physical):
+            densities.append(mapped / physical)
+    reference_density = median(densities) if len(densities) >= 3 else None
     for indices in islands:
         if not indices or len(indices) > max_faces:
             continue
@@ -69,6 +78,44 @@ def find_uv_artifacts(bm, max_faces=7, stretch_threshold=8.0,
                 'stretch': worst_stretch, 'compactness': compactness,
                 'mesh_area': mesh_area, 'uv_area': uv_area,
             })
+    # A thin physical triangle can unwrap into a broad, regular UV triangle.
+    # It may belong to a large island, so inspect these faces independently of
+    # the island-size limit. Require both physical degeneracy and excessive UV
+    # area per mesh area to avoid removing deliberately scaled valid islands.
+    already_detected = {face for artifact in result for face in artifact['faces']}
+    if reference_density is not None:
+        for face in bm.faces:
+            if (face.index not in graph or face in already_detected or len(face.verts) != 3
+                    or (selected_only and not face.select)):
+                continue
+            physical, mapped, stretch = metrics_by_face[face.index][0]
+            if mapped <= 1e-12:
+                continue
+            mesh_perimeter = sum(edge.calc_length() for edge in face.edges)
+            mesh_compactness = (mesh_perimeter ** 2 / (4 * math.pi * physical)
+                                if physical > 1e-20 else math.inf)
+            density_ratio = (mapped / physical / reference_density
+                             if physical > 1e-20 else math.inf)
+            if (mesh_compactness >= compactness_threshold
+                    and density_ratio >= stretch_threshold ** 2):
+                result.append({
+                    'faces': {face}, 'face_count': 1, 'stretch': stretch,
+                    'compactness': mesh_compactness, 'mesh_area': physical,
+                    'uv_area': mapped, 'density_ratio': density_ratio,
+                    'reason': 'thin_mesh_uv_expansion',
+                })
+    for group in double_wall_groups(bm):
+        if selected_only and not any(face.select for face in group):
+            continue
+        # Keep both sides in one artifact so cleanup cannot leave a second wall.
+        for artifact in result:
+            artifact['faces'].difference_update(group)
+        result = [artifact for artifact in result if artifact['faces']]
+        result.append({
+            'faces': group, 'face_count': len(group), 'stretch': math.inf,
+            'compactness': math.inf, 'mesh_area': sum(face.calc_area() for face in group),
+            'uv_area': 0.0, 'reason': 'zero_thickness_double_wall',
+        })
     # Never erase or collapse the complete analyzed mesh. A lone tiny object may
     # simply be a valid asset with an absent/unfinished UV map rather than debris.
     detected_faces = {face for artifact in result for face in artifact['faces']}

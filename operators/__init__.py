@@ -34,6 +34,7 @@ from .baking import OBJECT_OT_polygroups_prepare_lowpoly_bake_material
 from .baking import OBJECT_OT_polygroups_save_blend_file
 from .baking import OBJECT_OT_polygroups_save_blend_file_as
 from .baking import OBJECT_OT_polygroups_save_bake_textures
+from .baking import OBJECT_OT_polygroups_restore_textures
 from .batch_import import AIRETOPO_FH_gltf
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .import_queue import OBJECT_OT_polygroups_import_control
@@ -143,6 +144,7 @@ from .render_queue import OBJECT_OT_polygroups_render_current_state
 from .render_queue import OBJECT_OT_polygroups_scan_render_queue
 from .render_queue import OBJECT_OT_polygroups_start_render_queue
 from .render_queue import OBJECT_OT_polygroups_stop_render_queue
+from .render_queue import OBJECT_OT_polygroups_reset_render_state
 from .render_resolution import RENDER_OT_polygroups_apply_resolution
 from .turnaround_animation import OBJECT_OT_polygroups_prepare_turnaround_animation
 from .turnaround_animation import OBJECT_OT_polygroups_render_turnaround_animation
@@ -262,6 +264,7 @@ CLASSES = (
     OBJECT_OT_polygroups_save_blend_file,
     OBJECT_OT_polygroups_save_blend_file_as,
     OBJECT_OT_polygroups_save_bake_textures,
+    OBJECT_OT_polygroups_restore_textures,
     OBJECT_OT_polygroups_merge_bake_textures,
     OBJECT_OT_polygroups_clear_bake_temp_images,
     OBJECT_OT_polygroups_add_multires,
@@ -284,6 +287,7 @@ CLASSES = (
     OBJECT_OT_polygroups_scan_render_queue,
     OBJECT_OT_polygroups_start_render_queue,
     OBJECT_OT_polygroups_stop_render_queue,
+    OBJECT_OT_polygroups_reset_render_state,
     RENDER_OT_polygroups_apply_resolution,
     OBJECT_OT_polygroups_clear_multiview_render,
     OBJECT_OT_polygroups_mark_freestyle_edges,

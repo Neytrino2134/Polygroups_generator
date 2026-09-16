@@ -34,6 +34,7 @@ BSDF_TEXTURE_INPUTS = {
 }
 
 TEXTURE_SUFFIX_PATTERNS = (
+    ("AlphaMap", ("alphamap", "alpha_map", "bake_alpha", "merged_alpha", "bake_alpha_mask")),
     ("BaseColor", ("basecolor", "base_color", "diffuse", "albedo", "color", "col", "alb")),
     ("Normal", ("normalmap", "normal_map", "normal", "normals", "nmap", "norm", "nor")),
     ("Roughness", ("roughness", "rough", "rou")),
@@ -137,6 +138,10 @@ def _texture_suffix(image, node):
         if item
     ).lower()
     text = text.replace("-", "_").replace(" ", "_")
+    # Coverage masks are separate from actual material opacity maps.
+    if any(re.search(rf"(^|_|\.){pattern}($|_|\.)", text)
+           for pattern in ("alphamap", "alpha_map", "bake_alpha", "merged_alpha")):
+        return "AlphaMap"
 
     for suffix, patterns in TEXTURE_SUFFIX_PATTERNS:
         for pattern in patterns:

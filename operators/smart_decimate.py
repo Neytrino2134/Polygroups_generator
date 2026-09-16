@@ -61,6 +61,12 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
     bl_description = "Decimate seam vertices and non-seam areas with separate ratios"
     bl_options = {"REGISTER", "UNDO"}
 
+    triangle_limit: bpy.props.IntProperty(
+        name="Triangle Limit",
+        description="Automatically fit decimate ratios to this triangle budget; 0 uses manual ratios",
+        default=0,
+        min=0,
+    )
     ratio: bpy.props.FloatProperty(
         name="Ratio",
         description="Decimate ratio for non-seam areas",
@@ -151,6 +157,23 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
 
         _select_seam_edges(obj)
 
+        budget_suffix = ""
+        budget_unreached = False
+        if self.triangle_limit > 0:
+            from .smart_lods import _fit_ratios
+
+            triangles, body_ratio, seam_ratio = _fit_ratios(
+                obj, seams_modifier, modifier, self.triangle_limit,
+                context.evaluated_depsgraph_get(),
+            )
+            budget_unreached = triangles > self.triangle_limit
+            budget_suffix = (
+                f", {triangles}/{self.triangle_limit} tris "
+                f"(body {body_ratio:.3f}, seams {seam_ratio:.3f})"
+            )
+            if budget_unreached:
+                budget_suffix += "; triangle limit could not be reached"
+
         applied_suffix = ""
         if self.duplicate_and_apply:
             try:
@@ -164,10 +187,10 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="OBJECT")
 
         self.report(
-            {"INFO"},
+            {"WARNING"} if budget_unreached else {"INFO"},
             (
                 f"Seams Decimate and Smart Decimate added: {len(seam_vertex_indices)} seam "
-                f"vertex/vertices from {len(seam_edges)} seam edge(s){applied_suffix}"
+                f"vertex/vertices from {len(seam_edges)} seam edge(s){applied_suffix}{budget_suffix}"
             ),
         )
         return {"FINISHED"}

@@ -43,6 +43,16 @@ def redo_source(collection):
     return next((obj for obj in collection.objects if obj.type == "MESH" and obj.name == name), None)
 
 
+def active_highpoly_collection(context):
+    """Resolve only the selected active Highpoly_Generated.N mesh."""
+    source = context.active_object
+    if (source is None or source.type != "MESH" or not source.select_get()
+            or re.fullmatch(r"Highpoly_Generated\.(\d+)", source.name) is None):
+        return None
+    return next((collection for collection in source.users_collection
+                 if redo_source(collection) == source), None)
+
+
 def redo_collections(view_layer):
     from .generated_visibility import generated_paths
     return [path[-1].collection for path in generated_paths(view_layer)

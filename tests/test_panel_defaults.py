@@ -62,14 +62,14 @@ assert model.batch_second_small_islands_enabled
 assert model.batch_second_narrow_island_width == 3
 assert model.batch_second_narrow_island_max_width_percent == 6.0
 assert model.batch_second_small_island_threshold == 5.0
-assert not model.batch_autobake_enabled
+assert model.batch_autobake_enabled
 assert model.batch_autobake_cage_mode == "AUTO"
 assert model.batch_stage_3_remesh_preset == "MID"
 assert model.batch_stage_3_autofix_enabled
 assert model.batch_stage_3_autofix_fin_loose
 assert model.batch_stage_3_autofix_close_nonmanifold
 assert model.batch_stage_3_autofix_triangulate_ngons
-assert model.batch_stage_4_remesh_preset == "LOW"
+assert model.batch_stage_4_remesh_preset == "MID"
 assert model.batch_stage_3_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_4_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_3_smart_relax_edges
@@ -77,6 +77,7 @@ assert not model.batch_stage_4_smart_relax_edges
 assert model.batch_small_islands_enabled
 assert model.batch_small_island_threshold == 5.0
 assert model.batch_small_island_protect_pinned
+assert model.batch_second_small_island_protect_pinned
 assert model.batch_small_island_protect_sharp
 assert not model.batch_small_island_protect_materials
 assert all(getattr(model, f"batch_stage_{stage}_{option}")
@@ -172,7 +173,7 @@ assert model.batch_stage_3_autofix_enabled
 assert model.batch_stage_3_autofix_fin_loose
 assert model.batch_stage_3_autofix_close_nonmanifold
 assert model.batch_stage_3_autofix_triangulate_ngons
-assert model.batch_stage_4_remesh_preset == "LOW"
+assert model.batch_stage_4_remesh_preset == "MID"
 assert model.batch_stage_3_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_4_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_3_smart_relax_edges
@@ -183,7 +184,7 @@ assert model.batch_second_small_islands_enabled
 assert model.batch_second_narrow_island_width == 3
 assert model.batch_second_narrow_island_max_width_percent == 6.0
 assert model.batch_second_small_island_threshold == 5.0
-assert not model.batch_autobake_enabled
+assert model.batch_autobake_enabled
 assert model.batch_autobake_cage_mode == "AUTO"
 assert model.batch_small_islands_enabled
 assert model.batch_small_island_threshold == 5.0

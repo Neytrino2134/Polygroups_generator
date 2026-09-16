@@ -447,6 +447,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         options={"HIDDEN", "SKIP_SAVE"},
     )
     redo_collection_name: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
+    do_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     directory: bpy.props.StringProperty(
         subtype="DIR_PATH",
         options={"HIDDEN"},
@@ -490,13 +491,19 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         from .remesh_progress import ACTIVE_REMESH
 
         settings = context.scene.polygroups_model_preparation_settings
-        if settings.batch_import_format == "BLEND":
+        if settings.batch_import_format == "BLEND" and not (self.do_selected or self.redo_collection_name):
             self.report({"WARNING"}, "Use Append Generated Collections for Blend format")
             return {"CANCELLED"}
         if import_queue.ACTIVE_QUEUE is not None or ACTIVE_REMESH is not None:
             self.report({"WARNING"}, "An import queue or Remesh is already running")
             return {"CANCELLED"}
         redo_collection_name = getattr(self, "redo_collection_name", "")
+        if self.do_selected:
+            collection = import_queue.active_highpoly_collection(context)
+            if collection is None:
+                self.report({"ERROR"}, "Select a Highpoly_Generated.N mesh in its matching Generated.N collection")
+                return {"CANCELLED"}
+            redo_collection_name = collection.name
         file_selection = self.use_file_selection and not redo_collection_name
         try:
             redo_collection = None
@@ -539,7 +546,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
     def invoke(self, context, event):
         from ..core.remesh_cursor import update_remesh_cursor
         update_remesh_cursor(context, event)
-        if self.use_file_selection and not self.redo_collection_name:
+        if self.use_file_selection and not self.redo_collection_name and not self.do_selected:
             return ImportHelper.invoke_popup(self, context)
         return self.execute(context)
 

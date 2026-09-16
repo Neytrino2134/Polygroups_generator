@@ -3,6 +3,7 @@ from collections import defaultdict
 import bpy
 import bmesh
 from mathutils import Vector
+from ..core.double_walls import double_wall_groups
 
 
 ZERO_AREA_EPSILON = 0.00000001
@@ -12,6 +13,7 @@ STATUS_NOT_CHECKED = "Not checked"
 
 MESH_CHECK_STAGES = (
     "FIN_FACES",
+    "DOUBLE_WALLS",
     "LOOSE_EDGES",
     "ISOLATED_VERTICES",
     "NGONS",
@@ -21,6 +23,7 @@ MESH_CHECK_STAGES = (
 
 STAGE_LABELS = {
     "FIN_FACES": "Dangling Fin Polygons",
+    "DOUBLE_WALLS": "Zero-Thickness Double Walls",
     "LOOSE_EDGES": "Loose Edges",
     "ISOLATED_VERTICES": "Isolated Vertices",
     "NGONS": "N-gons",
@@ -30,6 +33,7 @@ STAGE_LABELS = {
 
 STAGE_COUNT_PROPERTIES = {
     "FIN_FACES": "mesh_check_thin_protrusions",
+    "DOUBLE_WALLS": "mesh_check_double_walls",
     "LOOSE_EDGES": "mesh_check_loose_edges",
     "ISOLATED_VERTICES": "mesh_check_loose_vertices",
     "NGONS": "mesh_check_ngons",
@@ -229,6 +233,7 @@ def _fixable_issue_total(result):
             "zero_area_faces",
             "duplicate_vertices",
             "thin_protrusions",
+            "double_walls",
         )
         if result.get(key, 0) > 0
     )
@@ -281,6 +286,7 @@ def analyze_mesh(obj):
         "duplicate_vertices": _duplicate_vertex_count(mesh),
         "thin_protrusions": len(_thin_protrusion_faces(mesh, edge_to_faces)),
     }
+    result["double_walls"] = len(_double_wall_indices(mesh))
     return result
 
 
@@ -289,6 +295,7 @@ def _stage_issue_count(result, stage):
         return result["normal_issues"]
     result_key = {
         "FIN_FACES": "thin_protrusions",
+        "DOUBLE_WALLS": "double_walls",
         "LOOSE_EDGES": "loose_edges",
         "ISOLATED_VERTICES": "loose_vertices",
         "NGONS": "ngons",
@@ -309,6 +316,8 @@ def analyze_mesh_stage(obj, stage):
     """Analyze just one guided stage so each Scan button is an independent pass."""
     mesh = obj.data
     mesh.update(calc_edges=True)
+    if stage == "DOUBLE_WALLS":
+        return {"double_walls": len(_double_wall_indices(mesh))}
 
     if stage == "NGONS":
         return {"ngons": sum(1 for polygon in mesh.polygons if len(polygon.vertices) > 4)}
@@ -360,6 +369,16 @@ def _scan_stage(context, obj, stage):
     label = STAGE_LABELS[stage]
     settings.mesh_check_status = f"{label}: found {count}" if count else f"{label}: OK"
     return count
+
+
+def _double_wall_indices(mesh):
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(mesh)
+        bm.faces.index_update()
+        return {face.index for group in double_wall_groups(bm) for face in group}
+    finally:
+        bm.free()
 
 
 def _delete_fin_faces(context, obj):
@@ -453,6 +472,8 @@ def _fix_normals(context, obj):
 
 def _fix_stage(context, obj, stage):
     _ensure_object_mode(obj)
+    if stage == "DOUBLE_WALLS":
+        return _delete_faces_by_indices(context, obj, sorted(_double_wall_indices(obj.data)))
     if stage == "FIN_FACES":
         return _delete_fin_faces(context, obj)
     if stage == "LOOSE_EDGES":
@@ -480,6 +501,7 @@ def _store_result(settings, result):
     settings.mesh_check_zero_area_faces = result["zero_area_faces"]
     settings.mesh_check_duplicate_vertices = result["duplicate_vertices"]
     settings.mesh_check_thin_protrusions = result["thin_protrusions"]
+    settings.mesh_check_double_walls = result["double_walls"]
 
     total = _fixable_issue_total(result)
     if total == 0:

@@ -1039,6 +1039,54 @@ class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
         return {"FINISHED"}
 
 
+_ACTIVE_QUEUE_TASK = None
+
+
+class OBJECT_OT_polygroups_reset_render_state(bpy.types.Operator):
+    bl_idname = "object.polygroups_reset_render_state"
+    bl_label = "Reset Render State"
+    bl_description = "Clean up stale render tasks and unlock animation and render queue controls"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        global _ACTIVE_QUEUE_TASK
+        from . import turnaround_animation
+
+        if bpy.app.is_job_running("RENDER"):
+            self.report({"WARNING"}, "Wait for the active render to finish or cancel it before resetting")
+            return {"CANCELLED"}
+        warnings = []
+        task = turnaround_animation._ACTIVE_RENDER_TASK
+        if task is not None:
+            try:
+                task._finish(completed=False)
+            except Exception as error:
+                warnings.append(str(error))
+            finally:
+                task._finished = True
+                turnaround_animation._ACTIVE_RENDER_TASK = None
+        task = _ACTIVE_QUEUE_TASK
+        if task is not None:
+            try:
+                task._finish(context, "Render state reset")
+            except Exception as error:
+                warnings.append(str(error))
+            finally:
+                task._reset = True
+                _ACTIVE_QUEUE_TASK = None
+        settings = context.scene.polygroups_render_settings
+        settings.is_running = False
+        settings.stop_requested = False
+        settings.status = "Render state reset"
+        settings.animation_status = "Render state reset"
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                area.tag_redraw()
+        self.report({"WARNING"} if warnings else {"INFO"},
+                    "Render state reset" + (": " + "; ".join(warnings) if warnings else ""))
+        return {"FINISHED"}
+
+
 class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
     bl_idname = "object.polygroups_start_render_queue"
     bl_label = "Start Render Queue"
@@ -1056,6 +1104,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         return not settings.is_running
 
     def invoke(self, context, event):
+        global _ACTIVE_QUEUE_TASK
         del event
         settings = context.scene.polygroups_render_settings
         _normalize_render_output_setting(settings)
@@ -1085,12 +1134,16 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         self._visibility_snapshot = _snapshot_visibility()
         self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
         context.window_manager.modal_handler_add(self)
+        self._reset = False
+        _ACTIVE_QUEUE_TASK = self
         return {"RUNNING_MODAL"}
 
     def execute(self, context):
         return self.invoke(context, None)
 
     def modal(self, context, event):
+        if getattr(self, "_reset", False):
+            return {"CANCELLED"}
         settings = context.scene.polygroups_render_settings
         if event.type != "TIMER":
             return {"PASS_THROUGH"}
@@ -1139,6 +1192,10 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         return {"RUNNING_MODAL"}
 
     def _finish(self, context, status):
+        global _ACTIVE_QUEUE_TASK
+        self._reset = True
+        if _ACTIVE_QUEUE_TASK is self:
+            _ACTIVE_QUEUE_TASK = None
         settings = context.scene.polygroups_render_settings
         if self._timer is not None:
             context.window_manager.event_timer_remove(self._timer)

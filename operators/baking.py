@@ -472,7 +472,7 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
         target,
         settings,
         BAKE_ALPHA_IMAGE_PROP,
-        "Alpha",
+        "AlphaMap",
         "Non-Color",
         generated_color=(0.0, 0.0, 0.0, 1.0),
         source_prop_name=BAKE_SOURCE_ALPHA_IMAGE_PROP if update_source_images else None,
@@ -498,7 +498,7 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
     if alpha_node is None:
         alpha_node = nodes.new("ShaderNodeTexImage")
         alpha_node.name = BAKE_ALPHA_NODE
-        alpha_node.label = "Bake Alpha Mask"
+        alpha_node.label = "Bake AlphaMap (Merge Mask)"
         alpha_node.location = (-560, -340)
     alpha_node.image = alpha_image
 
@@ -628,6 +628,8 @@ def _find_object_source_bake_image(target, settings, node_name, current_prop_nam
         return image
 
     image = bpy.data.images.get(_bake_data_name(settings, target, suffix))
+    if image is None and suffix == "AlphaMap":
+        image = bpy.data.images.get(_bake_data_name(settings, target, "Alpha"))
     if image is not None:
         target[source_prop_name] = image.name
         return image
@@ -842,7 +844,7 @@ def _finalize_bake_images(target, settings):
         target,
         settings,
         BAKE_ALPHA_IMAGE_PROP,
-        "Alpha",
+        "AlphaMap",
         "Non-Color",
         generated_color=(0.0, 0.0, 0.0, 1.0),
         source_prop_name=BAKE_SOURCE_ALPHA_IMAGE_PROP,
@@ -886,7 +888,7 @@ def _collect_bake_texture_packs(objects, settings):
             BAKE_ALPHA_NODE,
             BAKE_ALPHA_IMAGE_PROP,
             BAKE_SOURCE_ALPHA_IMAGE_PROP,
-            "Alpha",
+            "AlphaMap",
         )
         if alpha_image is None or (base_image is None and normal_image is None):
             continue
@@ -1097,7 +1099,7 @@ def _ensure_merged_material(pack_name, base_image, normal_image, alpha_image, ob
     if alpha_node is None:
         alpha_node = nodes.new("ShaderNodeTexImage")
         alpha_node.name = BAKE_ALPHA_NODE
-        alpha_node.label = "Merged Alpha Mask"
+        alpha_node.label = "Merged AlphaMap (Merge Mask)"
         alpha_node.location = (-560, -340)
     alpha_node.image = alpha_image
 
@@ -1448,12 +1450,98 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             saved_paths.append(filepath)
 
         if alpha_image is not None:
-            filepath = os.path.join(output_dir, f"{output_name}_Bake_Alpha.png")
+            filepath = os.path.join(output_dir, f"{output_name}_Bake_AlphaMap.png")
             _save_image_as_png(alpha_image, filepath)
             saved_paths.append(filepath)
 
         self.report({"INFO"}, f"Saved {len(saved_paths)} texture(s) to {output_dir}")
         return {"FINISHED"}
+
+
+def _connected_texture_nodes(node_tree, output_type="OUTPUT_MATERIAL", visited=None):
+    """Find image nodes upstream of material outputs, including node groups."""
+    visited = set() if visited is None else visited
+    if node_tree is None or node_tree in visited:
+        return []
+    visited.add(node_tree)
+    pending = [node for node in node_tree.nodes if node.type == output_type
+               and getattr(node, "is_active_output", True)]
+    seen = set()
+    textures = []
+    while pending:
+        node = pending.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        if node.type == "TEX_IMAGE" and node.image is not None:
+            textures.append(node)
+        if node.type == "GROUP":
+            textures.extend(_connected_texture_nodes(node.node_tree, "GROUP_OUTPUT", visited))
+        for socket in node.inputs:
+            pending.extend(link.from_node for link in socket.links)
+    return textures
+
+
+class OBJECT_OT_polygroups_restore_textures(bpy.types.Operator):
+    bl_idname = "object.polygroups_restore_textures"
+    bl_label = "Restore Textures"
+    bl_description = "Save connected material textures of selected objects to Bakes, overwrite files and reconnect saved images"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        settings = context.scene.polygroups_baking_settings
+        return bool(context.selected_objects) and not settings.bake_task_is_running
+
+    def execute(self, context):
+        if not bpy.data.filepath:
+            self.report({"ERROR"}, "Save the blend file first")
+            return {"CANCELLED"}
+        materials = {slot.material for obj in context.selected_objects
+                     for slot in obj.material_slots if slot.material is not None}
+        images = {}
+        for material in materials:
+            for node in _connected_texture_nodes(material.node_tree):
+                images.setdefault(node.image, set()).add(node)
+        if not images:
+            self.report({"WARNING"}, "No connected material textures found on selected objects")
+            return {"CANCELLED"}
+        output_dir = os.path.join(os.path.dirname(bpy.data.filepath), "Bakes")
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except OSError as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+        saved = 0
+        failures = []
+        used_names = set()
+        for image, nodes in sorted(images.items(), key=lambda item: item[0].name):
+            stem = _safe_path_name(os.path.splitext(image.name)[0])
+            filename = stem + ".png"
+            suffix = 2
+            while filename.casefold() in used_names:
+                filename = f"{stem}_{suffix}.png"
+                suffix += 1
+            used_names.add(filename.casefold())
+            filepath = os.path.join(output_dir, filename)
+            old_path, old_format = image.filepath_raw, image.file_format
+            try:
+                if image.source not in {"FILE", "GENERATED"} or not image.has_data:
+                    raise ValueError("Image has no available pixels or is not a single texture")
+                _save_image_as_png(image, filepath)
+                if image.packed_file is not None:
+                    image.unpack(method="REMOVE")
+                image.source = "FILE"
+                for node in nodes:
+                    node.image = image
+                saved += 1
+            except Exception as error:
+                image.filepath_raw, image.file_format = old_path, old_format
+                failures.append(f"{image.name}: {error}")
+        if failures:
+            self.report({"WARNING"}, "; ".join(failures))
+        self.report({"INFO"}, f"Restored {saved} texture(s) to {output_dir}")
+        return {"FINISHED"} if saved else {"CANCELLED"}
 
 
 class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
@@ -1505,7 +1593,7 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
             (0.5, 0.5, 1.0, 1.0),
         )
         alpha_image = _ensure_output_image(
-            _bake_pack_data_name(settings, pack_name, "Merged_Alpha"),
+            _bake_pack_data_name(settings, pack_name, "Merged_AlphaMap"),
             resolution,
             "Non-Color",
             (0.0, 0.0, 0.0, 1.0),

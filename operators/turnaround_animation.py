@@ -510,7 +510,9 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
                 self._mouse_x = event.mouse_x - region.x
                 self._mouse_y = event.mouse_y - region.y
                 self._area.tag_redraw()
-        if event.type == "TIMER" and event.timer == self._timer:
+        # Blender events expose no timer handle. Progress refresh is idempotent,
+        # so TIMER events from other modal tools can safely refresh it too.
+        if event.type == "TIMER":
             self._refresh_progress()
             if self._render_completed or self._render_cancelled:
                 return self._finish(completed=self._render_completed)

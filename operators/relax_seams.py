@@ -115,6 +115,12 @@ class MESH_OT_polygroups_relax_seams(bpy.types.Operator):
         default="SETTINGS",
         options={"HIDDEN", "SKIP_SAVE"},
     )
+    selected_seams_only: bpy.props.BoolProperty(
+        name="Selected Seams Only",
+        description="Smart relax only selected seam edges, keeping the selection and unselected seam vertices unchanged",
+        default=False,
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
 
     @classmethod
     def poll(cls, context):
@@ -122,14 +128,27 @@ class MESH_OT_polygroups_relax_seams(bpy.types.Operator):
 
     def execute(self, context):
         settings = context.scene.polygroups_seam_preparation_settings
+        selected_edges = None
+        if self.selected_seams_only:
+            bm = bmesh.from_edit_mesh(context.edit_object.data)
+            selected_edges = {edge for edge in bm.edges
+                              if edge.seam and edge.select and not edge.hide}
+            if not selected_edges:
+                self.report({"WARNING"}, "Select seam edges to smart relax")
+                return {"CANCELLED"}
         moved, protected = relax_seams(
             context,
-            settings.seam_relax_mode if self.mode_override == "SETTINGS" else self.mode_override,
+            "SMART" if self.selected_seams_only else (
+                settings.seam_relax_mode if self.mode_override == "SETTINGS" else self.mode_override
+            ),
             settings.seam_relax_iterations,
             settings.seam_relax_corner_angle,
             settings.seam_relax_protection_radius,
             settings.seam_relax_use_corner_angle,
-            selected_area_only=settings.seam_relax_selected_area_only,
+            select_result=not self.selected_seams_only,
+            selected_area_only=(settings.seam_relax_selected_area_only
+                                and not self.selected_seams_only),
+            relax_edges=selected_edges,
         )
         if not moved:
             self.report({"WARNING"}, "No relaxable seam chain vertices found")

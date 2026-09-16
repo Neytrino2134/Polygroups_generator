@@ -1624,6 +1624,24 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 expand=True,
             )
 
+            from .operators.import_queue import active_highpoly_collection
+
+            selected_row = content.row(align=True)
+            selected_row.enabled = (
+                not settings.batch_is_running
+                and active_highpoly_collection(context) is not None
+            )
+            selected_row.operator_context = "EXEC_DEFAULT"
+            do_selected = selected_row.operator(
+                "object.polygroups_batch_import",
+                text=t(context, "batch_do_selected"),
+                icon="PLAY",
+            )
+            do_selected.use_file_selection = False
+            do_selected.do_selected = True
+            selected_hint = content.row()
+            selected_hint.label(text=t(context, "batch_do_selected_hint"), icon="OUTLINER_OB_MESH")
+
             operator_row = content.row(align=True)
             operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
             operator_row.operator_context = "EXEC_DEFAULT"
@@ -1964,6 +1982,10 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
                 "mesh.polygroups_relax_seams",
                 text=t(context, "seam_relax"), icon="MOD_SMOOTH",
             )
+            relax_column.operator(
+                "mesh.polygroups_relax_seams",
+                text=t(context, "smart_relax_selected_seams"), icon="MOD_SMOOTH",
+            ).selected_seams_only = True
 
         content = draw_topic(layout, context, "seam_prep_7", "seam_group_cut", "MOD_BEVEL")
         if content is not None:
@@ -2682,6 +2704,11 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 "object.polygroups_save_bake_textures",
                 text=t(context, "save_textures"),
                 icon="FILE_FOLDER",
+            )
+            save_box.operator(
+                "object.polygroups_restore_textures",
+                text=t(context, "restore_textures"),
+                icon="FILE_REFRESH",
             )
             save_box.operator(
                 "object.polygroups_merge_bake_textures",
@@ -3411,13 +3438,16 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             "smart_decimate_duplicate_and_apply",
             text=t(context, "duplicate_and_apply_decimate"),
         )
-        column.prop(
+        column.prop(settings, "smart_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))
+        ratios = column.column(align=True)
+        ratios.enabled = settings.smart_decimate_triangle_limit == 0
+        ratios.prop(
             settings,
             "smart_decimate_ratio",
             text=t(context, "ratio"),
             slider=True,
         )
-        column.prop(
+        ratios.prop(
             settings,
             "smart_decimate_seams_ratio",
             text=t(context, "seams_decimate_ratio"),
@@ -3429,6 +3459,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             icon="MOD_DECIM",
         )
         smart_decimate_operator.ratio = settings.smart_decimate_ratio
+        smart_decimate_operator.triangle_limit = settings.smart_decimate_triangle_limit
         smart_decimate_operator.seams_ratio = settings.smart_decimate_seams_ratio
         smart_decimate_operator.duplicate_and_apply = (
             settings.smart_decimate_duplicate_and_apply
@@ -3478,6 +3509,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         normal_total = settings.mesh_check_inconsistent_normals + settings.mesh_check_inward_normals
         stages = (
             ("FIN_FACES", "mesh_check_stage_fin_faces", settings.mesh_check_thin_protrusions, "FACESEL"),
+            ("DOUBLE_WALLS", "mesh_check_stage_double_walls", settings.mesh_check_double_walls, "FACESEL"),
             ("LOOSE_EDGES", "mesh_check_stage_loose_edges", settings.mesh_check_loose_edges, "EDGESEL"),
             ("ISOLATED_VERTICES", "mesh_check_stage_isolated_vertices", settings.mesh_check_loose_vertices, "VERTEXSEL"),
             ("NGONS", "mesh_check_stage_ngons", settings.mesh_check_ngons, "MOD_TRIANGULATE"),
@@ -3730,6 +3762,9 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 icon="CANCEL",
             )
 
+            column.operator("object.polygroups_reset_render_state",
+                            text=t(context, "render_reset_state"), icon="FILE_REFRESH")
+
         content = draw_topic(layout, context, "render_1", 'Quality and Output', "PREFERENCES")
         if content is not None:
             column = content.column(align=True)
@@ -3849,6 +3884,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                     text=f"{settings.animation_progress:.0f}%",
                 )
             column.label(text=t(context, "animation_status", value=settings.animation_status))
+            column.operator("object.polygroups_reset_render_state",
+                            text=t(context, "render_reset_state"), icon="FILE_REFRESH")
             if settings.animation_last_output:
                 column.label(text=t(context, "animation_output", value=settings.animation_last_output), icon="FILE_MOVIE")
 
@@ -4149,6 +4186,11 @@ def draw_edit_select_tool_actions(self, context):
         text=t(context, "cutter_auto_fix_smart_relax_seams"),
         icon="MOD_SMOOTH",
     ).mode_override = "SMART"
+    layout.operator(
+        "mesh.polygroups_relax_seams",
+        text=t(context, "smart_relax_selected_seams"),
+        icon="MOD_SMOOTH",
+    ).selected_seams_only = True
     pin_row = layout.row(align=True)
     pin_row.operator(
         "mesh.polygroups_pin_selected_seams",

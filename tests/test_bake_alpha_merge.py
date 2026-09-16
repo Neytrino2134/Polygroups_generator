@@ -128,6 +128,6 @@ with tempfile.TemporaryDirectory() as directory:
     output_dir = Path(directory) / "Bakes" / output_name
     assert (output_dir / f"{output_name}_Bake_BaseColor.png").is_file()
     assert (output_dir / f"{output_name}_Bake_Normal.png").is_file()
-    assert (output_dir / f"{output_name}_Bake_Alpha.png").is_file()
+    assert (output_dir / f"{output_name}_Bake_AlphaMap.png").is_file()
 
 print("BAKE ALPHA MERGE PASSED")
