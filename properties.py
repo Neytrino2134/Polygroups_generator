@@ -65,7 +65,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_remesh_section": ("topic_remesh_0", "topic_remesh_1"),
     "show_resculpting_section": ("topic_sculpt_0", "topic_sculpt_1"),
     "show_seam_finalization_section": tuple(f"topic_seam_final_{index}" for index in range(6)),
-    "show_uv_preparation_section": ("topic_uv_0", "topic_uv_2", "topic_uv_1"),
+    "show_uv_preparation_section": ("topic_uv_0", "topic_uv_3", "topic_uv_2", "topic_uv_1"),
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
@@ -843,6 +843,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_uv_0: bpy.props.BoolProperty(default=False)
     topic_uv_1: bpy.props.BoolProperty(default=False)
     topic_uv_2: bpy.props.BoolProperty(default=False)
+    topic_uv_3: bpy.props.BoolProperty(default=False)
     topic_sculpt_0: bpy.props.BoolProperty(default=False)
     topic_sculpt_1: bpy.props.BoolProperty(default=False)
     topic_seam_final_0: bpy.props.BoolProperty(default=False)
@@ -1549,6 +1550,72 @@ class POLYGROUPS_PG_polygroups_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
+    uv_repair_threshold: bpy.props.FloatProperty(
+        name="Critical Stretch Ratio", default=4.0, min=1.1, max=1000.0,
+    )
+    uv_repair_grow_threshold: bpy.props.FloatProperty(
+        name="Region Growth Ratio", default=1.8, min=1.01, max=1000.0,
+    )
+    uv_repair_min_faces: bpy.props.IntProperty(
+        name="Minimum Region Faces", default=6, min=1,
+    )
+    uv_repair_smooth_steps: bpy.props.IntProperty(
+        name="Boundary Smoothing", default=2, min=0, max=20,
+    )
+    uv_repair_surface_angle: bpy.props.FloatProperty(
+        name="Surface Angle", default=radians(75.0), subtype="ANGLE", min=0.0, max=radians(180.0),
+    )
+    uv_repair_sharp_preference: bpy.props.FloatProperty(
+        name="Prefer Sharp Longitudinal Edges", default=3.0, min=0.0, max=20.0,
+    )
+    uv_repair_selected_only: bpy.props.BoolProperty(name="Selected Faces Only", default=False)
+    uv_repair_create_edges: bpy.props.BoolProperty(
+        name="Create New Edges", default=False,
+        description="Allow smart routing to split faces when it improves the seam path",
+    )
+    uv_repair_pin_generated: bpy.props.BoolProperty(name="Pin Generated Seams", default=True)
+    uv_repair_merge_small_islands: bpy.props.BoolProperty(
+        name="Merge Small UV Islands", default=True,
+        description="Locally merge small islands made by this repair before generated seams are pinned",
+    )
+    uv_repair_small_island_threshold: bpy.props.FloatProperty(
+        name="Small Island Area (%)", default=3.0, min=0.0, max=49.0, precision=2,
+        description="Maximum island area as a percentage of its repaired region, not of the whole mesh",
+    )
+    uv_repair_average_island_scale: bpy.props.BoolProperty(
+        name="Average Island Scale", default=False,
+        description="Average texel density across all UV islands after repairing and unwrapping",
+    )
+    uv_repair_native_pack: bpy.props.BoolProperty(
+        name="Native Blender Pack", default=False,
+        description="Pack all UV islands with Blender's native Pack Islands after repair",
+    )
+    uv_repair_cleanup_artifacts: bpy.props.BoolProperty(
+        name="Clean UV Artifacts During Repair", default=False,
+        description="Run tiny malformed UV island cleanup as the first Smart UV Repair step",
+    )
+    uv_repair_artifact_method: bpy.props.EnumProperty(
+        name="Artifact Fix Method",
+        items=(
+            ('DELETE', 'Delete Faces', 'Delete artifact faces from mesh geometry'),
+            ('MERGE_CENTER', 'Merge to Center', 'Collapse each connected artifact to its center'),
+        ),
+        default='DELETE',
+    )
+    uv_repair_artifact_max_faces: bpy.props.IntProperty(
+        name="Maximum Island Faces", default=7, min=1, max=100,
+    )
+    uv_repair_artifact_stretch: bpy.props.FloatProperty(
+        name="Artifact Stretch", default=8.0, min=1.1, max=10000.0,
+    )
+    uv_repair_artifact_compactness: bpy.props.FloatProperty(
+        name="Needle Compactness", default=10.0, min=1.0, max=10000.0,
+        description="Detect tiny UV islands with a long perimeter compared with their UV area",
+    )
+    uv_repair_smart_relax: bpy.props.BoolProperty(
+        name="Smart Relax Generated", default=False,
+        description="Relax generated seam paths on the mesh surface; this can move mesh vertices",
+    )
     narrow_island_source: bpy.props.EnumProperty(
         name="Analyze",
         items=(

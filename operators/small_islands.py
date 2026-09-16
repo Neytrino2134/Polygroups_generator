@@ -17,7 +17,8 @@ def _is_pinned(edge, layer):
 
 
 def plan_merge(bm, threshold, protect_sharp=True, protect_materials=False,
-               selected_only=False, protect_pinned=True):
+               selected_only=False, protect_pinned=True,
+               threshold_basis='LARGEST', removable_edges=None):
     bm.faces.ensure_lookup_table()
     bm.edges.ensure_lookup_table()
     bm.faces.index_update()
@@ -53,11 +54,14 @@ def plan_merge(bm, threshold, protect_sharp=True, protect_materials=False,
     labels, regions = partition(False)
     areas = [sum(face.calc_area() for face in region) for region in regions]
     maxima = {}
+    totals = {}
     for index, region in enumerate(regions):
         component = components[region[0].index]
         maxima[component] = max(maxima.get(component, 0), areas[index])
+        totals[component] = totals.get(component, 0.0) + areas[index]
+    references = totals if threshold_basis == 'TOTAL' else maxima
     small = {i for i, region in enumerate(regions)
-             if areas[i] < maxima[components[region[0].index]] * threshold / 100}
+             if areas[i] < references[components[region[0].index]] * threshold / 100}
     parent = list(range(len(regions)))
     anchors = [None if i in small else i for i in range(len(regions))]
     adjacency = [dict() for _ in regions]
@@ -67,7 +71,8 @@ def plan_merge(bm, threshold, protect_sharp=True, protect_materials=False,
         a, b = (labels[face.index] for face in edge.link_faces)
         if a == b:
             continue
-        blocked = (protect_pinned and _is_pinned(edge, pins)) or (protect_sharp and not edge.smooth) or (
+        blocked = (removable_edges is not None and edge.index not in removable_edges) or (
+            protect_pinned and _is_pinned(edge, pins)) or (protect_sharp and not edge.smooth) or (
             protect_materials and edge.link_faces[0].material_index != edge.link_faces[1].material_index)
         data = adjacency[a].setdefault(b, [0.0, set(), False])
         data[0] += edge.calc_length()

@@ -1,3 +1,5 @@
+from .repair_uv_stretch import MESH_OT_polygroups_repair_uv_stretch, IMAGE_PT_polygroups_uv_repair
+from .uv_artifacts import MESH_OT_polygroups_uv_artifact_cleanup
 from .split_narrow_islands import (
     MESH_OT_polygroups_split_narrow_islands,
     IMAGE_PT_polygroups_narrow_islands,
@@ -194,6 +196,9 @@ from .dev_restart import (
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
+    MESH_OT_polygroups_repair_uv_stretch,
+    MESH_OT_polygroups_uv_artifact_cleanup,
+    IMAGE_PT_polygroups_uv_repair,
     MESH_OT_polygroups_split_narrow_islands,
     IMAGE_PT_polygroups_narrow_islands,
     WM_OT_airetopo_detach_group,

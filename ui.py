@@ -2718,6 +2718,67 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             )
             content.separator()
 
+        content = draw_topic(layout, context, "uv_3", "uv_repair", "UV")
+        if content is not None:
+            repair = context.scene.polygroups_seam_finalization_settings
+            column = content.column(align=True)
+            for name in (
+                "threshold", "grow_threshold", "min_faces", "smooth_steps",
+                "surface_angle", "selected_only", "sharp_preference",
+                "create_edges", "merge_small_islands", "small_island_threshold",
+                "pin_generated", "smart_relax", "average_island_scale", "native_pack",
+            ):
+                column.prop(repair, "uv_repair_" + name, text=t(context, "uv_repair_" + name))
+            column.separator()
+            column.operator_context = 'EXEC_DEFAULT'
+            for action, label, icon in (
+                ('SELECT', 'uv_repair_select', 'RESTRICT_SELECT_OFF'),
+                ('REPAIR', 'uv_repair_apply', 'UV'),
+            ):
+                button = column.operator(
+                    'mesh.polygroups_repair_uv_stretch', text=t(context, label), icon=icon,
+                )
+                button.action = action
+                button.threshold = repair.uv_repair_threshold
+                button.grow_threshold = repair.uv_repair_grow_threshold
+                button.min_faces = repair.uv_repair_min_faces
+                button.smooth_steps = repair.uv_repair_smooth_steps
+                button.surface_angle = repair.uv_repair_surface_angle
+                button.selected_only = repair.uv_repair_selected_only
+                button.sharp_preference = repair.uv_repair_sharp_preference
+                button.create_edges = repair.uv_repair_create_edges
+                button.merge_small_islands = repair.uv_repair_merge_small_islands
+                button.small_island_threshold = repair.uv_repair_small_island_threshold
+                button.pin_generated = repair.uv_repair_pin_generated
+                button.smart_relax = repair.uv_repair_smart_relax
+                button.average_island_scale = repair.uv_repair_average_island_scale
+                button.native_pack = repair.uv_repair_native_pack
+                button.cleanup_artifacts = repair.uv_repair_cleanup_artifacts
+                button.artifact_method = repair.uv_repair_artifact_method
+                button.artifact_max_faces = repair.uv_repair_artifact_max_faces
+                button.artifact_stretch = repair.uv_repair_artifact_stretch
+                button.artifact_compactness = repair.uv_repair_artifact_compactness
+            column.separator()
+            column.label(text=t(context, "uv_artifact_cleanup"), icon="MESH_DATA")
+            for name in (
+                "cleanup_artifacts", "artifact_method", "artifact_max_faces",
+                "artifact_stretch", "artifact_compactness",
+            ):
+                column.prop(repair, "uv_repair_" + name, text=t(context, "uv_repair_" + name))
+            for action, label, icon in (
+                ('SELECT', 'uv_artifact_select', 'RESTRICT_SELECT_OFF'),
+                ('APPLY', 'uv_artifact_apply', 'MESH_DATA'),
+            ):
+                button = column.operator(
+                    'mesh.polygroups_uv_artifact_cleanup', text=t(context, label), icon=icon,
+                )
+                button.action = action
+                button.method = repair.uv_repair_artifact_method
+                button.max_faces = repair.uv_repair_artifact_max_faces
+                button.stretch_threshold = repair.uv_repair_artifact_stretch
+                button.compactness_threshold = repair.uv_repair_artifact_compactness
+                button.selected_only = repair.uv_repair_selected_only
+
         content = draw_topic(layout, context, "uv_2", "narrow_island_splitter", "UV_EDGESEL")
         if content is not None:
             narrow = context.scene.polygroups_seam_finalization_settings
@@ -3146,6 +3207,7 @@ class VIEW3D_PT_polygroups_seam_finalization(bpy.types.Panel):
                 text=t(context, "boundary_longitudinal_seam"),
                 icon="EDGE_SEAM",
             )
+            column.operator("mesh.polygroups_repair_uv_stretch", text=t(context, "uv_repair"), icon="UV")
 
         content = draw_topic(layout, context, "seam_final_2", 'Seam Gap Check', "VIEWZOOM")
         if content is not None:
