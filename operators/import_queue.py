@@ -2,6 +2,10 @@
 
 import os
 import re
+import traceback
+import time
+
+from ..core.batch_report import BatchReport
 
 import bpy
 import bmesh
@@ -211,14 +215,35 @@ def write_collection_blend(filepath, collection):
     # 5.2 can crash in BKE_view_layer_copy_data when that partial write runs
     # from the modal Batch Import operator after baking. Save As Copy follows
     # Blender's regular full-file writer and does not change bpy.data.filepath.
-    result = bpy.ops.wm.save_as_mainfile(
-        filepath=filepath,
-        copy=True,
-        relative_remap=True,
-        check_existing=False,
-    )
-    if "FINISHED" not in result:
-        raise RuntimeError("Blender did not finish saving the Generated.N copy")
+    # Remove other generated datablocks, not merely their view-layer visibility.
+    # Keep empty placeholders in the working file for Restore Separate Retopo.
+    placeholders = []
+    for other in list(bpy.data.collections):
+        if other in set(bpy.data.collections) and other != collection and re.fullmatch(r"Generated(?:\.\d+)?", other.name):
+            placeholders.append(other.name)
+            for obj in list(other.all_objects):
+                if obj not in set(collection.all_objects):
+                    bpy.data.objects.remove(obj, do_unlink=True)
+            pending = [other]
+            hierarchy = []
+            while pending:
+                child = pending.pop()
+                if child not in hierarchy and child != collection:
+                    hierarchy.append(child)
+                    pending.extend(child.children)
+            for child in reversed(hierarchy):
+                if child.name in bpy.data.collections:
+                    bpy.data.collections.remove(child, do_unlink=True)
+    try:
+        result = bpy.ops.wm.save_as_mainfile(
+            filepath=filepath, copy=True, relative_remap=True, check_existing=False,
+        )
+        if "FINISHED" not in result:
+            raise RuntimeError("Blender did not finish saving the Generated.N copy")
+    finally:
+        for name in placeholders:
+            placeholder = bpy.data.collections.new(name)
+            bpy.context.scene.collection.children.link(placeholder)
 
 
 def move_to_collection(objects, collection):
@@ -236,7 +261,19 @@ class ImportQueue:
         self.scene = context.scene
         self.view_layer = context.view_layer
         self.settings = self.scene.polygroups_model_preparation_settings
-        self.report = report
+        self.batch_report = None
+        self.file_record = None
+        def audited_report(kind, message):
+            report(kind, message)
+            if self.batch_report is not None:
+                try:
+                    self.batch_report.event("message", {
+                        "file": self.files[self.index] if self.index < len(self.files) else None,
+                        "stage": self.stage, "level": sorted(kind), "message": str(message),
+                    })
+                except OSError:
+                    pass
+        self.report = audited_report
         self.files = list(files)
         self.redo_collection = redo_collection
         self.redo_mode = redo_collection is not None
@@ -449,6 +486,14 @@ class ImportQueue:
         )
 
     def begin(self):
+        directory = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else (
+            os.path.dirname(os.path.abspath(self.files[0])) if not self.redo_mode else bpy.app.tempdir
+        )
+        try:
+            self.batch_report = BatchReport(directory, self.files)
+            self.report({"INFO"}, f"Batch reports: {self.batch_report.directory}")
+        except OSError as error:
+            self.report({"WARNING"}, f"Cannot create batch reports: {error}")
         self.timing = ImportTiming()
         settings = self.settings
         # Import owns its UV workflow. Disable the seam/remesh automatic unwrap
@@ -499,6 +544,7 @@ class ImportQueue:
             raise RuntimeError("The selected Generated collection is not in this View Layer")
         self.collection = collection
         self.meshes = [source]
+        self.file_record["input_tris"] = self.count_tris(self.meshes)
         self.file_objects = [source]
         self.pass_sources = [source]
         self.configure_passes(context)
@@ -792,6 +838,17 @@ class ImportQueue:
                     path[-1].exclude = True
                 self.view_layer.update()
                 self.completed_collection = None
+            self.file_owned_before = {
+                kind: set(getattr(self, "owned_" + kind))
+                for kind in ("objects", "collections", "meshes", "materials", "images")
+            }
+            self.file_record = {
+                "file": self.files[self.index], "status": "processing",
+                "input_tris": None, "output_tris": None, "stages": [],
+                "started": time.time(),
+            }
+            self.last_logged_stage = None
+            self.pass_number = None
             self.file_objects = []
             self.meshes = []
             self.result_meshes = []
@@ -812,8 +869,23 @@ class ImportQueue:
             settings.batch_stage = self.stage
             return  # Give the panel a frame to display the next file.
         try:
+            stage_key = (self.stage, getattr(self, "pass_number", None), self.mesh_index)
+            if stage_key != self.last_logged_stage:
+                self.last_logged_stage = stage_key
+                event = {"stage": self.stage, "pass": stage_key[1],
+                         "mesh_index": self.mesh_index, "time": time.time()}
+                self.file_record["stages"].append(event)
+                self.write_batch_report("stage", event)
             self.advance(context)
         except Exception as error:
+            self.file_record.update(
+                error=str(error), error_type=type(error).__name__,
+                failed_stage=self.stage, failed_pass=getattr(self, "pass_number", None),
+                mesh_index=self.mesh_index, traceback=traceback.format_exc(),
+            )
+            if self.job and hasattr(self.job, "diagnostics"):
+                self.file_record["remesher"] = self.job.diagnostics()
+            self.write_batch_report("error", self.file_record)
             if self.job:
                 self.job.abort()
                 self.job = None
@@ -828,6 +900,8 @@ class ImportQueue:
             self.report({"WARNING"}, settings.batch_last_error)
             settings.batch_failed_count += 1
             self.complete_file(success=False)
+            if self.save_generated_separately and not self.redo_mode:
+                self.clear_failed_file()
         self.update_progress()
         self.update_timing()
 
@@ -853,6 +927,7 @@ class ImportQueue:
                                  key=lambda obj: obj.name)
             if not self.meshes:
                 raise RuntimeError("File contains no mesh objects")
+            self.file_record["input_tris"] = self.count_tris(self.meshes)
             if self.separate:
                 number = 1
                 while bpy.data.collections.get(f"Generated.{number:03d}"):
@@ -1142,6 +1217,7 @@ class ImportQueue:
                 self.restore_bake_settings()
                 self.stage = "COMPLETE"
         elif self.stage == "COMPLETE":
+            self.file_record["output_tris"] = self.count_tris(self.pass_sources or self.meshes)
             completed_object_count = len(self.meshes)
             if self.save_generated_separately:
                 self.save_and_clear_completed_collection()
@@ -1200,7 +1276,42 @@ class ImportQueue:
                 obj.matrix_world = matrix
                 self.view_layer.update()
 
+    @staticmethod
+    def count_tris(objects):
+        return sum(max(0, len(poly.vertices) - 2)
+                   for obj in set(objects) if obj.type == "MESH" for poly in obj.data.polygons)
+
+    def write_batch_report(self, event, data):
+        if self.batch_report is not None:
+            try:
+                self.batch_report.event(event, data)
+            except OSError as error:
+                self.report({"WARNING"}, f"Cannot update batch reports: {error}")
+
+    def clear_failed_file(self):
+        collection_name = self.collection.name if self.collection else None
+        for kind in ("objects", "collections", "meshes", "materials", "images"):
+            owned = getattr(self, "owned_" + kind)
+            ids = getattr(bpy.data, kind)
+            for item in (owned - self.file_owned_before[kind]) & set(ids):
+                if kind in ("objects", "collections") or item.users == 0:
+                    owned.discard(item)
+                    ids.remove(item, do_unlink=True)
+        if collection_name:
+            placeholder = bpy.data.collections.new(collection_name)
+            self.scene.collection.children.link(placeholder)
+        self.collection = None
+        self.file_objects = []
+        self.meshes = []
+        self.pass_sources = []
+        self.pass_outputs = []
+        self.result_meshes = []
+
     def complete_file(self, success, object_count=None):
+        if self.file_record is not None:
+            self.file_record.update(status="success" if success else "failed", finished=time.time())
+            self.write_batch_report("file_complete", self.file_record)
+            self.file_record = None
         self.timing.complete_file(success)
         if success:
             self.completed_collection = self.collection
@@ -1254,16 +1365,26 @@ class ImportQueue:
         output_path = generated_collection_output_path(bpy.data.filepath, collection.name)
         working_path = bpy.data.filepath
         write_collection_blend(output_path, collection)
+        if getattr(self, "file_record", None) is not None:
+            self.file_record["output_file"] = output_path
         if bpy.data.filepath != working_path:
             raise RuntimeError("Separate saving unexpectedly changed the working blend path")
 
         saved_object_count = len(self.meshes)
-        removed_objects = list(collection.objects)
+        removed_objects = list(collection.all_objects)
         for obj in removed_objects:
             self.owned_objects.discard(obj)
             bpy.data.objects.remove(obj, do_unlink=True)
-        for child in list(collection.children):
-            collection.children.unlink(child)
+        pending = list(collection.children)
+        children = []
+        while pending:
+            child = pending.pop()
+            if child not in children:
+                children.append(child)
+                pending.extend(child.children)
+        for child in reversed(children):
+            self.owned_collections.discard(child)
+            bpy.data.collections.remove(child, do_unlink=True)
 
         for mesh in list(self.owned_meshes):
             if mesh.users == 0:
@@ -1424,6 +1545,12 @@ class ImportQueue:
         self.update_timing()
         if status != "DONE":
             self.settings.batch_eta_seconds = -1.0
+        if self.file_record is not None:
+            self.file_record.update(status="cancelled" if rollback else "interrupted",
+                                    failed_stage=self.stage, finished=time.time())
+            self.write_batch_report("file_complete", self.file_record)
+            self.file_record = None
+        self.write_batch_report("finish", {"status": status})
         self.finished = True
         if (
             status == "DONE"

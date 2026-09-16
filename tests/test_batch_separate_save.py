@@ -1,6 +1,8 @@
 """Blender background regression for Batch Import's per-collection blend output."""
 
 import sys
+import json
+from unittest.mock import patch
 import shutil
 import tempfile
 from pathlib import Path
@@ -128,6 +130,43 @@ with tempfile.TemporaryDirectory() as directory:
         assert "Generated.001" in source.collections
         assert "Highpoly_Generated.001" in source.objects
         assert "Highpoly_Generated.007" not in source.objects
+
+        assert [name for name in source.collections if name.startswith("Generated")] == ["Generated.001"]
+
+    # Inject a retopology failure, then verify the next file and durable reports.
+    bad_path = Path(directory) / "failed.obj"
+    bad_path.write_text(obj_path.read_text())
+    queue = import_queue.ImportQueue(
+        bpy.context, [str(bad_path), str(obj_path)], False,
+        lambda kind, message: reports.append((kind, message)),
+    )
+    queue.begin()
+    original_advance = queue.advance
+    def fail_first(context):
+        if queue.index == 0 and queue.stage == "WELD":
+            queue.meshes[0].name = "FailedArtifact"
+            queue.stage = "REMESH_WAIT"
+            queue.pass_number = 2
+            raise RuntimeError("Injected Quad Remesher failure")
+        original_advance(context)
+    with patch.object(queue, "advance", side_effect=fail_first):
+        for _step in range(100):
+            queue.step(bpy.context)
+            if queue.finished:
+                break
+    assert queue.finished and settings.batch_failed_count == 1
+    assert settings.batch_imported_count == 1
+    summary = json.loads((queue.batch_report.directory / "summary.json").read_text())
+    records = json.loads((queue.batch_report.directory / "files.json").read_text())
+    assert summary["total_files"] == 2
+    assert summary["successful_files"] == summary["failed_files"] == 1
+    assert records[0]["failed_stage"] == "REMESH_WAIT"
+    assert records[0]["failed_pass"] == 2
+    assert "Injected Quad Remesher failure" in records[0]["traceback"]
+    assert records[1]["input_tris"] == records[1]["output_tris"] == 1
+    with bpy.data.libraries.load(records[1]["output_file"]) as (source, _target):
+        assert len([name for name in source.collections if name.startswith("Generated")]) == 1
+        assert "FailedArtifact" not in source.objects
 
     # The separate result must open normally with its Generated.N linked into
     # the scene, while Save As Copy keeps the working path unchanged.

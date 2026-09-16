@@ -163,6 +163,22 @@ class RemeshJob:
             self.cursor.close()
         return outputs
 
+    def diagnostics(self):
+        process = self.state.remeshProcess
+        data = {"message": self.message,
+                "exit_code": process.poll() if process is not None else None,
+                "source": getattr(self, "source_name", None)}
+        for attribute in ("progressFilename", "retopoFilename"):
+            path = getattr(self.state, attribute, None)
+            data[attribute] = path
+            if attribute == "progressFilename" and path:
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as stream:
+                        data["progress_contents"] = stream.read(65536)
+                except OSError as error:
+                    data["progress_read_error"] = str(error)
+        return data
+
     def abort(self):
         if self.cursor is not None:
             self.cursor.close()

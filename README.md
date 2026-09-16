@@ -141,3 +141,24 @@ mesh selection modes in Edit Mode. Numpad shortcuts are unchanged.
 This repository should track source files only. Python caches, Blender backups, local editor settings, build folders, archives, and logs are ignored through `.gitignore`.
 The built-in updater expects this folder to stay a clean git repository; commit or stash local changes before running `Update`.
 Bump the add-on patch version in `bl_info` by `0.0.1` only when the user requests a push to the remote repository. Include the version bump in a commit before pushing; ordinary commits do not change the version.
+
+
+### Batch reports and separate blend output
+
+Each run creates `batch_reports/<timestamp>_<id>/` beside the working `.blend`
+(or beside the first input file if the scene has not been saved).
+`summary.json` contains total, successful, failed, interrupted and unprocessed
+file counts and triangle totals. `files.json` contains per-file input/output
+triangles, output path, stages, pass numbers and failure details.
+`events.jsonl` is the separate append-only journal of stage transitions,
+operator messages and full exception tracebacks. Quad Remesher failures include
+available engine progress contents, engine message, process exit code and paths.
+Reports update after every file; stopping or cancelling records an interrupted
+file separately from failures. A missing engine explanation remains unknown.
+
+Separate output contains only the current Generated collection and the static
+scene collections. Previous Generated contents are removed before saving;
+empty numbered placeholders remain in the working scene for Retopo restore.
+Failed file objects are removed in separate-output mode and their empty
+placeholder reserves the collection number. Camera, lights and other objects
+outside Generated collections remain in the output.
