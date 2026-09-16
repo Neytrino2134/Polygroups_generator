@@ -82,7 +82,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
-    "show_render_section": tuple(f"topic_render_{index}" for index in range(6)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(7)),
 }
 
 SUBSECTION_VISIBILITY_PROPERTIES = tuple(
@@ -909,6 +909,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_render_3: bpy.props.BoolProperty(default=False)
     topic_render_4: bpy.props.BoolProperty(default=False)
     topic_render_5: bpy.props.BoolProperty(default=False)
+    topic_render_6: bpy.props.BoolProperty(default=False)
     topic_remesh_0: bpy.props.BoolProperty(default=False)
     topic_remesh_1: bpy.props.BoolProperty(default=False)
     topic_export_0: bpy.props.BoolProperty(default=False)
@@ -2011,7 +2012,33 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     mesh_check_double_walls: bpy.props.IntProperty(default=0, min=0)
 
 
+def _update_studio_backdrop(self, context):
+    from .operators.render_studio import update_backdrop
+    update_backdrop(self, context)
+
+
 class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
+    studio_backdrop: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_camera: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_camera_aim: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_key: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_key_aim: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_fill: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_fill_aim: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_rim: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_rim_aim: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_move_step: bpy.props.FloatProperty(
+        name="Movement Step (m)",
+        description="Movement distance in metres for all studio arrow buttons",
+        default=0.1, min=0.001, soft_max=10, precision=3,
+    )
+    studio_width: bpy.props.FloatProperty(name="Width", default=12, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
+    studio_depth: bpy.props.FloatProperty(name="Depth", default=8, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
+    studio_height: bpy.props.FloatProperty(name="Height", default=5, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
+    studio_distance: bpy.props.FloatProperty(name="Distance", default=3, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
+    studio_radius: bpy.props.FloatProperty(name="Radius", default=1, min=0.001, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
+    studio_color: bpy.props.FloatVectorProperty(name="Background Color", subtype="COLOR", size=3, default=(0.18, 0.18, 0.18), min=0, max=1, update=_update_studio_backdrop)
+
     animation_frame_count: bpy.props.IntProperty(
         name="Animation Length",
         description="Last frame and total turnaround animation length",

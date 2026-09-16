@@ -162,3 +162,48 @@ empty numbered placeholders remain in the working scene for Retopo restore.
 Failed file objects are removed in separate-output mode and their empty
 placeholder reserves the collection number. Camera, lights and other objects
 outside Generated collections remain in the output.
+
+
+### Render studio setup
+
+Open Render → Scene Setup and click Prepare Scene to create a curved floor and
+backdrop, three Area lights and a camera. The default camera is at (0, -8, 0.5),
+looking at (0, 0, 0.5), for an approximately one-metre asset at the origin.
+Camera and each light have a movable Aim empty with Track To (-Z, up Y).
+The panel exposes positions, aim points, camera projection and focal length,
+light color/power/size and backdrop color/width/depth/height/distance/bend radius.
+Backdrop dimensions and color update immediately. Bend radius is limited to
+the available backdrop height and depth.
+
+Repeated preparation preserves adjusted transforms, camera lens and light
+settings and repairs missing elements. Rig objects live in Scene_Studio,
+Camera_Studio and Light_Studio collections. The backdrop is compatible with
+the render queue's default Scene prefix for transparent-background rendering.
+
+Studio position controls use arrow buttons with a shared configurable movement step (0.1 metre by default) and show
+current world coordinates in metres. Camera and camera Aim expose Y/Z only;
+lights and their Aim points expose X/Y/Z. Increasing Y moves forward toward
+the backdrop; increasing Z moves upward. New Key/Fill lights use 50 W and Rim
+uses 100 W. Repeated preparation keeps existing manually adjusted settings.
+
+Reset Entire Studio restores camera, all lights and backdrop defaults. Separate
+reset buttons restore the camera, all lights, backdrop or a single light without
+changing other sections. Resets include transforms and Aim positions, camera
+projection/lens, light color/power/size/visibility, and backdrop color/dimensions.
+Missing elements in the selected section are recreated. Each reset supports Undo.
+
+Movement Step (m) applies to every camera, light and Aim arrow. Set it to 1
+for one-metre moves. The entire-studio reset returns the step to 0.1 metre.
+
+Light Color Presets offers Neutral, Warm/Cool, Cool/Warm, Sunset, Cyan/Magenta
+and Gold/Violet. The first color describes front Key/Fill lighting and the
+second describes the Rim light. Palettes change only light colors; positions,
+Aim points, power, source sizes and backdrop color remain as adjusted. Prepare
+the studio first. Individual light colors remain editable after applying a preset.
+
+Delete all scenes removes every collection whose name starts with Scene_,
+Camera_ or Light_ throughout the blend file, including all nested collections
+and their objects. Objects also linked to collections outside the removed
+hierarchy are preserved there. Unused mesh/camera/light data belonging to deleted
+objects is cleaned up. Studio pointers clear automatically and Prepare Scene
+can recreate the rig. The operation supports Undo.

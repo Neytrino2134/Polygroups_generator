@@ -3704,6 +3704,21 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             stats_row.label(text=t(context, "blend_export_mid", value=settings.blend_export_mid_count))
 
 
+def draw_studio_position(layout, context, target, obj, axes, label):
+    layout.label(text=label)
+    scale = context.scene.unit_settings.scale_length
+    for axis in axes:
+        row = layout.row(align=True)
+        minus_icon, plus_icon = ('TRIA_LEFT', 'TRIA_RIGHT') if axis == 'X' else ('TRIA_DOWN', 'TRIA_UP')
+        minus = row.operator("render.polygroups_move_studio", text="", icon=minus_icon)
+        minus.target, minus.axis, minus.direction = target, axis, 'NEGATIVE'
+        value = obj.matrix_world.translation['XYZ'.index(axis)] * scale
+        caption = t(context, 'studio_axis_' + axis.lower())
+        row.label(text=f"{caption}: {value:.2f} m")
+        plus = row.operator("render.polygroups_move_studio", text="", icon=plus_icon)
+        plus.target, plus.axis, plus.direction = target, axis, 'POSITIVE'
+
+
 class VIEW3D_PT_polygroups_render(bpy.types.Panel):
     bl_label = "13 |"
     bl_text_key = "section_render"
@@ -3722,6 +3737,66 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_render_settings
+        content = draw_topic(layout, context, "render_6", "Scene Setup", "SCENE_DATA")
+        if content is not None:
+            column = content.column(align=True)
+            column.enabled = not settings.is_running
+            column.operator("render.polygroups_prepare_studio", text=t(context, "studio_prepare"), icon="SCENE_DATA")
+            column.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_all"), icon="LOOP_BACK").scope = 'ALL'
+
+            column.operator("render.polygroups_delete_studio_scenes", text=t(context, "studio_delete_all"), icon="TRASH")
+
+            column.prop(settings, "studio_move_step", text=t(context, "studio_move_step"))
+
+            column.separator()
+            column.label(text=t(context, "studio_camera"), icon="CAMERA_DATA")
+            column.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_camera"), icon="LOOP_BACK").scope = "CAMERA"
+            camera = settings.studio_camera
+            if camera is not None and camera.type == "CAMERA":
+                draw_studio_position(column, context, "camera", camera, "YZ", t(context, "studio_position"))
+                if settings.studio_camera_aim is not None:
+                    draw_studio_position(column, context, "camera_aim", settings.studio_camera_aim, "YZ", t(context, "studio_aim"))
+                column.prop(camera.data, "type", text=t(context, "studio_camera_type"))
+                if camera.data.type == "ORTHO":
+                    column.prop(camera.data, "ortho_scale", text=t(context, "studio_ortho_scale"))
+                else:
+                    column.prop(camera.data, "lens", text=t(context, "studio_lens"))
+                column.operator("view3d.view_camera", text=t(context, "studio_camera_view"), icon="VIEW_CAMERA")
+
+            column.separator()
+            column.label(text=t(context, "studio_lights"), icon="LIGHT")
+            column.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_lights"), icon="LOOP_BACK").scope = "LIGHTS"
+            column.label(text=t(context, "studio_color_presets"), icon="COLOR")
+            for pair in (("NEUTRAL", "WARM_COOL"), ("COOL_WARM", "SUNSET"), ("CYAN_MAGENTA", "GOLD_VIOLET")):
+                row = column.row(align=True)
+                for preset in pair:
+                    row.operator("render.polygroups_studio_light_colors",
+                                 text=t(context, "studio_palette_" + preset.lower())).preset = preset
+            for role in ("key", "fill", "rim"):
+                light = getattr(settings, "studio_" + role)
+                if light is None or light.type != "LIGHT":
+                    continue
+                box = column.box().column(align=True)
+                box.label(text=t(context, "studio_" + role), icon="LIGHT_AREA")
+                box.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_light"), icon="LOOP_BACK").scope = role.upper()
+                draw_studio_position(box, context, role, light, "XYZ", t(context, "studio_position"))
+                target = getattr(settings, "studio_" + role + "_aim")
+                if target is not None:
+                    draw_studio_position(box, context, role + "_aim", target, "XYZ", t(context, "studio_aim"))
+                box.prop(light, "hide_render", text=t(context, "studio_light_off"))
+                box.prop(light.data, "color", text=t(context, "studio_light_color"))
+                box.prop(light.data, "energy", text=t(context, "studio_power"))
+                if light.data.type == "AREA":
+                    box.prop(light.data, "size", text=t(context, "studio_light_size"))
+
+            column.separator()
+            column.label(text=t(context, "studio_scene"), icon="MESH_PLANE")
+            column.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_scene"), icon="LOOP_BACK").scope = "SCENE"
+            for prop in ("color", "width", "depth", "height", "distance", "radius"):
+                column.prop(settings, "studio_" + prop, text=t(context, "studio_" + prop))
+            if settings.studio_backdrop is not None:
+                column.prop(settings.studio_backdrop, "location", text=t(context, "studio_position"))
+
         content = draw_topic(layout, context, "render_0", 'Render Queue', "RENDER_STILL")
         if content is not None:
             column = content.column(align=True)
