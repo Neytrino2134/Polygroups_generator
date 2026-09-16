@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from math import ceil
 
@@ -6,6 +7,8 @@ import bpy
 from bpy_extras.io_utils import ImportHelper
 from bpy_extras.io_utils import poll_file_object_drop
 from mathutils import Vector
+
+from ..core.generated_index import indexed_object_name
 
 
 
@@ -16,9 +19,13 @@ FORMAT_EXTENSIONS = {
     "STL": {".stl"},
     "GLB": {".glb", ".gltf"},
     "3MF": {".3mf"},
+    "BLEND": {".blend"},
 }
 
-AUTO_EXTENSIONS = set().union(*FORMAT_EXTENSIONS.values())
+AUTO_EXTENSIONS = set().union(*(
+    extensions for format_name, extensions in FORMAT_EXTENSIONS.items()
+    if format_name != "BLEND"
+))
 SUPPORTED_FILTER_GLOB = "*.usd;*.usda;*.usdc;*.fbx;*.obj;*.stl;*.glb;*.gltf;*.3mf"
 
 IMPORT_OPERATOR_CANDIDATES = {
@@ -232,6 +239,12 @@ class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
             settings.batch_import_format,
             include_subfolders=settings.batch_include_subfolders,
         )
+        if settings.batch_import_format == "BLEND" and bpy.data.filepath:
+            current_file = os.path.normcase(os.path.abspath(bpy.data.filepath))
+            files = [
+                filepath for filepath in files
+                if os.path.normcase(os.path.abspath(filepath)) != current_file
+            ]
         settings.batch_total_count = len(files)
         settings.batch_imported_count = 0
         settings.batch_failed_count = 0
@@ -248,6 +261,175 @@ class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
         settings.batch_current_file = "Scan complete"
 
         self.report({"INFO"}, f"Found {len(files)} supported file(s)")
+        return {"FINISHED"}
+
+
+GENERATED_COLLECTION_PATTERN = re.compile(r"^Generated(?:\.(\d+))?$", re.IGNORECASE)
+
+
+def _next_generated_collection_index():
+    indices = []
+    for collection in bpy.data.collections:
+        match = GENERATED_COLLECTION_PATTERN.fullmatch(collection.name)
+        if match is not None and match.group(1) is not None:
+            indices.append(int(match.group(1)))
+    return max(indices, default=0) + 1
+
+
+def _source_generated_collection_names(filepath):
+    with bpy.data.libraries.load(filepath, link=False) as (source, _target):
+        names = [
+            name for name in source.collections
+            if GENERATED_COLLECTION_PATTERN.fullmatch(name)
+        ]
+    return sorted(
+        names,
+        key=lambda name: (
+            GENERATED_COLLECTION_PATTERN.fullmatch(name).group(1) is not None,
+            int(GENERATED_COLLECTION_PATTERN.fullmatch(name).group(1) or 0),
+            name.lower(),
+        ),
+    )
+
+
+def _remove_appended_objects(objects):
+    data_blocks = {getattr(obj, "data", None) for obj in objects}
+    data_blocks.discard(None)
+    for obj in objects:
+        if obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    orphaned = {data for data in data_blocks if data.users == 0}
+    if orphaned:
+        bpy.data.batch_remove(ids=orphaned)
+
+
+def _discard_appended_collection(collection):
+    collections = []
+    pending = [collection]
+    while pending:
+        current = pending.pop()
+        if current in collections:
+            continue
+        collections.append(current)
+        pending.extend(current.children)
+    _remove_appended_objects(set(collection.all_objects))
+    for current in reversed(collections):
+        if current.name in bpy.data.collections:
+            bpy.data.collections.remove(current, do_unlink=True)
+
+
+def append_generated_collections(filepath, scene, start_index, include_highpoly=False):
+    """Append matching collections and return (next index, collections, meshes)."""
+    source_names = _source_generated_collection_names(filepath)
+    if not source_names:
+        return start_index, [], []
+    with bpy.data.libraries.load(filepath, link=False) as (_source, target):
+        target.collections = source_names
+
+    appended_collections = []
+    appended_meshes = []
+    index = start_index
+    for collection in target.collections:
+        if collection is None:
+            continue
+        objects = list(collection.all_objects)
+        has_retopo = any(obj.name.lower().startswith("retopo_") for obj in objects)
+        has_included_highpoly = include_highpoly and any(
+            obj.name.lower().startswith("highpoly_") for obj in objects
+        )
+        if not has_retopo and not has_included_highpoly:
+            _discard_appended_collection(collection)
+            continue
+        collection.name = f"Generated.{index:03d}"
+        scene.collection.children.link(collection)
+        for obj in objects:
+            if not include_highpoly and obj.name.lower().startswith("highpoly_"):
+                _remove_appended_objects((obj,))
+                continue
+            # A direct Generated.N membership makes Auto Fix Index deterministic,
+            # including for objects originally stored in nested child collections.
+            if obj.name not in collection.objects:
+                collection.objects.link(obj)
+            if obj.type == "MESH":
+                appended_meshes.append((obj, f"{index:03d}"))
+        appended_collections.append(collection)
+        index += 1
+    return index, appended_collections, appended_meshes
+
+
+def _fix_appended_generated_indices(entries):
+    targets = [(obj, indexed_object_name(obj.name, index)) for obj, index in entries]
+    for ordinal, (obj, _target_name) in enumerate(targets):
+        obj.name = f"__AIRETOPO_BLEND_APPEND_{ordinal:06d}__"
+    for obj, target_name in targets:
+        obj.name = target_name
+
+
+class OBJECT_OT_polygroups_append_generated_blends(bpy.types.Operator):
+    bl_idname = "object.polygroups_append_generated_blends"
+    bl_label = "Append Generated Collections"
+    bl_description = "Append Generated and Generated.N collections from every scanned blend file"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
+        return bool(settings and settings.batch_import_format == "BLEND" and not settings.batch_is_running)
+
+    def execute(self, context):
+        settings = context.scene.polygroups_model_preparation_settings
+        directory = bpy.path.abspath(settings.batch_import_directory)
+        if not directory or not os.path.isdir(directory):
+            self.report({"WARNING"}, "Select a valid import folder")
+            return {"CANCELLED"}
+        files = collect_import_files(directory, "BLEND", settings.batch_include_subfolders)
+        current_file = os.path.normcase(os.path.abspath(bpy.data.filepath)) if bpy.data.filepath else ""
+        files = [
+            filepath for filepath in files
+            if os.path.normcase(os.path.abspath(filepath)) != current_file
+        ]
+        if not files:
+            self.report({"WARNING"}, "No external blend files found")
+            return {"CANCELLED"}
+
+        next_index = _next_generated_collection_index()
+        imported_collections = []
+        imported_meshes = []
+        matched_files = 0
+        failed = []
+        for filepath in files:
+            try:
+                next_index, collections, meshes = append_generated_collections(
+                    filepath,
+                    context.scene,
+                    next_index,
+                    settings.batch_append_include_highpoly,
+                )
+            except Exception as error:
+                failed.append(f"{os.path.basename(filepath)}: {error}")
+                continue
+            imported_collections.extend(collections)
+            imported_meshes.extend(meshes)
+            if collections:
+                matched_files += 1
+
+        _fix_appended_generated_indices(imported_meshes)
+        settings.batch_imported_count = len(imported_collections)
+        settings.batch_imported_object_count = len(imported_meshes)
+        settings.batch_failed_count = len(failed)
+        settings.batch_remaining_count = 0
+        settings.batch_import_progress = 1.0 if imported_collections else 0.0
+        settings.batch_current_progress = settings.batch_import_progress
+        settings.batch_stage = "DONE" if imported_collections else "ERROR"
+        settings.batch_current_file = "Blend append complete"
+        settings.batch_last_error = "\n".join(failed)
+        if not imported_collections:
+            self.report({"WARNING"}, "No Generated or Generated.N collections were found")
+            return {"CANCELLED"}
+        message = f"Appended {len(imported_collections)} Generated collection(s) from {matched_files} file(s)"
+        if failed:
+            message += f"; {len(failed)} file(s) failed"
+        self.report({"WARNING"} if failed else {"INFO"}, message)
         return {"FINISHED"}
 
 
@@ -308,6 +490,9 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         from .remesh_progress import ACTIVE_REMESH
 
         settings = context.scene.polygroups_model_preparation_settings
+        if settings.batch_import_format == "BLEND":
+            self.report({"WARNING"}, "Use Append Generated Collections for Blend format")
+            return {"CANCELLED"}
         if import_queue.ACTIVE_QUEUE is not None or ACTIVE_REMESH is not None:
             self.report({"WARNING"}, "An import queue or Remesh is already running")
             return {"CANCELLED"}

@@ -125,6 +125,73 @@ def generated_collection_output_path(blend_filepath, collection_name):
     )
 
 
+def generated_collection_files(blend_filepath):
+    """Return numbered separate Generated files belonging to the working blend."""
+    source = os.path.abspath(blend_filepath) if blend_filepath else ""
+    if not source:
+        raise ValueError("Save the working blend file before restoring separate collections")
+    directory = os.path.dirname(source)
+    stem, _extension = os.path.splitext(os.path.basename(source))
+    pattern = re.compile(rf"^{re.escape(stem)}_Generated_(\d+)\.blend$", re.IGNORECASE)
+    files = []
+    for entry in os.scandir(directory):
+        if not entry.is_file():
+            continue
+        match = pattern.fullmatch(entry.name)
+        if match is not None:
+            digits = match.group(1)
+            files.append((int(digits), digits, entry.path))
+    return sorted(files, key=lambda item: item[0])
+
+
+def restore_retopo_collection(filepath, collection_name, scene):
+    """Append only Retopo_* objects from one separately saved Generated.N."""
+    with bpy.data.libraries.load(filepath, link=False) as (source, target):
+        if collection_name not in source.collections:
+            return 0
+        target.collections = [collection_name]
+    imported_collection = target.collections[0] if target.collections else None
+    if imported_collection is None:
+        return 0
+
+    destination = bpy.data.collections.get(collection_name)
+    if destination is imported_collection:
+        destination = None
+    if destination is None:
+        destination = bpy.data.collections.new(collection_name)
+        scene.collection.children.link(destination)
+
+    # Re-running restore should reproduce the file, not create .001 duplicates.
+    for obj in list(destination.objects):
+        if obj.name.startswith("Retopo_"):
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    imported_collections = []
+    pending = [imported_collection]
+    while pending:
+        collection = pending.pop()
+        if collection in imported_collections:
+            continue
+        imported_collections.append(collection)
+        pending.extend(collection.children)
+    imported_objects = set(imported_collection.all_objects)
+    restored = []
+    for obj in imported_objects:
+        if obj.name.startswith("Retopo_"):
+            destination.objects.link(obj)
+            restored.append(obj)
+
+    # Discard the appended HighPoly and temporary collection hierarchy. Retopo
+    # objects survive because they are now linked directly to the destination.
+    for obj in imported_objects:
+        if obj not in restored:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    for collection in reversed(imported_collections):
+        if collection.name in bpy.data.collections:
+            bpy.data.collections.remove(collection, do_unlink=True)
+    return len(restored)
+
+
 def write_collection_blend(filepath, collection):
     """Save a directly openable copy while keeping the working file active."""
     if collection.name not in bpy.data.collections:
@@ -1453,4 +1520,55 @@ class OBJECT_OT_polygroups_reset_import_state(bpy.types.Operator):
             self.report({"WARNING"}, f"Import state reset after cleanup warning: {reset_warning}")
         else:
             self.report({"INFO"}, "Import processing state reset")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_restore_separate_retopo(bpy.types.Operator):
+    bl_idname = "object.polygroups_restore_separate_retopo"
+    bl_label = "Restore Retopo from Separate Files"
+    bl_description = "Restore Retopo objects from separate Generated.N blend files without HighPoly objects"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
+        return bool(bpy.data.filepath and settings and not settings.batch_is_running)
+
+    def execute(self, context):
+        try:
+            files = generated_collection_files(bpy.data.filepath)
+        except (OSError, ValueError) as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+        if not files:
+            self.report({"WARNING"}, "No separate Generated.N blend files were found")
+            return {"CANCELLED"}
+
+        restored_files = 0
+        restored_objects = 0
+        skipped = []
+        for _number, digits, filepath in files:
+            collection_name = f"Generated.{digits}"
+            try:
+                count = restore_retopo_collection(filepath, collection_name, context.scene)
+            except Exception as error:
+                skipped.append(f"{os.path.basename(filepath)}: {error}")
+                continue
+            if count:
+                restored_files += 1
+                restored_objects += count
+            else:
+                skipped.append(os.path.basename(filepath))
+
+        redraw(context)
+        if restored_objects == 0:
+            message = "No Retopo objects were restored"
+            if skipped:
+                message += f" ({len(skipped)} file(s) skipped)"
+            self.report({"WARNING"}, message)
+            return {"CANCELLED"}
+        message = f"Restored {restored_objects} Retopo object(s) from {restored_files} file(s)"
+        if skipped:
+            message += f"; skipped {len(skipped)} file(s)"
+        self.report({"WARNING"} if skipped else {"INFO"}, message)
         return {"FINISHED"}

@@ -1474,10 +1474,26 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 type="BAR",
                 text=t(context, "scanned_files_found", value=settings.batch_total_count),
             )
+            if settings.batch_import_format == "BLEND":
+                append_options = content.column(align=True)
+                append_options.enabled = not settings.batch_is_running
+                append_options.prop(
+                    settings,
+                    "batch_append_include_highpoly",
+                    text=t(context, "batch_append_include_highpoly"),
+                )
+                append_options.operator(
+                    "object.polygroups_append_generated_blends",
+                    text=t(context, "batch_append_generated_blends"),
+                    icon="APPEND_BLEND",
+                )
 
         content = draw_topic(layout, context, "batch_1", t(context, "import_group_processing"), "MODIFIER")
         if content is not None:
-            draw_batch_processing(content, context, settings)
+            if settings.batch_import_format == "BLEND":
+                content.label(text=t(context, "batch_blend_processing_disabled"), icon="INFO")
+            else:
+                draw_batch_processing(content, context, settings)
 
         content = draw_topic(layout, context, "batch_2", t(context, "arrange_objects"), "SNAP_EDGE")
         if content is not None:
@@ -1557,6 +1573,18 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 text=t(context, "batch_save_generated_separately_hint"),
                 icon="ERROR" if separate_hint.alert else "FILE_BLEND",
             )
+            restore_row = separate_save.row(align=True)
+            restore_row.enabled = bool(bpy.data.filepath)
+            restore_row.operator(
+                "object.polygroups_restore_separate_retopo",
+                text=t(context, "batch_restore_separate_retopo"),
+                icon="IMPORT",
+            )
+            restore_hint = separate_save.row()
+            restore_hint.label(
+                text=t(context, "batch_restore_separate_retopo_hint"),
+                icon="OUTLINER_OB_MESH",
+            )
 
             content.separator()
             content.label(text=t(context, "batch_start_mode_group"), icon="PLAY")
@@ -1571,7 +1599,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             )
 
             operator_row = content.row(align=True)
-            operator_row.enabled = not settings.batch_is_running
+            operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
             operator_row.operator_context = "EXEC_DEFAULT"
             start_import = operator_row.operator(
                 "object.polygroups_batch_import",

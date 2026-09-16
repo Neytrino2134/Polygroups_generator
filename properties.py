@@ -290,6 +290,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
             ("STL", "STL", "Import STL files"),
             ("GLB", "GLB", "Import GLB and GLTF files"),
             ("3MF", "3MF", "Import 3MF files"),
+            ("BLEND", "Blend", "Append Generated collections from Blender files"),
         ),
         default="GLB",
     )
@@ -458,6 +459,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
             "Save each successfully processed Generated.N collection beside the current blend file, "
             "then leave that collection empty in the working file"
         ),
+        default=False,
+    )
+    batch_append_include_highpoly: bpy.props.BoolProperty(
+        name="Include HighPoly",
+        description="Include Highpoly_* objects when appending Generated collections from blend files",
         default=False,
     )
     small_loose_part_threshold_percent: bpy.props.FloatProperty(

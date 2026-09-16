@@ -36,10 +36,12 @@ from .batch_import import AIRETOPO_FH_gltf
 from .batch_import import OBJECT_OT_polygroups_batch_import
 from .import_queue import OBJECT_OT_polygroups_import_control
 from .import_queue import OBJECT_OT_polygroups_reset_import_state
+from .import_queue import OBJECT_OT_polygroups_restore_separate_retopo
 from .import_queue import OBJECT_OT_polygroups_batch_redo_select
 from .import_queue import OBJECT_OT_polygroups_toggle_batch_stage
 from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
+from .batch_import import OBJECT_OT_polygroups_append_generated_blends
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
 from .check_material_textures import OBJECT_OT_polygroups_check_material_textures
 from .clear_materials import OBJECT_OT_clear_polygroups_materials
@@ -233,10 +235,12 @@ CLASSES = (
     OBJECT_OT_airetopo_set_section_subsection_visibility,
     OBJECT_OT_airetopo_restore_panel_defaults,
     OBJECT_OT_polygroups_scan_import_folder,
+    OBJECT_OT_polygroups_append_generated_blends,
     OBJECT_OT_polygroups_batch_import,
     AIRETOPO_FH_gltf,
     OBJECT_OT_polygroups_import_control,
     OBJECT_OT_polygroups_reset_import_state,
+    OBJECT_OT_polygroups_restore_separate_retopo,
     OBJECT_OT_polygroups_batch_redo_select,
     OBJECT_OT_polygroups_toggle_batch_stage,
     OBJECT_OT_polygroups_arrange_batch_objects,

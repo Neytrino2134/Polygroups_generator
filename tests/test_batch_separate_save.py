@@ -26,6 +26,9 @@ with tempfile.TemporaryDirectory() as directory:
     mesh.from_pydata([(0, 0, 0), (1, 0, 0), (0, 1, 0)], [], [(0, 1, 2)])
     obj = bpy.data.objects.new("Highpoly_Generated.007", mesh)
     collection.objects.link(obj)
+    retopo_mesh = mesh.copy()
+    retopo = bpy.data.objects.new("Retopo_03_Highpoly_Generated.007", retopo_mesh)
+    collection.objects.link(retopo)
 
     expected = Path(directory) / "Original blend name_Generated_007.blend"
     assert Path(import_queue.generated_collection_output_path(
@@ -35,19 +38,19 @@ with tempfile.TemporaryDirectory() as directory:
     reports = []
     queue = SimpleNamespace(
         collection=collection,
-        owned_objects={obj},
+        owned_objects={obj, retopo},
         owned_collections={collection},
-        owned_meshes={mesh},
+        owned_meshes={mesh, retopo_mesh},
         owned_materials=set(),
         owned_images=set(),
         owned_gray_materials=set(),
         owned_bake_materials=set(),
         owned_bake_images=set(),
-        file_objects=[obj],
-        meshes=[obj],
+        file_objects=[obj, retopo],
+        meshes=[obj, retopo],
         pass_sources=[obj],
         pass_outputs=[obj],
-        result_meshes=[obj],
+        result_meshes=[obj, retopo],
         separately_saved_count=0,
         separately_saved_object_count=0,
         report=lambda kind, message: reports.append((kind, message)),
@@ -59,19 +62,30 @@ with tempfile.TemporaryDirectory() as directory:
     assert collection.name in bpy.data.collections
     assert collection not in queue.owned_collections
     assert queue.separately_saved_count == 1
-    assert queue.separately_saved_object_count == 1
+    assert queue.separately_saved_object_count == 2
     assert not queue.file_objects and not queue.meshes
 
     with bpy.data.libraries.load(str(expected)) as (source, _target):
         assert "Generated.007" in source.collections
         assert "Scene" in source.scenes
         assert "Highpoly_Generated.007" in source.objects
+        assert "Retopo_03_Highpoly_Generated.007" in source.objects
 
     working_snapshot = Path(directory) / "working_snapshot.blend"
     shutil.copy2(working_path, working_snapshot)
     with bpy.data.libraries.load(str(working_snapshot)) as (source, _target):
         assert "Generated.007" in source.collections
         assert "Highpoly_Generated.007" not in source.objects
+        assert "Retopo_03_Highpoly_Generated.007" not in source.objects
+
+    # Restore is repeatable and returns only Retopo_* into the empty placeholder.
+    assert bpy.ops.object.polygroups_restore_separate_retopo() == {"FINISHED"}
+    assert [item.name for item in collection.objects] == [
+        "Retopo_03_Highpoly_Generated.007",
+    ]
+    assert bpy.data.objects.get("Highpoly_Generated.007") is None
+    assert bpy.ops.object.polygroups_restore_separate_retopo() == {"FINISHED"}
+    assert len([item for item in collection.objects if item.name.startswith("Retopo_")]) == 1
 
     # Exercise the complete queue handoff: successful processing writes one file,
     # empties the numbered placeholder, and advances normally.
