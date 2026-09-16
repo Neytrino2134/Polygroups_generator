@@ -96,6 +96,7 @@ def reset_batch_import_settings(settings):
     settings.batch_import_progress = 0.0
     settings.batch_current_progress = 0.0
     settings.batch_remesh_progress = 0.0
+    settings.batch_baking_progress = 0.0
     settings.batch_current_file = ""
     settings.batch_elapsed_seconds = 0.0
     settings.batch_current_seconds = 0.0
@@ -461,6 +462,7 @@ class ImportQueue:
         settings.batch_import_progress = 0
         settings.batch_current_progress = 0
         settings.batch_remesh_progress = 0
+        settings.batch_baking_progress = 0
         settings.batch_current_file = ""
         settings.batch_last_error = ""
         settings.batch_stage = "QUEUED"
@@ -598,7 +600,7 @@ class ImportQueue:
                         "QUAD" if getattr(settings, f"batch_stage_{number}_auto_remesh") else None,
                         dict(get_remesh_preset_counts(context))[preset],
                         getattr(settings, f"batch_stage_{number}_auto_unwrap"),
-                        "ANGLE",
+                        getattr(settings, f"batch_stage_{number}_auto_unwrap_method"),
                     ))
         self.stage = (self.first_cleanup_stage()
                       if self.batch_stages and not settings.batch_stage_2_enabled
@@ -740,6 +742,13 @@ class ImportQueue:
         ):
             self.mesh_index = 0
             return "REMOVE_SMALL_LOOSE_PARTS"
+        if (
+            self.batch_stages
+            and self.pass_number == 2
+            and self.settings.batch_first_uv_repair_enabled
+        ):
+            self.mesh_index = 0
+            return "FIRST_UV_REPAIR"
         return "UNWRAP_PASS"
 
     def step(self, context):
@@ -786,6 +795,7 @@ class ImportQueue:
             settings.batch_current_file = os.path.basename(self.files[self.index])
             settings.batch_current_progress = 0
             settings.batch_remesh_progress = 0
+            settings.batch_baking_progress = 0
             self.timing.start_file()
             self.update_timing()
             self.stage = "REDO_PREPARE" if self.redo_mode else "IMPORT"
@@ -890,6 +900,7 @@ class ImportQueue:
                               and settings.batch_stage_3_autofix_enabled else self.pre_unwrap_stage())
         elif self.stage == "REMESH":
             settings.batch_remesh_progress = 0
+            settings.batch_baking_progress = 0
             source = self.pass_sources[self.mesh_index]
             self.select_source(context, source)
             if self.pass_method == "QUAD":
@@ -977,11 +988,55 @@ class ImportQueue:
                     f"below {self.small_loose_part_threshold:g}%",
                 )
             self.mesh_index += 1
-            self.stage = (
-                "REMOVE_SMALL_LOOSE_PARTS"
-                if self.mesh_index < len(targets)
-                else "UNWRAP_PASS"
-            )
+            if self.mesh_index < len(targets):
+                self.stage = "REMOVE_SMALL_LOOSE_PARTS"
+            else:
+                self.mesh_index = 0
+                self.stage = (
+                    "FIRST_UV_REPAIR"
+                    if self.batch_stages and self.pass_number == 2
+                    and settings.batch_first_uv_repair_enabled
+                    else "UNWRAP_PASS"
+                )
+        elif self.stage == "FIRST_UV_REPAIR":
+            targets = self.pass_outputs or self.pass_sources
+            obj = targets[self.mesh_index]
+            self.select_source(context, obj)
+            if obj.data.uv_layers.active is None:
+                self.report({"INFO"}, f"{obj.name}: Smart UV Repair skipped; no UV map before Auto Unwrap")
+            else:
+                bpy.ops.object.mode_set(mode="EDIT")
+                bpy.ops.mesh.select_all(action="SELECT")
+                try:
+                    result = bpy.ops.mesh.polygroups_repair_uv_stretch(
+                        "EXEC_DEFAULT",
+                        threshold=settings.batch_first_uv_repair_threshold,
+                        grow_threshold=1.8,
+                        min_faces=settings.batch_first_uv_repair_min_faces,
+                        smooth_steps=2,
+                        surface_angle=settings.batch_first_uv_repair_surface_angle,
+                        selected_only=False,
+                        sharp_preference=3.0,
+                        create_edges=True,
+                        pin_generated=True,
+                        merge_small_islands=True,
+                        small_island_threshold=3.0,
+                        smart_relax=True,
+                        average_island_scale=True,
+                        native_pack=True,
+                        cleanup_artifacts=True,
+                        artifact_method="MERGE_CENTER",
+                        artifact_max_faces=7,
+                        artifact_stretch=8.0,
+                        artifact_compactness=10.0,
+                    )
+                finally:
+                    if obj.mode == "EDIT":
+                        bpy.ops.object.mode_set(mode="OBJECT")
+                if "FINISHED" not in result:
+                    raise RuntimeError(f"Smart UV Repair failed for {obj.name}")
+            self.mesh_index += 1
+            self.stage = "FIRST_UV_REPAIR" if self.mesh_index < len(targets) else "UNWRAP_PASS"
         elif self.stage == "UNWRAP_PASS":
             self.restore_remesh_settings()
             targets = self.pass_outputs or self.pass_sources
@@ -1058,15 +1113,18 @@ class ImportQueue:
             self.mesh_index = 0
             self.stage = "BAKE_SETUP" if settings.batch_autobake_enabled else "COMPLETE"
         elif self.stage == "BAKE_SETUP":
+            settings.batch_baking_progress = 0
             self.start_auto_bake(context, self.pass_sources[self.mesh_index])
             self.stage = "BAKE_WAIT"
         elif self.stage == "BAKE_WAIT":
             bake = self.scene.polygroups_baking_settings
+            settings.batch_baking_progress = bake.bake_task_progress
             if bake.bake_task_is_running:
                 return
             self.collect_bake_created()
             if bake.bake_task_stage != "DONE":
                 raise RuntimeError(f"Auto Bake failed: {bake.bake_task_message}")
+            settings.batch_baking_progress = 100
             self.mesh_index += 1
             if self.mesh_index < len(self.pass_sources):
                 self.stage = "BAKE_SETUP"
@@ -1284,6 +1342,12 @@ class ImportQueue:
             self.cursor.percent = self.settings.batch_import_progress
             self.cursor.label = f"{'Redo' if self.redo_mode else 'Import'} {self.index + 1}/{len(self.files)}"
             self.cursor.secondary_percent = self.settings.batch_remesh_progress
+            self.cursor.primary_in_corner = True
+            if self.stage in {"BAKE_SETUP", "BAKE_WAIT"}:
+                self.cursor.secondary_label = t(bpy.context, "import_baking_progress")
+                self.cursor.secondary_percent = self.settings.batch_baking_progress
+            else:
+                self.cursor.secondary_label = t(bpy.context, "import_remesh_progress")
             self.cursor.status_line = t(
                 bpy.context,
                 "import_cursor_paused" if self.settings.batch_stage == "PAUSED"
@@ -1336,6 +1400,7 @@ class ImportQueue:
             self.settings.batch_import_progress = 0
             self.settings.batch_current_progress = 0
             self.settings.batch_remesh_progress = 0
+            self.settings.batch_baking_progress = 0
             self.settings.batch_remaining_count = len(self.files)
             for obj in self.original_selection:
                 if obj in set(bpy.data.objects):
@@ -1350,6 +1415,18 @@ class ImportQueue:
         if status != "DONE":
             self.settings.batch_eta_seconds = -1.0
         self.finished = True
+        if (
+            status == "DONE"
+            and self.save_generated_separately
+            and self.settings.batch_auto_restore_separate_retopo
+        ):
+            try:
+                with context.temp_override(scene=self.scene, view_layer=self.view_layer):
+                    result = bpy.ops.object.polygroups_restore_separate_retopo()
+                if result != {"FINISHED"}:
+                    self.report({"WARNING"}, "Automatic Retopo restore did not complete")
+            except Exception as error:
+                self.report({"WARNING"}, f"Automatic Retopo restore failed: {error}")
         redraw(context)
 
 

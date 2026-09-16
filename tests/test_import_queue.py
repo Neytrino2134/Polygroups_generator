@@ -39,6 +39,11 @@ assert settings.batch_include_subfolders
 assert not settings.batch_auto_save and settings.batch_auto_save_interval == 5
 assert not settings.batch_save_generated_separately
 assert settings.batch_stage_2_enabled
+assert settings.batch_first_uv_repair_enabled
+assert settings.batch_first_uv_repair_threshold == 4.0
+assert settings.batch_first_uv_repair_min_faces == 6
+assert settings.batch_stage_3_auto_unwrap_method == "ANGLE"
+assert settings.batch_stage_4_auto_unwrap_method == "ANGLE"
 assert settings.batch_narrow_island_enabled
 assert settings.batch_small_islands_enabled
 assert settings.batch_small_island_threshold == 5.0
@@ -449,6 +454,8 @@ with tempfile.TemporaryDirectory() as directory:
     settings.batch_stage_4_enabled = True
     settings.batch_stage_3_auto_unwrap = False
     settings.batch_stage_4_auto_unwrap = False
+    settings.batch_stage_3_auto_unwrap_method = "SMART"
+    settings.batch_stage_4_auto_unwrap_method = "ANGLE"
     settings.batch_stage_5_enabled = False
     settings.batch_narrow_island_enabled = False
     settings.batch_small_islands_enabled = False

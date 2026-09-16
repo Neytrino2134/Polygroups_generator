@@ -1125,6 +1125,8 @@ def draw_import_progress(layout, context, settings):
                  text=f'{t(context, "import_current_progress")}: {settings.batch_current_progress:.1f}%')
     box.progress(factor=settings.batch_remesh_progress / 100, type="BAR",
                  text=f'{t(context, "import_remesh_progress")}: {settings.batch_remesh_progress:.1f}%')
+    box.progress(factor=settings.batch_baking_progress / 100, type="BAR",
+                 text=f'{t(context, "import_baking_progress")}: {settings.batch_baking_progress:.1f}%')
     box.label(text=t(context, "import_elapsed_time", value=format_duration(settings.batch_elapsed_seconds)))
     box.label(text=t(context, "import_current_time", value=format_duration(settings.batch_current_seconds)))
     if settings.batch_imported_count:
@@ -1328,6 +1330,13 @@ def draw_batch_processing(content, context, settings):
             angle = first.row()
             angle.enabled = settings.batch_auto_smart_uv_project
             angle.prop(settings, "batch_first_surface_angle", text=t(context, "smart_seam_angle_limit"))
+        first.separator()
+        first.prop(settings, "batch_first_uv_repair_enabled", text=t(context, "uv_repair"))
+        repair = first.column(align=True)
+        repair.enabled = settings.batch_first_uv_repair_enabled
+        repair.prop(settings, "batch_first_uv_repair_threshold", text=t(context, "uv_repair_threshold"))
+        repair.prop(settings, "batch_first_uv_repair_min_faces", text=t(context, "uv_repair_min_faces"))
+        repair.prop(settings, "batch_first_uv_repair_surface_angle", text=t(context, "uv_repair_surface_angle"))
 
     if draw_batch_stage_heading(content, t(context, "batch_stage_narrow"),
                                 settings, 3, "batch_narrow_island_enabled"):
@@ -1384,7 +1393,13 @@ def draw_batch_processing(content, context, settings):
                 autofix.prop(settings, "batch_stage_3_autofix_fin_loose", text=t(context, "batch_second_autofix_fin_loose"))
                 autofix.prop(settings, "batch_stage_3_autofix_close_nonmanifold", text=t(context, "batch_second_autofix_close_nonmanifold"))
                 autofix.prop(settings, "batch_stage_3_autofix_triangulate_ngons", text=t(context, "batch_second_autofix_triangulate_ngons"))
-            stage.prop(settings, f"batch_stage_{number}_auto_unwrap", text=t(context, "batch_angle_checker"))
+            stage.prop(settings, f"batch_stage_{number}_auto_unwrap", text=t(context, "auto_smart_uv_project"))
+            unwrap_method = stage.row(align=True)
+            unwrap_method.enabled = getattr(settings, f"batch_stage_{number}_auto_unwrap")
+            unwrap_method.prop(
+                settings, f"batch_stage_{number}_auto_unwrap_method",
+                text=t(context, "import_unwrap_method"),
+            )
 
         if number == 3:
             if draw_batch_stage_heading(content, t(context, "batch_stage_second_narrow"),
@@ -1579,6 +1594,17 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 "object.polygroups_restore_separate_retopo",
                 text=t(context, "batch_restore_separate_retopo"),
                 icon="IMPORT",
+            )
+            auto_restore_row = separate_save.row(align=True)
+            auto_restore_row.enabled = bool(
+                settings.batch_save_generated_separately
+                and settings.batch_separate_collections
+            )
+            auto_restore_row.prop(
+                settings,
+                "batch_auto_restore_separate_retopo",
+                text=t(context, "batch_auto_restore_separate_retopo"),
+                toggle=True,
             )
             restore_hint = separate_save.row()
             restore_hint.label(
@@ -4137,7 +4163,7 @@ def draw_edit_select_tool_actions(self, context):
 
 
 def draw_view_assists_shading_pie(self, context):
-    """Add independent Object Mode overlay toggles to the standard Z shading pie."""
+    """Add Object Mode overlay toggles to the standard Z shading pie."""
     if context.mode != "OBJECT":
         return
     scene = getattr(context, "scene", None)
@@ -4148,6 +4174,16 @@ def draw_view_assists_shading_pie(self, context):
     if seam_settings is None or checker_settings is None:
         return
     pie = self.layout.menu_pie()
+    enabled = bool(
+        seam_settings.show_seams_object_mode
+        and checker_settings.show_checker_solid_mode
+    )
+    pie.operator(
+        "wm.airetopo_toggle_view_assists",
+        text="Toggle Assists",
+        icon="HIDE_OFF" if enabled else "HIDE_ON",
+        depress=enabled,
+    )
     pie.prop(
         seam_settings,
         "show_seams_object_mode",

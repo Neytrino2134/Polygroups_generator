@@ -21,6 +21,7 @@ class RemeshCursor:
         self.secondary_percent = None
         self.secondary_label = "Remesh"
         self.status_line = None
+        self.primary_in_corner = False
         self.window = context.window
         self.handle = None
         if not bpy.app.background and self.window is not None:
@@ -30,20 +31,28 @@ class RemeshCursor:
         context = bpy.context
         if context.window != self.window or context.region is None:
             return
-        position = _positions.get(self.window.as_pointer())
-        if position is None:
-            return
         region = context.region
-        x, y = position[0] - region.x, position[1] - region.y
-        if not (0 <= x < region.width and 0 <= y < region.height):
-            return
         scale = context.preferences.system.ui_scale
         blf.size(0, 14 * scale)
         primary = f"{self.label} {self.percent:.0f}%"
         if self.secondary_percent is not None:
             primary += f" / {self.secondary_label} {self.secondary_percent:.0f}%"
-        lines = [primary]
-        if self.status_line:
+        if self.primary_in_corner:
+            corner_x, corner_y = 16 * scale, 16 * scale
+            blf.color(0, 0, 0, 0, 1)
+            blf.position(0, corner_x + 1, corner_y - 1, 0)
+            blf.draw(0, primary)
+            blf.color(0, 1, 1, 1, 1)
+            blf.position(0, corner_x, corner_y, 0)
+            blf.draw(0, primary)
+        position = _positions.get(self.window.as_pointer())
+        if position is None:
+            return
+        x, y = position[0] - region.x, position[1] - region.y
+        if not (0 <= x < region.width and 0 <= y < region.height):
+            return
+        lines = [self.status_line or ""] if self.primary_in_corner else [primary]
+        if self.status_line and not self.primary_in_corner:
             lines.append(self.status_line)
         width = max(blf.dimensions(0, line)[0] for line in lines)
         line_height = blf.dimensions(0, primary)[1]

@@ -154,7 +154,8 @@ for loop in outside.loops:
 before = [tuple(l[uv].uv) for l in outside.loops]
 bm.normal_update()
 bmesh.update_edit_mesh(obj.data)
-assert bpy.ops.mesh.polygroups_repair_uv_stretch() == {'FINISHED'}
+assert bpy.ops.mesh.polygroups_repair_uv_stretch(
+    average_island_scale=False, native_pack=False) == {'FINISHED'}
 bm = bmesh.from_edit_mesh(obj.data)
 uv = bm.loops.layers.uv.active
 outside = next(f for f in bm.faces if f.material_index == 8)

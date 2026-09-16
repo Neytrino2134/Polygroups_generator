@@ -47,6 +47,10 @@ assert model.batch_auto_unwrap_method == "SMART"
 assert model.batch_remesh_progress == 0
 assert model.batch_expanded_stages == 0
 assert abs(model.batch_first_surface_angle - radians(22)) < 1.0e-6
+assert model.batch_first_uv_repair_enabled
+assert model.batch_first_uv_repair_threshold == 4.0
+assert model.batch_first_uv_repair_min_faces == 6
+assert abs(model.batch_first_uv_repair_surface_angle - radians(45)) < 1.0e-6
 assert model.batch_first_remove_small_loose_parts
 assert model.batch_first_small_loose_part_metric == "BOUNDING_BOX"
 assert model.batch_first_small_loose_part_threshold_percent == 8.0
@@ -66,6 +70,8 @@ assert model.batch_stage_3_autofix_fin_loose
 assert model.batch_stage_3_autofix_close_nonmanifold
 assert model.batch_stage_3_autofix_triangulate_ngons
 assert model.batch_stage_4_remesh_preset == "LOW"
+assert model.batch_stage_3_auto_unwrap_method == "ANGLE"
+assert model.batch_stage_4_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_3_smart_relax_edges
 assert not model.batch_stage_4_smart_relax_edges
 assert model.batch_small_islands_enabled
@@ -105,6 +111,10 @@ model.file_import_automatic_processing = True
 model.batch_import_mode = "PAUSE_EACH"
 model.batch_expanded_stages = 1023
 model.batch_first_surface_angle = radians(40)
+model.batch_first_uv_repair_enabled = False
+model.batch_first_uv_repair_threshold = 9.0
+model.batch_first_uv_repair_min_faces = 12
+model.batch_first_uv_repair_surface_angle = radians(30)
 model.batch_narrow_island_max_width_percent = 20.0
 model.batch_stage_4_enabled = False
 model.batch_stage_3_remesh_preset = "HIGH"
@@ -113,6 +123,8 @@ model.batch_stage_3_autofix_fin_loose = False
 model.batch_stage_3_autofix_close_nonmanifold = False
 model.batch_stage_3_autofix_triangulate_ngons = False
 model.batch_stage_4_remesh_preset = "MID"
+model.batch_stage_3_auto_unwrap_method = "SMART"
+model.batch_stage_4_auto_unwrap_method = "SMART"
 model.batch_stage_3_smart_relax_edges = False
 model.batch_stage_4_smart_relax_edges = True
 model.batch_narrow_island_enabled = False
@@ -149,6 +161,10 @@ assert model.file_import_auto_unwrap_method == "SMART"
 assert model.batch_import_mode == "AUTO"
 assert model.batch_expanded_stages == 0
 assert abs(model.batch_first_surface_angle - radians(22)) < 1.0e-6
+assert model.batch_first_uv_repair_enabled
+assert model.batch_first_uv_repair_threshold == 4.0
+assert model.batch_first_uv_repair_min_faces == 6
+assert abs(model.batch_first_uv_repair_surface_angle - radians(45)) < 1.0e-6
 assert model.batch_narrow_island_max_width_percent == 10.0
 assert model.batch_stage_4_enabled
 assert model.batch_stage_3_remesh_preset == "MID"
@@ -157,6 +173,8 @@ assert model.batch_stage_3_autofix_fin_loose
 assert model.batch_stage_3_autofix_close_nonmanifold
 assert model.batch_stage_3_autofix_triangulate_ngons
 assert model.batch_stage_4_remesh_preset == "LOW"
+assert model.batch_stage_3_auto_unwrap_method == "ANGLE"
+assert model.batch_stage_4_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_3_smart_relax_edges
 assert not model.batch_stage_4_smart_relax_edges
 assert model.batch_narrow_island_enabled

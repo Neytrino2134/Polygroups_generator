@@ -106,11 +106,11 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
     grow_threshold: bpy.props.FloatProperty(name='Region Growth Ratio', default=1.8, min=1.01, max=1000)
     min_faces: bpy.props.IntProperty(name='Minimum Region Faces', default=6, min=1)
     smooth_steps: bpy.props.IntProperty(name='Boundary Smoothing', default=2, min=0, max=20)
-    surface_angle: bpy.props.FloatProperty(name='Surface Angle', default=math.radians(75),
+    surface_angle: bpy.props.FloatProperty(name='Surface Angle', default=math.radians(45),
                                           subtype='ANGLE', min=0, max=math.pi)
     sharp_preference: bpy.props.FloatProperty(name='Prefer Sharp Longitudinal Edges', default=3, min=0, max=20)
     selected_only: bpy.props.BoolProperty(name='Selected Faces Only', default=False)
-    create_edges: bpy.props.BoolProperty(name='Create New Edges', default=False,
+    create_edges: bpy.props.BoolProperty(name='Create New Edges', default=True,
         description='Allow smart routing to split faces; vertex positions are unchanged by routing')
     pin_generated: bpy.props.BoolProperty(name='Pin Generated Seams', default=True,
         description='Protect generated edges using the toolkit seam pin attribute, not UV pins')
@@ -119,18 +119,19 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
     small_island_threshold: bpy.props.FloatProperty(name='Small Island Area (%)', default=3.0,
         min=0.0, max=49.0, precision=2,
         description='Maximum island area relative to the repaired region, not the whole mesh')
-    average_island_scale: bpy.props.BoolProperty(name='Average Island Scale', default=False,
+    average_island_scale: bpy.props.BoolProperty(name='Average Island Scale', default=True,
         description='Average texel density across all UV islands after repair')
-    native_pack: bpy.props.BoolProperty(name='Native Blender Pack', default=False,
+    native_pack: bpy.props.BoolProperty(name='Native Blender Pack', default=True,
         description='Pack all UV islands with Blender native Pack Islands after repair')
-    cleanup_artifacts: bpy.props.BoolProperty(name='Clean UV Artifacts During Repair', default=False)
+    cleanup_artifacts: bpy.props.BoolProperty(name='Clean UV Artifacts During Repair', default=True)
     artifact_method: bpy.props.EnumProperty(name='Artifact Fix Method', items=(
         ('DELETE', 'Delete Faces', 'Delete artifact faces from mesh geometry'),
-        ('MERGE_CENTER', 'Merge to Center', 'Collapse each connected artifact to its center')))
+        ('MERGE_CENTER', 'Merge to Center', 'Collapse each connected artifact to its center')),
+        default='MERGE_CENTER')
     artifact_max_faces: bpy.props.IntProperty(name='Maximum Island Faces', default=7, min=1, max=100)
     artifact_stretch: bpy.props.FloatProperty(name='Artifact Stretch', default=8.0, min=1.1, max=10000)
     artifact_compactness: bpy.props.FloatProperty(name='Needle Compactness', default=10.0, min=1.0, max=10000)
-    smart_relax: bpy.props.BoolProperty(name='Smart Relax Generated', default=False,
+    smart_relax: bpy.props.BoolProperty(name='Smart Relax Generated', default=True,
         description='Move generated seam vertices along the mesh surface, preserving junctions')
 
     @classmethod

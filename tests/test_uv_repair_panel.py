@@ -18,6 +18,15 @@ assert not visibility.topic_uv_3
 assert settings.uv_repair_threshold == 4.0
 assert abs(settings.uv_repair_grow_threshold - 1.8) < 1e-5
 assert (settings.uv_repair_min_faces, settings.uv_repair_smooth_steps) == (6, 2)
+assert abs(settings.uv_repair_surface_angle - 0.7853981634) < 1e-5
+assert settings.uv_repair_create_edges
+assert settings.uv_repair_merge_small_islands
+assert settings.uv_repair_pin_generated
+assert settings.uv_repair_smart_relax
+assert settings.uv_repair_average_island_scale
+assert settings.uv_repair_native_pack
+assert settings.uv_repair_cleanup_artifacts
+assert settings.uv_repair_artifact_method == 'MERGE_CENTER'
 
 class Layout:
     def __init__(self, buttons=None, artifact_buttons=None):

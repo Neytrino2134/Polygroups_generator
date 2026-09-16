@@ -69,6 +69,11 @@ def find_uv_artifacts(bm, max_faces=7, stretch_threshold=8.0,
                 'stretch': worst_stretch, 'compactness': compactness,
                 'mesh_area': mesh_area, 'uv_area': uv_area,
             })
+    # Never erase or collapse the complete analyzed mesh. A lone tiny object may
+    # simply be a valid asset with an absent/unfinished UV map rather than debris.
+    detected_faces = {face for artifact in result for face in artifact['faces']}
+    if detected_faces and len(detected_faces) == len(graph):
+        return []
     return result
 
 
@@ -119,7 +124,8 @@ class MESH_OT_polygroups_uv_artifact_cleanup(bpy.types.Operator):
         ('APPLY', 'Apply Cleanup', 'Apply the selected cleanup method')))
     method: bpy.props.EnumProperty(name='Fix Method', items=(
         ('DELETE', 'Delete Faces', 'Delete artifact faces from the mesh'),
-        ('MERGE_CENTER', 'Merge to Center', 'Collapse each connected artifact to its center')))
+        ('MERGE_CENTER', 'Merge to Center', 'Collapse each connected artifact to its center')),
+        default='MERGE_CENTER')
     max_faces: bpy.props.IntProperty(name='Maximum Island Faces', default=7, min=1, max=100)
     stretch_threshold: bpy.props.FloatProperty(name='Artifact Stretch', default=8.0, min=1.1, max=10000)
     compactness_threshold: bpy.props.FloatProperty(name='Needle Compactness', default=10.0, min=1.0, max=10000)

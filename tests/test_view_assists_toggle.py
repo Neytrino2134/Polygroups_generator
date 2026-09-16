@@ -62,6 +62,11 @@ print("VIEW_ASSISTS_TOGGLE_TEST_PASSED")
 class PieLayout:
     def __init__(self):
         self.properties = []
+        self.button = None
+
+    def operator(self, identifier, **kwargs):
+        self.button = (identifier, kwargs)
+        return SimpleNamespace()
 
     def menu_pie(self):
         return self
@@ -72,6 +77,9 @@ class PieLayout:
 
 pie_layout = PieLayout()
 draw_view_assists_shading_pie(SimpleNamespace(layout=pie_layout), bpy.context)
+assert pie_layout.button[0] == "wm.airetopo_toggle_view_assists"
+assert pie_layout.button[1]["text"] == "Toggle Assists"
+assert pie_layout.button[1]["depress"] is True
 assert [item[1] for item in pie_layout.properties] == [
     "show_seams_object_mode",
     "show_checker_solid_mode",
@@ -84,5 +92,6 @@ edit_mode_layout = PieLayout()
 edit_context = SimpleNamespace(mode="EDIT_MESH", scene=scene)
 draw_view_assists_shading_pie(SimpleNamespace(layout=edit_mode_layout), edit_context)
 assert not edit_mode_layout.properties
+assert edit_mode_layout.button is None
 
 print("SHADING_PIE_SEPARATE_ASSISTS_TEST_PASSED")

@@ -50,7 +50,8 @@ default) only when they are also collapsed, critically stretched, or needle-shap
 **Select Artifacts** previews the matching mesh faces. **Apply Artifact Cleanup**
 either deletes those faces from the mesh or merges each physically connected artifact
 to its center. **Clean UV Artifacts During Repair** runs the same cleanup as the first
-Smart UV Repair step. Selection scope is shared with **Selected Faces Only**.
+Smart UV Repair step. It is enabled by default with **Merge to Center**. Selection
+scope is shared with **Selected Faces Only**.
 
 Two or more boundary loops are joined by paths. A single boundary is connected to
 its geodesically farthest interior vertex, supporting capped protrusions and cones.
@@ -62,6 +63,17 @@ without local distortion is not detected.
 Existing seams and pinned edges are protected during routing. New topology is
 planned on a mesh copy; failures after applying the copy restore the original mesh.
 Blender Undo is supported. No automatic invocation after Smart UV Unwrap is enabled.
+
+Batch Import runs Smart UV Repair after its first remesh and before Auto Unwrap when
+that remesh result already has an active UV map. The batch panel exposes only Critical
+Stretch Ratio, Minimum Region Faces, and Surface Angle. Routing, pinning, local small
+island merging, Smart Relax, scale averaging, native packing, and artifact cleanup
+with Merge to Center are enabled for this step. Results without a UV map are skipped
+and continue to Auto Unwrap normally.
+
+The second and third Batch Import remesh passes each keep their Auto Unwrap switch
+and provide an independent method selector: **Smart UV Unwrap** or **Angle Based**.
+Angle Based remains the default for compatibility with existing batch workflows.
 
 Validation: `tests/test_uv_repair_blender.py` runs in background Blender and covers
 healthy/distorted cylinders, detection-only mode, both routing modes, pins, selected
