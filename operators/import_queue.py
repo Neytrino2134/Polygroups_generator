@@ -357,6 +357,7 @@ class ImportQueue:
         self.timer = None
         self.cursor = None
         self.saved_remesh_settings = None
+        self.saved_unwrap_checker = None
         self.saved_bake_settings = None
         self.bake_snapshot = None
 
@@ -501,6 +502,7 @@ class ImportQueue:
         seam_settings = self.scene.polygroups_seam_finalization_settings
         seam_settings.auto_unwrap_after_seam = False
         seam_settings.smart_uv_unwrap_auto_pack = False
+        self.saved_unwrap_checker = settings.remesh_auto_unwrap_checker
         settings.remesh_auto_unwrap_checker = False
         if self.disable_view_assist:
             self.scene.polygroups_seam_preparation_settings.show_seams_object_mode = False
@@ -765,12 +767,12 @@ class ImportQueue:
             obj.data = obj.data.copy()
             self.owned_meshes.add(obj.data)
         settings = self.settings
-        if settings.batch_stage_3_autofix_fin_loose:
+        if getattr(settings, f"batch_stage_{self.pass_number}_autofix_fin_loose"):
             _remove_fin_faces_for_autofix(context, obj)
             _delete_loose_geometry_for_autofix(context, obj)
-        if settings.batch_stage_3_autofix_close_nonmanifold:
+        if getattr(settings, f"batch_stage_{self.pass_number}_autofix_close_nonmanifold"):
             _fill_open_nonmanifold_boundaries(obj)
-        if settings.batch_stage_3_autofix_triangulate_ngons:
+        if getattr(settings, f"batch_stage_{self.pass_number}_autofix_triangulate_ngons"):
             _triangulate_ngons_for_autofix(obj)
 
     def first_cleanup_stage(self):
@@ -791,7 +793,15 @@ class ImportQueue:
             return "SECOND_SMALL_ISLANDS"
         return "PASS_SETUP"
 
-    def pre_unwrap_stage(self):
+    def pre_unwrap_stage(self, loose_cleanup_done=False):
+        if self.batch_stages and self.pass_number in (3, 4):
+            self.mesh_index = 0
+            if (not loose_cleanup_done and getattr(
+                    self.settings, f"batch_stage_{self.pass_number}_remove_small_loose_parts")):
+                return "REMOVE_SMALL_LOOSE_PARTS"
+            if getattr(self.settings, f"batch_stage_{self.pass_number}_autofix_enabled"):
+                return "AUTOFIX_SECOND"
+            return "UNWRAP_PASS"
         if (
             self.remove_small_loose_parts
             and self.pass_number == (2 if self.batch_stages else 1)
@@ -968,7 +978,7 @@ class ImportQueue:
                 else:
                     self.mesh_index = 0
                     self.stage = ("BAKE_SETUP" if self.batch_stages and settings.batch_autobake_enabled
-                                  else "COMPLETE")
+                                  else self.finalization_stage())
             else:
                 self.pass_number, self.pass_method, self.pass_quad_count, self.pass_unwrap, self.pass_unwrap_method = self.passes[self.pass_index]
                 self.pass_outputs = []
@@ -980,9 +990,7 @@ class ImportQueue:
                         settings.remesh_pregenerate_polygroups,
                         settings.remesh_auto_generate_seams,
                     )
-                self.stage = ("REMESH" if self.pass_method else
-                              "AUTOFIX_SECOND" if self.batch_stages and self.pass_number == 3
-                              and settings.batch_stage_3_autofix_enabled else self.pre_unwrap_stage())
+                self.stage = "REMESH" if self.pass_method else self.pre_unwrap_stage()
         elif self.stage == "REMESH":
             settings.batch_remesh_progress = 0
             settings.batch_baking_progress = 0
@@ -1051,8 +1059,7 @@ class ImportQueue:
                 self.stage = "REMESH"
             else:
                 self.mesh_index = 0
-                self.stage = ("AUTOFIX_SECOND" if self.batch_stages and self.pass_number == 3
-                              and settings.batch_stage_3_autofix_enabled else self.pre_unwrap_stage())
+                self.stage = self.pre_unwrap_stage()
         elif self.stage == "AUTOFIX_SECOND":
             targets = self.pass_outputs or self.pass_sources
             self.autofix_second_pass(context, targets[self.mesh_index])
@@ -1061,16 +1068,21 @@ class ImportQueue:
         elif self.stage == "REMOVE_SMALL_LOOSE_PARTS":
             targets = self.pass_outputs or self.pass_sources
             obj = targets[self.mesh_index]
+            later_pass = self.batch_stages and self.pass_number in (3, 4)
+            metric = (getattr(settings, f"batch_stage_{self.pass_number}_small_loose_part_metric")
+                      if later_pass else self.small_loose_part_metric)
+            threshold = (getattr(settings, f"batch_stage_{self.pass_number}_small_loose_part_threshold_percent")
+                         if later_pass else self.small_loose_part_threshold)
             result = remove_small_loose_parts(
                 obj,
-                metric=self.small_loose_part_metric,
-                threshold_percent=self.small_loose_part_threshold,
+                metric=metric,
+                threshold_percent=threshold,
             )
             if result["part_count"]:
                 self.report(
                     {"INFO"},
                     f"{obj.name}: removed {result['part_count']} small loose part(s) "
-                    f"below {self.small_loose_part_threshold:g}%",
+                    f"below {threshold:g}%",
                 )
             self.mesh_index += 1
             if self.mesh_index < len(targets):
@@ -1081,25 +1093,29 @@ class ImportQueue:
                     "FIRST_UV_REPAIR"
                     if self.batch_stages and self.pass_number == 2
                     and settings.batch_first_uv_repair_enabled
+                    else self.pre_unwrap_stage(loose_cleanup_done=True) if later_pass
                     else "UNWRAP_PASS"
                 )
-        elif self.stage == "FIRST_UV_REPAIR":
+        elif self.stage in {"FIRST_UV_REPAIR", "POST_UNWRAP_UV_REPAIR"}:
+            repair_stage = self.stage
+            repair_prefix = ("batch_first_uv_repair" if repair_stage == "FIRST_UV_REPAIR"
+                             else f"batch_stage_{self.pass_number}_uv_repair")
             targets = self.pass_outputs or self.pass_sources
             obj = targets[self.mesh_index]
             self.select_source(context, obj)
             if obj.data.uv_layers.active is None:
-                self.report({"INFO"}, f"{obj.name}: Smart UV Repair skipped; no UV map before Auto Unwrap")
+                self.report({"INFO"}, f"{obj.name}: Smart UV Repair skipped; no UV map")
             else:
                 bpy.ops.object.mode_set(mode="EDIT")
                 bpy.ops.mesh.select_all(action="SELECT")
                 try:
                     result = bpy.ops.mesh.polygroups_repair_uv_stretch(
                         "EXEC_DEFAULT",
-                        threshold=settings.batch_first_uv_repair_threshold,
+                        threshold=getattr(settings, repair_prefix + "_threshold"),
                         grow_threshold=1.8,
-                        min_faces=settings.batch_first_uv_repair_min_faces,
+                        min_faces=getattr(settings, repair_prefix + "_min_faces"),
                         smooth_steps=2,
-                        surface_angle=settings.batch_first_uv_repair_surface_angle,
+                        surface_angle=getattr(settings, repair_prefix + "_surface_angle"),
                         selected_only=False,
                         sharp_preference=3.0,
                         create_edges=True,
@@ -1121,7 +1137,8 @@ class ImportQueue:
                 if "FINISHED" not in result:
                     raise RuntimeError(f"Smart UV Repair failed for {obj.name}")
             self.mesh_index += 1
-            self.stage = "FIRST_UV_REPAIR" if self.mesh_index < len(targets) else "UNWRAP_PASS"
+            self.stage = (repair_stage if self.mesh_index < len(targets) else
+                          "UNWRAP_PASS" if repair_stage == "FIRST_UV_REPAIR" else "COMPLETE_UNWRAP_PASS")
         elif self.stage == "UNWRAP_PASS":
             self.restore_remesh_settings()
             targets = self.pass_outputs or self.pass_sources
@@ -1147,8 +1164,17 @@ class ImportQueue:
                             raise RuntimeError(f"Angle Based unwrap failed for {obj.name}")
                         if "FINISHED" not in bpy.ops.object.polygroups_apply_checker_material():
                             raise RuntimeError(f"Applying checker material failed for {obj.name}")
+            self.mesh_index = 0
+            self.stage = (
+                "POST_UNWRAP_UV_REPAIR"
+                if self.batch_stages and self.pass_number in (3, 4) and self.pass_unwrap
+                and getattr(settings, f"batch_stage_{self.pass_number}_uv_repair_enabled")
+                else "COMPLETE_UNWRAP_PASS"
+            )
+        elif self.stage == "COMPLETE_UNWRAP_PASS":
+            targets = self.pass_outputs or self.pass_sources
             self.pass_sources = targets
-            self.result_meshes = targets
+            self.result_meshes = list(targets)
             self.pass_index += 1
             if self.batch_stages and self.pass_number == 2:
                 self.mesh_index = 0
@@ -1196,7 +1222,7 @@ class ImportQueue:
                 if "FINISHED" not in bpy.ops.object.polygroups_uvpackmaster_pack():
                     raise RuntimeError(f"UVPackmaster Pack failed for {obj.name}")
             self.mesh_index = 0
-            self.stage = "BAKE_SETUP" if settings.batch_autobake_enabled else "COMPLETE"
+            self.stage = "BAKE_SETUP" if settings.batch_autobake_enabled else self.finalization_stage()
         elif self.stage == "BAKE_SETUP":
             settings.batch_baking_progress = 0
             self.start_auto_bake(context, self.pass_sources[self.mesh_index])
@@ -1215,9 +1241,14 @@ class ImportQueue:
                 self.stage = "BAKE_SETUP"
             else:
                 self.restore_bake_settings()
+                self.stage = self.finalization_stage()
+        elif self.stage in ("SMART_DECIMATE", "SMART_LODS"):
+            self.finalize_mesh(context, self.pass_sources[self.mesh_index])
+            self.mesh_index += 1
+            if self.mesh_index == len(self.pass_sources):
                 self.stage = "COMPLETE"
         elif self.stage == "COMPLETE":
-            self.file_record["output_tris"] = self.count_tris(self.pass_sources or self.meshes)
+            self.file_record["output_tris"] = self.count_tris((self.pass_sources or self.meshes) + self.result_meshes)
             completed_object_count = len(self.meshes)
             if self.save_generated_separately:
                 self.save_and_clear_completed_collection()
@@ -1228,6 +1259,67 @@ class ImportQueue:
             self.complete_file(success=True, object_count=completed_object_count)
             self.auto_save_successful_meshes()
         settings.batch_stage = self.stage
+
+    def finalization_stage(self):
+        self.mesh_index = 0
+        if self.batch_stages and self.settings.batch_smart_decimate_enabled:
+            self.pass_number = 11
+            return "SMART_DECIMATE"
+        if self.batch_stages and self.settings.batch_smart_lods_enabled:
+            self.pass_number = 12
+            return "SMART_LODS"
+        return "COMPLETE"
+
+    def finalize_mesh(self, context, obj):
+        settings = self.settings
+        self.select_source(context, obj)
+        if self.stage == "SMART_DECIMATE":
+            from .smart_decimate import SEAMS_DECIMATE_MODIFIER_NAME, SMART_DECIMATE_MODIFIER_NAME
+            result = self.tracked(lambda: bpy.ops.object.polygroups_smart_decimate(
+                triangle_limit=settings.batch_smart_decimate_triangle_limit,
+                duplicate_and_apply=False,
+            ))
+            if "FINISHED" not in result:
+                raise RuntimeError(f"Smart Decimate failed for {obj.name}: check UV seam edges")
+            for name in (SEAMS_DECIMATE_MODIFIER_NAME, SMART_DECIMATE_MODIFIER_NAME):
+                if "FINISHED" not in self.tracked(lambda: bpy.ops.object.modifier_apply(modifier=name)):
+                    raise RuntimeError(f"Applying {name} failed for {obj.name}")
+            self.file_record.setdefault("finalization", []).append({
+                "object": obj.name, "stage": 11,
+                "triangle_limit": settings.batch_smart_decimate_triangle_limit,
+                "output_tris": self.count_tris([obj]),
+                "limit_reached": self.count_tris([obj]) <= settings.batch_smart_decimate_triangle_limit,
+            })
+        else:
+            lod_settings = self.scene.polygroups_mesh_finalization_settings
+            names = ["smart_lods_count", "smart_lods_final_decimate", "smart_lods_triangulate_all"]
+            names.extend(f"smart_lods_target_{i}" for i in range(1, 6))
+            previous = {name: getattr(lod_settings, name) for name in names + ["smart_lods_auto_arrange"]}
+            before = set(bpy.data.objects)
+            try:
+                for name in names:
+                    setattr(lod_settings, name, getattr(settings, "batch_" + name))
+                lod_settings.smart_lods_auto_arrange = False
+                result = self.tracked(lambda: bpy.ops.object.polygroups_generate_smart_lods())
+                if "FINISHED" not in result:
+                    raise RuntimeError(f"Smart LODs failed for {obj.name}")
+            finally:
+                for name, value in previous.items():
+                    setattr(lod_settings, name, value)
+            outputs = sorted(set(bpy.data.objects) - before, key=lambda item: item.name)
+            self.file_objects.extend(outputs)
+            if self.collection:
+                move_to_collection(outputs, self.collection)
+            self.result_meshes.extend(item for item in outputs if item.type == "MESH")
+            self.file_record.setdefault("finalization", []).append({
+                "object": obj.name, "stage": 12,
+                "fallback": settings.batch_smart_lods_final_decimate,
+                "triangulate": settings.batch_smart_lods_triangulate_all,
+                "lods": [{"object": item.name, "output_tris": self.count_tris([item]),
+                          "triangle_limit": getattr(settings, f"batch_smart_lods_target_{index}"),
+                          "limit_reached": self.count_tris([item]) <= getattr(settings, f"batch_smart_lods_target_{index}")}
+                         for index, item in enumerate((item for item in outputs if item.type == "MESH"), 1)],
+            })
 
     def replace_remesh_material(self, obj):
         # Only change the generated result, including when a backend shares data.
@@ -1434,6 +1526,7 @@ class ImportQueue:
     def update_progress(self, remesh_progress=None):
         fraction = {"NEXT": 0.0, "IMPORT": 0.0, "RENAME": 0.05,
                     "WELD": 0.10, "PACK": 0.93, "BAKE_SETUP": 0.94,
+                    "SMART_DECIMATE": 0.985, "SMART_LODS": 0.985,
                     "COMPLETE": 0.99}.get(self.stage, 0.15)
         if self.stage == "BAKE_WAIT":
             bake = self.scene.polygroups_baking_settings
@@ -1488,6 +1581,9 @@ class ImportQueue:
     def finish(self, context, status, rollback=False):
         if self.finished:
             return
+        if self.saved_unwrap_checker is not None:
+            self.settings.remesh_auto_unwrap_checker = self.saved_unwrap_checker
+            self.saved_unwrap_checker = None
         if self.job:
             self.job.abort()
             self.job = None
@@ -1573,7 +1669,7 @@ class OBJECT_OT_polygroups_toggle_batch_stage(bpy.types.Operator):
     bl_description = "Show or hide this stage's settings without changing whether it runs"
     bl_options = {"INTERNAL"}
 
-    stage: bpy.props.IntProperty(min=1, max=10, options={"SKIP_SAVE"})
+    stage: bpy.props.IntProperty(min=1, max=12, options={"SKIP_SAVE"})
 
     def execute(self, context):
         settings = context.scene.polygroups_model_preparation_settings

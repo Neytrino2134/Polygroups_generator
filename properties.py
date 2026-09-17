@@ -9,6 +9,7 @@ REMESH_PRESET_ITEMS = (
     ("LOW", "LOW", "Use the LOW quad count from add-on preferences"),
     ("MID", "MID", "Use the MID quad count from add-on preferences"),
     ("HIGH", "HIGH", "Use the HIGH quad count from add-on preferences"),
+    ("ULTRA", "ULTRA", "Use the ULTRA quad count from add-on preferences"),
 )
 
 IMPORT_REMESH_METHOD_ITEMS = (
@@ -119,6 +120,16 @@ def _panel_visibility_update(property_name):
         _set_single_visible_section(self, property_name)
 
     return update
+
+
+def _update_batch_smart_decimate(self, context):
+    if self.batch_smart_decimate_enabled:
+        self.batch_smart_lods_enabled = False
+
+
+def _update_batch_smart_lods(self, context):
+    if self.batch_smart_lods_enabled:
+        self.batch_smart_decimate_enabled = False
 
 
 def _normalize_render_output_directory(self, context):
@@ -686,7 +697,53 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Triangulate N-gons", default=True,
         description="Triangulate faces with more than four sides",
     )
+    batch_stage_3_remove_small_loose_parts: bpy.props.BoolProperty(
+        name="Remove Small Loose Parts",
+        default=True,
+        description="Automatically remove small disconnected components before Autofix Before Unwrap",
+    )
+    batch_stage_3_small_loose_part_threshold_percent: bpy.props.FloatProperty(
+        name="Remove Below",
+        default=8.0,
+        min=0.0,
+        max=100.0,
+        soft_max=25.0,
+        precision=1,
+        subtype="PERCENTAGE",
+        description="Remove parts smaller than this percentage of the largest disconnected part",
+    )
+    batch_stage_3_small_loose_part_metric: bpy.props.EnumProperty(
+        name="Loose Part Size",
+        description="How disconnected part size is measured before Autofix Before Unwrap",
+        items=(
+            (
+                "BOUNDING_BOX",
+                "Bounding Box",
+                "Use bounding-box size with flat and linear geometry support",
+            ),
+            (
+                "VOLUME",
+                "Volume",
+                "Use enclosed volume; automatically use bounding-box size for open geometry",
+            ),
+        ),
+        default="BOUNDING_BOX",
+    )
     batch_stage_3_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap", default=True)
+    batch_stage_3_uv_repair_enabled: bpy.props.BoolProperty(
+        name="Smart UV Repair", default=True,
+        description="Run Smart UV Repair after Auto Unwrap in remesh pass 2",
+    )
+    batch_stage_3_uv_repair_threshold: bpy.props.FloatProperty(
+        name="Critical Stretch Ratio", default=4.0, min=1.1, max=1000.0,
+    )
+    batch_stage_3_uv_repair_min_faces: bpy.props.IntProperty(
+        name="Minimum Region Faces", default=6, min=1,
+    )
+    batch_stage_3_uv_repair_surface_angle: bpy.props.FloatProperty(
+        name="Surface Angle", default=radians(45.0),
+        min=0.0, max=radians(180.0), subtype="ANGLE",
+    )
     batch_stage_3_auto_unwrap_method: bpy.props.EnumProperty(
         name="Unwrap Method", items=BATCH_REMESH_UNWRAP_METHOD_ITEMS, default="ANGLE",
     )
@@ -745,10 +802,72 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_stage_4_prepare_polygroups: bpy.props.BoolProperty(name="Prepare Poly Groups", default=True)
     batch_stage_4_material_seams: bpy.props.BoolProperty(name="Auto Generate Seams from Materials", default=True)
     batch_stage_4_smart_relax_edges: bpy.props.BoolProperty(
-        name="Smart Relax Edges", default=False,
+        name="Smart Relax Edges", default=True,
         description="Smart-relax the generated result's seam edges before UV unwrapping",
     )
+    batch_stage_4_remove_small_loose_parts: bpy.props.BoolProperty(
+        name="Remove Small Loose Parts",
+        default=True,
+        description="Automatically remove small disconnected components before Autofix Before Unwrap",
+    )
+    batch_stage_4_small_loose_part_threshold_percent: bpy.props.FloatProperty(
+        name="Remove Below",
+        default=8.0,
+        min=0.0,
+        max=100.0,
+        soft_max=25.0,
+        precision=1,
+        subtype="PERCENTAGE",
+        description="Remove parts smaller than this percentage of the largest disconnected part",
+    )
+    batch_stage_4_small_loose_part_metric: bpy.props.EnumProperty(
+        name="Loose Part Size",
+        description="How disconnected part size is measured before Autofix Before Unwrap",
+        items=(
+            (
+                "BOUNDING_BOX",
+                "Bounding Box",
+                "Use bounding-box size with flat and linear geometry support",
+            ),
+            (
+                "VOLUME",
+                "Volume",
+                "Use enclosed volume; automatically use bounding-box size for open geometry",
+            ),
+        ),
+        default="BOUNDING_BOX",
+    )
+    batch_stage_4_autofix_enabled: bpy.props.BoolProperty(
+        name="Autofix", default=True,
+        description="Repair the third remesh result before Angle Based UV unwrapping",
+    )
+    batch_stage_4_autofix_fin_loose: bpy.props.BoolProperty(
+        name="Remove Fin Faces and Loose Geometry", default=True,
+        description="Remove thin protruding fin faces, wire edges, and loose vertices",
+    )
+    batch_stage_4_autofix_close_nonmanifold: bpy.props.BoolProperty(
+        name="Close Open Boundaries", default=True,
+        description="Fill open non-manifold boundary loops",
+    )
+    batch_stage_4_autofix_triangulate_ngons: bpy.props.BoolProperty(
+        name="Triangulate N-gons", default=True,
+        description="Triangulate faces with more than four sides",
+    )
     batch_stage_4_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap", default=True)
+    batch_stage_4_uv_repair_enabled: bpy.props.BoolProperty(
+        name="Smart UV Repair", default=True,
+        description="Run Smart UV Repair after Auto Unwrap in remesh pass 3",
+    )
+    batch_stage_4_uv_repair_threshold: bpy.props.FloatProperty(
+        name="Critical Stretch Ratio", default=4.0, min=1.1, max=1000.0,
+    )
+    batch_stage_4_uv_repair_min_faces: bpy.props.IntProperty(
+        name="Minimum Region Faces", default=6, min=1,
+    )
+    batch_stage_4_uv_repair_surface_angle: bpy.props.FloatProperty(
+        name="Surface Angle", default=radians(45.0),
+        min=0.0, max=radians(180.0), subtype="ANGLE",
+    )
     batch_stage_4_auto_unwrap_method: bpy.props.EnumProperty(
         name="Unwrap Method", items=BATCH_REMESH_UNWRAP_METHOD_ITEMS, default="ANGLE",
     )
@@ -768,6 +887,23 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         ),
         default="AUTO",
     )
+    batch_smart_decimate_enabled: bpy.props.BoolProperty(
+        name="Stage 11: Smart Decimate", default=False, update=_update_batch_smart_decimate,
+    )
+    batch_smart_decimate_triangle_limit: bpy.props.IntProperty(
+        name="Triangle Limit", default=3000, min=1, step=1000,
+    )
+    batch_smart_lods_enabled: bpy.props.BoolProperty(
+        name="Stage 12: Smart LODs", default=False, update=_update_batch_smart_lods,
+    )
+    batch_smart_lods_count: bpy.props.IntProperty(name="LOD Count", default=5, min=1, max=5)
+    batch_smart_lods_target_1: bpy.props.IntProperty(name="LOD.1 Tris", default=3000, min=1)
+    batch_smart_lods_target_2: bpy.props.IntProperty(name="LOD.2 Tris", default=1500, min=1)
+    batch_smart_lods_target_3: bpy.props.IntProperty(name="LOD.3 Tris", default=1000, min=1)
+    batch_smart_lods_target_4: bpy.props.IntProperty(name="LOD.4 Tris", default=500, min=1)
+    batch_smart_lods_target_5: bpy.props.IntProperty(name="LOD.5 Tris", default=150, min=1)
+    batch_smart_lods_final_decimate: bpy.props.BoolProperty(name="Final Decimate Fallback", default=False)
+    batch_smart_lods_triangulate_all: bpy.props.BoolProperty(name="Triangulate All LODs", default=False)
     batch_redo_collection_name: bpy.props.StringProperty(
         name="Redo Collection", description="Generated.N collection selected for rebuilding",
     )
@@ -1793,12 +1929,13 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     show_smart_lods_settings: bpy.props.BoolProperty(name="Smart LODs", default=False)
     smart_lods_count: bpy.props.IntProperty(
         name="LOD Count", description="Number of generated LOD meshes",
-        default=4, min=1, max=4,
+        default=5, min=1, max=5,
     )
-    smart_lods_target_1: bpy.props.IntProperty(name="LOD.1", default=1500, min=1)
-    smart_lods_target_2: bpy.props.IntProperty(name="LOD.2", default=1000, min=1)
-    smart_lods_target_3: bpy.props.IntProperty(name="LOD.3", default=500, min=1)
-    smart_lods_target_4: bpy.props.IntProperty(name="LOD.4", default=150, min=1)
+    smart_lods_target_1: bpy.props.IntProperty(name="LOD.1", default=3000, min=1)
+    smart_lods_target_2: bpy.props.IntProperty(name="LOD.2", default=1500, min=1)
+    smart_lods_target_3: bpy.props.IntProperty(name="LOD.3", default=1000, min=1)
+    smart_lods_target_4: bpy.props.IntProperty(name="LOD.4", default=500, min=1)
+    smart_lods_target_5: bpy.props.IntProperty(name="LOD.5", default=150, min=1)
     smart_lods_final_decimate: bpy.props.BoolProperty(
         name="Final Decimate Fallback",
         description="If seam-aware decimation cannot reach a triangle limit, add an unrestricted Decimate pass",
@@ -1867,6 +2004,21 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         description="Duplicate the active object, add Smart Decimate to the duplicate, and apply it",
         default=True,
     )
+    smart_decimate_hide_source: bpy.props.BoolProperty(
+        name="Hide LOW After Decimate", default=False,
+        description="Disable original LOW viewport display after successful Smart Decimate",
+    )
+    fab_prepare_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    fab_prepare_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    fab_prepare_total: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
+    fab_prepare_done: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
+    fab_prepare_prepared: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
+    fab_prepare_skipped: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
+    fab_prepare_failed: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
+    fab_prepare_current: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    fab_prepare_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    fab_prepare_queue_data: bpy.props.StringProperty(default="[]", options={"SKIP_SAVE"})
+    fab_prepare_progress: bpy.props.FloatProperty(default=0, min=0, max=1, options={"SKIP_SAVE"})
     fab_asset_name: bpy.props.StringProperty(
         name="Asset Name",
         description="Base asset name used for FAB/Unreal object, material, and texture names",
@@ -2017,6 +2169,11 @@ def _update_studio_backdrop(self, context):
     update_backdrop(self, context)
 
 
+def _update_studio_color_tag(self, context):
+    from .operators.render_studio import update_studio_color_tag
+    update_studio_color_tag(self, context)
+
+
 class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     studio_backdrop: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_camera: bpy.props.PointerProperty(type=bpy.types.Object)
@@ -2027,6 +2184,13 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     studio_fill_aim: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_rim: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_rim_aim: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_collection_color_tag: bpy.props.EnumProperty(
+        name="Collection Color Tag",
+        items=[("NONE", "None", "No color tag")] + [
+            (f"COLOR_{index:02d}", f"Color {index}", f"Collection color tag {index}")
+            for index in range(1, 9)],
+        default="COLOR_08", update=_update_studio_color_tag,
+    )
     studio_move_step: bpy.props.FloatProperty(
         name="Movement Step (m)",
         description="Movement distance in metres for all studio arrow buttons",

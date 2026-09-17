@@ -207,3 +207,84 @@ and their objects. Objects also linked to collections outside the removed
 hierarchy are preserved there. Unused mesh/camera/light data belonging to deleted
 objects is cleaned up. Studio pointers clear automatically and Prepare Scene
 can recreate the rig. The operation supports Undo.
+
+
+### Batch finalization stages 11 and 12
+
+Batch Import adds optional Stage 11 Smart Decimate and Stage 12 Smart LODs.
+Enabling one disables the other. Both run after optional baking and before
+saving, on the latest processing results. Smart Decimate exposes only a triangle
+limit (3000 by default, arrows change it by 1000) and applies its two modifiers
+to the final mesh. It requires UV seam edges, as the Mesh Finalization operator
+does. Smart LODs exposes 1–5 LODs, a triangle budget per LOD, Final Decimate
+Fallback and Triangulate. It uses the existing LOD generator and keeps generated
+LODs in the source collection; batch controls do not overwrite the separate
+Mesh Finalization settings. Reports include actual triangle counts and whether
+requested budgets were reached; unattainable budgets follow the operators'
+existing warning behavior.
+
+Mesh Finalization → Decimate → Smart Decimate all generated applies that
+section's current settings to the highest numbered original Retopo in every
+Generated.N collection in the current scene. Retopo generation numbers are
+compared numerically; unnumbered Retopo counts as generation 1. LODs and
+SmartDecimated copies are excluded. Hidden collections and objects are temporarily
+revealed and restored, and each failed target is reported without stopping other
+collections. Selection is restored after processing.
+
+Smart LOD defaults in Batch Import and Mesh Finalization: 5 LODs with budgets
+3000, 1500, 1000, 500 and 150 triangles. Saved custom values remain unchanged.
+
+
+Decimate also provides Hide LOW After Decimate, Show all LOW and Delete all
+decimated. Hide LOW disables the source object's viewport display only after
+successful single or all-generated decimation. Show all LOW enables the latest
+original Retopo per Generated.N collection, revealing its collection path while
+preserving unrelated excluded branches; it leaves render visibility unchanged.
+Delete all decimated removes SmartDecimated mesh copies throughout the blend
+(including legacy names containing _SmartDecimated) and their unused mesh data.
+Original Retopo meshes with Decimate modifiers are preserved. Both buttons
+support Undo. Batch Stage 11 keeps its independent settings and does not use
+the Mesh Finalization Hide LOW option.
+
+
+### FAB Auto Prepare all generated
+
+FAB Rename adds Auto Prepare all generated. In numeric Generated.N order it
+requires the exact Highpoly_Generated.N (HIGH), the highest numbered original
+Retopo (MID), and that MID's exact SmartDecimated copy (LOW). It skips incomplete
+sets with a warning instead of falling back to an older Retopo or its LOW.
+Only this triplet moves to AssetName_NN_Collection; earlier passes and LODs stay
+in Generated. One index is shared across HIGH/MID/LOW, mesh data, materials and
+texture names, and the indexed Textures/AssetName_NN directory. MID and LOW keep
+the established shared M_AssetName_NN / T_AssetName_NN naming; HIGH uses _HIGH.
+Shared source materials and images are isolated from other assets before rename.
+
+The all-generated action allocates a unique numeric index per complete set,
+advances it once per asset and skips already occupied indices. It starts at the
+Index field and leaves the next index there. Incomplete sets do not consume an
+index. This batch action increments indices for every asset; the Auto +1 toggle
+continues to control the individual and selected-set actions. Collection names
+and texture folders for selected-set preparation also include the current index.
+
+
+Auto Prepare all generated now opens an Asset Name reminder/edit dialog before
+starting from the panel. Interactive runs use a timer-driven queue: each asset
+is announced to the panel before preparation, allowing progress to update
+between assets. FAB Rename shows the queue and each item's status, current
+collection, processed/total progress and prepared/skipped/error counts. Blender's
+native progress indicator is updated too. Stop Queue or Esc stops between
+assets and preserves completed work. A failed asset is marked with its error
+and subsequent assets continue; partial work on the failed asset remains
+available for inspection or Undo. Settings are captured at queue start.
+Scene loading and add-on unregistering stop the queue and release its timer.
+Background/script execution uses the same queue synchronously.
+
+
+Scene Setup provides Collection Color Tag, defaulting to Color 8. It applies to
+Scene_Studio, Camera_Studio and Light_Studio and updates existing studio tags
+immediately. Preparation moves those root collections ahead of other roots in
+Scene → Camera → Light order, preserving visibility, selection and exclusions
+across view layers. When new studio collections are created, View Layer Outliners
+switch off alphabetic sorting and collapse the tree to show collapsed top-level
+collections. This also folds other top-level collection branches. Entire-studio
+reset restores Color 8; other scoped resets retain the chosen tag.

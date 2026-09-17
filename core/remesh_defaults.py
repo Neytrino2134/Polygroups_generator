@@ -20,6 +20,7 @@ def get_remesh_preset_counts(context):
             ("LOW", "remesh_low_count", 1000),
             ("MID", "remesh_mid_count", DEFAULT_QUAD_COUNT),
             ("HIGH", "remesh_high_count", 50000),
+            ("ULTRA", "remesh_ultra_count", 100000),
         )
     )
 

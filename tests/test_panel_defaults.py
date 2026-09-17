@@ -73,7 +73,7 @@ assert model.batch_stage_4_remesh_preset == "MID"
 assert model.batch_stage_3_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_4_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_3_smart_relax_edges
-assert not model.batch_stage_4_smart_relax_edges
+assert model.batch_stage_4_smart_relax_edges
 assert model.batch_small_islands_enabled
 assert model.batch_small_island_threshold == 5.0
 assert model.batch_small_island_protect_pinned
@@ -177,7 +177,7 @@ assert model.batch_stage_4_remesh_preset == "MID"
 assert model.batch_stage_3_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_4_auto_unwrap_method == "ANGLE"
 assert model.batch_stage_3_smart_relax_edges
-assert not model.batch_stage_4_smart_relax_edges
+assert model.batch_stage_4_smart_relax_edges
 assert model.batch_narrow_island_enabled
 assert model.batch_second_narrow_island_enabled
 assert model.batch_second_small_islands_enabled

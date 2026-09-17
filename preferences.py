@@ -497,6 +497,11 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         default=50000, min=1,
     )
 
+    remesh_ultra_count: bpy.props.IntProperty(
+        name="ULTRA", description="Default target quad count for ULTRA remesh",
+        default=100000, min=1,
+    )
+
     interface_language: bpy.props.EnumProperty(
         name="Interface Language",
         description="Language used by AI Retopo Toolkit UI labels",
@@ -886,6 +891,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         column.prop(self, "remesh_low_count")
         column.prop(self, "remesh_mid_count")
         column.prop(self, "remesh_high_count")
+        column.prop(self, "remesh_ultra_count")
 
     def draw_api(self, context, layout):
         column = layout.column(align=True)

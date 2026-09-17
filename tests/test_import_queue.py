@@ -63,7 +63,7 @@ assert settings.batch_second_narrow_island_width == 3
 assert settings.batch_second_narrow_island_max_width_percent == 6.0
 assert settings.batch_second_small_island_threshold == 5.0
 assert settings.batch_stage_3_smart_relax_edges
-assert not settings.batch_stage_4_smart_relax_edges
+assert settings.batch_stage_4_smart_relax_edges
 assert settings.batch_stage_5_enabled
 assert not settings.batch_autobake_enabled
 assert settings.batch_autobake_cage_mode == "AUTO"

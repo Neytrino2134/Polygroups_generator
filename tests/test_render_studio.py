@@ -18,9 +18,33 @@ from polygroups_generator import ui
 scene = bpy.context.scene
 settings = scene.polygroups_render_settings
 assert 'topic_render_6' in SECTION_SUBSECTION_PROPERTIES['show_render_section']
+# Reordering preserves existing selection, per-view-layer hiding and exclusions.
+original_active = bpy.context.view_layer.objects.active
+original_active.hide_set(True)
+old_collection = bpy.data.collections.new('Generated.321')
+scene.collection.children.link(old_collection)
+old_child = bpy.data.collections.new('Existing child')
+old_collection.children.link(old_child)
+layer = bpy.context.view_layer.layer_collection.children[old_collection.name]
+layer.children[old_child.name].exclude = True
+alternate = scene.view_layers.new('Alternate')
+alternate.layer_collection.children[old_collection.name].exclude = True
+assert settings.studio_collection_color_tag == 'COLOR_08'
 original_objects = set(bpy.data.objects)
 assert bpy.ops.render.polygroups_prepare_studio() == {'FINISHED'}
 assert original_objects <= set(bpy.data.objects)
+assert [collection.name for collection in scene.collection.children][:3] == ['Scene_Studio', 'Camera_Studio', 'Light_Studio']
+assert bpy.context.view_layer.objects.active == original_active and original_active.hide_get()
+assert bpy.context.view_layer.layer_collection.children[old_collection.name].children[old_child.name].exclude
+assert alternate.layer_collection.children[old_collection.name].exclude
+studio = [collection for collection in scene.collection.children if collection.get(TAG)]
+assert all(collection.color_tag == 'COLOR_08' for collection in studio)
+settings.studio_collection_color_tag = 'COLOR_03'
+assert all(collection.color_tag == 'COLOR_03' for collection in studio)
+settings.studio_collection_color_tag = 'NONE'
+assert all(collection.color_tag == 'NONE' for collection in studio)
+settings.studio_collection_color_tag = 'COLOR_08'
+
 assert scene.camera == settings.studio_camera
 assert tuple(scene.camera.location) == (0, -8, 0.5)
 assert tuple(settings.studio_camera_aim.location) == (0, 0, 0.5)

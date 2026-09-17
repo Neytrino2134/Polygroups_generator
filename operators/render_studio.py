@@ -62,7 +62,96 @@ def studio_collection(scene, role):
         collection = bpy.data.collections.new(name)
         collection[TAG] = role
         scene.collection.children.link(collection)
+    collection.color_tag = scene.polygroups_render_settings.studio_collection_color_tag
     return collection
+
+
+def update_studio_color_tag(settings, context):
+    scene = settings.id_data
+    for collection in scene.collection.children:
+        if collection.get(TAG) in ('scene', 'camera', 'light'):
+            collection.color_tag = settings.studio_collection_color_tag
+
+
+def _layer_rows(layer, path=()):
+    path = path + (layer.collection,)
+    yield layer, path
+    for child in layer.children:
+        yield from _layer_rows(child, path)
+
+
+def studio_collections_first(context):
+    scene = context.scene
+    original = list(scene.collection.children)
+    studio = [collection for role in ('scene', 'camera', 'light')
+              for collection in original if collection.get(TAG) == role]
+    ordered = studio + [collection for collection in original if collection not in studio]
+    if original == ordered:
+        return
+    # Relinking roots reorders CollectionChildren but recreates view-layer bases.
+    # Preserve per-layer exclusions, viewport hiding, selection and active IDs.
+    states = []
+    active_obj = context.object
+    mode = active_obj.mode if active_obj else 'OBJECT'
+    if mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    for view_layer in scene.view_layers:
+        states.append((view_layer,
+                       {path: (layer.exclude, layer.hide_viewport, layer == view_layer.active_layer_collection)
+                        for layer, path in _layer_rows(view_layer.layer_collection)},
+                       [(obj, obj.hide_get(view_layer=view_layer), obj.select_get(view_layer=view_layer))
+                        for obj in view_layer.objects], view_layer.objects.active))
+    try:
+        for collection in original:
+            scene.collection.children.unlink(collection)
+        for collection in ordered:
+            scene.collection.children.link(collection)
+    finally:
+        for view_layer, layers, objects, active in states:
+            view_layer.update()
+            for layer, path in _layer_rows(view_layer.layer_collection):
+                if path in layers:
+                    excluded, hidden, was_active = layers[path]
+                    layer.exclude = excluded
+                    layer.hide_viewport = hidden
+                    if was_active:
+                        view_layer.active_layer_collection = layer
+            view_layer.update()
+            for obj, hidden, selected in objects:
+                if obj.name in view_layer.objects:
+                    obj.hide_set(hidden, view_layer=view_layer)
+                    obj.select_set(selected, view_layer=view_layer)
+            if active is not None and active.name in view_layer.objects:
+                view_layer.objects.active = active
+        if mode != 'OBJECT' and active_obj.name in context.view_layer.objects:
+            bpy.ops.object.mode_set(mode=mode)
+
+
+def arrange_studio_outliners(context):
+    if bpy.app.background:
+        return
+    scene = context.scene
+    depth = max((len(path) for _layer, path in _layer_rows(context.view_layer.layer_collection)), default=1)
+    for window in context.window_manager.windows:
+        if window.scene != scene:
+            continue
+        for area in window.screen.areas:
+            if area.type != 'OUTLINER' or area.spaces.active.display_mode != 'VIEW_LAYER':
+                continue
+            # Alphabetic sorting would override the collection insertion order.
+            area.spaces.active.use_sort_alpha = False
+            region = next((region for region in area.regions if region.type == 'WINDOW'), None)
+            if region is None:
+                continue
+            try:
+                with context.temp_override(window=window, area=area, region=region):
+                    if bpy.ops.outliner.show_one_level.poll():
+                        for _ in range(depth + 8):
+                            bpy.ops.outliner.show_one_level(open=False)
+                        bpy.ops.outliner.show_one_level(open=True)
+            except RuntimeError:
+                pass
+            area.tag_redraw()
 
 
 def ensure_object(settings, scene, property_name, role, name, kind, collection, location):
@@ -120,6 +209,7 @@ def aim_constraint(obj, target):
 
 def prepare_studio(context, scope='ALL'):
     scene = context.scene
+    previous_roots = set(scene.collection.children)
     settings = scene.polygroups_render_settings
     if scope in ('ALL', 'SCENE'):
         collection = studio_collection(scene, 'scene')
@@ -153,6 +243,9 @@ def prepare_studio(context, scope='ALL'):
                                'Studio ' + label + ' Aim', 'EMPTY', collection, AIM_POSITION)
         aim_constraint(light, target)
     context.view_layer.update()
+    studio_collections_first(context)
+    if any(collection not in previous_roots for collection in scene.collection.children):
+        arrange_studio_outliners(context)
 
 
 def reset_transform(obj, position):
@@ -179,6 +272,8 @@ def reset_studio(context, scope):
     settings = context.scene.polygroups_render_settings
     if scope == 'ALL':
         settings.property_unset('studio_move_step')
+        settings.property_unset('studio_collection_color_tag')
+        update_studio_color_tag(settings, context)
     if scope in ('ALL', 'CAMERA'):
         reset_transform(settings.studio_camera, CAMERA_POSITION)
         reset_transform(settings.studio_camera_aim, AIM_POSITION)

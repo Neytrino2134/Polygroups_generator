@@ -114,11 +114,14 @@ with tempfile.TemporaryDirectory() as directory:
         file_selection=False,
         report=lambda kind, message: reports.append((kind, message)),
     )
+    settings.remesh_auto_unwrap_checker = True
     queue.begin()
+    assert not settings.remesh_auto_unwrap_checker
     for _step in range(50):
         queue.step(bpy.context)
         if queue.finished:
             break
+    assert settings.remesh_auto_unwrap_checker
     assert queue.finished and settings.batch_stage == "DONE"
     assert settings.batch_imported_count == 1
     assert queue.separately_saved_count == 1

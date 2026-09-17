@@ -1,5 +1,6 @@
 from .custom_icons import icon_kwargs
 import os
+import json
 import sys
 import time
 from types import SimpleNamespace
@@ -1386,13 +1387,20 @@ def draw_batch_processing(content, context, settings):
             remesh_options.prop(settings, f"batch_stage_{number}_prepare_polygroups", text=t(context, "batch_prepare_polygroups"))
             remesh_options.prop(settings, f"batch_stage_{number}_material_seams", text=t(context, "batch_material_seams"))
             remesh_options.prop(settings, f"batch_stage_{number}_smart_relax_edges", text="Smart Relax Edges")
-            if number == 3:
-                stage.prop(settings, "batch_stage_3_autofix_enabled", text=t(context, "batch_second_autofix"))
-                autofix = stage.column(align=True)
-                autofix.enabled = settings.batch_stage_3_autofix_enabled
-                autofix.prop(settings, "batch_stage_3_autofix_fin_loose", text=t(context, "batch_second_autofix_fin_loose"))
-                autofix.prop(settings, "batch_stage_3_autofix_close_nonmanifold", text=t(context, "batch_second_autofix_close_nonmanifold"))
-                autofix.prop(settings, "batch_stage_3_autofix_triangulate_ngons", text=t(context, "batch_second_autofix_triangulate_ngons"))
+            stage.prop(settings, f"batch_stage_{number}_remove_small_loose_parts",
+                       text=t(context, "remove_small_loose_parts"))
+            loose_cleanup = stage.column(align=True)
+            loose_cleanup.enabled = getattr(settings, f"batch_stage_{number}_remove_small_loose_parts")
+            loose_cleanup.prop(settings, f"batch_stage_{number}_small_loose_part_metric",
+                               text=t(context, "small_loose_part_metric"))
+            loose_cleanup.prop(settings, f"batch_stage_{number}_small_loose_part_threshold_percent",
+                               text=t(context, "small_loose_part_threshold"))
+            stage.prop(settings, f"batch_stage_{number}_autofix_enabled", text=t(context, "batch_second_autofix"))
+            autofix = stage.column(align=True)
+            autofix.enabled = getattr(settings, f"batch_stage_{number}_autofix_enabled")
+            for suffix in ("fin_loose", "close_nonmanifold", "triangulate_ngons"):
+                autofix.prop(settings, f"batch_stage_{number}_autofix_{suffix}",
+                             text=t(context, "batch_second_autofix_" + suffix))
             stage.prop(settings, f"batch_stage_{number}_auto_unwrap", text=t(context, "auto_smart_uv_project"))
             unwrap_method = stage.row(align=True)
             unwrap_method.enabled = getattr(settings, f"batch_stage_{number}_auto_unwrap")
@@ -1400,6 +1408,13 @@ def draw_batch_processing(content, context, settings):
                 settings, f"batch_stage_{number}_auto_unwrap_method",
                 text=t(context, "import_unwrap_method"),
             )
+
+            stage.prop(settings, f"batch_stage_{number}_uv_repair_enabled", text=t(context, "uv_repair"))
+            repair = stage.column(align=True)
+            repair.enabled = getattr(settings, f"batch_stage_{number}_uv_repair_enabled")
+            for suffix in ("threshold", "min_faces", "surface_angle"):
+                repair.prop(settings, f"batch_stage_{number}_uv_repair_{suffix}",
+                            text=t(context, "uv_repair_" + suffix))
 
         if number == 3:
             if draw_batch_stage_heading(content, t(context, "batch_stage_second_narrow"),
@@ -1444,6 +1459,22 @@ def draw_batch_processing(content, context, settings):
         autobake = content.column(align=True)
         autobake.enabled = editable and settings.batch_autobake_enabled
         autobake.prop(settings, "batch_autobake_cage_mode", expand=True)
+
+    if draw_batch_stage_heading(content, t(context, "batch_stage_smart_decimate"),
+                                settings, 11, "batch_smart_decimate_enabled"):
+        decimate = content.column(align=True)
+        decimate.enabled = editable and settings.batch_smart_decimate_enabled
+        decimate.prop(settings, "batch_smart_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))
+
+    if draw_batch_stage_heading(content, t(context, "batch_stage_smart_lods"),
+                                settings, 12, "batch_smart_lods_enabled"):
+        lods = content.column(align=True)
+        lods.enabled = editable and settings.batch_smart_lods_enabled
+        lods.prop(settings, "batch_smart_lods_count", text=t(context, "batch_lods_count"))
+        for index in range(1, settings.batch_smart_lods_count + 1):
+            lods.prop(settings, f"batch_smart_lods_target_{index}", text=f"LOD.{index} Tris")
+        lods.prop(settings, "batch_smart_lods_final_decimate", text=t(context, "batch_lods_fallback"))
+        lods.prop(settings, "batch_smart_lods_triangulate_all", text=t(context, "batch_lods_triangulate"))
 
 
 class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
@@ -3438,6 +3469,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             "smart_decimate_duplicate_and_apply",
             text=t(context, "duplicate_and_apply_decimate"),
         )
+        column.prop(settings, "smart_decimate_hide_source", text=t(context, "smart_decimate_hide_low"))
         column.prop(settings, "smart_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))
         ratios = column.column(align=True)
         ratios.enabled = settings.smart_decimate_triangle_limit == 0
@@ -3458,12 +3490,19 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             text=t(context, "smart_decimate"),
             icon="MOD_DECIM",
         )
+        smart_decimate_operator.hide_source = settings.smart_decimate_hide_source
         smart_decimate_operator.ratio = settings.smart_decimate_ratio
         smart_decimate_operator.triangle_limit = settings.smart_decimate_triangle_limit
         smart_decimate_operator.seams_ratio = settings.smart_decimate_seams_ratio
         smart_decimate_operator.duplicate_and_apply = (
             settings.smart_decimate_duplicate_and_apply
         )
+
+        column.operator("object.polygroups_smart_decimate_all_generated",
+                        text=t(context, "smart_decimate_all_generated"), icon="MOD_DECIM")
+
+        column.operator("object.polygroups_show_all_low", text=t(context, "smart_decimate_show_low"), icon="RESTRICT_VIEW_OFF")
+        column.operator("object.polygroups_delete_all_decimated", text=t(context, "smart_decimate_delete_all"), icon="TRASH")
 
     def draw_smart_lods(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
@@ -3573,6 +3612,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
     def draw_fab_rename(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
         column = layout.column(align=True)
+        column.enabled = not settings.fab_prepare_is_running
         column.prop(settings, "fab_asset_name", text=t(context, "fab_asset_name"))
 
         index_row = column.row(align=True)
@@ -3611,6 +3651,37 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             text=t(context, "auto_prepare_fab_selection"),
             icon="CHECKMARK",
         )
+
+        column.operator("object.polygroups_auto_prepare_all_generated",
+                        text=t(context, "auto_prepare_all_generated"), icon="CHECKMARK")
+
+        if settings.fab_prepare_status:
+            status = layout.box().column(align=True)
+            status.label(text=t(context, "fab_queue_status_" + settings.fab_prepare_status.lower()))
+            status.progress(factor=settings.fab_prepare_progress, type="BAR",
+                            text=t(context, "fab_queue_progress", done=settings.fab_prepare_done,
+                                   total=settings.fab_prepare_total))
+            status.label(text=t(context, "fab_queue_counts", prepared=settings.fab_prepare_prepared,
+                                skipped=settings.fab_prepare_skipped, failed=settings.fab_prepare_failed))
+            if settings.fab_prepare_current:
+                status.label(text=settings.fab_prepare_current, icon="OUTLINER_COLLECTION")
+            if settings.fab_prepare_is_running:
+                status.operator("object.polygroups_stop_fab_prepare", text=t(context, "fab_queue_stop"), icon="CANCEL")
+            status.label(text=t(context, "fab_queue_title"), icon="PRESET")
+            try:
+                items = json.loads(settings.fab_prepare_queue_data or "[]")
+            except (ValueError, TypeError):
+                items = []
+            icons = {'QUEUED': 'TIME', 'PROCESSING': 'FILE_REFRESH', 'DONE': 'CHECKMARK',
+                     'SKIPPED': 'INFO', 'ERROR': 'ERROR', 'STOPPED': 'CANCEL'}
+            for item in items:
+                row = status.row(align=True)
+                row.label(text=item.get('collection', ''), icon=icons.get(item.get('status'), 'TIME'))
+                row.label(text=t(context, "fab_queue_item_" + item.get('status', 'QUEUED').lower()))
+                if item.get('asset'):
+                    status.label(text=item['asset'])
+                if item.get('status') in ('ERROR', 'SKIPPED') and item.get('message'):
+                    status.label(text=item['message'])
 
     def draw_mesh_export(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
@@ -3746,6 +3817,7 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
             column.operator("render.polygroups_delete_studio_scenes", text=t(context, "studio_delete_all"), icon="TRASH")
 
+            column.prop(settings, "studio_collection_color_tag", text=t(context, "studio_collection_color_tag"))
             column.prop(settings, "studio_move_step", text=t(context, "studio_move_step"))
 
             column.separator()

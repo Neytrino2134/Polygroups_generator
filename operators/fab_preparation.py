@@ -1,6 +1,10 @@
 import os
 import re
 import shutil
+import json
+import time
+from types import SimpleNamespace
+from bpy.app.handlers import persistent
 
 import bpy
 
@@ -80,12 +84,12 @@ def _texture_base_name(asset_name, asset_index, variant):
     return f"T_{_name_parts(asset_name, asset_index, suffix)}"
 
 
-def _collection_name(asset_name):
-    return f"{asset_name}_Collection"
+def _collection_name(asset_name, asset_index=""):
+    return _name_parts(asset_name, asset_index, "Collection")
 
 
-def _ensure_asset_collection(context, asset_name):
-    collection_name = _collection_name(asset_name)
+def _ensure_asset_collection(context, asset_name, asset_index=""):
+    collection_name = _collection_name(asset_name, asset_index)
     collection = bpy.data.collections.get(collection_name)
     if collection is None:
         collection = bpy.data.collections.new(collection_name)
@@ -333,12 +337,12 @@ def _iter_image_texture_nodes(material):
             yield node
 
 
-def _texture_output_directory(settings, asset_name):
+def _texture_output_directory(settings, asset_name, asset_index=""):
     if not bpy.data.filepath:
         return None
 
     blend_dir = os.path.dirname(bpy.data.filepath)
-    return os.path.join(blend_dir, "Textures", asset_name)
+    return os.path.join(blend_dir, "Textures", _name_parts(asset_name, asset_index))
 
 
 def _external_image_filepath(image):
@@ -351,7 +355,7 @@ def _external_image_filepath(image):
 
 def _copy_and_rename_material_textures(material, settings, asset_name, asset_index, variant, report=None):
     texture_base_name = _texture_base_name(asset_name, asset_index, variant)
-    output_dir = _texture_output_directory(settings, asset_name)
+    output_dir = _texture_output_directory(settings, asset_name, asset_index)
     suffix_counts = {}
     copied_count = 0
     renamed_count = 0
@@ -482,7 +486,8 @@ class OBJECT_OT_polygroups_prepare_fab_variant(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.active_object
-        return obj is not None and obj.type == "MESH"
+        return (obj is not None and obj.type == "MESH"
+                and not context.scene.polygroups_mesh_finalization_settings.fab_prepare_is_running)
 
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
@@ -503,7 +508,8 @@ class OBJECT_OT_polygroups_auto_prepare_fab_selection(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return any(obj.type == "MESH" for obj in context.selected_objects)
+        return (not context.scene.polygroups_mesh_finalization_settings.fab_prepare_is_running
+                and any(obj.type == "MESH" for obj in context.selected_objects))
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(
@@ -522,7 +528,7 @@ class OBJECT_OT_polygroups_auto_prepare_fab_selection(bpy.types.Operator):
         settings = context.scene.polygroups_mesh_finalization_settings
         mesh_objects = [obj for obj in context.selected_objects if obj.type == "MESH"]
         asset_name = _safe_asset_token(settings.fab_asset_name)
-        asset_collection = _ensure_asset_collection(context, asset_name)
+        asset_collection = _ensure_asset_collection(context, asset_name, _safe_index_token(settings.fab_asset_index))
         _apply_collection_color_tag(asset_collection, settings)
         prepared_count = 0
         skipped_count = 0
@@ -554,3 +560,309 @@ class OBJECT_OT_polygroups_auto_prepare_fab_selection(bpy.types.Operator):
             ),
         )
         return {"FINISHED"} if prepared_count else {"CANCELLED"}
+
+
+def generated_fab_triplet(collection):
+    from .smart_decimate import latest_generated_retopo, _decimated_name
+    match = re.fullmatch(r"Generated\.(\d+)", collection.name)
+    if match is None:
+        return None, []
+    objects = list(collection.all_objects)
+    high = next((obj for obj in objects if obj.type == 'MESH'
+                 and obj.name == f'Highpoly_Generated.{match.group(1)}'), None)
+    mid = latest_generated_retopo(collection)
+    low = next((obj for obj in objects if obj.type == 'MESH'
+                and mid is not None and obj.name == _decimated_name(mid.name)), None)
+    missing = [name for name, obj in (('HIGH', high), ('MID', mid), ('LOW of latest MID', low)) if obj is None]
+    return ((high, mid, low) if not missing else None), missing
+
+
+def _next_index(value):
+    match = re.fullmatch(r"(.*?)(\d+)", value)
+    if match is None:
+        raise ValueError('FAB Index must end with a number, for example 01')
+    prefix, number = match.groups()
+    return f'{prefix}{int(number) + 1:0{len(number)}d}'
+
+
+def _fab_index_available(settings, asset_name, index):
+    if bpy.data.collections.get(_collection_name(asset_name, index)):
+        return False
+    for variant in ('HIGH', 'MID', 'LOW'):
+        name = _object_name(asset_name, index, variant)
+        if bpy.data.objects.get(name) or bpy.data.meshes.get(name):
+            return False
+        if bpy.data.materials.get(_material_name(asset_name, index, variant)):
+            return False
+    texture_prefix = _name_parts('T', asset_name, index) + '_'
+    if any(image.name.startswith(texture_prefix) for image in bpy.data.images):
+        return False
+    directory = _texture_output_directory(settings, asset_name, index)
+    return not (directory and os.path.exists(directory))
+
+
+def _isolate_fab_triplet_materials(objects):
+    # HIGH and MID/LOW use different names. Isolate shared data from other
+    # Generated assets, retaining sharing between MID and its LOW copy.
+    materials, images = {}, {}
+    for variant, obj in zip(('HIGH', 'MID', 'LOW'), objects):
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+        source = obj.active_material or (obj.data.materials[0] if obj.data.materials else None)
+        if source is None:
+            continue
+        category = 'HIGH' if variant == 'HIGH' else 'MID_LOW'
+        key = (source, category)
+        if key not in materials:
+            material = source.copy()
+            _ungroup_source_texture_nodes(material)
+            for node in _iter_image_texture_nodes(material):
+                image_key = (node.image, category)
+                if image_key not in images:
+                    images[image_key] = node.image.copy()
+                node.image = images[image_key]
+            materials[key] = material
+        obj.data.materials.clear()
+        obj.data.materials.append(materials[key])
+        obj.active_material_index = 0
+
+
+ACTIVE_FAB_PREPARE = None
+
+
+def _redraw_fab(context):
+    for window in context.window_manager.windows:
+        for area in window.screen.areas:
+            area.tag_redraw()
+
+
+class FabPrepareQueue:
+    def __init__(self, context, report):
+        self.scene = context.scene
+        self.view_layer = context.view_layer
+        self.settings = context.scene.polygroups_mesh_finalization_settings
+        self.report = report
+        self.options = SimpleNamespace(**{name: getattr(self.settings, name) for name in (
+            'fab_asset_name', 'fab_asset_index', 'fab_copy_textures', 'fab_collection_color_tag')})
+        self.asset_name = _safe_asset_token(self.options.fab_asset_name)
+        self.index = _safe_index_token(self.options.fab_asset_index)
+        _next_index(self.index)
+        pending = list(self.scene.collection.children)
+        seen = set()
+        while pending:
+            collection = pending.pop()
+            if collection not in seen:
+                seen.add(collection)
+                pending.extend(collection.children)
+        self.collections = sorted((collection for collection in seen
+                                   if re.fullmatch(r'Generated\.\d+', collection.name)),
+                                  key=lambda collection: int(collection.name.split('.')[1]))
+        self.records = [{'collection': collection.name, 'status': 'QUEUED', 'message': ''}
+                        for collection in self.collections]
+        self.position = 0
+        self.phase = 'NEXT'
+        self.finished = False
+        self.objects = None
+
+    def begin(self):
+        settings = self.settings
+        settings.fab_prepare_is_running = True
+        settings.fab_prepare_stop_requested = False
+        settings.fab_prepare_total = len(self.records)
+        settings.fab_prepare_done = 0
+        settings.fab_prepare_prepared = 0
+        settings.fab_prepare_skipped = 0
+        settings.fab_prepare_failed = 0
+        settings.fab_prepare_current = ''
+        settings.fab_prepare_status = 'RUNNING'
+        self.publish()
+
+    def publish(self):
+        self.settings.fab_prepare_done = self.position
+        self.settings.fab_prepare_progress = self.position / max(1, len(self.records))
+        self.settings.fab_prepare_queue_data = json.dumps(self.records, ensure_ascii=False)
+
+    def step(self, context):
+        if self.finished:
+            return
+        if self.settings.fab_prepare_stop_requested:
+            self.finish('STOPPED')
+            return
+        if self.position == len(self.collections):
+            self.finish('DONE')
+            return
+        record = self.records[self.position]
+        if self.phase == 'NEXT':
+            self.settings.fab_prepare_current = record['collection']
+            try:
+                self.objects, missing = generated_fab_triplet(self.collections[self.position])
+                if missing:
+                    self.settings.fab_prepare_skipped += 1
+                    record.update(status='SKIPPED', message='missing ' + ', '.join(missing))
+                    self.report({'WARNING'}, record['collection'] + ': ' + record['message'])
+                    self.position += 1
+                else:
+                    record['status'] = 'PROCESSING'
+                    self.phase = 'PREPARE'
+            except (ReferenceError, RuntimeError) as error:
+                self.settings.fab_prepare_failed += 1
+                record.update(status='ERROR', message=str(error))
+                self.report({'WARNING'}, record['collection'] + ': ' + str(error))
+                self.position += 1
+            self.publish()
+            return  # Give the panel a frame to show the current asset.
+        allocated = False
+        try:
+            while not _fab_index_available(self.options, self.asset_name, self.index):
+                self.index = _next_index(self.index)
+            allocated = True
+            record['asset'] = _name_parts(self.asset_name, self.index)
+            self.options.fab_asset_index = self.index
+            self.settings.fab_asset_index = self.index
+            if context.object is not None and context.object.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            _isolate_fab_triplet_materials(self.objects)
+            destination = _ensure_asset_collection(context, self.asset_name, self.index)
+            _apply_collection_color_tag(destination, self.options)
+            for variant, obj in zip(('HIGH', 'MID', 'LOW'), self.objects):
+                if not prepare_object_for_fab(context, obj, variant, self.options, self.report):
+                    raise RuntimeError(f'Cannot prepare {variant}')
+                _move_object_to_collection(obj, destination)
+            record.update(status='DONE', message=destination.name)
+            self.settings.fab_prepare_prepared += 1
+        except Exception as error:
+            record.update(status='ERROR', message=str(error))
+            self.settings.fab_prepare_failed += 1
+            self.report({'WARNING'}, record['collection'] + ': ' + str(error))
+        finally:
+            if allocated:
+                self.index = _next_index(self.index)
+                self.settings.fab_asset_index = self.index
+            self.position += 1
+            self.phase = 'NEXT'
+            self.publish()
+
+    def finish(self, status):
+        if self.finished:
+            return
+        for record in self.records[self.position:]:
+            record['status'] = 'STOPPED'
+        self.settings.fab_prepare_is_running = False
+        self.settings.fab_prepare_status = status
+        self.finished = True
+        self.publish()
+        if status == 'DONE':
+            self.settings.fab_prepare_progress = 1
+        self.report({'INFO'}, f'FAB: {self.settings.fab_prepare_prepared} prepared, '
+                    f'{self.settings.fab_prepare_skipped} skipped, {self.settings.fab_prepare_failed} failed')
+
+
+@persistent
+def stop_fab_prepare(*_args):
+    if ACTIVE_FAB_PREPARE is not None:
+        ACTIVE_FAB_PREPARE.cancel(bpy.context)
+
+
+class OBJECT_OT_polygroups_auto_prepare_all_generated(bpy.types.Operator):
+    bl_idname = 'object.polygroups_auto_prepare_all_generated'
+    bl_label = 'Auto Prepare All Generated'
+    bl_description = 'Queue HIGH, latest MID and matching LOW preparation with a unique index per Generated collection'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.scene is not None
+                and not context.scene.polygroups_model_preparation_settings.batch_is_running
+                and not context.scene.polygroups_mesh_finalization_settings.fab_prepare_is_running)
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(
+            self, width=420, confirm_text=t(context, 'continue'))
+
+    def draw(self, context):
+        self.layout.label(text=t(context, 'fab_rename_asset_warning'), icon='ERROR')
+        self.layout.prop(context.scene.polygroups_mesh_finalization_settings,
+                         'fab_asset_name', text=t(context, 'fab_asset_name'))
+        self.layout.prop(context.scene.polygroups_mesh_finalization_settings,
+                         'fab_asset_index', text=t(context, 'fab_asset_index'))
+
+    def execute(self, context):
+        global ACTIVE_FAB_PREPARE
+        self._timer = None
+        self._native_progress = False
+        try:
+            self._queue = FabPrepareQueue(context, self.report)
+        except ValueError as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        self._queue.begin()
+        if bpy.app.background or context.window is None:
+            while not self._queue.finished:
+                self._queue.step(context)
+            return {'FINISHED'} if self._queue.settings.fab_prepare_prepared else {'CANCELLED'}
+        ACTIVE_FAB_PREPARE = self
+        try:
+            context.window_manager.progress_begin(0, max(1, len(self._queue.records)))
+            self._native_progress = True
+            self._timer = context.window_manager.event_timer_add(0.15, window=context.window)
+            self._next_tick = time.monotonic() + 0.15
+            context.window_manager.modal_handler_add(self)
+        except Exception:
+            self.cancel(context)
+            raise
+        _redraw_fab(context)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        if self._queue.finished:
+            self._cleanup(context)
+            return {'FINISHED'}
+        if event.type == 'ESC':
+            self._queue.settings.fab_prepare_stop_requested = True
+        elif event.type != 'TIMER':
+            return {'PASS_THROUGH'}
+        elif time.monotonic() < self._next_tick:
+            return {'PASS_THROUGH'}
+        self._next_tick = time.monotonic() + 0.15
+        try:
+            with context.temp_override(scene=self._queue.scene, view_layer=self._queue.view_layer):
+                self._queue.step(context)
+            context.window_manager.progress_update(self._queue.position)
+        except Exception as error:
+            self.report({'ERROR'}, str(error))
+            self._queue.finish('ERROR')
+        _redraw_fab(context)
+        if self._queue.finished:
+            self._cleanup(context)
+            return {'FINISHED'}
+        return {'PASS_THROUGH'}
+
+    def _cleanup(self, context):
+        global ACTIVE_FAB_PREPARE
+        if self._timer is not None:
+            context.window_manager.event_timer_remove(self._timer)
+            self._timer = None
+        if self._native_progress:
+            context.window_manager.progress_end()
+            self._native_progress = False
+        if ACTIVE_FAB_PREPARE == self:
+            ACTIVE_FAB_PREPARE = None
+
+    def cancel(self, context):
+        if getattr(self, '_queue', None) is not None:
+            self._queue.finish('STOPPED')
+        self._cleanup(context)
+
+
+class OBJECT_OT_polygroups_stop_fab_prepare(bpy.types.Operator):
+    bl_idname = 'object.polygroups_stop_fab_prepare'
+    bl_label = 'Stop FAB Queue'
+    bl_description = 'Stop after the current asset, keeping completed preparation'
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene is not None and context.scene.polygroups_mesh_finalization_settings.fab_prepare_is_running
+
+    def execute(self, context):
+        context.scene.polygroups_mesh_finalization_settings.fab_prepare_stop_requested = True
+        return {'FINISHED'}

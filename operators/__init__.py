@@ -65,6 +65,7 @@ from .uv_seam_path import (
 from .edge_merger import MESH_OT_polygroups_edge_merger_click
 from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_fab_selection
+from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_all_generated, OBJECT_OT_polygroups_stop_fab_prepare
 from .fab_preparation import OBJECT_OT_polygroups_prepare_fab_variant
 from .unity_preparation import OBJECT_OT_polygroups_prepare_unity, OBJECT_OT_polygroups_export_unity
 from .generate_polygroups import OBJECT_OT_generate_polygroups
@@ -174,7 +175,10 @@ from .safety_checks import OBJECT_OT_polygroups_skip_prepare_and_bake
 from .safety_checks import OBJECT_OT_polygroups_skip_generate_polygroups
 from .safety_checks import OBJECT_OT_polygroups_skip_quad_remesh
 from .smooth_face_selection import MESH_OT_polygroups_smooth_face_selection
-from .smart_decimate import OBJECT_OT_polygroups_smart_decimate
+from .smart_decimate import (
+    OBJECT_OT_polygroups_smart_decimate, OBJECT_OT_polygroups_smart_decimate_all_generated,
+    OBJECT_OT_polygroups_delete_all_decimated, OBJECT_OT_polygroups_show_all_low,
+)
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods
 from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
@@ -321,6 +325,8 @@ CLASSES = (
     OBJECT_OT_polygroups_prepare_unity,
     OBJECT_OT_polygroups_export_unity,
     OBJECT_OT_polygroups_auto_prepare_fab_selection,
+    OBJECT_OT_polygroups_auto_prepare_all_generated,
+    OBJECT_OT_polygroups_stop_fab_prepare,
     MESH_OT_polygroups_mark_boundary_and_longitudinal_seam,
     MESH_OT_polygroups_mark_longitudinal_seam,
     MESH_OT_polygroups_longitudinal_seam_tool_click,
@@ -374,6 +380,9 @@ CLASSES = (
     MESH_OT_polygroups_quick_knife_seam,
     MESH_OT_polygroups_select_seam_tool,
     OBJECT_OT_polygroups_smart_decimate,
+    OBJECT_OT_polygroups_smart_decimate_all_generated,
+    OBJECT_OT_polygroups_delete_all_decimated,
+    OBJECT_OT_polygroups_show_all_low,
     OBJECT_OT_polygroups_generate_smart_lods,
     OBJECT_OT_polygroups_draw_cutter_plane,
     OBJECT_OT_polygroups_draw_cutter_grid,
@@ -417,6 +426,8 @@ def register():
         bpy.utils.register_class(cls)
     MESH_OT_polygroups_native_knife_seam.define("MESH_OT_knife_tool")
     MESH_OT_polygroups_native_knife_seam.define("MESH_OT_polygroups_finish_knife_seam")
+    from .fab_preparation import stop_fab_prepare
+    bpy.app.handlers.load_pre.append(stop_fab_prepare)
     bpy.app.handlers.load_pre.append(stop_import_queue)
     bpy.app.handlers.load_pre.append(stop_remesh)
     bpy.app.handlers.load_pre.append(stop_knife_seams)
@@ -439,6 +450,10 @@ def unregister():
     from .knife_seam_tool import stop_knife_seams
     from .object_seam_cutter import stop_cutter_apply
 
+    from .fab_preparation import stop_fab_prepare
+    stop_fab_prepare()
+    if stop_fab_prepare in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(stop_fab_prepare)
     stop_import_queue()
     stop_remesh()
     stop_knife_seams()
