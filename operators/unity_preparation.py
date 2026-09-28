@@ -44,6 +44,8 @@ def save_textures(obj, directory):
             continue
         for node in texture_nodes(material.node_tree):
             image = node.image
+            if _texture_suffix(image, node) == "AlphaMap":
+                continue
             if image in seen:
                 continue
             seen.add(image)
@@ -102,6 +104,8 @@ def prepare_unity(obj, name, asset_name=None):
         _ungroup_source_texture_nodes(material)
         for node in texture_nodes(material.node_tree):
             source_image = node.image
+            if _texture_suffix(source_image, node) == "AlphaMap":
+                continue
             if source_image not in image_copies:
                 suffix = _texture_suffix(source_image, node)
                 # Connected socket names take precedence over arbitrary source filenames.
@@ -246,9 +250,17 @@ class OBJECT_OT_polygroups_export_unity(bpy.types.Operator):
                 return {"CANCELLED"}
         paths = {node.image: node.image.filepath_raw for obj in meshes
                  for mat in obj.data.materials if mat for node in texture_nodes(mat.node_tree)}
+        alpha_nodes = {
+            node: node.image
+            for obj in meshes for mat in obj.data.materials if mat
+            for node in texture_nodes(mat.node_tree)
+            if _texture_suffix(node.image, node) == "AlphaMap"
+        }
         try:
             if mode != "OBJECT":
                 bpy.ops.object.mode_set(mode="OBJECT")
+            for node in alpha_nodes:
+                node.image = None
             groups = {}
             for obj in meshes:
                 asset_name = re.sub(r"\.LOD\d+$", "", obj.name, flags=re.IGNORECASE)
@@ -281,6 +293,8 @@ class OBJECT_OT_polygroups_export_unity(bpy.types.Operator):
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
         finally:
+            for node, image in alpha_nodes.items():
+                node.image = image
             for image, path in paths.items():
                 image.filepath_raw = path
             bpy.ops.object.select_all(action="DESELECT")

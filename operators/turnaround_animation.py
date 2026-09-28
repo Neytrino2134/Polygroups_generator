@@ -1,5 +1,5 @@
 import os
-from math import tau
+from math import radians, tau
 
 import bpy
 import blf
@@ -260,15 +260,15 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
         duplicate.name = f"{source.name}_Turnaround"
         collection.objects.link(duplicate)
 
-        center = _object_world_center(source)
         empty = bpy.data.objects.new(f"{source.name}_Turnaround_Root", None)
         empty.empty_display_type = "PLAIN_AXES"
         empty.empty_display_size = max(max(source.dimensions) * 0.6, 0.1)
-        empty.location = center
+        empty.location = (0.0, 0.0, 0.0)
         empty.rotation_mode = "XYZ"
         collection.objects.link(empty)
 
         world_matrix = duplicate.matrix_world.copy()
+        world_matrix.translation = Vector((0.0, 0.0, 0.0))
         duplicate.parent = empty
         duplicate.matrix_world = world_matrix
         duplicate[TURNAROUND_SOURCE_PROP] = source.name
@@ -292,6 +292,99 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
             obj.select_set(False)
         duplicate.select_set(True)
         context.view_layer.objects.active = duplicate
+        self.report({"INFO"}, settings.animation_status)
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
+    bl_idname = "object.polygroups_render_turnaround_views"
+    bl_label = "Render Four Views"
+    bl_description = "Render PNG stills at 0, 90, 180 and 270 degrees"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        settings = context.scene.polygroups_render_settings
+        return bool(settings.animation_collection_name) and not settings.is_running and _ACTIVE_RENDER_TASK is None
+
+    def execute(self, context):
+        scene = context.scene
+        settings = scene.polygroups_render_settings
+        collection = bpy.data.collections.get(settings.animation_collection_name)
+        duplicate = bpy.data.objects.get(settings.animation_object_name)
+        if collection is None or not collection.get(TURNAROUND_COLLECTION_PROP) or duplicate is None or duplicate.parent is None:
+            self.report({"ERROR"}, "Prepare a turnaround animation first")
+            return {"CANCELLED"}
+        if scene.camera is None:
+            self.report({"ERROR"}, "The scene needs an active camera")
+            return {"CANCELLED"}
+
+        output_directory = os.path.join(bpy.path.abspath(settings.output_directory), "Render Animation")
+        try:
+            os.makedirs(output_directory, exist_ok=True)
+        except OSError as error:
+            self.report({"ERROR"}, f"Cannot create output folder: {error}")
+            return {"CANCELLED"}
+
+        root = duplicate.parent
+        render_state = _render_snapshot(scene)
+        visibility = _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
+        saved_rotation = root.rotation_euler.copy()
+        animation_data = root.animation_data
+        saved_action = animation_data.action if animation_data is not None else None
+        settings.is_running = True
+        outputs = []
+        error = None
+        try:
+            if animation_data is not None:
+                animation_data.action = None
+            scene.render.resolution_x = settings.resolution_x
+            scene.render.resolution_y = settings.resolution_y
+            scene.render.resolution_percentage = settings.resolution_scale
+            if settings.render_engine == "CYCLES":
+                scene.render.engine = "CYCLES"
+                scene.cycles.samples = settings.max_samples
+            else:
+                try:
+                    scene.render.engine = "BLENDER_EEVEE_NEXT"
+                except TypeError:
+                    scene.render.engine = "BLENDER_EEVEE"
+            scene.render.image_settings.media_type = "IMAGE"
+            scene.render.image_settings.file_format = "PNG"
+            scene.render.image_settings.color_mode = "RGB"
+            scene.render.image_settings.color_depth = "8"
+            scene.render.use_file_extension = True
+            scene.render.use_overwrite = settings.overwrite_existing
+            scene.render.save_output = True
+            scene.frame_set(scene.frame_start)
+            base = bpy.path.clean_name(settings.animation_object_name)
+            for angle in (0, 90, 180, 270):
+                root.rotation_euler.z = radians(angle)
+                context.view_layer.update()
+                path = os.path.join(output_directory, f"{base}_{angle:03d}.png")
+                scene.render.filepath = path
+                result = bpy.ops.render.render(write_still=True)
+                if "FINISHED" not in result:
+                    raise RuntimeError(f"Render cancelled at {angle} degrees")
+                outputs.append(path)
+        except Exception as exc:
+            error = exc
+        finally:
+            root.rotation_euler = saved_rotation
+            try:
+                _restore_render(scene, render_state)
+            finally:
+                if animation_data is not None:
+                    animation_data.action = saved_action
+                _restore_visibility(visibility)
+                settings.is_running = False
+
+        if error is not None:
+            settings.animation_status = f"Four views failed: {error}"
+            self.report({"ERROR"}, settings.animation_status)
+            return {"CANCELLED"}
+        settings.animation_last_output = output_directory
+        settings.animation_status = f"Saved {len(outputs)} views to {output_directory}"
         self.report({"INFO"}, settings.animation_status)
         return {"FINISHED"}
 

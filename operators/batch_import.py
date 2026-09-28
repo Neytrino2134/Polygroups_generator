@@ -124,7 +124,7 @@ def object_world_bounds(obj):
     return min_corner, max_corner
 
 
-def arrange_objects_zx(objects, spacing=0.1, mode="LINE", rows=1):
+def arrange_objects_zx(objects, spacing=0.1, mode="LINE", rows=1, plane="ZX", alignment="BOUNDS", secondary_spacing=None):
     arranged_objects = [obj for obj in objects if obj and obj.type == "MESH"]
     if not arranged_objects:
         return 0
@@ -138,11 +138,13 @@ def arrange_objects_zx(objects, spacing=0.1, mode="LINE", rows=1):
 
     columns = max(1, ceil(len(arranged_objects) / rows))
     spacing = max(0.0, spacing)
+    secondary_spacing = spacing if secondary_spacing is None else max(0.0, secondary_spacing)
     bounds = [object_world_bounds(obj) for obj in arranged_objects]
+    vertical_axis = "y" if plane == "XY" else "z"
     sizes = [
         (
             max_corner.x - min_corner.x,
-            max_corner.z - min_corner.z,
+            getattr(max_corner, vertical_axis) - getattr(min_corner, vertical_axis),
         )
         for min_corner, max_corner in bounds
     ]
@@ -155,22 +157,37 @@ def arrange_objects_zx(objects, spacing=0.1, mode="LINE", rows=1):
         column_widths[column] = max(column_widths[column], width)
         row_heights[row] = max(row_heights[row], height)
 
+    if alignment == "ORIGIN":
+        # Equal world-space steps keep all origins on a regular grid.
+        x_step = max(column_widths) + spacing
+        vertical_step = max(row_heights) + secondary_spacing
+        first_origin = arranged_objects[0].matrix_world.translation.copy()
+        for index, obj in enumerate(arranged_objects):
+            row, column = divmod(index, columns)
+            matrix = obj.matrix_world.copy()
+            origin = matrix.translation.copy()
+            origin.x = first_origin.x + column * x_step
+            setattr(origin, vertical_axis, getattr(first_origin, vertical_axis) + row * vertical_step)
+            matrix.translation = origin
+            obj.matrix_world = matrix
+        return len(arranged_objects)
+
     x_positions = [bounds[0][0].x]
     for column in range(1, columns):
         previous_width = column_widths[column - 1]
         x_positions.append(x_positions[-1] + previous_width + spacing)
 
-    z_positions = [bounds[0][0].z]
+    vertical_positions = [getattr(bounds[0][0], vertical_axis)]
     for row in range(1, rows):
         previous_height = row_heights[row - 1]
-        z_positions.append(z_positions[-1] + previous_height + spacing)
+        vertical_positions.append(vertical_positions[-1] + previous_height + secondary_spacing)
 
     for index, obj in enumerate(arranged_objects):
         row = index // columns
         column = index % columns
         min_corner, _max_corner = object_world_bounds(obj)
         obj.location.x += x_positions[column] - min_corner.x
-        obj.location.z += z_positions[row] - min_corner.z
+        setattr(obj.location, vertical_axis, getattr(obj.location, vertical_axis) + vertical_positions[row] - getattr(min_corner, vertical_axis))
 
     return len(arranged_objects)
 
@@ -613,23 +630,33 @@ class AIRETOPO_FH_gltf(bpy.types.FileHandler):
 class OBJECT_OT_polygroups_arrange_batch_objects(bpy.types.Operator):
     bl_idname = "object.polygroups_arrange_batch_objects"
     bl_label = "Arrange Objects"
-    bl_description = "Arrange selected mesh objects in a line or rows on the ZX plane"
+    bl_description = "Arrange selected mesh objects in a line or rows on the chosen plane"
     bl_options = {"REGISTER", "UNDO"}
+
+    use_render_settings: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
 
     @classmethod
     def poll(cls, context):
         return any(obj.type == "MESH" for obj in context.selected_objects)
 
     def execute(self, context):
-        settings = context.scene.polygroups_model_preparation_settings
+        settings = (
+            context.scene.polygroups_render_settings
+            if self.use_render_settings
+            else context.scene.polygroups_model_preparation_settings
+        )
         selected_mesh_objects = [
             obj for obj in context.selected_objects if obj.type == "MESH"
         ]
+        prefix = "render_arrange" if self.use_render_settings else "batch_arrange"
         arranged_count = arrange_objects_zx(
             selected_mesh_objects,
-            settings.batch_arrange_spacing,
-            settings.batch_arrange_mode,
-            settings.batch_arrange_rows,
+            getattr(settings, prefix + "_spacing"),
+            getattr(settings, prefix + "_mode"),
+            getattr(settings, prefix + "_rows"),
+            getattr(settings, prefix + "_plane"),
+            getattr(settings, prefix + "_alignment"),
+            getattr(settings, prefix + "_secondary_spacing"),
         )
 
         self.report({"INFO"}, f"Arranged {arranged_count} object(s)")

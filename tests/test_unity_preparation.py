@@ -45,6 +45,9 @@ image = bpy.data.images.new("Albedo", 4, 4)
 node = material.node_tree.nodes.new("ShaderNodeTexImage")
 node.image = image
 material.node_tree.links.new(node.outputs['Color'], material.node_tree.nodes.get('Principled BSDF').inputs['Base Color'])
+alpha_image = bpy.data.images.new("Bake_Temp_Generated.001_AlphaMap", 4, 4)
+alpha_node = material.node_tree.nodes.new("ShaderNodeTexImage")
+alpha_node.image = alpha_image
 with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory) / "test.blend"))
     settings.unity_asset_name = "Konduktor"
@@ -56,12 +59,15 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     assert image.name == 'Albedo'
     texture = Path(directory) / 'Textures' / ('Konduktor_01.png')
     assert texture.is_file(), texture
+    assert not list((Path(directory) / 'Textures').glob('*AlphaMap*.png'))
     assert settings.unity_asset_index == '02'
     assert bpy.ops.object.polygroups_export_unity() == {'FINISHED'}
     folder = Path(settings.unity_export_directory) / 'Konduktor_01'
     assert (folder / (obj.name + '.fbx')).stat().st_size > 0
     assert (folder / ('Konduktor_01.png')).is_file()
+    assert not list(folder.glob('*AlphaMap*.png'))
     from polygroups_generator.operators.unity_preparation import texture_nodes
+    assert any(node.image == alpha_image for node in texture_nodes(obj.active_material.node_tree))
     assert Path(next(texture_nodes(obj.active_material.node_tree)).image.filepath_raw) == texture
     assert context.active_object == obj and obj.select_get()
     # Import the produced FBX to check its material name and relative texture reference.

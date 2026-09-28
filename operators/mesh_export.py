@@ -1,10 +1,12 @@
 import os
 import re
 import uuid
+import json
 
 import bpy
 
 from ..sound import play_operation_done_sound
+from .fab_preparation import _fab_image_source, _write_fab_image_source
 
 
 INVALID_FILENAME_CHARS = r'[<>:"/\\|?*]'
@@ -131,19 +133,139 @@ def _export_root_directory(settings):
         return None
 
     blend_dir = os.path.dirname(blend_filepath)
-    folder_name = "!FBX"
+    folder_name = "!Unreal"
     return os.path.join(blend_dir, folder_name)
 
 
-def _export_filepath(root_dir, obj, export_format):
+def _export_filepath(root_dir, obj, export_format, sort_mode="VARIANT"):
     object_token = _safe_path_token(obj.name)
-    asset_token = _asset_folder_token(obj)
+    match = re.fullmatch(r"SM_.+_(LOW|MID|HIGH)", obj.name, re.IGNORECASE)
+    if match is None:
+        raise ValueError(f"FAB mesh name must end in LOW, MID or HIGH: {obj.name}")
+    variant = match.group(1).upper()
     extension = {
         "FBX": ".fbx",
         "GLB": ".glb",
         "GLTF": ".gltf",
     }[export_format]
-    return os.path.join(root_dir, asset_token, f"{object_token}{extension}")
+    folder = _asset_folder_token(obj) if sort_mode == "SET" else variant
+    return os.path.join(root_dir, folder, f"{object_token}{extension}")
+
+
+def _evaluated_mesh_counts(obj, depsgraph):
+    evaluated = obj.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
+    try:
+        vertices = len(mesh.vertices)
+        triangles = sum(max(0, len(polygon.vertices) - 2) for polygon in mesh.polygons)
+        return vertices, triangles
+    finally:
+        evaluated.to_mesh_clear()
+
+
+def _write_export_mesh_info(root_dir, export_format, entries):
+    if export_format == "NONE":
+        return
+    totals = {
+        "meshes": len(entries),
+        "vertices": sum(item["vertices"] for item in entries),
+        "triangles": sum(item["triangles"] for item in entries),
+    }
+    if export_format == "JSON":
+        filepath = os.path.join(root_dir, "MeshInfo.json")
+        with open(filepath, "w", encoding="utf-8") as output:
+            json.dump({"meshes": entries, "totals": totals}, output,
+                      ensure_ascii=False, indent=2)
+            output.write("\n")
+    else:
+        filepath = os.path.join(root_dir, "MeshInfo.txt")
+        with open(filepath, "w", encoding="utf-8") as output:
+            for item in entries:
+                output.write(f'{item["file"]}\tvertices: {item["vertices"]}\t'
+                             f'triangles: {item["triangles"]}\n')
+            output.write(f'TOTAL\tmeshes: {totals["meshes"]}\t'
+                         f'vertices: {totals["vertices"]}\t'
+                         f'triangles: {totals["triangles"]}\n')
+
+
+def _export_texture_images(objects):
+    seen_trees = set()
+    seen_images = set()
+    for obj in objects:
+        for material in obj.data.materials:
+            if not material or not material.use_nodes:
+                continue
+            stack = [material.node_tree]
+            while stack:
+                tree = stack.pop()
+                if tree is None or tree in seen_trees:
+                    continue
+                seen_trees.add(tree)
+                for node in tree.nodes:
+                    if node.type == "GROUP" and node.node_tree:
+                        stack.append(node.node_tree)
+                    elif (node.type == "TEX_IMAGE" and node.image
+                          and not re.search(r"_AlphaMap(?:_\d+)?$", node.image.name, re.IGNORECASE)
+                          and node.image not in seen_images):
+                        seen_images.add(node.image)
+                        yield node.image
+
+
+def _copy_export_textures(objects, root_dir):
+    """Copy texture files and temporarily point image datablocks at the export."""
+    originals = {}
+    destinations = set()
+    try:
+        for image in _export_texture_images(objects):
+            if image.source != "FILE":
+                raise ValueError(f"Unsupported FAB texture source: {image.name} ({image.source})")
+            source = _fab_image_source(image)
+            if source is None:
+                raise ValueError(f"Missing FAB texture: {image.name}")
+            destination = os.path.join(root_dir, "Textures", _safe_path_token(image.name) + source[2])
+            normalized = os.path.normcase(os.path.abspath(destination))
+            if normalized in destinations:
+                raise ValueError(f"Duplicate FAB texture name: {image.name}")
+            destinations.add(normalized)
+            originals[image] = (image.filepath, image.filepath_raw)
+            _write_fab_image_source(source, destination)
+            image.filepath = destination
+            image.filepath_raw = destination
+    except Exception:
+        for image, (filepath, filepath_raw) in originals.items():
+            image.filepath = filepath
+            image.filepath_raw = filepath_raw
+        raise
+    return originals
+
+
+def _detach_export_alpha_maps(objects):
+    """Keep temporary AlphaMap nodes out of exported material data."""
+    detached = {}
+    seen_trees = set()
+    try:
+        for obj in objects:
+            for material in obj.data.materials:
+                if not material or not material.use_nodes:
+                    continue
+                stack = [material.node_tree]
+                while stack:
+                    tree = stack.pop()
+                    if tree is None or tree in seen_trees:
+                        continue
+                    seen_trees.add(tree)
+                    for node in tree.nodes:
+                        if node.type == "GROUP" and node.node_tree:
+                            stack.append(node.node_tree)
+                        elif (node.type == "TEX_IMAGE" and node.image and
+                              re.search(r"_AlphaMap(?:_\d+)?$", node.image.name, re.IGNORECASE)):
+                            detached[node] = node.image
+                            node.image = None
+    except Exception:
+        for node, image in detached.items():
+            node.image = image
+        raise
+    return detached
 
 
 def _export_selected_object(filepath, export_format):
@@ -151,6 +273,10 @@ def _export_selected_object(filepath, export_format):
         return bpy.ops.export_scene.fbx(
             filepath=filepath,
             use_selection=True,
+            object_types={"MESH"},
+            path_mode="RELATIVE",
+            use_mesh_modifiers=True,
+            bake_anim=False,
         )
 
     gltf_format = "GLB" if export_format == "GLB" else "GLTF_EMBEDDED"
@@ -302,7 +428,7 @@ def _blend_export_scan(settings):
 class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
     bl_idname = "object.polygroups_export_selected_meshes"
     bl_label = "Export Selected Meshes"
-    bl_description = "Export each selected mesh to FBX, GLB, or GLTF in a per-object folder"
+    bl_description = "Export selected FAB meshes to !Unreal using the chosen folder layout and info format"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -320,6 +446,14 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
             self.report({"ERROR"}, "Save the blend file before exporting meshes")
             return {"CANCELLED"}
 
+        try:
+            filepaths = [(obj, _export_filepath(root_dir, obj, settings.mesh_export_format,
+                                                 settings.mesh_export_sort))
+                         for obj in mesh_objects]
+        except ValueError as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
         original_active = context.view_layer.objects.active
         original_selection = tuple(context.selected_objects)
         original_mode = original_active.mode if original_active else "OBJECT"
@@ -328,9 +462,13 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="OBJECT")
 
         exported_count = 0
+        mesh_info = []
+        original_image_paths = {}
+        detached_alpha_maps = {}
         try:
-            for obj in mesh_objects:
-                filepath = _export_filepath(root_dir, obj, settings.mesh_export_format)
+            original_image_paths = _copy_export_textures(mesh_objects, root_dir)
+            detached_alpha_maps = _detach_export_alpha_maps(mesh_objects)
+            for obj, filepath in filepaths:
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
                 bpy.ops.object.select_all(action="DESELECT")
@@ -340,7 +478,27 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
                 result = _export_selected_object(filepath, settings.mesh_export_format)
                 if "FINISHED" in result:
                     exported_count += 1
+                    if settings.mesh_export_info_format != "NONE":
+                        vertices, triangles = _evaluated_mesh_counts(
+                            obj, context.evaluated_depsgraph_get())
+                        mesh_info.append({
+                            "name": obj.name,
+                            "file": os.path.relpath(filepath, root_dir).replace(os.sep, "/"),
+                            "vertices": vertices,
+                            "triangles": triangles,
+                        })
+                else:
+                    raise RuntimeError(f"FAB export failed: {obj.name}")
+            _write_export_mesh_info(root_dir, settings.mesh_export_info_format, mesh_info)
+        except (RuntimeError, ValueError, OSError) as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
         finally:
+            for node, image in detached_alpha_maps.items():
+                node.image = image
+            for image, (filepath, filepath_raw) in original_image_paths.items():
+                image.filepath = filepath
+                image.filepath_raw = filepath_raw
             bpy.ops.object.select_all(action="DESELECT")
             for obj in original_selection:
                 if obj.name in context.view_layer.objects:

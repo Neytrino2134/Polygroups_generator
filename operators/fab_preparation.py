@@ -353,6 +353,33 @@ def _external_image_filepath(image):
     return bpy.path.abspath(filepath)
 
 
+def _fab_image_source(image):
+    """Return packed bytes first, or an external file, plus its extension."""
+    filepath = _external_image_filepath(image)
+    extension = os.path.splitext(filepath)[1].lower()
+    if not extension:
+        extension = {
+            'PNG': '.png', 'JPEG': '.jpg', 'TARGA': '.tga',
+            'OPEN_EXR': '.exr', 'TIFF': '.tif', 'BMP': '.bmp',
+        }.get(image.file_format, '.png')
+    packed = getattr(image, 'packed_file', None)
+    if packed is not None:
+        return ('PACKED', packed.data, extension)
+    if filepath and os.path.isfile(filepath):
+        return ('FILE', filepath, extension)
+    return None
+
+
+def _write_fab_image_source(source, destination):
+    kind, content, _extension = source
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    if kind == 'PACKED':
+        with open(destination, 'wb') as output:
+            output.write(content)
+    elif os.path.normcase(os.path.abspath(content)) != os.path.normcase(os.path.abspath(destination)):
+        shutil.copy2(content, destination)
+
+
 def _copy_and_rename_material_textures(material, settings, asset_name, asset_index, variant, report=None):
     texture_base_name = _texture_base_name(asset_name, asset_index, variant)
     output_dir = _texture_output_directory(settings, asset_name, asset_index)
@@ -377,19 +404,20 @@ def _copy_and_rename_material_textures(material, settings, asset_name, asset_ind
         if not settings.fab_copy_textures or output_dir is None:
             continue
 
-        source_filepath = _external_image_filepath(image)
-        if not source_filepath or not os.path.isfile(source_filepath):
+        source = _fab_image_source(image)
+        if source is None:
+            if report:
+                report({"WARNING"}, f"Missing FAB texture: {image.name}")
             continue
 
-        extension = os.path.splitext(source_filepath)[1] or ".png"
-        destination_filepath = os.path.join(output_dir, f"{texture_name}{extension.lower()}")
-        os.makedirs(output_dir, exist_ok=True)
+        destination_filepath = os.path.join(output_dir, f"{texture_name}{source[2]}")
 
         try:
-            if os.path.abspath(source_filepath) != os.path.abspath(destination_filepath):
-                shutil.copy2(source_filepath, destination_filepath)
+            _write_fab_image_source(source, destination_filepath)
             image.filepath = bpy.path.relpath(destination_filepath)
             image.filepath_raw = bpy.path.relpath(destination_filepath)
+            if image.packed_file is not None:
+                image.unpack(method='REMOVE')
             copied_count += 1
         except OSError as error:
             if report:

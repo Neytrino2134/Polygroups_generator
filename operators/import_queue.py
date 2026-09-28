@@ -337,7 +337,10 @@ class ImportQueue:
         self.weld_distance = settings.weld_distance
         self.arrange = settings.batch_auto_arrange_objects
         self.arrange_options = (settings.batch_arrange_spacing,
-                                settings.batch_arrange_mode, settings.batch_arrange_rows)
+                                settings.batch_arrange_mode, settings.batch_arrange_rows,
+                                settings.batch_arrange_plane,
+                                settings.batch_arrange_alignment,
+                                settings.batch_arrange_secondary_spacing)
         self.auto_save = bool(self.batch_stages and settings.batch_auto_save)
         self.auto_save_interval = max(1, settings.batch_auto_save_interval)
         self.successful_imports_since_save = 0
@@ -477,6 +480,9 @@ class ImportQueue:
             settings.batch_arrange_spacing,
             settings.batch_arrange_mode,
             settings.batch_arrange_rows,
+            settings.batch_arrange_plane,
+            settings.batch_arrange_alignment,
+            settings.batch_arrange_secondary_spacing,
         )
         self.auto_save = bool(self.batch_stages and settings.batch_auto_save)
         self.auto_save_interval = max(1, settings.batch_auto_save_interval)

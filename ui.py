@@ -1259,8 +1259,11 @@ class VIEW3D_PT_polygroups_import(bpy.types.Panel):
             automatic.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
             arrange = automatic.column(align=True)
             arrange.enabled = settings.batch_auto_arrange_objects
-            arrange.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing"))
+            arrange.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing_x"))
+            arrange.prop(settings, "batch_arrange_secondary_spacing", text=t(context, "arrange_spacing_y" if settings.batch_arrange_plane == "XY" else "arrange_spacing_z"))
             arrange.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
+            arrange.prop(settings, "batch_arrange_plane", text=t(context, "arrange_plane"))
+            arrange.prop(settings, "batch_arrange_alignment", text=t(context, "arrange_alignment"))
             arrange.prop(settings, "batch_arrange_rows", text=t(context, "arrange_rows"))
             automatic.prop(settings, "batch_import_mode", text=t(context, "batch_import_mode"), expand=True)
             save_row = automatic.row(align=True)
@@ -1545,8 +1548,11 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         if content is not None:
             arrange_box = content.column(align=True)
             arrange_box.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
-            arrange_box.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing"))
+            arrange_box.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing_x"))
+            arrange_box.prop(settings, "batch_arrange_secondary_spacing", text=t(context, "arrange_spacing_y" if settings.batch_arrange_plane == "XY" else "arrange_spacing_z"))
             arrange_box.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
+            arrange_box.prop(settings, "batch_arrange_plane", text=t(context, "arrange_plane"))
+            arrange_box.prop(settings, "batch_arrange_alignment", text=t(context, "arrange_alignment"))
             rows_row = arrange_box.row(align=True)
             rows_row.enabled = settings.batch_arrange_mode == "GRID"
             rows_row.prop(settings, "batch_arrange_rows", text=t(context, "arrange_rows"))
@@ -2608,6 +2614,12 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             pass_row = column.row(align=True)
             pass_row.prop(settings, "bake_base_color", text=t(context, "base_color"))
             pass_row.prop(settings, "bake_normal", text=t(context, "normal"))
+            column.prop(settings, "bake_artifact_mask", text=t(context, "bake_artifact_mask"))
+            if settings.bake_artifact_mask:
+                column.prop(settings, "bake_artifact_self_intersections", text=t(context, "bake_artifact_self_intersections"))
+                column.prop(settings, "bake_artifact_resolution", text=t(context, "bake_artifact_resolution"))
+                column.prop(settings, "bake_artifact_radius", text=t(context, "bake_artifact_radius"))
+                column.label(text=t(context, "bake_artifact_mask_hint"), icon="INFO")
             column.prop(
                 settings,
                 "auto_save_textures_after_bake",
@@ -3655,6 +3667,18 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         column.operator("object.polygroups_auto_prepare_all_generated",
                         text=t(context, "auto_prepare_all_generated"), icon="CHECKMARK")
 
+        column.operator("object.polygroups_rename_existing_fab",
+                        text=t(context, "fab_rename_all_sets"), icon="GREASEPENCIL").selected_only = False
+        column.operator("object.polygroups_rename_existing_fab",
+                        text=t(context, "fab_rename_selected_sets"), icon="RESTRICT_SELECT_OFF").selected_only = True
+        for variant in ("LOW", "MID", "HIGH"):
+            row = layout.row(align=True)
+            row.label(text=variant)
+            show = row.operator("object.polygroups_fab_variant_visibility", text="Show", icon="HIDE_OFF")
+            show.variant, show.hidden = variant, False
+            hide = row.operator("object.polygroups_fab_variant_visibility", text="Hide", icon="HIDE_ON")
+            hide.variant, hide.hidden = variant, True
+
         if settings.fab_prepare_status:
             status = layout.box().column(align=True)
             status.label(text=t(context, "fab_queue_status_" + settings.fab_prepare_status.lower()))
@@ -3693,6 +3717,8 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
                 "mesh_export_format",
                 text=t(context, "mesh_export_format"),
             )
+            column.prop(settings, "mesh_export_sort", text=t(context, "mesh_export_sort"))
+            column.prop(settings, "mesh_export_info_format", text=t(context, "mesh_export_info_format"))
             column.operator(
                 "object.polygroups_export_selected_meshes",
                 text=t(context, "export_selected_meshes"),
@@ -3869,6 +3895,23 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             if settings.studio_backdrop is not None:
                 column.prop(settings.studio_backdrop, "location", text=t(context, "studio_position"))
 
+        content = draw_topic(layout, context, "render_7", t(context, "arrange_objects"), "SNAP_EDGE")
+        if content is not None:
+            arrange_box = content.column(align=True)
+            arrange_box.prop(settings, "render_arrange_spacing", text=t(context, "arrange_spacing_x"))
+            arrange_box.prop(settings, "render_arrange_secondary_spacing", text=t(context, "arrange_spacing_y" if settings.render_arrange_plane == "XY" else "arrange_spacing_z"))
+            arrange_box.prop(settings, "render_arrange_mode", text=t(context, "arrange_mode"))
+            arrange_box.prop(settings, "render_arrange_plane", text=t(context, "arrange_plane"))
+            arrange_box.prop(settings, "render_arrange_alignment", text=t(context, "arrange_alignment"))
+            rows_row = arrange_box.row(align=True)
+            rows_row.enabled = settings.render_arrange_mode == "GRID"
+            rows_row.prop(settings, "render_arrange_rows", text=t(context, "arrange_rows"))
+            arrange_box.operator(
+                "object.polygroups_arrange_batch_objects",
+                text=t(context, "arrange_selected"),
+                icon="ALIGN_CENTER",
+            ).use_render_settings = True
+
         content = draw_topic(layout, context, "render_0", 'Render Queue', "RENDER_STILL")
         if content is not None:
             column = content.column(align=True)
@@ -4024,6 +4067,10 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             render_row.enabled = not settings.is_running and bool(settings.animation_collection_name)
             render_row.operator("object.polygroups_render_turnaround_animation",
                                 text=t(context, "animation_render"), icon="RENDER_ANIMATION")
+            views_row = column.row(align=True)
+            views_row.enabled = not settings.is_running and bool(settings.animation_collection_name)
+            views_row.operator("object.polygroups_render_turnaround_views",
+                               text=t(context, "animation_render_views"), icon="RENDER_STILL")
             if settings.is_running or settings.animation_progress > 0:
                 column.progress(
                     factor=settings.animation_progress / 100.0,

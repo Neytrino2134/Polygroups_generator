@@ -67,6 +67,7 @@ from .face_sets_to_materials import OBJECT_OT_face_sets_to_materials
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_fab_selection
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_all_generated, OBJECT_OT_polygroups_stop_fab_prepare
 from .fab_preparation import OBJECT_OT_polygroups_prepare_fab_variant
+from .fab_rename_existing import OBJECT_OT_polygroups_rename_existing_fab, OBJECT_OT_polygroups_fab_variant_visibility
 from .unity_preparation import OBJECT_OT_polygroups_prepare_unity, OBJECT_OT_polygroups_export_unity
 from .generate_polygroups import OBJECT_OT_generate_polygroups
 from .generate_polygroups import OBJECT_OT_polygroups_apply_checker_material
@@ -155,6 +156,7 @@ from .render_studio import (
 from .render_resolution import RENDER_OT_polygroups_apply_resolution
 from .turnaround_animation import OBJECT_OT_polygroups_prepare_turnaround_animation
 from .turnaround_animation import OBJECT_OT_polygroups_render_turnaround_animation
+from .turnaround_animation import OBJECT_OT_polygroups_render_turnaround_views
 from .resculpting import OBJECT_OT_polygroups_add_multires
 from .resculpting import OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly
 from .resculpting import OBJECT_OT_polygroups_setup_resculpting
@@ -310,6 +312,7 @@ CLASSES = (
     OBJECT_OT_polygroups_continue_render_queue,
     OBJECT_OT_polygroups_prepare_turnaround_animation,
     OBJECT_OT_polygroups_render_turnaround_animation,
+    OBJECT_OT_polygroups_render_turnaround_views,
     OBJECT_OT_generate_polygroups,
     OBJECT_OT_polygroups_apply_checker_material,
     OBJECT_OT_polygroups_apply_material_mode,
@@ -322,6 +325,8 @@ CLASSES = (
     OBJECT_OT_face_sets_to_materials,
     OBJECT_OT_clear_polygroups_materials,
     OBJECT_OT_polygroups_prepare_fab_variant,
+    OBJECT_OT_polygroups_rename_existing_fab,
+    OBJECT_OT_polygroups_fab_variant_visibility,
     OBJECT_OT_polygroups_prepare_unity,
     OBJECT_OT_polygroups_export_unity,
     OBJECT_OT_polygroups_auto_prepare_fab_selection,

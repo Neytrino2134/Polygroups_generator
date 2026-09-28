@@ -36,7 +36,8 @@ assert len(curves) == 1
 curve = curves[0]
 assert [point.co.x for point in curve.keyframe_points] == [1.0, 300.0]
 assert all(point.interpolation == "LINEAR" for point in curve.keyframe_points)
-assert abs(root.location.x - 3.0) < 1.0e-6
+assert all(abs(value) < 1.0e-6 for value in root.matrix_world.translation)
+assert all(abs(value) < 1.0e-6 for value in duplicate.matrix_world.translation)
 
 from polygroups_generator.operators.turnaround_animation import (
     _configure_animation_output,
@@ -87,7 +88,9 @@ assert scene_group.hide_render and protected_objects[1].hide_viewport
 # Media Type must be set to Video before FFmpeg becomes a valid file format.
 render_state = _render_snapshot(scene)
 assert settings.animation_media_type == "VIDEO"
-assert settings.animation_container == "MKV"
+assert settings.animation_container == "MPEG4"
+assert settings.animation_keep_scene_collections
+assert settings.render_engine == "EEVEE"
 for container, extension, codec in (
     ("MKV", ".mkv", "H264"),
     ("MPEG4", ".mp4", "H264"),
@@ -147,6 +150,10 @@ with TemporaryDirectory() as directory:
     settings.animation_media_type = "IMAGE"
     assert bpy.ops.object.polygroups_render_turnaround_animation() == {"FINISHED"}
     assert len(list(Path(directory).rglob("Turnaround_Test_Turnaround_*.png"))) == 2
+    assert bpy.ops.object.polygroups_render_turnaround_views() == {"FINISHED"}
+    for angle in (0, 90, 180, 270):
+        assert (Path(directory) / "Render Animation" / f"Turnaround_Test_Turnaround_{angle:03d}.png").is_file()
+    assert all(abs(value) < 1.0e-6 for value in root.rotation_euler)
 assert _render_snapshot(scene) == render_state
 
 addon_utils.disable(ROOT.name, default_set=True)

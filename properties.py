@@ -83,7 +83,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
-    "show_render_section": tuple(f"topic_render_{index}" for index in range(7)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(8)),
 }
 
 SUBSECTION_VISIBILITY_PROPERTIES = tuple(
@@ -449,6 +449,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         precision=2,
         unit="LENGTH",
     )
+    batch_arrange_secondary_spacing: bpy.props.FloatProperty(
+        name="Secondary Spacing",
+        description="Distance between rows along Y or Z",
+        default=0.1, min=0.0, max=1.0, precision=2, unit="LENGTH",
+    )
     batch_arrange_mode: bpy.props.EnumProperty(
         name="Arrange Mode",
         description="How to arrange imported objects on the ZX plane",
@@ -464,6 +469,18 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=2,
         min=1,
         soft_max=10,
+    )
+    batch_arrange_plane: bpy.props.EnumProperty(
+        name="Plane",
+        description="Plane for arranging imported objects",
+        items=(("ZX", "ZX", "Arrange along X and Z"), ("XY", "XY", "Arrange along X and Y")),
+        default="ZX",
+    )
+    batch_arrange_alignment: bpy.props.EnumProperty(
+        name="Alignment", description="Reference used to position objects",
+        items=(("BOUNDS", "Object Bounds", "Keep spacing between object bounds"),
+               ("ORIGIN", "Object Origins", "Align origins to an evenly spaced grid")),
+        default="BOUNDS",
     )
     batch_auto_save: bpy.props.BoolProperty(
         name="Auto Save",
@@ -1046,6 +1063,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_render_4: bpy.props.BoolProperty(default=False)
     topic_render_5: bpy.props.BoolProperty(default=False)
     topic_render_6: bpy.props.BoolProperty(default=False)
+    topic_render_7: bpy.props.BoolProperty(default=False)
     topic_remesh_0: bpy.props.BoolProperty(default=False)
     topic_remesh_1: bpy.props.BoolProperty(default=False)
     topic_export_0: bpy.props.BoolProperty(default=False)
@@ -2067,6 +2085,25 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         ),
         default="FBX",
     )
+    mesh_export_sort: bpy.props.EnumProperty(
+        name="Sort By",
+        description="Arrange exported FAB meshes by asset set or by mesh quality",
+        items=(
+            ("SET", "Sets", "Put LOW, MID and HIGH of each asset in one folder"),
+            ("VARIANT", "LOW / MID / HIGH", "Put all meshes of each quality in one folder"),
+        ),
+        default="VARIANT",
+    )
+    mesh_export_info_format: bpy.props.EnumProperty(
+        name="Mesh Info",
+        description="Write vertex and triangle counts for exported meshes to !Unreal",
+        items=(
+            ("NONE", "None", "Do not write a mesh info report"),
+            ("JSON", "JSON", "Write MeshInfo.json"),
+            ("TXT", "TXT", "Write MeshInfo.txt"),
+        ),
+        default="NONE",
+    )
     blend_export_directory: bpy.props.StringProperty(
         name="Blend Output",
         description="Folder used for exported asset blend files",
@@ -2228,7 +2265,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     animation_keep_scene_collections: bpy.props.BoolProperty(
         name="Keep Scene/Light/Camera Collections",
         description="Keep collections starting with Scene, Light, or Camera and all their contents visible during animation rendering",
-        default=False,
+        default=True,
     )
     animation_media_type: bpy.props.EnumProperty(
         name="Media Type",
@@ -2244,7 +2281,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
                ("MPEG4", "MPEG-4", "MPEG-4 video (.mp4)"),
                ("WEBM", "WebM", "WebM video (.webm)"),
                ("QUICKTIME", "QuickTime", "QuickTime video (.mov)")),
-        default="MKV",
+        default="MPEG4",
     )
     animation_collection_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
     animation_object_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
@@ -2254,6 +2291,36 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         name="Animation Progress", default=0.0, min=0.0, max=100.0,
         subtype="PERCENTAGE", options={"SKIP_SAVE"},
     )
+    render_arrange_spacing: bpy.props.FloatProperty(
+        name="Spacing", description="Distance between arranged objects",
+        default=0.1, min=0.0, max=1.0, precision=2, unit="LENGTH",
+    )
+    render_arrange_secondary_spacing: bpy.props.FloatProperty(
+        name="Secondary Spacing", description="Distance between rows along Y or Z",
+        default=0.1, min=0.0, max=1.0, precision=2, unit="LENGTH",
+    )
+    render_arrange_mode: bpy.props.EnumProperty(
+        name="Arrange Mode", description="How to arrange objects",
+        items=(("LINE", "One Row", "Arrange objects in one row"),
+               ("GRID", "Rows", "Arrange objects in a grid")),
+        default="LINE",
+    )
+    render_arrange_rows: bpy.props.IntProperty(
+        name="Rows", description="Number of rows used in Rows mode",
+        default=2, min=1, soft_max=10,
+    )
+    render_arrange_plane: bpy.props.EnumProperty(
+        name="Plane", description="Plane for arranging objects",
+        items=(("ZX", "ZX", "Arrange along X and Z"),
+               ("XY", "XY", "Arrange along X and Y")),
+        default="ZX",
+    )
+    render_arrange_alignment: bpy.props.EnumProperty(
+        name="Alignment", description="Reference used to position objects",
+        items=(("BOUNDS", "Object Bounds", "Keep spacing between object bounds"),
+               ("ORIGIN", "Object Origins", "Align origins to an evenly spaced grid")),
+        default="BOUNDS",
+    )
     render_engine: bpy.props.EnumProperty(
         name="Render Engine",
         description="Render engine used for batch asset previews",
@@ -2261,7 +2328,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
             ("CYCLES", "Cycles", "Render with Cycles"),
             ("EEVEE", "Eevee", "Render with Eevee"),
         ),
-        default="CYCLES",
+        default="EEVEE",
     )
     max_samples: bpy.props.IntProperty(
         name="Max Samples",
@@ -2620,6 +2687,26 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         name="Normal",
         description="Bake source normals to the active target",
         default=True,
+    )
+    bake_artifact_mask: bpy.props.BoolProperty(
+        name="Artifact Intersection Mask",
+        description="Project cage/highpoly intersections and enclosed areas to a black-and-white lowpoly UV mask",
+        default=False,
+    )
+    bake_artifact_self_intersections: bpy.props.BoolProperty(
+        name="Include Cage Self Intersections",
+        description="Also mark areas where the cage intersects itself in the artifact mask",
+        default=False,
+    )
+    bake_artifact_resolution: bpy.props.IntProperty(
+        name="Artifact Mask Resolution",
+        description="Width and height of the diagnostic mask in pixels",
+        default=1024, min=16, max=4096, soft_max=2048,
+    )
+    bake_artifact_radius: bpy.props.IntProperty(
+        name="Mark Radius",
+        description="Width in pixels around each detected intersection curve",
+        default=2, min=0, max=32,
     )
     auto_save_textures_after_bake: bpy.props.BoolProperty(
         name="Auto Save Textures After Bake",
