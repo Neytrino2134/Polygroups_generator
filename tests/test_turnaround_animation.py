@@ -147,12 +147,14 @@ with TemporaryDirectory() as directory:
     assert settings.animation_progress == 100.0
     assert settings.animation_last_output.endswith(".mkv")
     assert Path(settings.animation_last_output).is_file()
+    assert Path(settings.animation_last_output).parent.name == "Turnaround_Test"
     settings.animation_media_type = "IMAGE"
     assert bpy.ops.object.polygroups_render_turnaround_animation() == {"FINISHED"}
-    assert len(list(Path(directory).rglob("Turnaround_Test_Turnaround_*.png"))) == 2
+    mesh_output = Path(directory) / "Render Animation" / "Turnaround_Test"
+    assert len(list(mesh_output.glob("Turnaround_Test_Turnaround_*.png"))) == 2
     assert bpy.ops.object.polygroups_render_turnaround_views() == {"FINISHED"}
     for angle in (0, 90, 180, 270):
-        assert (Path(directory) / "Render Animation" / f"Turnaround_Test_Turnaround_{angle:03d}.png").is_file()
+        assert (Path(directory) / "Render Animation" / "Turnaround_Test" / f"Turnaround_Test_Turnaround_{angle:03d}.png").is_file()
     assert all(abs(value) < 1.0e-6 for value in root.rotation_euler)
 assert _render_snapshot(scene) == render_state
 

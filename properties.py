@@ -1935,6 +1935,14 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unity_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
     unity_export_directory: bpy.props.StringProperty(name="Directory", subtype="DIR_PATH", default="//!Unity")
     unity_export_overwrite: bpy.props.BoolProperty(name="Overwrite Existing", default=False)
+    unity_export_info_format: bpy.props.EnumProperty(
+        name="Mesh Info",
+        description="Write vertex and triangle counts for each exported LOD",
+        items=(("NONE", "None", "Do not write a mesh info report"),
+               ("JSON", "JSON", "Write MeshInfo.json for each asset"),
+               ("TXT", "TXT", "Write MeshInfo.txt for each asset")),
+        default="NONE",
+    )
     unity_use_auto_rig_pro: bpy.props.BoolProperty(
         name="Auto-Rig Pro Export",
         description="Export LOD0 together with the selected rig using the saved Auto-Rig Pro export settings",
@@ -2691,7 +2699,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     bake_artifact_mask: bpy.props.BoolProperty(
         name="Artifact Intersection Mask",
         description="Project cage/highpoly intersections and enclosed areas to a black-and-white lowpoly UV mask",
-        default=False,
+        default=True,
     )
     bake_artifact_self_intersections: bpy.props.BoolProperty(
         name="Include Cage Self Intersections",
@@ -2701,7 +2709,7 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     bake_artifact_resolution: bpy.props.IntProperty(
         name="Artifact Mask Resolution",
         description="Width and height of the diagnostic mask in pixels",
-        default=1024, min=16, max=4096, soft_max=2048,
+        default=2048, min=16, max=4096, soft_max=2048,
     )
     bake_artifact_radius: bpy.props.IntProperty(
         name="Mark Radius",

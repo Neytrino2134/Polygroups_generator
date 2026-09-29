@@ -233,6 +233,13 @@ def _configure_animation_output(scene, settings, output_base):
     return f"{output_base}_####.png"
 
 
+def _turnaround_output_directory(settings):
+    duplicate = bpy.data.objects.get(settings.animation_object_name)
+    source_name = duplicate.get(TURNAROUND_SOURCE_PROP) if duplicate is not None else None
+    mesh_name = bpy.path.clean_name(source_name or settings.animation_object_name or "Turnaround")
+    return os.path.join(bpy.path.abspath(settings.output_directory), "Render Animation", mesh_name)
+
+
 class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
     bl_idname = "object.polygroups_prepare_turnaround_animation"
     bl_label = "Prepare Turnaround"
@@ -319,7 +326,7 @@ class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
             self.report({"ERROR"}, "The scene needs an active camera")
             return {"CANCELLED"}
 
-        output_directory = os.path.join(bpy.path.abspath(settings.output_directory), "Render Animation")
+        output_directory = _turnaround_output_directory(settings)
         try:
             os.makedirs(output_directory, exist_ok=True)
         except OSError as error:
@@ -411,8 +418,7 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             self.report({"ERROR"}, "The scene needs an active camera")
             return False
 
-        base_directory = bpy.path.abspath(settings.output_directory)
-        output_directory = os.path.join(base_directory, "Render Animation")
+        output_directory = _turnaround_output_directory(settings)
         try:
             os.makedirs(output_directory, exist_ok=True)
         except OSError as error:

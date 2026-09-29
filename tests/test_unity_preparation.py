@@ -1,6 +1,7 @@
 """Run with Blender --background --factory-startup --python-exit-code 1 --python."""
 import sys
 import tempfile
+import json
 from pathlib import Path
 
 import addon_utils
@@ -19,6 +20,7 @@ class TEST_OT_arp_export(bpy.types.Operator):
         assert len(selected) == 2
         assert {obj.type for obj in selected} == {'MESH', 'ARMATURE'}
         assert context.active_object.type == 'ARMATURE'
+        assert all(abs(value) < 1e-6 for value in next(obj for obj in selected if obj.type == 'MESH').matrix_world.translation)
         Path(self.filepath).parent.mkdir(parents=True, exist_ok=True)
         Path(self.filepath).write_bytes(b'TEST ARP FBX')
         ARP_CALLS.append((self.filepath, tuple(obj.name for obj in selected)))
@@ -57,12 +59,17 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     assert obj.active_material.name == 'Konduktor_01'
     assert other.data != obj.data and other.active_material == material
     assert image.name == 'Albedo'
-    texture = Path(directory) / 'Textures' / ('Konduktor_01.png')
+    texture = Path(directory) / 'Textures' / 'Konduktor_01' / 'Konduktor_01.png'
     assert texture.is_file(), texture
-    assert not list((Path(directory) / 'Textures').glob('*AlphaMap*.png'))
+    assert not list((Path(directory) / 'Textures' / 'Konduktor_01').glob('*AlphaMap*.png'))
     assert settings.unity_asset_index == '02'
+    settings.unity_export_info_format = 'JSON'
+    obj.location = (3.0, 4.0, 5.0)
     assert bpy.ops.object.polygroups_export_unity() == {'FINISHED'}
+    assert tuple(obj.location) == (3.0, 4.0, 5.0)
     folder = Path(settings.unity_export_directory) / 'Konduktor_01'
+    info = json.loads((folder / 'MeshInfo.json').read_text(encoding='utf-8'))
+    assert [entry['lod'] for entry in info['meshes']] == ['LOD1']
     assert (folder / (obj.name + '.fbx')).stat().st_size > 0
     assert (folder / ('Konduktor_01.png')).is_file()
     assert not list(folder.glob('*AlphaMap*.png'))
@@ -74,6 +81,7 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.import_scene.fbx(filepath=str(folder / (obj.name + '.fbx')))
     imported = context.selected_objects[0]
+    assert all(abs(value) < 1e-5 for value in imported.matrix_world.translation)
     assert imported.active_material.name.startswith('Konduktor_01')
     imported_images = [node.image for node in texture_nodes(imported.active_material.node_tree)]
     assert imported_images and all(Path(bpy.path.abspath(img.filepath)).is_file() for img in imported_images)
@@ -97,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
         assert item.users_collection[0].name == f'Batch_02_LOD{lod}_Collection'
         assert item.active_material == batch[-1].active_material
     assert batch[0].active_material.name == 'Batch_02'
-    assert (Path(directory) / 'Textures' / 'Batch_02.png').is_file()
+    assert (Path(directory) / 'Textures' / 'Batch_02' / 'Batch_02.png').is_file()
     # Repeating preparation reuses the common material and preserves exact names.
     settings.unity_asset_index = '02'
     assert bpy.ops.object.polygroups_prepare_unity(auto_lods=True) == {'FINISHED'}
@@ -109,8 +117,17 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     context.collection.objects.link(rig)
     rig.select_set(True)
     settings.unity_use_auto_rig_pro = True
+    settings.unity_export_info_format = 'TXT'
+    for lod, item in enumerate(reversed(batch)):
+        item.location = (float(lod + 1), 2.0, 3.0)
+    rig.location = (10.0, 0.0, 0.0)
     assert bpy.ops.object.polygroups_export_unity() == {'FINISHED'}
+    assert tuple(rig.location) == (10.0, 0.0, 0.0)
+    for lod, item in enumerate(reversed(batch)):
+        assert tuple(item.location) == (float(lod + 1), 2.0, 3.0)
     batch_folder = Path(settings.unity_export_directory) / 'Batch_02'
+    report = (batch_folder / 'MeshInfo.txt').read_text(encoding='utf-8')
+    assert all(f'LOD{lod}\t' in report for lod in range(6))
     assert sorted(path.name for path in batch_folder.glob('*.fbx')) == [
         'Batch_02.LOD1.fbx', 'Batch_02.LOD2.fbx',
         'Batch_02.LOD3.fbx', 'Batch_02.LOD4.fbx', 'Batch_02.LOD5.fbx',

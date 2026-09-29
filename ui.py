@@ -3730,6 +3730,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column = content.column(align=True)
             column.prop(settings, "unity_export_directory")
             column.prop(settings, "unity_export_overwrite")
+            column.prop(settings, "unity_export_info_format", text=t(context, "mesh_export_info_format"))
             column.prop(settings, "unity_use_auto_rig_pro")
             column.operator("object.polygroups_export_unity", icon="EXPORT")
 

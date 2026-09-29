@@ -6,7 +6,12 @@ from array import array
 import bpy
 
 from .fab_preparation import _texture_suffix, _ungroup_source_texture_nodes
-from .mesh_export import _safe_path_token
+from .mesh_export import (
+    _evaluated_mesh_counts,
+    _export_at_world_origin,
+    _safe_path_token,
+    _write_export_mesh_info,
+)
 
 
 def unity_name(settings, lod):
@@ -199,7 +204,9 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
                 prepare_unity(item, name, unity_name(settings, ""))
                 move_to_lod_collection(context, item, lod)
             if settings.unity_copy_textures:
-                save_textures(meshes[0], os.path.join(os.path.dirname(bpy.data.filepath), "Textures"))
+                asset_folder = _safe_path_token(unity_name(settings, ""))
+                texture_dir = os.path.join(os.path.dirname(bpy.data.filepath), "Textures", asset_folder)
+                save_textures(meshes[0], texture_dir)
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
@@ -273,22 +280,37 @@ class OBJECT_OT_polygroups_export_unity(bpy.types.Operator):
                 folder = os.path.join(root, _safe_path_token(asset_name))
                 # Unity Prepare assigns one common material and texture set to all LODs.
                 save_textures(lods[0], folder)
+                mesh_info = []
                 for obj in lods:
                     bpy.ops.object.select_all(action="DESELECT")
                     obj.select_set(True)
                     filepath = os.path.join(folder, _safe_path_token(obj.name) + ".fbx")
-                    if rig is not None and obj.name == asset_name:
-                        rig.select_set(True)
-                        context.view_layer.objects.active = rig
-                        result = bpy.ops.arp.arp_export_fbx_panel("EXEC_DEFAULT", filepath=filepath)
-                    else:
-                        context.view_layer.objects.active = obj
-                        result = bpy.ops.export_scene.fbx(
-                            filepath=filepath, use_selection=True, object_types={"MESH"},
-                            path_mode="RELATIVE", use_mesh_modifiers=True, bake_anim=False,
-                        )
+                    use_rig = rig is not None and obj.name == asset_name
+                    with _export_at_world_origin(obj, context.view_layer, rig if use_rig else None):
+                        if use_rig:
+                            rig.select_set(True)
+                            context.view_layer.objects.active = rig
+                            result = bpy.ops.arp.arp_export_fbx_panel("EXEC_DEFAULT", filepath=filepath)
+                        else:
+                            context.view_layer.objects.active = obj
+                            result = bpy.ops.export_scene.fbx(
+                                filepath=filepath, use_selection=True, object_types={"MESH"},
+                                path_mode="RELATIVE", use_mesh_modifiers=True, bake_anim=False,
+                            )
                     if "FINISHED" not in result:
                         raise RuntimeError(f"FBX export failed: {obj.name}")
+                    if settings.unity_export_info_format != "NONE":
+                        vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
+                        lod_match = re.search(r"LOD\d+$", obj.name, flags=re.IGNORECASE)
+                        mesh_info.append({
+                            "lod": lod_match.group(0).upper() if lod_match else "LOD0",
+                            "name": obj.name,
+                            "file": os.path.basename(filepath),
+                            "vertices": vertices,
+                            "triangles": triangles,
+                        })
+                mesh_info.sort(key=lambda entry: int(entry["lod"][3:]))
+                _write_export_mesh_info(folder, settings.unity_export_info_format, mesh_info)
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}

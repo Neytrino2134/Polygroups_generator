@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import json
+from contextlib import contextmanager
 
 import bpy
 
@@ -163,6 +164,29 @@ def _evaluated_mesh_counts(obj, depsgraph):
         evaluated.to_mesh_clear()
 
 
+@contextmanager
+def _export_at_world_origin(obj, view_layer, companion=None):
+    """Move an export mesh to world origin and restore transforms on every exit."""
+    original_matrix = obj.matrix_world.copy()
+    companion_matrix = companion.matrix_world.copy() if companion is not None else None
+    offset = original_matrix.translation.copy()
+    try:
+        matrix = original_matrix.copy()
+        matrix.translation = (0.0, 0.0, 0.0)
+        obj.matrix_world = matrix
+        if companion is not None:
+            matrix = companion_matrix.copy()
+            matrix.translation -= offset
+            companion.matrix_world = matrix
+        view_layer.update()
+        yield
+    finally:
+        obj.matrix_world = original_matrix
+        if companion is not None:
+            companion.matrix_world = companion_matrix
+        view_layer.update()
+
+
 def _write_export_mesh_info(root_dir, export_format, entries):
     if export_format == "NONE":
         return
@@ -181,7 +205,8 @@ def _write_export_mesh_info(root_dir, export_format, entries):
         filepath = os.path.join(root_dir, "MeshInfo.txt")
         with open(filepath, "w", encoding="utf-8") as output:
             for item in entries:
-                output.write(f'{item["file"]}\tvertices: {item["vertices"]}\t'
+                lod = f'{item["lod"]}\t' if "lod" in item else ""
+                output.write(f'{lod}{item["file"]}\tvertices: {item["vertices"]}\t'
                              f'triangles: {item["triangles"]}\n')
             output.write(f'TOTAL\tmeshes: {totals["meshes"]}\t'
                          f'vertices: {totals["vertices"]}\t'
@@ -475,7 +500,8 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
                 obj.select_set(True)
                 context.view_layer.objects.active = obj
 
-                result = _export_selected_object(filepath, settings.mesh_export_format)
+                with _export_at_world_origin(obj, context.view_layer):
+                    result = _export_selected_object(filepath, settings.mesh_export_format)
                 if "FINISHED" in result:
                     exported_count += 1
                     if settings.mesh_export_info_format != "NONE":
