@@ -31,6 +31,8 @@ from .pin_edges import register as register_pin_edges
 from .pin_edges import unregister as unregister_pin_edges
 from .seam_object_overlay import register as register_seam_object_overlay
 from .seam_object_overlay import unregister as unregister_seam_object_overlay
+from .object_stats_overlay import register as register_object_stats_overlay
+from .object_stats_overlay import unregister as unregister_object_stats_overlay
 from .uv_checker_overlay import register as register_uv_checker_overlay
 from .uv_checker_overlay import unregister as unregister_uv_checker_overlay
 from .uv_seam_overlay import register as register_uv_seam_overlay
@@ -47,6 +49,7 @@ def register():
     register_ui()
     register_pin_edges()
     register_seam_object_overlay()
+    register_object_stats_overlay()
     register_uv_checker_overlay()
     register_uv_seam_overlay()
     register_hotkeys()
@@ -64,6 +67,7 @@ def unregister():
     unregister_uv_checker_overlay()
     unregister_uv_seam_overlay()
     unregister_seam_object_overlay()
+    unregister_object_stats_overlay()
     unregister_pin_edges()
     unregister_tools()
     unregister_operators()

@@ -378,6 +378,16 @@ def draw_enum_icon_toggle(layout, data_path, settings, property_name, items):
     return row
 
 
+def draw_fab_variant_visibility(layout):
+    for variant in ("HIGH", "LOW", "MID"):
+        row = layout.row(align=True)
+        row.label(text=variant)
+        hide = row.operator("object.polygroups_fab_variant_visibility", text="Hide", icon="HIDE_ON")
+        hide.variant, hide.hidden = variant, True
+        show = row.operator("object.polygroups_fab_variant_visibility", text="Show", icon="HIDE_OFF")
+        show.variant, show.hidden = variant, False
+
+
 def draw_section_header_icon(self, context):
     self.layout.label(text="", icon=self.bl_icon)
 
@@ -3671,13 +3681,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
                         text=t(context, "fab_rename_all_sets"), icon="GREASEPENCIL").selected_only = False
         column.operator("object.polygroups_rename_existing_fab",
                         text=t(context, "fab_rename_selected_sets"), icon="RESTRICT_SELECT_OFF").selected_only = True
-        for variant in ("LOW", "MID", "HIGH"):
-            row = layout.row(align=True)
-            row.label(text=variant)
-            show = row.operator("object.polygroups_fab_variant_visibility", text="Show", icon="HIDE_OFF")
-            show.variant, show.hidden = variant, False
-            hide = row.operator("object.polygroups_fab_variant_visibility", text="Hide", icon="HIDE_ON")
-            hide.variant, hide.hidden = variant, True
+        draw_fab_variant_visibility(layout)
 
         if settings.fab_prepare_status:
             status = layout.box().column(align=True)
@@ -3835,6 +3839,56 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_render_settings
+        content = draw_topic(layout, context, "render_1", 'Quality and Output', "PREFERENCES")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.prop(settings, "render_engine", text=t(context, "render_engine"))
+            column.prop(settings, "max_samples", text=t(context, "render_max_samples"))
+            column.prop(settings, "resolution_aspect_preset", text=t(context, "render_aspect_preset"), expand=True)
+            column.prop(settings, "resolution_size_preset", text=t(context, "render_size_preset"), expand=True)
+            resolution_row = column.row(align=True)
+            resolution_row.prop(settings, "resolution_x", text=t(context, "render_resolution_x"))
+            resolution_row.prop(settings, "resolution_y", text=t(context, "render_resolution_y"))
+            column.prop(settings, "resolution_scale", text=t(context, "render_resolution_scale"))
+            column.operator(
+                "render.polygroups_apply_resolution",
+                text=t(context, "render_apply_format"),
+                icon="CHECKMARK",
+            )
+            column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
+
+            options_row = column.row(align=True)
+            options_row.prop(settings, "render_low", text=t(context, "render_low"))
+            options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
+            column.prop(settings, "transparent_background", text=t(context, "render_transparent_background"))
+            scene_row = column.row(align=True)
+            scene_row.enabled = settings.transparent_background
+            scene_row.prop(settings, "scene_collection_prefix", text=t(context, "render_scene_collection_prefix"))
+            column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
+            column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
+
+            freestyle_box = content.box().column(align=True)
+            freestyle_box.label(text="Freestyle Edges", icon="EDGE_SEAM")
+            freestyle_box.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
+            freestyle_column = freestyle_box.column(align=True)
+            freestyle_column.enabled = settings.freestyle_edges
+            freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
+            freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
+            freestyle_column.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+            freestyle_row = freestyle_box.row(align=True)
+            freestyle_row.enabled = not settings.is_running
+            freestyle_row.operator(
+                "object.polygroups_mark_freestyle_edges",
+                text=t(context, "render_mark_freestyle"),
+                icon="EDGESEL",
+            )
+            freestyle_row.operator(
+                "object.polygroups_clear_freestyle_edges",
+                text=t(context, "render_clear_freestyle"),
+                icon="TRASH",
+            )
+
         content = draw_topic(layout, context, "render_6", "Scene Setup", "SCENE_DATA")
         if content is not None:
             column = content.column(align=True)
@@ -3913,6 +3967,29 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 icon="ALIGN_CENTER",
             ).use_render_settings = True
 
+        content = draw_topic(layout, context, "render_2", 'Multiple Views', "CAMERA_DATA")
+        if content is not None:
+            column = content.column(align=True)
+            column.separator()
+            column.prop(settings, "multiview_render", text=t(context, "render_multiview"))
+            multiview_row = column.row(align=True)
+            multiview_row.prop(settings, "multiview_offset", text=t(context, "render_multiview_offset"))
+            column.prop(settings, "multiview_angle", text=t(context, "render_multiview_angle"))
+            prepare_row = column.row(align=True)
+            prepare_row.enabled = not settings.is_running
+            prepare_row.operator(
+                "object.polygroups_prepare_selected_multiview",
+                text=t(context, "render_prepare_multiview"),
+                icon="DUPLICATE",
+            )
+            clear_row = column.row(align=True)
+            clear_row.enabled = not settings.is_running
+            clear_row.operator(
+                "object.polygroups_clear_multiview_render",
+                text=t(context, "render_clear_multiview"),
+                icon="TRASH",
+            )
+
         content = draw_topic(layout, context, "render_0", 'Render Queue', "RENDER_STILL")
         if content is not None:
             column = content.column(align=True)
@@ -3929,6 +4006,17 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 text=t(context, "render_start"),
                 icon="RENDER_STILL",
             )
+
+            if settings.queue_scanned:
+                column.progress(
+                    factor=1.0,
+                    type="BAR",
+                    text=t(
+                        context, "render_scan_summary",
+                        collections=settings.collection_count,
+                        jobs=settings.total_count,
+                    ),
+                )
 
             current_row = column.row(align=True)
             current_row.enabled = not settings.is_running
@@ -3955,74 +4043,10 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
             column.operator("object.polygroups_reset_render_state",
                             text=t(context, "render_reset_state"), icon="FILE_REFRESH")
-
-        content = draw_topic(layout, context, "render_1", 'Quality and Output', "PREFERENCES")
-        if content is not None:
-            column = content.column(align=True)
             column.separator()
-            column.prop(settings, "render_engine", text=t(context, "render_engine"))
-            column.prop(settings, "max_samples", text=t(context, "render_max_samples"))
-            column.prop(settings, "resolution_aspect_preset", text=t(context, "render_aspect_preset"), expand=True)
-            column.prop(settings, "resolution_size_preset", text=t(context, "render_size_preset"), expand=True)
-            resolution_row = column.row(align=True)
-            resolution_row.prop(settings, "resolution_x", text=t(context, "render_resolution_x"))
-            resolution_row.prop(settings, "resolution_y", text=t(context, "render_resolution_y"))
-            column.prop(settings, "resolution_scale", text=t(context, "render_resolution_scale"))
-            column.operator(
-                "render.polygroups_apply_resolution",
-                text=t(context, "render_apply_format"),
-                icon="CHECKMARK",
-            )
-            column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
-
-            options_row = column.row(align=True)
-            options_row.prop(settings, "render_low", text=t(context, "render_low"))
-            options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
-            column.prop(settings, "transparent_background", text=t(context, "render_transparent_background"))
-            scene_row = column.row(align=True)
-            scene_row.enabled = settings.transparent_background
-            scene_row.prop(settings, "scene_collection_prefix", text=t(context, "render_scene_collection_prefix"))
-            column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
-            column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
-
-        content = draw_topic(layout, context, "render_2", 'Multiple Views', "CAMERA_DATA")
-        if content is not None:
-            column = content.column(align=True)
-            column.separator()
-            column.prop(settings, "multiview_render", text=t(context, "render_multiview"))
-            multiview_row = column.row(align=True)
-            multiview_row.enabled = settings.multiview_render
-            multiview_row.prop(settings, "multiview_offset", text=t(context, "render_multiview_offset"))
-            clear_row = column.row(align=True)
-            clear_row.enabled = not settings.is_running
-            clear_row.operator(
-                "object.polygroups_clear_multiview_render",
-                text=t(context, "render_clear_multiview"),
-                icon="TRASH",
-            )
-
-        content = draw_topic(layout, context, "render_3", 'Freestyle Edges', "EDGE_SEAM")
-        if content is not None:
-            column = content.column(align=True)
-            column.separator()
-            column.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
-            freestyle_column = column.column(align=True)
-            freestyle_column.enabled = settings.freestyle_edges
-            freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
-            freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
-            freestyle_column.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
-            freestyle_row = column.row(align=True)
-            freestyle_row.enabled = not settings.is_running
-            freestyle_row.operator(
-                "object.polygroups_mark_freestyle_edges",
-                text=t(context, "render_mark_freestyle"),
-                icon="EDGESEL",
-            )
-            freestyle_row.operator(
-                "object.polygroups_clear_freestyle_edges",
-                text=t(context, "render_clear_freestyle"),
-                icon="TRASH",
-            )
+            visibility = column.column(align=True)
+            visibility.enabled = not settings.is_running
+            draw_fab_variant_visibility(visibility)
 
         content = draw_topic(layout, context, "render_4", 'Progress', "INFO")
         if content is not None:
@@ -4447,6 +4471,27 @@ def draw_object_apply_menu(self, context):
     )
 
 
+def draw_move_to_collection_menu(self, context):
+    self.layout.separator()
+    self.layout.operator(
+        "object.polygroups_move_to_new_generated_collection",
+        text="New Generated.N Collection",
+        icon="COLLECTION_NEW",
+    )
+
+
+class VIEW3D_MT_polygroups_move_to_collection(bpy.types.Menu):
+    bl_label = "Move to Collection"
+    bl_options = {"SEARCH_ON_KEY_PRESS"}
+
+    def draw(self, context):
+        self.layout.menu_contents("OBJECT_MT_move_to_collection")
+        draw_move_to_collection_menu(self, context)
+
+
+_move_collection_keymaps = []
+
+
 def register():
     update_panel_labels(bpy.context)
     for cls in CLASSES:
@@ -4454,6 +4499,14 @@ def register():
     bpy.types.VIEW3D_MT_edit_mesh_edges.append(draw_edge_menu)
     bpy.types.VIEW3D_MT_edit_mesh_delete.append(draw_delete_menu)
     bpy.types.VIEW3D_MT_object_apply.append(draw_object_apply_menu)
+    bpy.utils.register_class(VIEW3D_MT_polygroups_move_to_collection)
+    bpy.types.VIEW3D_MT_object_collection.append(draw_move_to_collection_menu)
+    keyconfig = bpy.context.window_manager.keyconfigs.addon
+    if keyconfig is not None:
+        keymap = keyconfig.keymaps.new(name="Object Mode", space_type="EMPTY")
+        item = keymap.keymap_items.new("wm.call_menu", "M", "PRESS")
+        item.properties.name = "VIEW3D_MT_polygroups_move_to_collection"
+        _move_collection_keymaps.append((keymap, item))
     bpy.types.VIEW3D_MT_shading_pie.append(draw_view_assists_shading_pie)
     bpy.types.OUTLINER_HT_header.prepend(draw_outliner_header)
     bpy.types.VIEW3D_HT_header.append(draw_view_assists_header)
@@ -4468,6 +4521,11 @@ def unregister():
     bpy.types.OUTLINER_HT_header.remove(draw_outliner_header)
     bpy.types.VIEW3D_MT_shading_pie.remove(draw_view_assists_shading_pie)
     bpy.types.VIEW3D_MT_object_apply.remove(draw_object_apply_menu)
+    for keymap, item in _move_collection_keymaps:
+        keymap.keymap_items.remove(item)
+    _move_collection_keymaps.clear()
+    bpy.types.VIEW3D_MT_object_collection.remove(draw_move_to_collection_menu)
+    bpy.utils.unregister_class(VIEW3D_MT_polygroups_move_to_collection)
     bpy.types.VIEW3D_MT_edit_mesh_delete.remove(draw_delete_menu)
     bpy.types.VIEW3D_MT_edit_mesh_edges.remove(draw_edge_menu)
     for cls in reversed(CLASSES):

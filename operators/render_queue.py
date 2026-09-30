@@ -13,6 +13,10 @@ ASSET_COLLECTION_SUFFIX = "_Collection"
 ASSET_RENDER_SUFFIXES = ("LOW", "MID")
 BLENDER_NUMERIC_SUFFIX_RE = re.compile(r"\.\d{3}$")
 MULTIVIEW_PROP = "polygroups_render_multiview"
+MULTIVIEW_SOURCE_PROP = "polygroups_multiview_source"
+MULTIVIEW_PREPARED_PROP = "polygroups_multiview_prepared"
+MULTIVIEW_SOURCE_RENDER_PROP = "polygroups_multiview_source_hide_render"
+MULTIVIEW_SOURCE_VIEWPORT_PROP = "polygroups_multiview_source_hide_viewport"
 MULTIVIEW_COLLECTION_SUFFIX = "_Multi_View"
 TEMP_FREESTYLE_RENDER_LAYERS_NODE = "__POLYGROUPS_FREESTYLE_RENDER_LAYERS__"
 TEMP_FREESTYLE_COMPOSITE_NODE = "__POLYGROUPS_FREESTYLE_COMPOSITE__"
@@ -58,8 +62,8 @@ def _render_output_base_directory(settings):
 
 def _normalize_render_output_setting(settings):
     directory = (settings.output_directory or "").strip()
-    if directory.startswith("//"):
-        settings.output_directory = bpy.path.abspath(directory)
+    if directory != settings.output_directory:
+        settings.output_directory = directory
 
 
 def _freestyle_pass_path(output_path):
@@ -70,6 +74,11 @@ def _freestyle_pass_path(output_path):
 def _freestyle_overlay_path(output_path):
     root, _ = os.path.splitext(output_path)
     return f"{root}_freestyle_overlay.png"
+
+
+def _transparent_output_path(output_path):
+    root, extension = os.path.splitext(output_path)
+    return f"{root}_transparent{extension}"
 
 
 def _current_state_render_path():
@@ -142,6 +151,7 @@ def _scan_render_queue(settings):
                     "object": obj.name,
                     "variant": suffix,
                     "output_path": output_path,
+                    "transparent_output_path": _transparent_output_path(output_path),
                     "freestyle_output_path": _freestyle_pass_path(output_path),
                     "freestyle_overlay_path": _freestyle_overlay_path(output_path),
                 },
@@ -163,6 +173,11 @@ def _store_queue(settings, queue, collection_count=None):
     settings.total_count = len(queue)
     settings.collection_count = len({item.get("collection", "") for item in queue}) if collection_count is None else collection_count
     _sync_progress(settings)
+
+
+def _ensure_render_job_directories(queue):
+    for directory in {os.path.dirname(job["output_path"]) for job in queue}:
+        os.makedirs(directory, exist_ok=True)
 
 
 def _sync_progress(settings):
@@ -803,7 +818,8 @@ def _multiview_collection(parent_collection, asset_name):
     return collection
 
 
-def _create_multiview_duplicate(source, collection, name, x_offset, z_rotation_degrees):
+def _create_multiview_duplicate(source, collection, name, x_offset, z_rotation_degrees,
+                                prepared=False):
     duplicate = source.copy()
     duplicate.name = name
     duplicate.data = source.data
@@ -813,8 +829,36 @@ def _create_multiview_duplicate(source, collection, name, x_offset, z_rotation_d
     duplicate.hide_render = False
     duplicate.hide_viewport = False
     duplicate[MULTIVIEW_PROP] = True
+    duplicate[MULTIVIEW_SOURCE_PROP] = source.name
+    duplicate[MULTIVIEW_PREPARED_PROP] = prepared
     collection.objects.link(duplicate)
     return duplicate
+
+
+def _multiview_views(source, parent_collection, asset_name, settings, prepared=False):
+    collection = _multiview_collection(parent_collection, asset_name)
+    offset = settings.multiview_offset
+    angle = float(settings.multiview_angle)
+    base_name = _clean_name(_base_name(source.name))
+    views = [
+        _create_multiview_duplicate(source, collection, f"{base_name}_MV_Front",
+                                    0.0, angle, prepared),
+        _create_multiview_duplicate(source, collection, f"{base_name}_MV_Back",
+                                    -offset, 180.0 + angle, prepared),
+        _create_multiview_duplicate(source, collection, f"{base_name}_MV_Side",
+                                    offset, 90.0 + angle, prepared),
+    ]
+    source.hide_render = True
+    source.hide_viewport = True
+    _set_collection_enabled(collection, True)
+    return views
+
+
+def _prepared_multiview_views(source):
+    views = [obj for obj in bpy.data.objects
+             if obj.get(MULTIVIEW_PROP) and obj.get(MULTIVIEW_PREPARED_PROP)
+             and obj.get(MULTIVIEW_SOURCE_PROP) == source.name]
+    return views if len(views) == 3 else []
 
 
 def _create_multiview_setup(job):
@@ -825,37 +869,41 @@ def _create_multiview_setup(job):
 
     settings = bpy.context.scene.polygroups_render_settings
     asset_name = job.get("asset_name", "") or _asset_name_from_collection(parent_collection)
-    collection = _multiview_collection(parent_collection, asset_name)
-    offset = settings.multiview_offset
-    base_name = _clean_name(_base_name(source.name))
-    duplicates = [
-        _create_multiview_duplicate(
-            source,
-            collection,
-            f"{base_name}_MV_Back",
-            -offset,
-            180.0,
-        ),
-        _create_multiview_duplicate(
-            source,
-            collection,
-            f"{base_name}_MV_Side",
-            offset,
-            90.0,
-        ),
-    ]
-
-    _set_collection_enabled(collection, True)
-    return duplicates
+    prepared = _prepared_multiview_views(source)
+    if prepared:
+        source.hide_render = True
+        source.hide_viewport = True
+        for obj in prepared:
+            obj.hide_render = False
+            obj.hide_viewport = False
+            for collection in obj.users_collection:
+                _set_collection_enabled(collection, True)
+        return []
+    return _multiview_views(source, parent_collection, asset_name, settings)
 
 
 def _remove_multiview_objects(objects):
     for obj in objects:
         if obj.name in bpy.data.objects:
+            source = bpy.data.objects.get(obj.get(MULTIVIEW_SOURCE_PROP, ""))
             bpy.data.objects.remove(obj, do_unlink=True)
+            if source is not None:
+                source.hide_render = False
+                source.hide_viewport = False
+    for collection in list(bpy.data.collections):
+        if (_base_name(collection.name).endswith(MULTIVIEW_COLLECTION_SUFFIX)
+                and not collection.objects and not collection.children):
+            bpy.data.collections.remove(collection)
 
 
 def _clear_multiview_setups():
+    for source in bpy.data.objects:
+        if MULTIVIEW_SOURCE_RENDER_PROP in source:
+            source.hide_render = bool(source[MULTIVIEW_SOURCE_RENDER_PROP])
+            source.hide_viewport = bool(source.get(MULTIVIEW_SOURCE_VIEWPORT_PROP, False))
+            del source[MULTIVIEW_SOURCE_RENDER_PROP]
+            if MULTIVIEW_SOURCE_VIEWPORT_PROP in source:
+                del source[MULTIVIEW_SOURCE_VIEWPORT_PROP]
     removed_objects = 0
     for obj in list(bpy.data.objects):
         if not obj.get(MULTIVIEW_PROP):
@@ -897,13 +945,11 @@ def _prepare_scene_for_job(job):
         obj.hide_render = not is_current
         obj.hide_viewport = not is_current
 
-    _prepare_transparent_background(bpy.context.scene.polygroups_render_settings)
     return True
 
 
 def _finish_render_job(job, multiview_objects=None):
     _remove_multiview_objects(multiview_objects or [])
-    _clear_multiview_setups()
     collection = bpy.data.collections.get(job.get("collection", ""))
     if collection is not None:
         _set_asset_collection_enabled(collection, False)
@@ -916,8 +962,8 @@ def _configure_render(scene, settings, job, filepath=None, file_format="PNG", fr
     scene.render.resolution_percentage = settings.resolution_scale
     scene.render.use_file_extension = True
     scene.render.image_settings.file_format = file_format
-    if file_format == "PNG" and (settings.transparent_background or freestyle):
-        scene.render.image_settings.color_mode = "RGBA"
+    if file_format == "PNG":
+        scene.render.image_settings.color_mode = "RGBA" if scene.render.film_transparent or freestyle else "RGB"
     scene.render.use_overwrite = settings.overwrite_existing
     output_path = filepath or job["output_path"]
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -940,6 +986,7 @@ class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
         output_path = _current_state_render_path()
         job = {
             "output_path": output_path,
+            "transparent_output_path": _transparent_output_path(output_path),
             "freestyle_output_path": _freestyle_pass_path(output_path),
             "freestyle_overlay_path": _freestyle_overlay_path(output_path),
         }
@@ -953,7 +1000,6 @@ class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
 
         try:
             settings.status = "Rendering current state"
-            _prepare_transparent_background(settings)
             _render_current_job(context, settings, job)
         except Exception as error:
             settings.status = f"Current state render failed: {error}"
@@ -966,20 +1012,21 @@ class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
             render.resolution_y = previous_settings["resolution_y"]
 
         settings.last_output_path = output_path
+        extra_output = f", {job['transparent_output_path']}" if settings.transparent_background else ""
         if settings.freestyle_edges and settings.freestyle_as_render_pass:
             settings.status = "Rendered current state with Freestyle pass"
             self.report(
                 {"INFO"},
-                f"Rendered current state: {output_path}, {job['freestyle_overlay_path']}, {job['freestyle_output_path']}",
+                f"Rendered current state: {output_path}{extra_output}, {job['freestyle_overlay_path']}, {job['freestyle_output_path']}",
             )
             return {"FINISHED"}
 
         settings.status = "Rendered current state"
-        self.report({"INFO"}, f"Rendered current state: {output_path}")
+        self.report({"INFO"}, f"Rendered current state: {output_path}{extra_output}")
         return {"FINISHED"}
 
 
-def _render_current_job(context, settings, job):
+def _render_single_job(context, settings, job):
     if settings.freestyle_edges and settings.freestyle_as_render_pass:
         _disable_freestyle(context)
         _configure_render(context.scene, settings, job, job["output_path"], "PNG")
@@ -1019,6 +1066,28 @@ def _render_current_job(context, settings, job):
     bpy.ops.render.render(write_still=True)
 
 
+def _render_current_job(context, settings, job):
+    """Render the scene image, then an isolated transparent companion image."""
+    context.scene.render.film_transparent = False
+    _render_single_job(context, settings, job)
+    if not settings.transparent_background:
+        return
+
+    snapshot = _snapshot_visibility()
+    transparent_path = job.get("transparent_output_path") or _transparent_output_path(job["output_path"])
+    transparent_job = {
+        **job,
+        "output_path": transparent_path,
+        "freestyle_output_path": _freestyle_pass_path(transparent_path),
+        "freestyle_overlay_path": _freestyle_overlay_path(transparent_path),
+    }
+    try:
+        _prepare_transparent_background(settings)
+        _render_single_job(context, settings, transparent_job)
+    finally:
+        _restore_visibility(snapshot)
+
+
 class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
     bl_idname = "object.polygroups_scan_render_queue"
     bl_label = "Scan Render Queue"
@@ -1035,6 +1104,7 @@ class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
         settings.last_output_path = ""
         settings.stop_requested = False
         _store_queue(settings, queue, collection_count)
+        settings.queue_scanned = True
         settings.status = f"Queued {settings.total_count} render job(s) from {collection_count} collection(s)"
         return {"FINISHED"}
 
@@ -1077,6 +1147,7 @@ class OBJECT_OT_polygroups_reset_render_state(bpy.types.Operator):
         settings = context.scene.polygroups_render_settings
         settings.is_running = False
         settings.stop_requested = False
+        settings.queue_scanned = False
         settings.status = "Render state reset"
         settings.animation_status = "Render state reset"
         for window in context.window_manager.windows:
@@ -1108,6 +1179,9 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         del event
         settings = context.scene.polygroups_render_settings
         _normalize_render_output_setting(settings)
+        if settings.output_directory.startswith("//") and not bpy.data.filepath:
+            self.report({"ERROR"}, "Save the blend file before rendering to a // relative folder")
+            return {"CANCELLED"}
         if not self.continue_from_current:
             queue, collection_count = _scan_render_queue(settings)
             settings.queue_index = 0
@@ -1120,7 +1194,15 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
                 _store_queue(settings, queue, collection_count)
 
         if settings.total_count == 0:
-            settings.status = "Render queue is empty"
+            settings.status = "Render queue is empty: no LOW/MID meshes in *_Collection assets"
+            self.report({"WARNING"}, settings.status)
+            return {"CANCELLED"}
+
+        try:
+            _ensure_render_job_directories(queue)
+        except OSError as error:
+            settings.status = f"Cannot create render output folder: {error}"
+            self.report({"ERROR"}, settings.status)
             return {"CANCELLED"}
 
         if settings.freestyle_edges:
@@ -1130,12 +1212,13 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         settings.is_running = True
         settings.stop_requested = False
         if not settings.freestyle_edges:
-            settings.status = "Render queue running"
+            settings.status = f"Render queue running: {_render_output_base_directory(settings)}"
         self._visibility_snapshot = _snapshot_visibility()
         self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
         context.window_manager.modal_handler_add(self)
         self._reset = False
         _ACTIVE_QUEUE_TASK = self
+        self.report({"INFO"}, f"Started {settings.total_count} render job(s): {_render_output_base_directory(settings)}")
         return {"RUNNING_MODAL"}
 
     def execute(self, context):
@@ -1159,7 +1242,11 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
             return {"FINISHED"}
 
         job = queue[settings.queue_index]
-        if settings.skip_existing and not settings.overwrite_existing and os.path.exists(job.get("output_path", "")):
+        output_exists = os.path.exists(job.get("output_path", ""))
+        transparent_exists = not settings.transparent_background or os.path.exists(
+            job.get("transparent_output_path") or _transparent_output_path(job.get("output_path", ""))
+        )
+        if settings.skip_existing and not settings.overwrite_existing and output_exists and transparent_exists:
             settings.queue_index += 1
             _sync_progress(settings)
             return {"RUNNING_MODAL"}
@@ -1174,7 +1261,10 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         settings.current_object = job.get("object", "")
         settings.last_output_path = job.get("output_path", "")
         settings.status = f"Rendering {settings.current_object}"
-        multiview_objects = _create_multiview_setup(job) if settings.multiview_render else []
+        source = bpy.data.objects.get(job.get("object", ""))
+        use_multiview = settings.multiview_render or (source is not None and
+                                                     bool(_prepared_multiview_views(source)))
+        multiview_objects = _create_multiview_setup(job) if use_multiview else []
         try:
             _render_current_job(context, settings, job)
         except Exception as error:
@@ -1224,6 +1314,42 @@ class OBJECT_OT_polygroups_stop_render_queue(bpy.types.Operator):
         settings.stop_requested = True
         settings.status = "Stop requested"
         return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_prepare_selected_multiview(bpy.types.Operator):
+    bl_idname = "object.polygroups_prepare_selected_multiview"
+    bl_label = "Prepare Selected Multi View"
+    bl_description = "Create three persistent preview views for each selected mesh"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return (not context.scene.polygroups_render_settings.is_running
+                and any(obj.type == "MESH" for obj in context.selected_objects))
+
+    def execute(self, context):
+        settings = context.scene.polygroups_render_settings
+        sources = [obj for obj in context.selected_objects
+                   if obj.type == "MESH" and not obj.get(MULTIVIEW_PROP)]
+        prepared_count = 0
+        for source in sources:
+            parent = next((collection for collection in source.users_collection
+                           if _asset_name_from_collection(collection)), None)
+            if parent is None:
+                parent = source.users_collection[0] if source.users_collection else None
+            if parent is None:
+                continue
+            if MULTIVIEW_SOURCE_RENDER_PROP not in source:
+                source[MULTIVIEW_SOURCE_RENDER_PROP] = bool(source.hide_render)
+                source[MULTIVIEW_SOURCE_VIEWPORT_PROP] = bool(source.hide_viewport)
+            for obj in list(bpy.data.objects):
+                if obj.get(MULTIVIEW_PROP) and obj.get(MULTIVIEW_SOURCE_PROP) == source.name:
+                    bpy.data.objects.remove(obj, do_unlink=True)
+            asset_name = _asset_name_from_collection(parent) or source.name
+            _multiview_views(source, parent, asset_name, settings, prepared=True)
+            prepared_count += 1
+        self.report({"INFO"}, f"Prepared three views for {prepared_count} selected mesh(es)")
+        return {"FINISHED"} if prepared_count else {"CANCELLED"}
 
 
 class OBJECT_OT_polygroups_clear_multiview_render(bpy.types.Operator):

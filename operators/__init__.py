@@ -13,6 +13,7 @@ from .generated_visibility import OBJECT_OT_polygroups_object_visibility
 from .generated_visibility import OBJECT_OT_polygroups_generated_collection
 from .generated_index import OBJECT_OT_polygroups_fix_all_generated_indices
 from .generated_index import OBJECT_OT_polygroups_fix_selected_generated_indices
+from .generated_index import OBJECT_OT_polygroups_move_to_new_generated_collection
 from .ai_generation import OBJECT_OT_airetopo_generate_google_image
 from .ai_generation import OBJECT_OT_airetopo_generate_openai_image
 from .ai_generation import OBJECT_OT_airetopo_load_library_prompt
@@ -139,6 +140,7 @@ from .quick_knife_seam_tool import MESH_OT_polygroups_quick_knife_seam
 from .rename_objects import OBJECT_OT_polygroups_rename_objects
 from .remesh_presets import OBJECT_OT_polygroups_set_quad_count_preset
 from .render_queue import OBJECT_OT_polygroups_clear_multiview_render
+from .render_queue import OBJECT_OT_polygroups_prepare_selected_multiview
 from .render_queue import OBJECT_OT_polygroups_clear_freestyle_edges
 from .render_queue import OBJECT_OT_polygroups_continue_render_queue
 from .render_queue import OBJECT_OT_polygroups_mark_freestyle_edges
@@ -240,6 +242,7 @@ CLASSES = (
     OBJECT_OT_polygroups_generated_collection,
     OBJECT_OT_polygroups_fix_all_generated_indices,
     OBJECT_OT_polygroups_fix_selected_generated_indices,
+    OBJECT_OT_polygroups_move_to_new_generated_collection,
     OBJECT_OT_polygroups_select_import_folder,
     OBJECT_OT_airetopo_generate_openai_image,
     OBJECT_OT_airetopo_generate_google_image,
@@ -307,6 +310,7 @@ CLASSES = (
     RENDER_OT_polygroups_studio_light_colors,
     RENDER_OT_polygroups_delete_studio_scenes,
     OBJECT_OT_polygroups_clear_multiview_render,
+    OBJECT_OT_polygroups_prepare_selected_multiview,
     OBJECT_OT_polygroups_mark_freestyle_edges,
     OBJECT_OT_polygroups_clear_freestyle_edges,
     OBJECT_OT_polygroups_continue_render_queue,

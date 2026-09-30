@@ -135,8 +135,8 @@ def _update_batch_smart_lods(self, context):
 def _normalize_render_output_directory(self, context):
     del context
     value = (self.output_directory or "").strip()
-    if value.startswith("//"):
-        self["output_directory"] = bpy.path.abspath(value)
+    if value != self.output_directory:
+        self["output_directory"] = value
 
 
 def _update_render_resolution_preset(self, context):
@@ -2417,7 +2417,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     )
     transparent_background: bpy.props.BoolProperty(
         name="Transparent Background",
-        description="Render with transparent film and hide scene/background collections during each job",
+        description="Render an additional transparent PNG for each job while keeping the main scene render",
         default=False,
     )
     scene_collection_prefix: bpy.props.StringProperty(
@@ -2427,7 +2427,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     )
     multiview_render: bpy.props.BoolProperty(
         name="Multi View",
-        description="Render temporary front, back, and side views of each asset together",
+        description="Automatically create front, back and side views for render jobs without prepared previews",
         default=False,
     )
     multiview_offset: bpy.props.FloatProperty(
@@ -2438,6 +2438,16 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         soft_max=5.0,
         precision=3,
         unit="LENGTH",
+    )
+    multiview_angle: bpy.props.EnumProperty(
+        name="View Angle",
+        description="Additional Z rotation applied to all three multi view positions",
+        items=(
+            ("-30", "-30°", "Rotate every view by -30 degrees"),
+            ("0", "0°", "Use front, back and side angles without an offset"),
+            ("30", "+30°", "Rotate every view by +30 degrees"),
+        ),
+        default="0",
     )
     freestyle_edges: bpy.props.BoolProperty(
         name="Freestyle Edges",
@@ -2477,6 +2487,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         min=0,
         options={"HIDDEN"},
     )
+    queue_scanned: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     total_count: bpy.props.IntProperty(name="Queued", default=0, min=0)
     rendered_count: bpy.props.IntProperty(name="Rendered", default=0, min=0)
     remaining_count: bpy.props.IntProperty(name="Remaining", default=0, min=0)

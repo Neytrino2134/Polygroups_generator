@@ -9,6 +9,39 @@ from ..core.generated_index import (
 )
 
 
+class OBJECT_OT_polygroups_move_to_new_generated_collection(bpy.types.Operator):
+    bl_idname = "object.polygroups_move_to_new_generated_collection"
+    bl_label = "New Generated.N Collection"
+    bl_description = "Create the next numbered Generated collection, move selected meshes into it and update their Generated indices"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "OBJECT" and any(
+            obj.type == "MESH" for obj in context.selected_editable_objects
+        )
+
+    def execute(self, context):
+        from .batch_import import _next_generated_collection_index
+
+        meshes = [obj for obj in context.selected_editable_objects if obj.type == "MESH"]
+        if not meshes:
+            return {"CANCELLED"}
+        index = _next_generated_collection_index()
+        collection = bpy.data.collections.new(f"Generated.{index:03d}")
+        context.scene.collection.children.link(collection)
+        for obj in meshes:
+            previous_collections = tuple(obj.users_collection)
+            collection.objects.link(obj)
+            for previous in previous_collections:
+                previous.objects.unlink(obj)
+            base, separator, suffix = obj.name.rpartition(".")
+            if separator and base.lower().endswith("generated") and suffix.isdigit():
+                fix_object_generated_index(obj)
+        self.report({"INFO"}, f"Moved {len(meshes)} mesh(es) to {collection.name}")
+        return {"FINISHED"}
+
+
 def _fix_objects(objects):
     changed = 0
     skipped = 0
