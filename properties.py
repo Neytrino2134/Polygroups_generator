@@ -3,6 +3,7 @@ from math import radians
 
 import bpy
 
+from .core.render_palettes import PROPERTY_CLASSES as PALETTE_PROPERTY_CLASSES, RenderPaletteGroup
 from .core.render_resolution import preset_resolution
 
 REMESH_PRESET_ITEMS = (
@@ -83,7 +84,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
-    "show_render_section": tuple(f"topic_render_{index}" for index in range(8)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(9)),
 }
 
 SUBSECTION_VISIBILITY_PROPERTIES = tuple(
@@ -1064,6 +1065,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_render_5: bpy.props.BoolProperty(default=False)
     topic_render_6: bpy.props.BoolProperty(default=False)
     topic_render_7: bpy.props.BoolProperty(default=False)
+    topic_render_8: bpy.props.BoolProperty(default=False)
     topic_remesh_0: bpy.props.BoolProperty(default=False)
     topic_remesh_1: bpy.props.BoolProperty(default=False)
     topic_export_0: bpy.props.BoolProperty(default=False)
@@ -1965,22 +1967,22 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     smart_lods_final_decimate: bpy.props.BoolProperty(
         name="Final Decimate Fallback",
         description="If seam-aware decimation cannot reach a triangle limit, add an unrestricted Decimate pass",
-        default=False,
+        default=True,
     )
     smart_lods_triangulate_all: bpy.props.BoolProperty(
         name="Triangulate All LODs",
         description="Apply triangulation to every generated LOD mesh",
-        default=False,
+        default=True,
     )
     smart_lods_auto_arrange: bpy.props.BoolProperty(
         name="Auto Arrange LODs",
         description="Place generated LODs side by side along the world X axis",
-        default=False,
+        default=True,
     )
     smart_lods_spacing: bpy.props.FloatProperty(
         name="Arrange Objects Spacing",
         description="Minimum gap between the world-space bounds of successive LOD meshes",
-        default=1.0,
+        default=0.1,
         min=0.0,
         soft_max=10.0,
         subtype="DISTANCE",
@@ -2220,6 +2222,9 @@ def _update_studio_color_tag(self, context):
 
 
 class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
+    palette_groups: bpy.props.CollectionProperty(type=RenderPaletteGroup)
+    palette_group_index: bpy.props.IntProperty(default=0, min=0)
+    palette_library_initialized: bpy.props.BoolProperty(default=False)
     studio_backdrop: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_camera: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_camera_aim: bpy.props.PointerProperty(type=bpy.types.Object)
@@ -2429,6 +2434,11 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         name="Multi View",
         description="Automatically create front, back and side views for render jobs without prepared previews",
         default=False,
+    )
+    multiview_render_hero: bpy.props.BoolProperty(
+        name="Render Hero View",
+        description="Also render the centered front view without the side and back views, using the same background and Freestyle settings",
+        default=True,
     )
     multiview_offset: bpy.props.FloatProperty(
         name="Multi View Offset",
@@ -2962,6 +2972,7 @@ class AIRETOPO_PG_google_image_settings(bpy.types.PropertyGroup):
 
 
 CLASSES = (
+    *PALETTE_PROPERTY_CLASSES,
     POLYGROUPS_PG_remesh_status,
     AIRETOPO_PG_panel_visibility_settings,
     POLYGROUPS_PG_model_preparation_settings,

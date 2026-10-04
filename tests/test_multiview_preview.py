@@ -39,6 +39,22 @@ job = {"collection": collection.name, "object": source.name, "asset_name": "Prev
 assert render_queue._prepare_scene_for_job(job)
 assert render_queue._create_multiview_setup(job) == []
 assert all(not obj.hide_render for obj in views)
+assert settings.multiview_render_hero
+settings.render_low = True
+settings.render_mid = False
+queue, count = render_queue._scan_render_queue(settings)
+assert count == 1 and len(queue) == 2
+assert Path(queue[0]["output_path"]).name == "Image_Multiview_01_LOW.png"
+assert Path(queue[1]["output_path"]).name == "Image_Hero_01_LOW.png"
+assert Path(queue[1]["transparent_output_path"]).name == "Image_Hero_01_LOW_transparent.png"
+assert Path(queue[1]["freestyle_output_path"]).name == "Image_Hero_01_LOW_freestyle_pass.png"
+render_queue._isolate_hero_view(source, [])
+assert [obj.name for obj in views if not obj.hide_render] == ["SM_Preview_01_LOW_MV_Front"]
+render_queue._create_multiview_setup(job)
+assert all(not obj.hide_render for obj in views)
+settings.multiview_render_hero = False
+assert len(render_queue._scan_render_queue(settings)[0]) == 1
+settings.multiview_render_hero = True
 render_queue._finish_render_job(job)
 assert len(render_queue._prepared_multiview_views(source)) == 3
 

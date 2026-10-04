@@ -7,6 +7,24 @@ from math import radians
 import bpy
 
 from ..sound import play_operation_done_sound
+from ..core.remesh_cursor import RemeshCursor, update_remesh_cursor
+
+
+class RenderQueueCursor(RemeshCursor):
+    def __init__(self, context):
+        super().__init__(context)
+        self.primary_in_corner = True
+        self.status_line = "Rendering..."
+
+    def draw(self):
+        settings = bpy.context.scene.polygroups_render_settings
+        if not settings.is_running:
+            return
+        total = settings.total_count
+        completed = min(settings.queue_index, total)
+        self.label = f"Готово {completed} из {total} —"
+        self.percent = 100 * completed / total if total else 0
+        super().draw()
 
 
 ASSET_COLLECTION_SUFFIX = "_Collection"
@@ -129,6 +147,7 @@ def _scan_render_queue(settings):
     base_directory = _render_output_base_directory(settings)
     queue = []
     collection_names = set()
+    collection_index = 0
 
     for collection in bpy.data.collections:
         asset_name = _asset_name_from_collection(collection)
@@ -140,22 +159,32 @@ def _scan_render_queue(settings):
         if not objects:
             continue
 
-        asset_directory = os.path.join(base_directory, _clean_name(asset_name))
+        # Number only collections with render jobs. LOW and MID of the same
+        # asset share an index, independent of the enabled render variants.
+        collection_index += 1
+        asset_directory = os.path.join(base_directory, f"Collection_{collection_index:02d}")
         for obj in objects:
             suffix = _render_suffix_from_name(obj.name)
-            output_path = os.path.join(asset_directory, f"{_clean_name(_base_name(obj.name))}.png")
-            queue.append(
-                {
-                    "asset_name": asset_name,
-                    "collection": collection.name,
-                    "object": obj.name,
-                    "variant": suffix,
-                    "output_path": output_path,
-                    "transparent_output_path": _transparent_output_path(output_path),
-                    "freestyle_output_path": _freestyle_pass_path(output_path),
-                    "freestyle_overlay_path": _freestyle_overlay_path(output_path),
-                },
-            )
+            use_multiview = settings.multiview_render or bool(_prepared_multiview_views(obj))
+            modes = ["Multiview"] if use_multiview else [""]
+            if use_multiview and settings.multiview_render_hero:
+                modes.append("Hero")
+            for mode in modes:
+                prefix = f"Image_{mode}" if mode else "Image"
+                output_path = os.path.join(asset_directory, f"{prefix}_{collection_index:02d}_{suffix}.png")
+                queue.append(
+                    {
+                        "asset_name": asset_name,
+                        "collection": collection.name,
+                        "object": obj.name,
+                        "variant": suffix,
+                        "view_mode": mode,
+                        "output_path": output_path,
+                        "transparent_output_path": _transparent_output_path(output_path),
+                        "freestyle_output_path": _freestyle_pass_path(output_path),
+                        "freestyle_overlay_path": _freestyle_overlay_path(output_path),
+                    },
+                )
 
     return queue, len(collection_names)
 
@@ -882,6 +911,15 @@ def _create_multiview_setup(job):
     return _multiview_views(source, parent_collection, asset_name, settings)
 
 
+def _isolate_hero_view(source, temporary_views):
+    """Keep the centered front view with the configured +/-30 degree angle."""
+    views = temporary_views or _prepared_multiview_views(source)
+    for obj in views:
+        is_front = _base_name(obj.name).endswith("_MV_Front")
+        obj.hide_render = not is_front
+        obj.hide_viewport = not is_front
+
+
 def _remove_multiview_objects(objects):
     for obj in objects:
         if obj.name in bpy.data.objects:
@@ -1168,6 +1206,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
 
     _timer = None
     _visibility_snapshot = None
+    _cursor = None
 
     @classmethod
     def poll(cls, context):
@@ -1176,7 +1215,8 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
 
     def invoke(self, context, event):
         global _ACTIVE_QUEUE_TASK
-        del event
+        if event is not None:
+            update_remesh_cursor(context, event)
         settings = context.scene.polygroups_render_settings
         _normalize_render_output_setting(settings)
         if settings.output_directory.startswith("//") and not bpy.data.filepath:
@@ -1214,6 +1254,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         if not settings.freestyle_edges:
             settings.status = f"Render queue running: {_render_output_base_directory(settings)}"
         self._visibility_snapshot = _snapshot_visibility()
+        self._cursor = RenderQueueCursor(context)
         self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
         context.window_manager.modal_handler_add(self)
         self._reset = False
@@ -1225,6 +1266,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         return self.invoke(context, None)
 
     def modal(self, context, event):
+        update_remesh_cursor(context, event)
         if getattr(self, "_reset", False):
             return {"CANCELLED"}
         settings = context.scene.polygroups_render_settings
@@ -1266,6 +1308,12 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
                                                      bool(_prepared_multiview_views(source)))
         multiview_objects = _create_multiview_setup(job) if use_multiview else []
         try:
+            if job.get("view_mode") == "Hero":
+                _isolate_hero_view(source, multiview_objects)
+            # The actual render is synchronous; paint the queue status before
+            # it blocks the modal event loop for the next image.
+            if not bpy.app.background:
+                bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
             _render_current_job(context, settings, job)
         except Exception as error:
             _finish_render_job(job, multiview_objects)
@@ -1283,6 +1331,9 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
 
     def _finish(self, context, status):
         global _ACTIVE_QUEUE_TASK
+        if self._cursor is not None:
+            self._cursor.close()
+            self._cursor = None
         self._reset = True
         if _ACTIVE_QUEUE_TASK is self:
             _ACTIVE_QUEUE_TASK = None
@@ -1297,6 +1348,9 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         settings.stop_requested = False
         _sync_progress(settings)
         settings.status = status
+
+    def cancel(self, context):
+        self._finish(context, "Render queue stopped")
 
 
 class OBJECT_OT_polygroups_stop_render_queue(bpy.types.Operator):

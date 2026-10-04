@@ -43,6 +43,15 @@ with TemporaryDirectory() as directory:
     queue, count = render_queue._scan_render_queue(settings)
     assert count == 1 and len(queue) == 1
     job = queue[0]
+    assert Path(job["output_path"]).name == "Image_01_LOW.png"
+    assert Path(job["output_path"]).parent.name == "Collection_01"
+    # Renaming the asset pack must not change the Photoshop input paths.
+    collection.name = "OtherPack_Collection"
+    source.name = "SM_OtherPack_LOW"
+    renamed_queue, _ = render_queue._scan_render_queue(settings)
+    assert renamed_queue[0]["output_path"] == job["output_path"]
+    job = renamed_queue[0]
+    queue = renamed_queue
     render_queue._ensure_render_job_directories(queue)
     assert Path(job["output_path"]).parent.is_dir()
     assert render_queue._prepare_scene_for_job(job)
@@ -50,7 +59,7 @@ with TemporaryDirectory() as directory:
     assert Path(job["output_path"]).is_file(), job["output_path"]
     settings.output_directory = "//!Started"
     assert bpy.ops.object.polygroups_start_render_queue("INVOKE_DEFAULT") == {"RUNNING_MODAL"}
-    assert (Path(directory) / "!Started" / "RenderTest_01").is_dir()
+    assert (Path(directory) / "!Started" / "Collection_01").is_dir()
     settings.stop_requested = True
 
 print("RENDER QUEUE OUTPUT TEST PASSED")

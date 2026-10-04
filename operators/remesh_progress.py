@@ -111,7 +111,7 @@ class RemeshSession:
 class OBJECT_OT_polygroups_run_remesh(bpy.types.Operator):
     bl_idname = "object.polygroups_run_remesh"
     bl_label = "Remesh with Progress"
-    bl_options = {"UNDO", "INTERNAL"}
+    bl_options = {"INTERNAL"}
 
     @classmethod
     def poll(cls, context):
@@ -144,16 +144,27 @@ class OBJECT_OT_polygroups_run_remesh(bpy.types.Operator):
         update_remesh_cursor(context, event)
         if self._session.done:
             self.cleanup(context)
-            return {"FINISHED"}
+            return {"CANCELLED"}
+        # Never let Undo replace Blender datablocks while the engine/session
+        # still holds RNA references to the source and its materials.
+        if event.ctrl and event.type in {"Z", "Y"}:
+            return {"RUNNING_MODAL"}
         if event.type == "ESC":
             self._session.status.cancel_requested = True
         elif event.type != "TIMER" or time.monotonic() < self._next_tick:
             return {"PASS_THROUGH"}
         self._next_tick = time.monotonic() + 0.15
         with context.temp_override(scene=self._session.scene, view_layer=self._session.view_layer):
-            self._session.step(context)
+            if self._session.status.stage == "STARTING":
+                bpy.ops.ed.undo_push(message="Before Auto Remesh")
+            # Execute mutations inside an operator, so nested FBX/material/UV
+            # operators cannot leave partial snapshots on the undo stack.
+            bpy.ops.object.polygroups_remesh_step("EXEC_DEFAULT", False)
         redraw(context)
         if self._session.done:
+            # Calls made from modal callbacks do not reliably receive an
+            # automatic undo push. Commit only after all postprocessing ends.
+            bpy.ops.ed.undo_push(message="Auto Remesh")
             self.cleanup(context)
             return {"FINISHED"}
         return {"PASS_THROUGH"}
@@ -161,6 +172,19 @@ class OBJECT_OT_polygroups_run_remesh(bpy.types.Operator):
     def cancel(self, context):
         self._session.finish(context, "CANCELLED")
         self.cleanup(context)
+
+
+class OBJECT_OT_polygroups_remesh_step(bpy.types.Operator):
+    bl_idname = "object.polygroups_remesh_step"
+    bl_label = "Auto Remesh"
+    bl_options = {"INTERNAL"}
+
+    def execute(self, context):
+        session = ACTIVE_REMESH
+        if session is None or session.done:
+            return {"CANCELLED"}
+        session.step(context)
+        return {"FINISHED"}
 
 
 class OBJECT_OT_polygroups_cancel_remesh(bpy.types.Operator):

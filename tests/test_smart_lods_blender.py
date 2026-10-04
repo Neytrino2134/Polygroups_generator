@@ -23,8 +23,13 @@ collection.objects.link(source)
 for edge in source.data.edges:
     edge.use_seam = all(abs(source.data.vertices[i].co.y) < 1e-5 for i in edge.vertices)
 settings = bpy.context.scene.polygroups_mesh_finalization_settings
-assert not settings.smart_lods_auto_arrange
-assert abs(settings.smart_lods_spacing - 1.0) < 1e-6
+assert settings.smart_lods_final_decimate
+assert settings.smart_lods_triangulate_all
+assert settings.smart_lods_auto_arrange
+assert abs(settings.smart_lods_spacing - 0.1) < 1e-6
+settings.smart_lods_final_decimate = False
+settings.smart_lods_triangulate_all = False
+settings.smart_lods_auto_arrange = False
 settings.smart_lods_count = 4
 for i, target in enumerate((700, 400, 200, 100), 1):
     setattr(settings, f"smart_lods_target_{i}", target)

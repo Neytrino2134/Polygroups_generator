@@ -1,3 +1,4 @@
+from ..core.render_palettes import OPERATOR_CLASSES as PALETTE_OPERATOR_CLASSES, ensure_libraries
 from .repair_uv_stretch import MESH_OT_polygroups_repair_uv_stretch, IMAGE_PT_polygroups_uv_repair
 from .uv_artifacts import MESH_OT_polygroups_uv_artifact_cleanup
 from .split_narrow_islands import (
@@ -8,7 +9,7 @@ from .seam_eraser import MESH_OT_polygroups_seam_eraser_resize
 from .seam_eraser import MESH_OT_polygroups_seam_eraser, MESH_OT_polygroups_edge_seam_eraser_click
 from .apply_weld import OBJECT_OT_polygroups_apply_weld
 from .delete_and_fill import MESH_OT_polygroups_delete_and_fill
-from .remesh_progress import OBJECT_OT_polygroups_run_remesh, OBJECT_OT_polygroups_cancel_remesh
+from .remesh_progress import OBJECT_OT_polygroups_run_remesh, OBJECT_OT_polygroups_cancel_remesh, OBJECT_OT_polygroups_remesh_step
 from .generated_visibility import OBJECT_OT_polygroups_object_visibility
 from .generated_visibility import OBJECT_OT_polygroups_generated_collection
 from .generated_index import OBJECT_OT_polygroups_fix_all_generated_indices
@@ -212,6 +213,7 @@ from .dev_restart import (
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
+    *PALETTE_OPERATOR_CLASSES,
     MESH_OT_polygroups_repair_uv_stretch,
     MESH_OT_polygroups_uv_artifact_cleanup,
     IMAGE_PT_polygroups_uv_repair,
@@ -236,6 +238,7 @@ CLASSES = (
     MESH_OT_polygroups_mark_smart_angle_seams,
     MESH_OT_polygroups_smart_seams_generator_click,
     OBJECT_OT_polygroups_run_remesh,
+    OBJECT_OT_polygroups_remesh_step,
     OBJECT_OT_polygroups_cancel_remesh,
     OBJECT_OT_polygroups_apply_weld,
     OBJECT_OT_polygroups_object_visibility,
@@ -438,7 +441,11 @@ def register():
     from .fab_preparation import stop_fab_prepare
     bpy.app.handlers.load_pre.append(stop_fab_prepare)
     bpy.app.handlers.load_pre.append(stop_import_queue)
+    bpy.app.timers.register(ensure_libraries, first_interval=0.0)
+    bpy.app.handlers.load_post.append(ensure_libraries)
     bpy.app.handlers.load_pre.append(stop_remesh)
+    bpy.app.handlers.undo_pre.append(stop_remesh)
+    bpy.app.handlers.redo_pre.append(stop_remesh)
     bpy.app.handlers.load_pre.append(stop_knife_seams)
     bpy.app.handlers.load_pre.append(stop_cutter_apply)
     bpy.app.handlers.load_pre.append(discard_mesh_check_backup)
@@ -447,6 +454,13 @@ def register():
 
 
 def unregister():
+    import bpy
+    from ..core.render_palettes import clear_swatches
+    clear_swatches()
+    if ensure_libraries in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(ensure_libraries)
+    if bpy.app.timers.is_registered(ensure_libraries):
+        bpy.app.timers.unregister(ensure_libraries)
     from .narrow_cut_preview import clear_preview
     clear_preview()
     from .detached_groups import cleanup_windows
@@ -476,6 +490,10 @@ def unregister():
         bpy.app.handlers.load_pre.remove(stop_knife_seams)
     if stop_remesh in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_remesh)
+    if stop_remesh in bpy.app.handlers.undo_pre:
+        bpy.app.handlers.undo_pre.remove(stop_remesh)
+    if stop_remesh in bpy.app.handlers.redo_pre:
+        bpy.app.handlers.redo_pre.remove(stop_remesh)
     if stop_import_queue in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_import_queue)
 

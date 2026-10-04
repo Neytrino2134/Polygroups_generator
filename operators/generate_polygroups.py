@@ -14,6 +14,8 @@ class OBJECT_OT_generate_polygroups(bpy.types.Operator):
     bl_description = "Split the active mesh by seam edges, assign materials, and create Face Sets"
     bl_options = {"REGISTER", "UNDO"}
 
+    remesh_preparation: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+
     @classmethod
     def poll(cls, context):
         obj = context.active_object
@@ -50,7 +52,16 @@ class OBJECT_OT_generate_polygroups(bpy.types.Operator):
         bmesh.update_edit_mesh(obj.data)
 
         bpy.ops.object.mode_set(mode="OBJECT")
-        assign_face_sets_from_materials(context, obj)
+        if self.remesh_preparation:
+            # Avoid introducing Sculpt undo entries into an asynchronous
+            # remesh transaction. Face Sets are simply material IDs here.
+            attribute = obj.data.attributes.get(".sculpt_face_set")
+            if attribute is None:
+                attribute = obj.data.attributes.new(".sculpt_face_set", "INT", "FACE")
+            attribute.data.foreach_set("value", [face.material_index + 1 for face in obj.data.polygons])
+            obj.data.update()
+        else:
+            assign_face_sets_from_materials(context, obj)
         bpy.ops.object.mode_set(mode="OBJECT")
 
         self.report(

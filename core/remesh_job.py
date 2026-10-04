@@ -74,7 +74,11 @@ class RemeshJob:
         # user enabled angle detection in Quad Remesher between runs.
         context.scene.qremesher.autodetect_hard_edges = False
         if preparation.remesh_pregenerate_polygroups:
-            if "FINISHED" not in bpy.ops.object.generate_polygroups():
+            # Keep the mesh stored in the pre-remesh undo snapshot untouched.
+            # PolyGroups replaces material slots and Face Sets; use a private
+            # mesh so the original geometry/material assignment is preserved.
+            self.source.data = self.source.data.copy()
+            if "FINISHED" not in bpy.ops.object.generate_polygroups(remesh_preparation=True):
                 raise RuntimeError("Generate PolyGroups did not finish")
         self.cursor = RemeshCursor(context)
         self.backend.doRemeshing_Start(self.state, context)

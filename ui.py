@@ -3875,7 +3875,11 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             freestyle_column.enabled = settings.freestyle_edges
             freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
             freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
-            freestyle_column.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+            color_row = freestyle_column.row(align=True)
+            color_row.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+            palette_button = color_row.row(align=True)
+            palette_button.enabled = not settings.is_running
+            palette_button.operator("render.polygroups_palette_popup", text="", icon="COLOR")
             freestyle_row = freestyle_box.row(align=True)
             freestyle_row.enabled = not settings.is_running
             freestyle_row.operator(
@@ -3967,11 +3971,19 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 icon="ALIGN_CENTER",
             ).use_render_settings = True
 
+        content = draw_topic(layout, context, "render_8", "Color Palettes", "COLOR")
+        if content is not None:
+            from .core.render_palettes import draw_library
+            column = content.column(align=True)
+            column.enabled = not settings.is_running
+            draw_library(column, settings)
+
         content = draw_topic(layout, context, "render_2", 'Multiple Views', "CAMERA_DATA")
         if content is not None:
             column = content.column(align=True)
             column.separator()
             column.prop(settings, "multiview_render", text=t(context, "render_multiview"))
+            column.prop(settings, "multiview_render_hero")
             multiview_row = column.row(align=True)
             multiview_row.prop(settings, "multiview_offset", text=t(context, "render_multiview_offset"))
             column.prop(settings, "multiview_angle", text=t(context, "render_multiview_angle"))
