@@ -11,6 +11,7 @@ from .mesh_export import (
     _export_at_world_origin,
     _safe_path_token,
     _write_export_mesh_info,
+    _export_gltf_asset,
 )
 
 
@@ -210,6 +211,9 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
+        if settings.unity_generate_text_labels:
+            for item, lod in zip(meshes, lods):
+                ensure_unity_label(context, item, int(lod[3:]))
         if settings.unity_auto_increment_index:
             match = re.fullmatch(r"(.*?)(\d+)", settings.unity_asset_index)
             if match:
@@ -219,18 +223,199 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class OBJECT_OT_polygroups_export_unity(bpy.types.Operator):
+class UnityRenderProgressMixin:
+    def execute(self, context):
+        steps = self._steps(context)
+        try:
+            next(steps)
+        except StopIteration as finished:
+            return finished.value
+        finally:
+            steps.close()
+
+    def invoke(self, context, event):
+        from . import turnaround_animation as ta
+        if bpy.app.background:
+            return self.execute(context)
+        if ta._ACTIVE_RENDER_TASK is not None:
+            return {'CANCELLED'}
+        self._scene = context.scene
+        self._settings = self._scene.polygroups_render_settings
+        self._window_manager = context.window_manager
+        self._area = context.area
+        self._region = next((r for r in self._area.regions if r.type == 'WINDOW'), None)
+        self._mouse_x = event.mouse_x - self._region.x if self._region else 32
+        self._mouse_y = event.mouse_y - self._region.y if self._region else 32
+        self._frames_done = 0
+        self._total_frames = self._progress_total(context)
+        self._finished = False
+        self._render_completed = False
+        self._render_cancelled = False
+        self._timer = self._draw_handle = None
+        self._render_display_type = context.preferences.view.render_display_type
+        self._steps_iterator = self._steps(context, interactive=True)
+        self._context = {'window': context.window, 'area': self._area, 'region': self._region,
+                         'scene': self._scene, 'view_layer': context.view_layer}
+        self._handlers_registered = False
+        self._progress_started = False
+        try:
+            context.preferences.view.render_display_type = 'NONE'
+            self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+                ta._draw_animation_cursor, (), 'WINDOW', 'POST_PIXEL')
+            for handlers, callback in self._handlers():
+                handlers.append(callback)
+            self._handlers_registered = True
+            ta._ACTIVE_RENDER_TASK = self
+            self._settings.animation_progress = 0
+            self._window_manager.progress_begin(0, 100)
+            self._progress_started = True
+            self._timer = self._window_manager.event_timer_add(.1, window=context.window)
+            self._window_manager.modal_handler_add(self)
+            self._start_next()
+            if self._finished:
+                return self._result
+            bpy.app.timers.register(self._watchdog, first_interval=.1)
+            return {'RUNNING_MODAL'}
+        except Exception as error:
+            return self._finish(error=error)
+
+    def _handlers(self):
+        return ((bpy.app.handlers.render_post, self._on_render_post),
+                (bpy.app.handlers.render_complete, self._on_render_complete),
+                (bpy.app.handlers.render_cancel, self._on_render_cancel))
+
+    def _start_next(self):
+        self._render_completed = self._render_cancelled = False
+        with bpy.context.temp_override(**self._context):
+            try:
+                job = next(self._steps_iterator)
+            except StopIteration as finished:
+                self._finish(completed=finished.value == {'FINISHED'})
+                return
+            self._settings.is_running = True
+            self._job_animation = bool(job.get('animation'))
+            self._job_start_frames = self._frames_done
+            self._job_status = self._settings.animation_status
+            self._refresh_progress()
+            result = bpy.ops.render.render('INVOKE_DEFAULT', **job)
+            if 'RUNNING_MODAL' not in result:
+                self._render_completed = 'FINISHED' in result
+                self._render_cancelled = not self._render_completed
+
+    def _on_render_post(self, scene, *args):
+        if scene == self._scene:
+            self._frames_done = min(self._total_frames, self._frames_done + 1)
+
+    def _on_render_complete(self, scene, *args):
+        if scene == self._scene:
+            self._render_completed = True
+
+    def _on_render_cancel(self, scene, *args):
+        if scene == self._scene:
+            self._render_cancelled = True
+
+    def _refresh_progress(self):
+        from .turnaround_animation import _redraw_animation_ui
+        self._settings.animation_progress = 100 * self._frames_done / self._total_frames
+        if getattr(self, '_job_animation', False) and not self._render_completed:
+            count = self._frames_done - self._job_start_frames
+            self._settings.animation_status = f'{self._job_status} {count}/{max(2, int(self._settings.animation_frame_count))}'
+        if self._progress_started:
+            self._window_manager.progress_update(self._settings.animation_progress)
+        _redraw_animation_ui(self._window_manager)
+
+    def _watchdog(self):
+        if self._finished:
+            return None
+        try:
+            self._refresh_progress()
+            if not bpy.app.is_job_running('RENDER'):
+                if self._render_cancelled:
+                    self._finish()
+                elif self._render_completed:
+                    self._start_next()
+        except Exception as error:
+            self._finish(error=error)
+        return None if self._finished else .1
+
+    def _finish(self, completed=False, error=None):
+        from . import turnaround_animation as ta
+        if self._finished:
+            return self._result
+        self._finished = True
+        self._result = {'FINISHED'} if completed else {'CANCELLED'}
+        try:
+            with bpy.context.temp_override(**self._context):
+                self._steps_iterator.close()
+        finally:
+            if self._handlers_registered:
+                for handlers, callback in self._handlers():
+                    if callback in handlers:
+                        handlers.remove(callback)
+            if self._timer is not None:
+                self._window_manager.event_timer_remove(self._timer)
+            if self._draw_handle is not None:
+                bpy.types.SpaceView3D.draw_handler_remove(self._draw_handle, 'WINDOW')
+            if self._progress_started:
+                self._window_manager.progress_end()
+            bpy.context.preferences.view.render_display_type = self._render_display_type
+            if ta._ACTIVE_RENDER_TASK is self:
+                ta._ACTIVE_RENDER_TASK = None
+            self._settings.is_running = False
+            if completed:
+                self._frames_done = self._total_frames
+                self._settings.animation_progress = 100
+                self._settings.animation_status = 'Unity: export/render completed'
+            else:
+                self._settings.animation_status = f'Unity: render failed: {error}' if error else 'Unity: render cancelled'
+            ta._redraw_animation_ui(self._window_manager)
+        if error:
+            self.report({'ERROR'}, self._settings.animation_status)
+        return {'FINISHED'} if completed else {'CANCELLED'}
+
+    def modal(self, context, event):
+        if self._finished:
+            return self._result
+        if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'} and context.area == self._area and self._region:
+            self._mouse_x = event.mouse_x - self._region.x
+            self._mouse_y = event.mouse_y - self._region.y
+            self._area.tag_redraw()
+        return {'PASS_THROUGH'}
+
+
+class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Operator):
     bl_idname = "object.polygroups_export_unity"
-    bl_label = "Export Unity FBX"
-    bl_description = "Export selected prepared Unity meshes, each with its textures in its own folder"
+    bl_label = "Export Unity Assets"
+    bl_description = "Export prepared Unity meshes as FBX with textures and/or embedded GLTF"
 
     @classmethod
     def poll(cls, context):
-        return any(obj.type == "MESH" for obj in context.selected_objects)
+        return not context.scene.polygroups_render_settings.is_running and any(obj.type == "MESH" for obj in context.selected_objects)
 
-    def execute(self, context):
+    def invoke(self, context, event):
+        if not context.scene.polygroups_mesh_finalization_settings.unity_export_all_renders:
+            return self.execute(context)
+        return UnityRenderProgressMixin.invoke(self, context, event)
+
+    def _progress_total(self, context):
+        meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        assets = {re.sub(r'\.LOD\d+$', '', obj.name, flags=re.IGNORECASE) for obj in meshes}
+        render_meshes = [obj for obj in context.scene.objects if obj.type == 'MESH' and obj.get('unity_prepared') and
+                         re.sub(r'\.LOD\d+$', '', obj.name, flags=re.IGNORECASE) in assets]
+        rs = context.scene.polygroups_render_settings
+        return max(1, len(render_meshes) * (2 if rs.transparent_background else 1) +
+                   len(assets) * (4 + max(2, int(rs.animation_frame_count))))
+
+    def _steps(self, context, interactive=False):
         settings = context.scene.polygroups_mesh_finalization_settings
+        if settings.unity_export_all_renders and context.scene.camera is None:
+            self.report({'ERROR'}, "Set a scene camera before exporting renders")
+            return {'CANCELLED'}
         directory = settings.unity_export_directory
+        formats = [name for name, enabled in (('FBX', settings.unity_export_fbx), ('GLTF', settings.unity_export_gltf)) if enabled]
+        if not formats:
+            self.report({'ERROR'}, "Enable FBX or GLTF export")
+            return {'CANCELLED'}
         if directory.startswith("//") and not bpy.data.filepath:
             self.report({"ERROR"}, "Save the blend file or choose an absolute export directory")
             return {"CANCELLED"}
@@ -243,7 +428,7 @@ class OBJECT_OT_polygroups_export_unity(bpy.types.Operator):
         active = context.view_layer.objects.active
         mode = active.mode if active else "OBJECT"
         rig = None
-        if settings.unity_use_auto_rig_pro:
+        if settings.unity_use_auto_rig_pro and settings.unity_export_fbx:
             rigs = [obj for obj in selected if obj.type == "ARMATURE"]
             if len(rigs) != 1:
                 self.report({"ERROR"}, "Select exactly one rig for Auto-Rig Pro export")
@@ -277,40 +462,68 @@ class OBJECT_OT_polygroups_export_unity(bpy.types.Operator):
                 if os.path.exists(folder) and not settings.unity_export_overwrite:
                     raise ValueError(f"Folder already exists: {folder}. Enable Overwrite to replace files")
             for asset_name, lods in groups.items():
-                folder = os.path.join(root, _safe_path_token(asset_name))
-                # Unity Prepare assigns one common material and texture set to all LODs.
-                save_textures(lods[0], folder)
-                mesh_info = []
-                for obj in lods:
-                    bpy.ops.object.select_all(action="DESELECT")
-                    obj.select_set(True)
-                    filepath = os.path.join(folder, _safe_path_token(obj.name) + ".fbx")
-                    use_rig = rig is not None and obj.name == asset_name
-                    with _export_at_world_origin(obj, context.view_layer, rig if use_rig else None):
-                        if use_rig:
-                            rig.select_set(True)
-                            context.view_layer.objects.active = rig
-                            result = bpy.ops.arp.arp_export_fbx_panel("EXEC_DEFAULT", filepath=filepath)
-                        else:
-                            context.view_layer.objects.active = obj
-                            result = bpy.ops.export_scene.fbx(
-                                filepath=filepath, use_selection=True, object_types={"MESH"},
-                                path_mode="RELATIVE", use_mesh_modifiers=True, bake_anim=False,
-                            )
-                    if "FINISHED" not in result:
-                        raise RuntimeError(f"FBX export failed: {obj.name}")
-                    if settings.unity_export_info_format != "NONE":
-                        vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
-                        lod_match = re.search(r"LOD\d+$", obj.name, flags=re.IGNORECASE)
-                        mesh_info.append({
-                            "lod": lod_match.group(0).upper() if lod_match else "LOD0",
-                            "name": obj.name,
-                            "file": os.path.basename(filepath),
-                            "vertices": vertices,
-                            "triangles": triangles,
-                        })
-                mesh_info.sort(key=lambda entry: int(entry["lod"][3:]))
-                _write_export_mesh_info(folder, settings.unity_export_info_format, mesh_info)
+                asset_folder = os.path.join(root, _safe_path_token(asset_name))
+                for export_format in formats:
+                    folder = os.path.join(asset_folder, export_format)
+                    os.makedirs(folder, exist_ok=True)
+                    # Unity Prepare assigns one common material and texture set to all LODs.
+                    if export_format == "FBX":
+                        save_textures(lods[0], folder)
+                    mesh_info = []
+                    for obj in lods:
+                        bpy.ops.object.select_all(action="DESELECT")
+                        obj.select_set(True)
+                        filepath = os.path.join(folder, _safe_path_token(obj.name) + (".fbx" if export_format == "FBX" else ".gltf"))
+                        use_rig = rig is not None and obj.name == asset_name
+                        with _export_at_world_origin(obj, context.view_layer, rig if use_rig else None):
+                            if export_format == "GLTF":
+                                context.view_layer.objects.active = obj
+                                result = _export_gltf_asset(filepath, True)
+                            elif use_rig:
+                                rig.select_set(True)
+                                context.view_layer.objects.active = rig
+                                result = bpy.ops.arp.arp_export_fbx_panel("EXEC_DEFAULT", filepath=filepath)
+                            else:
+                                context.view_layer.objects.active = obj
+                                result = bpy.ops.export_scene.fbx(
+                                    filepath=filepath, use_selection=True, object_types={"MESH"},
+                                    path_mode="RELATIVE", use_mesh_modifiers=True, bake_anim=False,
+                                )
+                        if "FINISHED" not in result:
+                            raise RuntimeError(f"{export_format} export failed: {obj.name}")
+                        if settings.unity_export_info_format != "NONE":
+                            vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
+                            lod_match = re.search(r"LOD\d+$", obj.name, flags=re.IGNORECASE)
+                            mesh_info.append({
+                                "lod": lod_match.group(0).upper() if lod_match else "LOD0",
+                                "name": obj.name,
+                                "file": os.path.basename(filepath),
+                                "vertices": vertices,
+                                "triangles": triangles,
+                            })
+                    mesh_info.sort(key=lambda entry: int(entry["lod"][3:]))
+                    _write_export_mesh_info(folder, settings.unity_export_info_format, mesh_info)
+                if settings.unity_export_all_renders:
+                    rs = context.scene.polygroups_render_settings
+                    render_lods = [obj for obj in context.scene.objects if obj.type == 'MESH' and obj.get('unity_prepared') and
+                                   re.sub(r'\.LOD\d+$', '', obj.name, flags=re.IGNORECASE) == asset_name]
+                    rs.animation_status = f'Unity: rendering LODs - {asset_name}'
+                    result = yield from OBJECT_OT_polygroups_render_unity_assets._steps(
+                        self, context, interactive=interactive, targets_override=render_lods, force_separate=True,
+                        output_directory=os.path.join(asset_folder, f'{_safe_path_token(asset_name)}_LODS'))
+                    if result != {'FINISHED'}:
+                        return {'CANCELLED'}
+                    source = min(render_lods, key=lambda obj: int(re.search(r'\.LOD(\d+)$', obj.name).group(1))
+                                 if re.search(r'\.LOD(\d+)$', obj.name) else 0)
+                    bpy.ops.object.select_all(action='DESELECT')
+                    source.select_set(True)
+                    context.view_layer.objects.active = source
+                    rs.animation_status = f'Unity: turnaround - {asset_name}'
+                    result = yield from OBJECT_OT_polygroups_render_unity_turnaround._steps(
+                        self, context, interactive=interactive, output_directory=asset_folder,
+                        video_container=rs.animation_container, asset_name=asset_name)
+                    if result != {'FINISHED'}:
+                        return {'CANCELLED'}
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
@@ -327,3 +540,330 @@ class OBJECT_OT_polygroups_export_unity(bpy.types.Operator):
                 bpy.ops.object.mode_set(mode=mode)
         self.report({"INFO"}, f"Exported {len(meshes)} Unity asset(s) to {root}")
         return {"FINISHED"}
+
+
+UNITY_LABEL = "polygroups_unity_label"
+
+
+def ensure_unity_label(context, obj, index=None):
+    from .smart_lods import ensure_lod_label
+    match = re.search(r"\.LOD(\d+)$", obj.name)
+    index = int(match.group(1)) if index is None and match else (index or 0)
+    base = re.sub(r"\.LOD\d+$", "", obj.name)
+    return ensure_lod_label(context, obj, base, index, label_tag=UNITY_LABEL,
+                            text_size=context.scene.polygroups_mesh_finalization_settings.unity_label_size)
+
+
+class OBJECT_OT_polygroups_unity_index_step(bpy.types.Operator):
+    bl_idname = "object.polygroups_unity_index_step"
+    bl_label = "Change Unity Index"
+    bl_description = "Change the Unity index by one, preserving its prefix and leading zeros"
+    bl_options = {'UNDO', 'INTERNAL'}
+    delta: bpy.props.IntProperty(default=1, min=-1, max=1)
+
+    def execute(self, context):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        match = re.fullmatch(r"(.*?)(\d+)", settings.unity_asset_index)
+        if not match:
+            self.report({'WARNING'}, "Index must end with a number")
+            return {'CANCELLED'}
+        prefix, digits = match.groups()
+        settings.unity_asset_index = f"{prefix}{max(0, int(digits) + self.delta):0{len(digits)}d}"
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_render_unity_assets(bpy.types.Operator):
+    bl_idname = "object.polygroups_render_unity_assets"
+    bl_label = "Render Unity Assets"
+    bl_description = "Auto-frame and render Unity meshes with labels and Freestyle, then restore settings"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.scene.camera and context.active_object and not context.scene.polygroups_render_settings.is_running)
+
+    def execute(self, context):
+        steps = self._steps(context)
+        try:
+            next(steps)
+        except StopIteration as finished:
+            return finished.value
+        finally:
+            steps.close()
+
+    def _steps(self, context, interactive=False, output_directory=None, targets_override=None, force_separate=False):
+        from .render_queue import _current_state_render_path, image_extension
+        settings = context.scene.polygroups_mesh_finalization_settings
+        rs = context.scene.polygroups_render_settings
+        active = context.active_object
+        selected = list(context.selected_objects)
+        mode = active.mode
+        base = re.sub(r"\.LOD\d+$", "", active.name)
+        targets = [o for o in (selected if settings.unity_render_mode == 'SELECTED' else context.scene.objects)
+                   if o.type == 'MESH' and o.get('unity_prepared') and
+                   (settings.unity_render_mode == 'SELECTED' or re.sub(r"\.LOD\d+$", "", o.name) == base)]
+        if targets_override is not None:
+            targets = list(targets_override)
+        targets.sort(key=lambda o: (int(re.search(r"\.LOD(\d+)$", o.name).group(1)) if re.search(r"\.LOD(\d+)$", o.name) else 0, o.name))
+        if not targets:
+            self.report({'ERROR'}, "Select a prepared Unity mesh")
+            return {'CANCELLED'}
+        original = (rs.resolution_x, rs.resolution_y, rs.resolution_scale, rs.freestyle_edges, rs.freestyle_as_render_pass)
+        original_format = rs.image_format
+        visibility = [(o, o.hide_viewport, o.hide_render, o.hide_get()) for o in targets]
+        try:
+            if mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            rs.image_format = settings.unity_render_image_format
+            separate = force_separate or settings.unity_render_separate or settings.unity_render_mode == 'INDIVIDUAL'
+            if separate or settings.unity_render_mode == 'ALL':
+                rs.resolution_x = rs.resolution_y = 2048 if separate else 4096
+                rs.resolution_scale = 100
+            if settings.unity_render_freestyle:
+                rs.freestyle_edges = True
+            rs.freestyle_as_render_pass = False
+            seed = _current_state_render_path()
+            directory = output_directory or os.path.join(os.path.dirname(seed), 'Render Unity Assets')
+            os.makedirs(directory, exist_ok=True)
+            separate = force_separate or settings.unity_render_separate or settings.unity_render_mode == 'INDIVIDUAL'
+            batches = [[o] for o in targets] if separate else [targets]
+            resolutions = {}
+            camera_frames = {}
+            mesh_info = []
+            for batch in batches:
+                for o in context.selected_objects:
+                    o.select_set(False)
+                for obj in batch:
+                    obj.hide_viewport = False
+                    obj.hide_set(False)
+                    obj.select_set(True)
+                    if settings.unity_render_text:
+                        ensure_unity_label(context, obj).select_set(True)
+                context.view_layer.objects.active = batch[0]
+                if separate:
+                    asset_base = re.sub(r"\.LOD\d+$", "", batch[0].name)
+                    if asset_base not in resolutions:
+                        from .render_selected import selected_bounds, fit_render_aspect
+                        reference = next((o for o in context.scene.objects if o.type == 'MESH' and
+                                          o.get('unity_prepared') and o.name in {asset_base, asset_base + '.LOD0'}), batch[0])
+                        reference_objects = [reference]
+                        if settings.unity_render_text:
+                            reference_objects.append(ensure_unity_label(context, reference))
+                        context.view_layer.update()
+                        camera = context.scene.camera
+                        data, matrix = camera.data, camera.matrix_world.copy()
+                        constraints = [(c, c.mute) for c in camera.constraints]
+                        render = context.scene.render
+                        previous = (render.resolution_x, render.resolution_y, render.pixel_aspect_x, render.pixel_aspect_y)
+                        temporary = data.copy()
+                        try:
+                            camera.data = temporary
+                            for constraint, mute in constraints:
+                                constraint.mute = True
+                            render.pixel_aspect_x = render.pixel_aspect_y = 1
+                            rs.resolution_x = rs.resolution_y = 2048
+                            reference_bounds = selected_bounds(context, reference_objects)
+                            fit_render_aspect(context, camera, *reference_bounds, rs)
+                            resolutions[asset_base] = (rs.resolution_x, rs.resolution_y)
+                            camera_frames[asset_base] = (camera.matrix_world.copy(), {
+                                name: getattr(camera.data, name) for name in
+                                ('lens', 'ortho_scale', 'shift_x', 'shift_y', 'clip_start', 'clip_end')}, reference_bounds[1].x)
+                        finally:
+                            camera.data = data
+                            camera.matrix_world = matrix
+                            for constraint, mute in constraints:
+                                constraint.mute = mute
+                            bpy.data.cameras.remove(temporary)
+                            render.resolution_x, render.resolution_y, render.pixel_aspect_x, render.pixel_aspect_y = previous
+                            context.view_layer.update()
+                    rs.resolution_x, rs.resolution_y = resolutions[asset_base]
+                name = batch[0].name if separate else base + '_All'
+                if separate and not re.search(r"\.LOD\d+$", name):
+                    name += '.LOD0'
+                camera = context.scene.camera
+                camera_data, camera_matrix = camera.data, camera.matrix_world.copy()
+                camera_constraints = [(c, c.mute) for c in camera.constraints]
+                frame_data = None
+                try:
+                    if separate:
+                        for constraint, mute in camera_constraints:
+                            constraint.mute = True
+                        frame_data = camera_data.copy()
+                        camera.data = frame_data
+                        fitted_matrix, fitted_properties, reference_x = camera_frames[asset_base]
+                        moved_matrix = fitted_matrix.copy()
+                        moved_matrix.translation.x += selected_bounds(context)[1].x - reference_x
+                        camera.matrix_world = moved_matrix
+                        for attribute, value in fitted_properties.items():
+                            setattr(frame_data, attribute, value)
+                        context.view_layer.update()
+                    path = os.path.join(directory, f"{_safe_path_token(name)}{image_extension(rs.image_format)}")
+                    if interactive:
+                        from .render_selected import OBJECT_OT_render_selected_auto
+                        rs.animation_status = f'Unity LOD: {name}'
+                        result = yield from OBJECT_OT_render_selected_auto._steps(
+                            self, context, interactive=True, output_path=path,
+                            fixed_resolution=separate, fixed_camera=separate)
+                    else:
+                        result = bpy.ops.object.polygroups_render_selected_auto(
+                            output_path=path, fixed_resolution=separate, fixed_camera=separate)
+                finally:
+                    camera.data = camera_data
+                    camera.matrix_world = camera_matrix
+                    for constraint, mute in camera_constraints:
+                        constraint.mute = mute
+                    if frame_data:
+                        bpy.data.cameras.remove(frame_data)
+                    context.view_layer.update()
+                if 'FINISHED' not in result:
+                    return {'CANCELLED'}
+                if settings.unity_render_mesh_info:
+                    for obj in batch:
+                        vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
+                        lod_match = re.search(r"LOD\d+$", obj.name, flags=re.IGNORECASE)
+                        mesh_info.append({
+                            'lod': lod_match.group(0).upper() if lod_match else 'LOD0',
+                            'name': obj.name,
+                            'file': f'{_safe_path_token(name)}{image_extension(rs.image_format)}',
+                            'vertices': vertices,
+                            'triangles': triangles,
+                        })
+            if settings.unity_render_mesh_info:
+                _write_export_mesh_info(directory, 'JSON', mesh_info)
+            return {'FINISHED'}
+        except (RuntimeError, ValueError, OSError) as error:
+            self.report({'ERROR'}, f'Unity render failed: {error}')
+            return {'CANCELLED'}
+        finally:
+            rs.resolution_x, rs.resolution_y, rs.resolution_scale, rs.freestyle_edges, rs.freestyle_as_render_pass = original
+            rs.image_format = original_format
+            for o, viewport, render, hidden in visibility:
+                o.hide_viewport, o.hide_render = viewport, render
+                o.hide_set(hidden)
+            for o in context.selected_objects:
+                o.select_set(False)
+            for o in selected:
+                o.select_set(True)
+            context.view_layer.objects.active = active
+            if mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode=mode)
+
+
+class OBJECT_OT_polygroups_render_unity_turnaround(UnityRenderProgressMixin, bpy.types.Operator):
+    bl_idname = "object.polygroups_render_unity_turnaround"
+    bl_label = "Unity Turnaround: 4 Views + MP4"
+    bl_description = "Prepare the active Unity mesh, frame its complete rotation, render four views and an MP4 animation"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(context.active_object and context.active_object.type == 'MESH' and
+                    context.active_object.get('unity_prepared') and context.scene.camera and
+                    not context.scene.polygroups_render_settings.is_running)
+
+    def execute(self, context):
+        steps = self._steps(context)
+        try:
+            next(steps)
+        except StopIteration as finished:
+            return finished.value
+        finally:
+            steps.close()
+
+    def _progress_total(self, context):
+        return 4 + max(2, int(context.scene.polygroups_render_settings.animation_frame_count))
+
+    def _steps(self, context, interactive=False, output_directory=None, video_container=None, asset_name=None):
+        from math import hypot
+        from mathutils import Vector
+        from . import render_queue as rq
+        from .render_selected import fit_camera
+        from .render_studio import position_lights
+        scene = context.scene
+        rs = scene.polygroups_render_settings
+        source = context.active_object
+        selected = list(context.selected_objects)
+        mode = source.mode
+        camera = scene.camera
+        matrix, data = camera.matrix_world.copy(), camera.data
+        constraints = [(c, c.mute) for c in camera.constraints]
+        snapshot = rq._snapshot_visibility()
+        frames = (scene.frame_start, scene.frame_end, scene.frame_current)
+        properties = ('resolution_x', 'resolution_y', 'resolution_scale', 'animation_media_type',
+                      'animation_container', 'output_directory', 'freestyle_edges', 'freestyle_as_render_pass')
+        values = {name: getattr(rs, name) for name in properties}
+        resolution = (scene.render.resolution_x, scene.render.resolution_y, scene.render.pixel_aspect_x, scene.render.pixel_aspect_y)
+        temporary = data.copy()
+        saved_freestyle = scene.render.use_freestyle
+        light_root, light_matrix = None, None
+        collection = None
+        try:
+            if mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            if 'FINISHED' not in bpy.ops.object.polygroups_prepare_turnaround_animation():
+                return {'CANCELLED'}
+            duplicate = bpy.data.objects.get(rs.animation_object_name)
+            if asset_name:
+                from .turnaround_animation import TURNAROUND_SOURCE_PROP
+                duplicate[TURNAROUND_SOURCE_PROP] = asset_name
+            collection = bpy.data.collections.get(rs.animation_collection_name)
+            context.view_layer.update()
+            corners = [duplicate.matrix_world @ Vector(c) for c in duplicate.bound_box]
+            radius = max(hypot(p.x, p.y) for p in corners)
+            low, high = min(p.z for p in corners), max(p.z for p in corners)
+            points = [Vector((x, y, z)) for x in (-radius, radius) for y in (-radius, radius) for z in (low, high)]
+            center = Vector((0, 0, (low + high) / 2))
+            size = Vector((2 * radius, 2 * radius, high - low))
+            camera.data = temporary
+            for c, mute in constraints:
+                c.mute = True
+            light_root, light_matrix = position_lights(context, center)
+            rs.resolution_x = rs.resolution_y = 2048
+            rs.resolution_scale = 100
+            scene.render.resolution_x = scene.render.resolution_y = 2048
+            scene.render.pixel_aspect_x = scene.render.pixel_aspect_y = 1
+            fit_camera(context, camera, points, center, size)
+            rs.output_directory = output_directory or os.path.join(os.path.dirname(rq._current_state_render_path()), 'Render Unity Assets')
+            rs.animation_media_type = 'VIDEO'
+            rs.animation_container = video_container or 'MPEG4'
+            rs.freestyle_edges = False
+            rs.freestyle_as_render_pass = False
+            scene.render.use_freestyle = False
+            if interactive:
+                from .turnaround_animation import unity_turnaround_render_steps
+                yield from unity_turnaround_render_steps(context)
+                return {'FINISHED'}
+            if 'FINISHED' not in bpy.ops.object.polygroups_render_turnaround_views():
+                return {'CANCELLED'}
+            rs.resolution_x = rs.resolution_y = 1024
+            scene.render.resolution_x = scene.render.resolution_y = 1024
+            return bpy.ops.object.polygroups_render_turnaround_animation('EXEC_DEFAULT')
+        except Exception as error:
+            self.report({'ERROR'}, f'Unity turnaround failed: {error}')
+            return {'CANCELLED'}
+        finally:
+            camera.data = data
+            scene.render.use_freestyle = saved_freestyle
+            camera.matrix_world = matrix
+            for c, mute in constraints:
+                c.mute = mute
+            bpy.data.cameras.remove(temporary)
+            if light_root:
+                light_root.matrix_world = light_matrix
+            rq._restore_visibility(snapshot)
+            if collection:
+                collection.hide_render = True
+                collection.hide_viewport = True
+            for name, value in values.items():
+                setattr(rs, name, value)
+            scene.render.resolution_x, scene.render.resolution_y, scene.render.pixel_aspect_x, scene.render.pixel_aspect_y = resolution
+            scene.frame_start, scene.frame_end = frames[:2]
+            scene.frame_set(frames[2])
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            for obj in selected:
+                obj.select_set(True)
+            context.view_layer.objects.active = source
+            if mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode=mode)
+            context.view_layer.update()

@@ -34,3 +34,5 @@ dist/
 
 # Temporary icon source assets
 /icons/Temp/
+
+/user_data/

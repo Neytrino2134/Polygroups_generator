@@ -48,7 +48,9 @@ settings.studio_collection_color_tag = 'COLOR_08'
 assert scene.camera == settings.studio_camera
 assert tuple(scene.camera.location) == (0, -8, 0.5)
 assert tuple(settings.studio_camera_aim.location) == (0, 0, 0.5)
-assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 9
+assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 10
+assert settings.studio_light_position is not None
+assert all(obj.parent == settings.studio_light_position for obj in bpy.context.scene.objects if obj.type == "LIGHT")
 assert {collection.name for collection in scene.collection.children} >= {
     'Scene_Studio', 'Camera_Studio', 'Light_Studio'}
 for role in ('camera', 'key', 'fill', 'rim'):
@@ -252,5 +254,5 @@ assert all(getattr(settings, 'studio_' + role) is None for role in (
     'backdrop', 'camera', 'camera_aim', 'key', 'key_aim', 'fill', 'fill_aim', 'rim', 'rim_aim'))
 assert bpy.ops.render.polygroups_delete_studio_scenes() == {'FINISHED'}
 assert bpy.ops.render.polygroups_prepare_studio() == {'FINISHED'}
-assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 9
+assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 10
 print('studio rig test passed')

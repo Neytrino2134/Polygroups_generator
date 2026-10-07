@@ -1,4 +1,9 @@
-from ..core.render_palettes import OPERATOR_CLASSES as PALETTE_OPERATOR_CLASSES, ensure_libraries
+from .unity_preparation import OBJECT_OT_polygroups_render_unity_turnaround
+from .unity_preparation import OBJECT_OT_polygroups_unity_index_step, OBJECT_OT_polygroups_render_unity_assets
+from .smart_lods import OBJECT_OT_polygroups_render_smart_lods
+from .render_textures import CLASSES as TEXTURE_RENDER_CLASSES
+from .render_selected import CLASSES as SELECTED_RENDER_CLASSES
+from ..core.render_palettes import OPERATOR_CLASSES as PALETTE_OPERATOR_CLASSES, ensure_libraries, flush_library, stop_library
 from .repair_uv_stretch import MESH_OT_polygroups_repair_uv_stretch, IMAGE_PT_polygroups_uv_repair
 from .uv_artifacts import MESH_OT_polygroups_uv_artifact_cleanup
 from .split_narrow_islands import (
@@ -101,6 +106,7 @@ from .mesh_checks import OBJECT_OT_polygroups_undo_mesh_check_fix
 from .mesh_checks import discard_mesh_check_backup
 from .small_loose_parts import OBJECT_OT_polygroups_small_loose_parts
 from .mesh_export import OBJECT_OT_polygroups_export_blend_assets
+from .mesh_export import OBJECT_OT_polygroups_export_selected_gltf
 from .mesh_export import OBJECT_OT_polygroups_export_selected_meshes
 from .mesh_export import OBJECT_OT_polygroups_add_blend_static_collection
 from .mesh_export import OBJECT_OT_polygroups_clear_blend_static_collections
@@ -213,6 +219,12 @@ from .dev_restart import (
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
+    OBJECT_OT_polygroups_render_unity_turnaround,
+    OBJECT_OT_polygroups_unity_index_step,
+    OBJECT_OT_polygroups_render_unity_assets,
+    OBJECT_OT_polygroups_render_smart_lods,
+    *SELECTED_RENDER_CLASSES,
+    *TEXTURE_RENDER_CLASSES,
     *PALETTE_OPERATOR_CLASSES,
     MESH_OT_polygroups_repair_uv_stretch,
     MESH_OT_polygroups_uv_artifact_cleanup,
@@ -382,6 +394,7 @@ CLASSES = (
     OBJECT_OT_polygroups_create_mesh_backup,
     OBJECT_OT_polygroups_small_loose_parts,
     OBJECT_OT_polygroups_export_selected_meshes,
+    OBJECT_OT_polygroups_export_selected_gltf,
     OBJECT_OT_polygroups_scan_blend_assets,
     OBJECT_OT_polygroups_add_blend_static_collection,
     OBJECT_OT_polygroups_clear_blend_static_collections,
@@ -443,6 +456,7 @@ def register():
     bpy.app.handlers.load_pre.append(stop_import_queue)
     bpy.app.timers.register(ensure_libraries, first_interval=0.0)
     bpy.app.handlers.load_post.append(ensure_libraries)
+    bpy.app.handlers.load_pre.append(flush_library)
     bpy.app.handlers.load_pre.append(stop_remesh)
     bpy.app.handlers.undo_pre.append(stop_remesh)
     bpy.app.handlers.redo_pre.append(stop_remesh)
@@ -457,6 +471,9 @@ def unregister():
     import bpy
     from ..core.render_palettes import clear_swatches
     clear_swatches()
+    stop_library()
+    if flush_library in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(flush_library)
     if ensure_libraries in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(ensure_libraries)
     if bpy.app.timers.is_registered(ensure_libraries):

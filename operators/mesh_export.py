@@ -2,6 +2,10 @@ import os
 import re
 import uuid
 import json
+import base64
+import mimetypes
+import tempfile
+from urllib.parse import unquote
 from contextlib import contextmanager
 
 import bpy
@@ -680,3 +684,97 @@ class OBJECT_OT_polygroups_export_blend_assets(bpy.types.Operator):
         if exported_count:
             play_operation_done_sound(context)
         return {"FINISHED"} if exported_count else {"CANCELLED"}
+
+
+def _export_gltf_asset(filepath, embedded):
+    options = dict(export_format="GLTF_SEPARATE", export_texture_dir="Textures",
+                   use_selection=True, export_cameras=False, export_lights=False,
+                   export_animations=False)
+    if not embedded:
+        return bpy.ops.export_scene.gltf(filepath=filepath, **options)
+    # New Blender versions hide the embedded format. Export into a disposable
+    # directory and embed its resources as standard glTF data URIs instead.
+    with tempfile.TemporaryDirectory() as temporary:
+        intermediate = os.path.join(temporary, "asset.gltf")
+        result = bpy.ops.export_scene.gltf(filepath=intermediate, **options)
+        if "FINISHED" not in result:
+            return result
+        with open(intermediate, encoding="utf-8") as stream:
+            document = json.load(stream)
+        for category in ("buffers", "images"):
+            for resource in document.get(category, []):
+                uri = resource.get("uri")
+                if not uri or uri.startswith("data:"):
+                    continue
+                resource_path = os.path.join(temporary, unquote(uri))
+                mime = "application/octet-stream" if category == "buffers" else (
+                    resource.get("mimeType") or mimetypes.guess_type(resource_path)[0] or "application/octet-stream")
+                with open(resource_path, "rb") as stream:
+                    encoded = base64.b64encode(stream.read()).decode("ascii")
+                resource["uri"] = f"data:{mime};base64,{encoded}"
+        with open(filepath, "w", encoding="utf-8") as stream:
+            json.dump(document, stream, ensure_ascii=False, separators=(",", ":"))
+        return result
+
+
+class OBJECT_OT_polygroups_export_selected_gltf(bpy.types.Operator):
+    bl_idname = "object.polygroups_export_selected_gltf"
+    bl_label = "Export Selected Meshes (glTF)"
+    bl_description = "Automatically export each selected mesh to !GLTF beside the blend file, with optional Mesh Info"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(_selected_mesh_objects(context))
+
+    def execute(self, context):
+        meshes = sorted(_selected_mesh_objects(context), key=lambda obj: obj.name.lower())
+        if not meshes:
+            self.report({"ERROR"}, "Select at least one mesh")
+            return {"CANCELLED"}
+        if not bpy.data.filepath:
+            self.report({"ERROR"}, "Save the blend file before exporting meshes")
+            return {"CANCELLED"}
+        root_dir = os.path.join(os.path.dirname(bpy.data.filepath), "!GLTF")
+        paths = [(obj, os.path.join(root_dir, _safe_path_token(obj.name) + ".gltf")) for obj in meshes]
+        if len({path.lower() for _, path in paths}) != len(paths):
+            self.report({"ERROR"}, "Selected mesh names produce duplicate filenames")
+            return {"CANCELLED"}
+        settings = context.scene.polygroups_mesh_finalization_settings
+        selected = list(context.selected_objects)
+        active = context.view_layer.objects.active
+        previous_mode = active.mode if active else "OBJECT"
+        mesh_info = []
+        try:
+            os.makedirs(root_dir, exist_ok=True)
+            if previous_mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            for obj, filepath in paths:
+                for other in context.selected_objects:
+                    other.select_set(False)
+                obj.select_set(True)
+                context.view_layer.objects.active = obj
+                with _export_at_world_origin(obj, context.view_layer):
+                    result = _export_gltf_asset(filepath, settings.gltf_export_embedded)
+                if "FINISHED" not in result:
+                    raise RuntimeError(f"Export cancelled: {obj.name}")
+                if settings.gltf_export_info_format != "NONE":
+                    vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
+                    mesh_info.append({"name": obj.name, "file": os.path.basename(filepath),
+                                      "vertices": vertices, "triangles": triangles})
+            _write_export_mesh_info(root_dir, settings.gltf_export_info_format, mesh_info)
+        except Exception as error:
+            self.report({"ERROR"}, f"glTF export failed: {error}")
+            return {"CANCELLED"}
+        finally:
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            for obj in selected:
+                obj.select_set(True)
+            context.view_layer.objects.active = active
+            if active and previous_mode != "OBJECT":
+                bpy.ops.object.mode_set(mode=previous_mode)
+        self.report({"INFO"}, f"Exported {len(meshes)} mesh(es) to {root_dir}")
+        if not bpy.app.background:
+            play_operation_done_sound(context)
+        return {"FINISHED"}

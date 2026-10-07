@@ -64,19 +64,42 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     assert not list((Path(directory) / 'Textures' / 'Konduktor_01').glob('*AlphaMap*.png'))
     assert settings.unity_asset_index == '02'
     settings.unity_export_info_format = 'JSON'
+    assert settings.unity_export_fbx and not settings.unity_export_gltf
+    settings.unity_export_gltf = True
     obj.location = (3.0, 4.0, 5.0)
     assert bpy.ops.object.polygroups_export_unity() == {'FINISHED'}
     assert tuple(obj.location) == (3.0, 4.0, 5.0)
-    folder = Path(settings.unity_export_directory) / 'Konduktor_01'
+    folder = Path(settings.unity_export_directory) / 'Konduktor_01' / 'FBX'
     info = json.loads((folder / 'MeshInfo.json').read_text(encoding='utf-8'))
     assert [entry['lod'] for entry in info['meshes']] == ['LOD1']
     assert (folder / (obj.name + '.fbx')).stat().st_size > 0
     assert (folder / ('Konduktor_01.png')).is_file()
     assert not list(folder.glob('*AlphaMap*.png'))
+    gltf_folder = folder.parent / 'GLTF'
+    gltf = json.loads((gltf_folder / (obj.name + '.gltf')).read_text(encoding='utf-8'))
+    assert gltf.get('buffers') and gltf.get('images')
+    assert all(resource['uri'].startswith('data:') for category in ('buffers','images') for resource in gltf[category])
+    assert not list(gltf_folder.glob('*.bin')) and not list(gltf_folder.glob('*.png'))
+    assert not (gltf_folder / 'Textures').exists()
+    gltf_info = json.loads((gltf_folder / 'MeshInfo.json').read_text(encoding='utf-8'))
+    assert gltf_info['meshes'][0]['file'] == obj.name + '.gltf'
+    settings.unity_export_gltf = False
     from polygroups_generator.operators.unity_preparation import texture_nodes
     assert any(node.image == alpha_image for node in texture_nodes(obj.active_material.node_tree))
     assert Path(next(texture_nodes(obj.active_material.node_tree)).image.filepath_raw) == texture
     assert context.active_object == obj and obj.select_get()
+    export_directory = settings.unity_export_directory
+    settings.unity_export_directory = str(Path(directory) / 'GLTFOnly')
+    settings.unity_export_fbx = False
+    settings.unity_export_gltf = True
+    assert bpy.ops.object.polygroups_export_unity() == {'FINISHED'}
+    gltf_only = Path(settings.unity_export_directory) / 'Konduktor_01'
+    assert not (gltf_only / 'FBX').exists()
+    assert (gltf_only / 'GLTF' / (obj.name + '.gltf')).is_file()
+    assert tuple(obj.location) == (3.0, 4.0, 5.0)
+    settings.unity_export_directory = export_directory
+    settings.unity_export_fbx = True
+    settings.unity_export_gltf = False
     # Import the produced FBX to check its material name and relative texture reference.
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.import_scene.fbx(filepath=str(folder / (obj.name + '.fbx')))
@@ -125,7 +148,7 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     assert tuple(rig.location) == (10.0, 0.0, 0.0)
     for lod, item in enumerate(reversed(batch)):
         assert tuple(item.location) == (float(lod + 1), 2.0, 3.0)
-    batch_folder = Path(settings.unity_export_directory) / 'Batch_02'
+    batch_folder = Path(settings.unity_export_directory) / 'Batch_02' / 'FBX'
     report = (batch_folder / 'MeshInfo.txt').read_text(encoding='utf-8')
     assert all(f'LOD{lod}\t' in report for lod in range(6))
     assert sorted(path.name for path in batch_folder.glob('*.fbx')) == [

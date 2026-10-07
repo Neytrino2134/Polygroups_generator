@@ -243,9 +243,46 @@ def prepare_studio(context, scope='ALL'):
                                'Studio ' + label + ' Aim', 'EMPTY', collection, AIM_POSITION)
         aim_constraint(light, target)
     context.view_layer.update()
+    if scope in ('ALL', 'LIGHTS', 'KEY', 'FILL', 'RIM'):
+        ensure_light_position(context)
     studio_collections_first(context)
     if any(collection not in previous_roots for collection in scene.collection.children):
         arrange_studio_outliners(context)
+
+
+
+def ensure_light_position(context):
+    settings = context.scene.polygroups_render_settings
+    collection = studio_collection(context.scene, 'light')
+    root = ensure_object(settings, context.scene, 'studio_light_position', 'light_position',
+                         'Light Position', 'EMPTY', collection, (0, 0, 0))
+    root.empty_display_type = 'PLAIN_AXES'
+    context.view_layer.update()
+    objects = [obj for obj in context.scene.objects if obj.type == 'LIGHT']
+    objects += [getattr(settings, 'studio_' + role + '_aim') for role in ('key', 'fill', 'rim')]
+    for obj in objects:
+        if obj is None or obj.parent == root:
+            continue
+        matrix = obj.matrix_world.copy()
+        obj.parent = root
+        obj.matrix_world = matrix
+    context.view_layer.update()
+    return root
+
+
+def position_lights(context, center):
+    from mathutils import Vector
+    settings = context.scene.polygroups_render_settings
+    root = settings.studio_light_position
+    if root is None:
+        return None, None
+    original = root.matrix_world.copy()
+    reference = settings.studio_camera_aim.matrix_world.translation if settings.studio_camera_aim else Vector(AIM_POSITION)
+    matrix = original.copy()
+    matrix.translation += center - reference
+    root.matrix_world = matrix
+    context.view_layer.update()
+    return root, original
 
 
 def reset_transform(obj, position):
@@ -300,6 +337,9 @@ def reset_studio(context, scope):
         reset_transform(settings.studio_backdrop, (0, 0, 0))
         update_backdrop(settings, context)
     context.view_layer.update()
+
+    if scope in ('ALL', 'LIGHTS', 'KEY', 'FILL', 'RIM'):
+        ensure_light_position(context)
 
 
 class RENDER_OT_polygroups_prepare_studio(bpy.types.Operator):

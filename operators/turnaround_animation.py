@@ -6,11 +6,14 @@ import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
+from .render_queue import image_extension
 
 
 TURNAROUND_COLLECTION_PROP = "polygroups_turnaround_collection"
 TURNAROUND_SOURCE_PROP = "polygroups_turnaround_source"
 TURNAROUND_EMPTY_PROP = "polygroups_turnaround_empty"
+TURNAROUND_LABEL_PROP = "polygroups_turnaround_label"
+VIEW_LABELS = {0: "Front", 90: "Side 90", 180: "Back 180", 270: "Side 270"}
 VIDEO_CONTAINERS = {
     "MKV": (".mkv", "H264"),
     "MPEG4": (".mp4", "H264"),
@@ -18,6 +21,51 @@ VIDEO_CONTAINERS = {
     "QUICKTIME": (".mov", "H264"),
 }
 _ACTIVE_RENDER_TASK = None
+
+
+def _create_turnaround_labels(collection, source_name):
+    material = bpy.data.materials.new("Turnaround Text")
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    nodes.clear()
+    output = nodes.new('ShaderNodeOutputMaterial')
+    emission = nodes.new('ShaderNodeEmission')
+    emission.inputs['Color'].default_value = (1, 1, 1, 1)
+    material.node_tree.links.new(emission.outputs[0], output.inputs['Surface'])
+    for key, body in [('name', source_name)] + [(str(angle), text) for angle, text in VIEW_LABELS.items()]:
+        curve = bpy.data.curves.new(f"Turnaround Label {key}", 'FONT')
+        curve.body = body
+        curve.align_x = 'CENTER'
+        curve.align_y = 'CENTER'
+        curve.materials.append(material)
+        obj = bpy.data.objects.new(curve.name, curve)
+        collection.objects.link(obj)
+        obj[TURNAROUND_LABEL_PROP] = key
+        obj.hide_render = obj.hide_viewport = key != 'name'
+
+
+def _show_turnaround_labels(scene, collection, angle=None):
+    """Keep captions fixed in the camera frame, independent of asset rotation."""
+    camera = scene.camera
+    frame = camera.data.view_frame(scene=scene)
+    depth = max(camera.data.clip_start * 2, 1.0)
+    corners = [v.copy() if camera.data.type == 'ORTHO' else v * (depth / abs(v.z)) for v in frame]
+    left, right = min(v.x for v in corners), max(v.x for v in corners)
+    bottom, top = min(v.y for v in corners), max(v.y for v in corners)
+    for obj in collection.objects:
+        key = obj.get(TURNAROUND_LABEL_PROP)
+        if key is None:
+            continue
+        obj.hide_render = obj.hide_viewport = key not in {'name', str(angle)}
+        obj.parent = camera
+        obj.matrix_parent_inverse.identity()
+        obj.rotation_euler = (0, 0, 0)
+        obj.scale = (1, 1, 1)
+        obj.location = ((left + right) / 2, top - (top - bottom) * .05 if key == 'name' else bottom + (top - bottom) * .05, -depth)
+        obj.data.size = (top - bottom) * .035
+        bpy.context.view_layer.update()
+        if obj.dimensions.x > (right - left) * .9:
+            obj.data.size *= (right - left) * .9 / obj.dimensions.x
 
 
 def _redraw_animation_ui(window_manager):
@@ -34,8 +82,8 @@ def _draw_animation_cursor():
     region = bpy.context.region
     if region is None:
         return
-    x = min(max(task._mouse_x + 18, 8), max(8, region.width - 176))
-    y = min(max(task._mouse_y - 43, 8), max(8, region.height - 42))
+    x = min(max(task._mouse_x + 18, 8), max(8, region.width - 308))
+    y = min(max(task._mouse_y - 67, 8), max(8, region.height - 66))
     factor = min(1.0, max(0.0, task._settings.animation_progress / 100.0))
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
 
@@ -50,14 +98,24 @@ def _draw_animation_cursor():
 
     gpu.state.blend_set("ALPHA")
     try:
-        rectangle(x, y, 168, 38, (0.06, 0.06, 0.07, 0.88))
-        rectangle(x + 7, y + 7, 154, 7, (0.25, 0.25, 0.27, 1.0))
+        rectangle(x, y, 300, 62, (0.06, 0.06, 0.07, 0.88))
+        rectangle(x + 7, y + 7, 286, 7, (0.25, 0.25, 0.27, 1.0))
         if factor:
-            rectangle(x + 7, y + 7, 154 * factor, 7, (0.44, 0.30, 0.83, 1.0))
+            rectangle(x + 7, y + 7, 286 * factor, 7, (0.44, 0.30, 0.83, 1.0))
         blf.size(0, 12)
         blf.position(0, x + 7, y + 20, 0)
         blf.color(0, 1.0, 1.0, 1.0, 1.0)
         blf.draw(0, f"Render {task._frames_done}/{task._total_frames}  {factor * 100:.0f}%")
+        blf.position(0, x + 7, y + 42, 0)
+        blf.draw(0, task._settings.animation_status)
+        rectangle(16, 16, 360, 62, (0.06, 0.06, 0.07, 0.88))
+        rectangle(24, 24, 344, 7, (0.25, 0.25, 0.27, 1.0))
+        if factor:
+            rectangle(24, 24, 344 * factor, 7, (0.44, 0.30, 0.83, 1.0))
+        blf.position(0, 24, 42, 0)
+        blf.draw(0, f"Completed {task._frames_done}/{task._total_frames}  {factor * 100:.0f}%")
+        blf.position(0, 24, 60, 0)
+        blf.draw(0, task._settings.animation_status)
     finally:
         gpu.state.blend_set("NONE")
 
@@ -237,7 +295,66 @@ def _turnaround_output_directory(settings):
     duplicate = bpy.data.objects.get(settings.animation_object_name)
     source_name = duplicate.get(TURNAROUND_SOURCE_PROP) if duplicate is not None else None
     mesh_name = bpy.path.clean_name(source_name or settings.animation_object_name or "Turnaround")
-    return os.path.join(bpy.path.abspath(settings.output_directory), "Render Animation", mesh_name)
+    return os.path.join(bpy.path.abspath(settings.output_directory), f"{mesh_name}_Turnaround")
+
+
+def unity_turnaround_render_steps(context):
+    """Yield individual render jobs while retaining their temporary scene state."""
+    scene = context.scene
+    settings = scene.polygroups_render_settings
+    collection = bpy.data.collections[settings.animation_collection_name]
+    duplicate = bpy.data.objects[settings.animation_object_name]
+    root = duplicate.parent
+    render_state = _render_snapshot(scene)
+    visibility = _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
+    rotation = root.rotation_euler.copy()
+    animation_data = root.animation_data
+    action = animation_data.action if animation_data else None
+    output_directory = _turnaround_output_directory(settings)
+    try:
+        os.makedirs(output_directory, exist_ok=True)
+        scene.render.engine = 'CYCLES' if settings.render_engine == 'CYCLES' else 'BLENDER_EEVEE'
+        if settings.render_engine == 'CYCLES':
+            scene.cycles.samples = settings.max_samples
+        scene.render.resolution_percentage = 100
+        scene.render.use_file_extension = True
+        scene.render.use_overwrite = settings.overwrite_existing
+        scene.render.save_output = True
+        scene.render.image_settings.media_type = 'IMAGE'
+        scene.render.image_settings.file_format = settings.animation_views_image_format
+        scene.render.image_settings.color_mode = 'RGB'
+        scene.render.image_settings.color_depth = '8'
+        if animation_data:
+            animation_data.action = None
+        scene.frame_set(1)
+        base = bpy.path.clean_name(settings.animation_object_name)
+        for index, angle in enumerate(VIEW_LABELS, 1):
+            root.rotation_euler.z = radians(angle)
+            _show_turnaround_labels(scene, collection, angle)
+            context.view_layer.update()
+            scene.render.filepath = os.path.join(output_directory, f'{base}_{angle:03d}{image_extension(settings.animation_views_image_format)}')
+            settings.animation_status = f'Unity: {settings.animation_views_image_format} {index}/4 - {VIEW_LABELS[angle]}'
+            yield {'write_still': True}
+        root.rotation_euler = rotation
+        if animation_data:
+            animation_data.action = action
+        settings.resolution_x = settings.resolution_y = 1024
+        scene.render.resolution_x = scene.render.resolution_y = 1024
+        scene.frame_start = 1
+        scene.frame_end = max(2, int(settings.animation_frame_count))
+        scene.render.fps = settings.animation_fps
+        scene.frame_set(1)
+        _show_turnaround_labels(scene, collection)
+        settings.animation_status = f'Unity: {settings.animation_container} animation'
+        output = _configure_animation_output(scene, settings, os.path.join(output_directory, base))
+        yield {'animation': True}
+        settings.animation_last_output = output
+    finally:
+        root.rotation_euler = rotation
+        if animation_data:
+            animation_data.action = action
+        _restore_render(scene, render_state)
+        _restore_visibility(visibility)
 
 
 class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
@@ -291,6 +408,9 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
         scene.frame_start = frame_start
         scene.frame_end = frame_end
         scene.frame_set(frame_start)
+        _create_turnaround_labels(collection, source.name)
+        if scene.camera:
+            _show_turnaround_labels(scene, collection)
         settings.animation_collection_name = collection.name
         settings.animation_object_name = duplicate.name
         settings.animation_status = f"Ready: {collection.name}, frames {frame_start}-{frame_end}"
@@ -306,7 +426,7 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
 class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
     bl_idname = "object.polygroups_render_turnaround_views"
     bl_label = "Render Four Views"
-    bl_description = "Render PNG stills at 0, 90, 180 and 270 degrees"
+    bl_description = "Render still images at 0, 90, 180 and 270 degrees in the selected format"
     bl_options = {"REGISTER"}
 
     @classmethod
@@ -357,7 +477,7 @@ class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
                 except TypeError:
                     scene.render.engine = "BLENDER_EEVEE"
             scene.render.image_settings.media_type = "IMAGE"
-            scene.render.image_settings.file_format = "PNG"
+            scene.render.image_settings.file_format = settings.animation_views_image_format
             scene.render.image_settings.color_mode = "RGB"
             scene.render.image_settings.color_depth = "8"
             scene.render.use_file_extension = True
@@ -367,8 +487,9 @@ class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
             base = bpy.path.clean_name(settings.animation_object_name)
             for angle in (0, 90, 180, 270):
                 root.rotation_euler.z = radians(angle)
+                _show_turnaround_labels(scene, collection, angle)
                 context.view_layer.update()
-                path = os.path.join(output_directory, f"{base}_{angle:03d}.png")
+                path = os.path.join(output_directory, f"{base}_{angle:03d}{image_extension(settings.animation_views_image_format)}")
                 scene.render.filepath = path
                 result = bpy.ops.render.render(write_still=True)
                 if "FINISHED" not in result:
@@ -453,6 +574,7 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             scene.render.resolution_x = settings.resolution_x
             scene.render.resolution_y = settings.resolution_y
             scene.render.resolution_percentage = settings.resolution_scale
+            _show_turnaround_labels(scene, collection)
             if settings.render_engine == "CYCLES":
                 scene.render.engine = "CYCLES"
                 scene.cycles.samples = settings.max_samples

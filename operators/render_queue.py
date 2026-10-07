@@ -6,6 +6,7 @@ from math import radians
 
 import bpy
 
+from .render_textures import PLANE_TAG, texture_planes
 from ..sound import play_operation_done_sound
 from ..core.remesh_cursor import RemeshCursor, update_remesh_cursor
 
@@ -96,14 +97,21 @@ def _freestyle_overlay_path(output_path):
 
 def _transparent_output_path(output_path):
     root, extension = os.path.splitext(output_path)
+    if extension.lower() in {'.jpg', '.jpeg'}:
+        extension = '.png'
     return f"{root}_transparent{extension}"
+
+
+def image_extension(file_format):
+    return {'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp'}[file_format]
 
 
 def _current_state_render_path():
     base_directory = os.path.join(bpy.path.abspath("//"), "!Renders")
     os.makedirs(base_directory, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    base_path = os.path.join(base_directory, f"Render_Image_{timestamp}.png")
+    extension = image_extension(bpy.context.scene.polygroups_render_settings.image_format)
+    base_path = os.path.join(base_directory, f"Render_Image_{timestamp}{extension}")
     if not os.path.exists(base_path):
         return base_path
 
@@ -133,7 +141,7 @@ def _find_asset_objects(collection, asset_name, settings):
 
     objects_by_suffix = {}
     for obj in _collection_objects_recursive(collection):
-        if obj.type != "MESH":
+        if obj.type != "MESH" or obj.get(PLANE_TAG):
             continue
         suffix = _render_suffix_from_name(obj.name)
         if suffix not in include_suffixes:
@@ -156,7 +164,8 @@ def _scan_render_queue(settings):
 
         collection_names.add(collection.name)
         objects = _find_asset_objects(collection, asset_name, settings)
-        if not objects:
+        planes = texture_planes(collection)
+        if not objects and not planes:
             continue
 
         # Number only collections with render jobs. LOW and MID of the same
@@ -171,7 +180,7 @@ def _scan_render_queue(settings):
                 modes.append("Hero")
             for mode in modes:
                 prefix = f"Image_{mode}" if mode else "Image"
-                output_path = os.path.join(asset_directory, f"{prefix}_{collection_index:02d}_{suffix}.png")
+                output_path = os.path.join(asset_directory, f"{prefix}_{collection_index:02d}_{suffix}{image_extension(settings.image_format)}")
                 queue.append(
                     {
                         "asset_name": asset_name,
@@ -185,6 +194,25 @@ def _scan_render_queue(settings):
                         "freestyle_overlay_path": _freestyle_overlay_path(output_path),
                     },
                 )
+
+        if settings.texture_render_mode in {"SEPARATE", "BOTH"}:
+            for plane in sorted(planes, key=lambda obj: obj.get(PLANE_TAG)):
+                kind = plane[PLANE_TAG]
+                queue.append({
+                    "asset_name": asset_name, "collection": collection.name,
+                    "object": plane.name, "variant": kind, "texture_kind": kind,
+                    "output_path": os.path.join(asset_directory, f"Image_Texture_{collection_index:02d}_{kind}.png"),
+                })
+        if settings.texture_render_mode in {"COMBINED", "BOTH"}:
+            pair = {plane[PLANE_TAG]: plane for plane in planes}
+            if "BaseColor" in pair and "Normal" in pair:
+                queue.append({
+                    "asset_name": asset_name, "collection": collection.name,
+                    "object": pair["BaseColor"].name,
+                    "texture_objects": [pair["BaseColor"].name, pair["Normal"].name],
+                    "variant": "BaseColor_Normal", "texture_kind": "Combined",
+                    "output_path": os.path.join(asset_directory, f"Image_Texture_{collection_index:02d}_BaseColor_Normal.png"),
+                })
 
     return queue, len(collection_names)
 
@@ -224,6 +252,8 @@ def _queue_objects(queue):
     objects = []
     seen = set()
     for job in queue:
+        if job.get("texture_kind"):
+            continue
         obj = bpy.data.objects.get(job.get("object", ""))
         if obj is None or obj.type != "MESH" or obj.name in seen:
             continue
@@ -335,6 +365,7 @@ def _snapshot_visibility():
             "filepath": bpy.context.scene.render.filepath,
             "use_overwrite": bpy.context.scene.render.use_overwrite,
             "file_format": bpy.context.scene.render.image_settings.file_format,
+            "media_type": bpy.context.scene.render.image_settings.media_type,
             "color_mode": bpy.context.scene.render.image_settings.color_mode,
             "use_compositing": getattr(bpy.context.scene.render, "use_compositing", None),
         },
@@ -373,6 +404,7 @@ def _restore_visibility(snapshot):
     if "use_overwrite" in render_settings:
         bpy.context.scene.render.use_overwrite = render_settings["use_overwrite"]
     if "file_format" in render_settings:
+        bpy.context.scene.render.image_settings.media_type = render_settings.get('media_type', 'IMAGE')
         bpy.context.scene.render.image_settings.file_format = render_settings["file_format"]
     if "color_mode" in render_settings:
         bpy.context.scene.render.image_settings.color_mode = render_settings["color_mode"]
@@ -964,6 +996,10 @@ def _clear_multiview_setups():
 
 
 def _prepare_scene_for_job(job):
+    # Texture previews must never leak into mesh, Hero or Multiview renders.
+    for plane in texture_planes():
+        plane.hide_render = True
+        plane.hide_viewport = True
     queue_collections = [
         collection
         for collection in bpy.data.collections
@@ -979,7 +1015,7 @@ def _prepare_scene_for_job(job):
         _set_asset_collection_enabled(collection, is_current)
 
     for obj in _collection_objects_recursive(current_collection):
-        is_current = obj == current_object
+        is_current = obj == current_object or obj.name in job.get("texture_objects", [])
         obj.hide_render = not is_current
         obj.hide_viewport = not is_current
 
@@ -993,15 +1029,19 @@ def _finish_render_job(job, multiview_objects=None):
         _set_asset_collection_enabled(collection, False)
 
 
-def _configure_render(scene, settings, job, filepath=None, file_format="PNG", freestyle=False):
+def _configure_render(scene, settings, job, filepath=None, file_format=None, freestyle=False):
+    file_format = file_format or settings.image_format
     _apply_render_engine(scene, settings, freestyle)
     scene.render.resolution_x = settings.resolution_x
     scene.render.resolution_y = settings.resolution_y
     scene.render.resolution_percentage = settings.resolution_scale
     scene.render.use_file_extension = True
+    scene.render.image_settings.media_type = 'IMAGE'
     scene.render.image_settings.file_format = file_format
-    if file_format == "PNG":
+    if file_format in {"PNG", "WEBP"}:
         scene.render.image_settings.color_mode = "RGBA" if scene.render.film_transparent or freestyle else "RGB"
+    else:
+        scene.render.image_settings.color_mode = "RGB"
     scene.render.use_overwrite = settings.overwrite_existing
     output_path = filepath or job["output_path"]
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -1036,7 +1076,16 @@ class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
             "resolution_y": render.resolution_y,
         }
 
+        light_root, light_matrix = None, None
         try:
+            from .render_selected import selected_bounds
+            from .render_studio import position_lights
+            objects = [obj for obj in scene.objects if obj.type in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}
+                       and not obj.hide_render and not obj.hide_get()
+                       and not any(_scene_collection_matches(c, settings) for c in obj.users_collection)]
+            if objects:
+                _, center, _ = selected_bounds(context, objects)
+                light_root, light_matrix = position_lights(context, center)
             settings.status = "Rendering current state"
             _render_current_job(context, settings, job)
         except Exception as error:
@@ -1044,6 +1093,9 @@ class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
             self.report({"ERROR"}, settings.status)
             return {"CANCELLED"}
         finally:
+            if light_root:
+                light_root.matrix_world = light_matrix
+                context.view_layer.update()
             _restore_visibility(visibility_snapshot)
             render.use_file_extension = previous_settings["use_file_extension"]
             render.resolution_x = previous_settings["resolution_x"]
@@ -1065,10 +1117,16 @@ class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
 
 
 def _render_single_job(context, settings, job):
+    for options in _render_single_job_steps(context, settings, job):
+        bpy.ops.render.render(**options)
+
+
+def _render_single_job_steps(context, settings, job):
     if settings.freestyle_edges and settings.freestyle_as_render_pass:
         _disable_freestyle(context)
-        _configure_render(context.scene, settings, job, job["output_path"], "PNG")
-        bpy.ops.render.render(write_still=True)
+        _configure_render(context.scene, settings, job, job["output_path"],
+                          'PNG' if context.scene.render.film_transparent and settings.image_format == 'JPEG' else settings.image_format)
+        yield {'write_still': True}
 
         _configure_freestyle(context, settings, True)
         compositor_snapshot = _setup_freestyle_pass_compositor(context.scene)
@@ -1086,7 +1144,7 @@ def _render_single_job(context, settings, job):
                 "PNG",
                 True,
             )
-            bpy.ops.render.render(write_still=True)
+            yield {'write_still': True}
         finally:
             _restore_freestyle_pass_compositor(context.scene, compositor_snapshot)
         _render_freestyle_overlay_image(context, settings, job)
@@ -1098,16 +1156,69 @@ def _render_single_job(context, settings, job):
         settings,
         job,
         job["output_path"],
-        "PNG",
+        'PNG' if context.scene.render.film_transparent and settings.image_format == 'JPEG' else settings.image_format,
         settings.freestyle_edges,
     )
-    bpy.ops.render.render(write_still=True)
+    yield {'write_still': True}
+
+
+def _render_texture_job(context, settings, job):
+    snapshot = _snapshot_visibility()
+    scene = context.scene
+    view = scene.view_settings
+    transform = (view.view_transform, view.look, view.exposure, view.gamma)
+    visible_names = set(job.get("texture_objects", [job["object"]]))
+    image_overrides = []
+    try:
+        if job.get("texture_kind") == "Combined":
+            # Standard display is needed for Base Color. Decode a private copy
+            # of Normal as sRGB so the same display transform preserves its RGB
+            # data values, without changing the source image's color space.
+            for name in visible_names:
+                plane = bpy.data.objects.get(name)
+                if plane is None or plane.get(PLANE_TAG) != "Normal":
+                    continue
+                for material in plane.data.materials:
+                    for node in material.node_tree.nodes:
+                        if node.type == "TEX_IMAGE" and node.image:
+                            original = node.image
+                            copy = original.copy()
+                            image_overrides.append((node, original, copy))
+                            copy.colorspace_settings.name = "sRGB"
+                            node.image = copy
+        for other in scene.objects:
+            if other.type not in {"CAMERA", "LIGHT"}:
+                other.hide_render = other.name not in visible_names
+        scene.render.film_transparent = True
+        _disable_freestyle(context)
+        scene.render.use_compositing = False
+        # Normal maps are data, so do not apply an sRGB display transform.
+        view.view_transform = "Raw" if job.get("texture_kind") == "Normal" else "Standard"
+        view.look = "None"
+        view.exposure = 0
+        view.gamma = 1
+        _configure_render(scene, settings, job, file_format='PNG')
+        bpy.ops.render.render(write_still=True)
+    finally:
+        for node, original, copy in image_overrides:
+            node.image = original
+            bpy.data.images.remove(copy)
+        view.view_transform, view.look, view.exposure, view.gamma = transform
+        _restore_visibility(snapshot)
 
 
 def _render_current_job(context, settings, job):
+    for options in _render_current_job_steps(context, settings, job):
+        bpy.ops.render.render(**options)
+
+
+def _render_current_job_steps(context, settings, job):
     """Render the scene image, then an isolated transparent companion image."""
+    if job.get("texture_kind"):
+        _render_texture_job(context, settings, job)
+        return
     context.scene.render.film_transparent = False
-    _render_single_job(context, settings, job)
+    yield from _render_single_job_steps(context, settings, job)
     if not settings.transparent_background:
         return
 
@@ -1121,7 +1232,7 @@ def _render_current_job(context, settings, job):
     }
     try:
         _prepare_transparent_background(settings)
-        _render_single_job(context, settings, transparent_job)
+        yield from _render_single_job_steps(context, settings, transparent_job)
     finally:
         _restore_visibility(snapshot)
 
@@ -1285,7 +1396,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
 
         job = queue[settings.queue_index]
         output_exists = os.path.exists(job.get("output_path", ""))
-        transparent_exists = not settings.transparent_background or os.path.exists(
+        transparent_exists = bool(job.get("texture_kind")) or not settings.transparent_background or os.path.exists(
             job.get("transparent_output_path") or _transparent_output_path(job.get("output_path", ""))
         )
         if settings.skip_existing and not settings.overwrite_existing and output_exists and transparent_exists:
@@ -1304,8 +1415,8 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         settings.last_output_path = job.get("output_path", "")
         settings.status = f"Rendering {settings.current_object}"
         source = bpy.data.objects.get(job.get("object", ""))
-        use_multiview = settings.multiview_render or (source is not None and
-                                                     bool(_prepared_multiview_views(source)))
+        use_multiview = not job.get("texture_kind") and (settings.multiview_render or (source is not None and
+                                                     bool(_prepared_multiview_views(source))))
         multiview_objects = _create_multiview_setup(job) if use_multiview else []
         try:
             if job.get("view_mode") == "Hero":

@@ -83,8 +83,8 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_uv_preparation_section": ("topic_uv_0", "topic_uv_3", "topic_uv_2", "topic_uv_1"),
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
-    "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(3)),
-    "show_render_section": tuple(f"topic_render_{index}" for index in range(9)),
+    "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(4)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(10)),
 }
 
 SUBSECTION_VISIBILITY_PROPERTIES = tuple(
@@ -1066,11 +1066,13 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_render_6: bpy.props.BoolProperty(default=False)
     topic_render_7: bpy.props.BoolProperty(default=False)
     topic_render_8: bpy.props.BoolProperty(default=False)
+    topic_render_9: bpy.props.BoolProperty(default=False)
     topic_remesh_0: bpy.props.BoolProperty(default=False)
     topic_remesh_1: bpy.props.BoolProperty(default=False)
     topic_export_0: bpy.props.BoolProperty(default=False)
     topic_export_1: bpy.props.BoolProperty(default=False)
     topic_export_2: bpy.props.BoolProperty(default=False)
+    topic_export_3: bpy.props.BoolProperty(default=False)
     single_section_mode: bpy.props.BoolProperty(
         name="Single Mode",
         description="Keep only one main toolkit section expanded at a time",
@@ -1932,11 +1934,36 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
 class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=False)
     unity_asset_name: bpy.props.StringProperty(name="Asset Name", default="Asset")
+    unity_generate_text_labels: bpy.props.BoolProperty(name="Generate Text Labels", default=False)
+    unity_label_size: bpy.props.FloatProperty(name="Label Size", default=0.1, min=0.001, unit="LENGTH")
+    unity_render_mode: bpy.props.EnumProperty(name="Unity Render Mode",
+        items=(("ALL", "All Asset LODs Together", "Render all LODs of the active Unity asset in 4K"),
+               ("INDIVIDUAL", "One LOD per Image", "Render each LOD of the active Unity asset separately"),
+               ("SELECTED", "Selected Assets", "Render selected Unity meshes together")), default="ALL")
+    unity_render_separate: bpy.props.BoolProperty(
+        name="Separate Renders",
+        description="Render each Unity mesh in the chosen set separately, with its own label and automatic framing",
+        default=False,
+    )
+    unity_render_text: bpy.props.BoolProperty(name="Include Text Labels", default=True)
+    unity_render_freestyle: bpy.props.BoolProperty(name="Enable Freestyle", default=True)
+    unity_render_mesh_info: bpy.props.BoolProperty(
+        name="Export Mesh Info JSON",
+        description="Write MeshInfo.json beside the Unity renders using the Unity FBX mesh info format",
+        default=False,
+    )
+    unity_render_image_format: bpy.props.EnumProperty(name="Image Format",
+        items=(("PNG", "PNG", "PNG image"), ("JPEG", "JPEG", "JPEG image"),
+               ("WEBP", "WebP", "WebP image")), default="WEBP")
     unity_asset_index: bpy.props.StringProperty(name="Index", default="01")
     unity_auto_increment_index: bpy.props.BoolProperty(name="Auto Increment Index", default=True)
     unity_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
     unity_export_directory: bpy.props.StringProperty(name="Directory", subtype="DIR_PATH", default="//!Unity")
     unity_export_overwrite: bpy.props.BoolProperty(name="Overwrite Existing", default=False)
+    unity_export_fbx: bpy.props.BoolProperty(name="FBX", default=True)
+    unity_export_gltf: bpy.props.BoolProperty(name="GLTF", description="Single .gltf file with embedded textures and binary data", default=False)
+    unity_export_all_renders: bpy.props.BoolProperty(name="Export All Renders",
+        description="Render each selected LOD and the asset turnaround into the Unity asset folder", default=False)
     unity_export_info_format: bpy.props.EnumProperty(
         name="Mesh Info",
         description="Write vertex and triangle counts for each exported LOD",
@@ -1979,6 +2006,18 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         description="Place generated LODs side by side along the world X axis",
         default=True,
     )
+    smart_lods_create_text: bpy.props.BoolProperty(name="Create LOD Labels", default=False)
+    smart_lods_text_size: bpy.props.FloatProperty(name="Label Size", default=0.1, min=0.001, unit="LENGTH")
+    smart_lods_render_select_all: bpy.props.BoolProperty(name="Select All Generated LODs", default=True)
+    smart_lods_render_mode: bpy.props.EnumProperty(
+        name="LOD Render Mode",
+        items=(("ALL", "All LODs Together", "Select all generated LODs and render one 4K image"),
+               ("INDIVIDUAL", "One LOD per Image", "Render each generated LOD and its label separately"),
+               ("SELECTED", "Selected LODs", "Render only the selected LODs together")),
+        default="ALL",
+    )
+    smart_lods_render_text: bpy.props.BoolProperty(name="Include LOD Labels", default=True)
+    smart_lods_render_freestyle: bpy.props.BoolProperty(name="Enable Freestyle", default=True)
     smart_lods_spacing: bpy.props.FloatProperty(
         name="Arrange Objects Spacing",
         description="Minimum gap between the world-space bounds of successive LOD meshes",
@@ -2104,6 +2143,19 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         ),
         default="VARIANT",
     )
+    gltf_export_embedded: bpy.props.BoolProperty(
+        name="Embed Textures and Buffers",
+        description="Store textures and binary mesh data inside each .gltf file instead of separate files",
+        default=False,
+    )
+    gltf_export_info_format: bpy.props.EnumProperty(
+        name="Mesh Info",
+        description="Write vertex and triangle counts for exported meshes to !GLTF",
+        items=(("NONE", "None", "Do not write a mesh info report"),
+               ("JSON", "JSON", "Write MeshInfo.json"),
+               ("TXT", "TXT", "Write MeshInfo.txt")),
+        default="NONE",
+    )
     mesh_export_info_format: bpy.props.EnumProperty(
         name="Mesh Info",
         description="Write vertex and triangle counts for exported meshes to !Unreal",
@@ -2222,12 +2274,26 @@ def _update_studio_color_tag(self, context):
 
 
 class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
+    image_format: bpy.props.EnumProperty(name="Image Format",
+        items=(("PNG", "PNG", "PNG image"), ("JPEG", "JPEG", "JPEG image"),
+               ("WEBP", "WebP", "WebP image")), default="PNG")
+    animation_views_image_format: bpy.props.EnumProperty(name="Four Views Image Format",
+        items=(("PNG", "PNG", "PNG image"), ("JPEG", "JPEG", "JPEG image"),
+               ("WEBP", "WebP", "WebP image")), default="WEBP")
+    texture_render_mode: bpy.props.EnumProperty(
+        name="Texture Render Mode",
+        items=(("SEPARATE", "Separate", "Render Base Color and Normal as separate images"),
+               ("COMBINED", "Together", "Render both texture planes in one image and one pass"),
+               ("BOTH", "Separate + Together", "Save separate images and an additional combined image")),
+        default="SEPARATE",
+    )
     palette_groups: bpy.props.CollectionProperty(type=RenderPaletteGroup)
     palette_group_index: bpy.props.IntProperty(default=0, min=0)
     palette_library_initialized: bpy.props.BoolProperty(default=False)
     studio_backdrop: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_camera: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_camera_aim: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_light_position: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_key: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_key_aim: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_fill: bpy.props.PointerProperty(type=bpy.types.Object)
@@ -2294,7 +2360,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
                ("MPEG4", "MPEG-4", "MPEG-4 video (.mp4)"),
                ("WEBM", "WebM", "WebM video (.webm)"),
                ("QUICKTIME", "QuickTime", "QuickTime video (.mov)")),
-        default="MPEG4",
+        default="WEBM",
     )
     animation_collection_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
     animation_object_name: bpy.props.StringProperty(default="", options={"HIDDEN"})

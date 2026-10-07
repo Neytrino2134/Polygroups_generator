@@ -5,6 +5,9 @@ import bpy
 import addon_utils
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT.parent))
+from polygroups_generator.core import render_palettes as palette_module
+catalog_temp=TemporaryDirectory()
+palette_module.LIBRARY_PATH=Path(catalog_temp.name)/'catalog.json'
 addon_utils.enable(ROOT.name,default_set=False)
 from polygroups_generator.core.render_palettes import ensure_libraries, library_data, srgb_to_linear
 from polygroups_generator.core.render_palettes import color_icon, clear_swatches

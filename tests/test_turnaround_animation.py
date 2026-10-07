@@ -14,6 +14,9 @@ addon_utils.enable(ROOT.name, default_set=True)
 
 scene = bpy.context.scene
 settings = scene.polygroups_render_settings
+assert settings.animation_views_image_format == 'WEBP'
+assert settings.image_format == 'PNG'
+settings.animation_views_image_format = 'PNG'
 settings.animation_frame_count = 300
 visibility = scene.airetopo_panel_visibility_settings
 assert hasattr(visibility, "topic_render_5")
@@ -88,7 +91,7 @@ assert scene_group.hide_render and protected_objects[1].hide_viewport
 # Media Type must be set to Video before FFmpeg becomes a valid file format.
 render_state = _render_snapshot(scene)
 assert settings.animation_media_type == "VIDEO"
-assert settings.animation_container == "MPEG4"
+assert settings.animation_container == "WEBM"
 assert settings.animation_keep_scene_collections
 assert settings.render_engine == "EEVEE"
 for container, extension, codec in (
@@ -147,14 +150,15 @@ with TemporaryDirectory() as directory:
     assert settings.animation_progress == 100.0
     assert settings.animation_last_output.endswith(".mkv")
     assert Path(settings.animation_last_output).is_file()
-    assert Path(settings.animation_last_output).parent.name == "Turnaround_Test"
+    assert Path(settings.animation_last_output).parent.name == "Turnaround_Test_Turnaround"
     settings.animation_media_type = "IMAGE"
     assert bpy.ops.object.polygroups_render_turnaround_animation() == {"FINISHED"}
-    mesh_output = Path(directory) / "Render Animation" / "Turnaround_Test"
+    mesh_output = Path(directory) / "Turnaround_Test_Turnaround"
+    assert not (Path(directory) / "Render Animation").exists()
     assert len(list(mesh_output.glob("Turnaround_Test_Turnaround_*.png"))) == 2
     assert bpy.ops.object.polygroups_render_turnaround_views() == {"FINISHED"}
     for angle in (0, 90, 180, 270):
-        assert (Path(directory) / "Render Animation" / "Turnaround_Test" / f"Turnaround_Test_Turnaround_{angle:03d}.png").is_file()
+        assert (mesh_output / f"Turnaround_Test_Turnaround_{angle:03d}.png").is_file()
     assert all(abs(value) < 1.0e-6 for value in root.rotation_euler)
 assert _render_snapshot(scene) == render_state
 

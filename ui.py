@@ -3463,8 +3463,12 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             unity_content.label(text="Unity Prepare")
             unity_content.prop(settings, "unity_asset_name", text=t(context, "fab_asset_name"))
             row = unity_content.row(align=True)
+            row.operator("object.polygroups_unity_index_step", text="", icon="TRIA_LEFT").delta = -1
             row.prop(settings, "unity_asset_index", text=t(context, "fab_asset_index"))
+            row.operator("object.polygroups_unity_index_step", text="", icon="TRIA_RIGHT").delta = 1
             row.prop(settings, "unity_auto_increment_index", text="", icon="ADD")
+            unity_content.prop(settings, "unity_generate_text_labels")
+            unity_content.prop(settings, "unity_label_size")
             unity_content.prop(settings, "unity_copy_textures", text=t(context, "copy_textures"))
             row = unity_content.row(align=True)
             for lod in range(6):
@@ -3472,6 +3476,24 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             unity_content.operator(
                 "object.polygroups_prepare_unity", text="Prepare Meshes (Auto LOD)", icon="SORTSIZE",
             ).auto_lods = True
+            box = unity_content.box().column(align=True)
+            box.prop(settings, "unity_render_mode")
+            box.prop(settings, "unity_render_separate")
+            box.prop(settings, "unity_render_text")
+            box.prop(settings, "unity_render_freestyle")
+            box.prop(settings, "unity_render_mesh_info")
+            box.prop(settings, "unity_render_image_format")
+            box.operator("object.polygroups_render_unity_assets", icon="RENDER_STILL")
+            animation_box = unity_content.box().column(align=True)
+            animation_box.label(text="Unity Turnaround")
+            rs = context.scene.polygroups_render_settings
+            animation_box.prop(rs, "animation_frame_count")
+            animation_box.prop(rs, "animation_fps")
+            animation_box.operator("object.polygroups_render_unity_turnaround", icon="RENDER_ANIMATION")
+            if rs.is_running or rs.animation_progress > 0:
+                animation_box.progress(factor=rs.animation_progress / 100.0, type='BAR',
+                                       text=f'{rs.animation_progress:.0f}%')
+                animation_box.label(text=rs.animation_status)
 
         export_content = draw_collapsible_box(
             layout,
@@ -3538,7 +3560,14 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         spacing_row = column.row()
         spacing_row.enabled = settings.smart_lods_auto_arrange
         spacing_row.prop(settings, "smart_lods_spacing")
+        column.prop(settings, "smart_lods_create_text")
+        column.prop(settings, "smart_lods_text_size")
         column.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")
+        box = column.box().column(align=True)
+        box.prop(settings, "smart_lods_render_mode")
+        box.prop(settings, "smart_lods_render_text")
+        box.prop(settings, "smart_lods_render_freestyle")
+        box.operator("object.polygroups_render_smart_lods", icon="RENDER_STILL")
 
     def draw_mesh_check(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
@@ -3713,6 +3742,12 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
 
     def draw_mesh_export(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
+        content = draw_topic(layout, context, "export_3", "GLTF Export", "EXPORT")
+        if content is not None:
+            column = content.column(align=True)
+            column.prop(settings, "gltf_export_info_format")
+            column.prop(settings, "gltf_export_embedded")
+            column.operator("object.polygroups_export_selected_gltf", icon="EXPORT")
         content = draw_topic(layout, context, "export_0", 'Fab Export', "EXPORT")
         if content is not None:
             column = content.column(align=True)
@@ -3734,6 +3769,20 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column = content.column(align=True)
             column.prop(settings, "unity_export_directory")
             column.prop(settings, "unity_export_overwrite")
+            formats = column.row(align=True)
+            formats.prop(settings, "unity_export_fbx")
+            formats.prop(settings, "unity_export_gltf")
+            column.prop(settings, "unity_export_all_renders")
+            rs = context.scene.polygroups_render_settings
+            if settings.unity_export_all_renders:
+                column.prop(settings, "unity_render_image_format", text="LOD Image Format")
+                column.prop(rs, "animation_views_image_format")
+                column.prop(rs, "animation_container")
+                column.prop(rs, "animation_frame_count")
+                column.prop(rs, "animation_fps")
+                if rs.is_running or rs.animation_progress > 0:
+                    column.progress(factor=rs.animation_progress / 100, type='BAR', text=f'{rs.animation_progress:.0f}%')
+                    column.label(text=rs.animation_status)
             column.prop(settings, "unity_export_info_format", text=t(context, "mesh_export_info_format"))
             column.prop(settings, "unity_use_auto_rig_pro")
             column.operator("object.polygroups_export_unity", icon="EXPORT")
@@ -3857,6 +3906,7 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 icon="CHECKMARK",
             )
             column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
+            column.prop(settings, "image_format")
 
             options_row = column.row(align=True)
             options_row.prop(settings, "render_low", text=t(context, "render_low"))
@@ -3922,6 +3972,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
             column.separator()
             column.label(text=t(context, "studio_lights"), icon="LIGHT")
+            if settings.studio_light_position is not None:
+                column.prop(settings.studio_light_position, "location", text="Light Position")
             column.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_lights"), icon="LOOP_BACK").scope = "LIGHTS"
             column.label(text=t(context, "studio_color_presets"), icon="COLOR")
             for pair in (("NEUTRAL", "WARM_COOL"), ("COOL_WARM", "SUNSET"), ("CYAN_MAGENTA", "GOLD_VIOLET")):
@@ -3971,13 +4023,6 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 icon="ALIGN_CENTER",
             ).use_render_settings = True
 
-        content = draw_topic(layout, context, "render_8", "Color Palettes", "COLOR")
-        if content is not None:
-            from .core.render_palettes import draw_library
-            column = content.column(align=True)
-            column.enabled = not settings.is_running
-            draw_library(column, settings)
-
         content = draw_topic(layout, context, "render_2", 'Multiple Views', "CAMERA_DATA")
         if content is not None:
             column = content.column(align=True)
@@ -4001,6 +4046,21 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 text=t(context, "render_clear_multiview"),
                 icon="TRASH",
             )
+
+        content = draw_topic(layout, context, "render_9", "Render Textures", "TEXTURE")
+        if content is not None:
+            column = content.column(align=True)
+            column.enabled = not settings.is_running
+            column.operator("object.polygroups_prepare_render_textures", icon="MESH_PLANE")
+            column.prop(settings, "texture_render_mode")
+            for kind, title in (("BaseColor", "Base Color Planes"), ("Normal", "Normal Planes")):
+                column.label(text=title)
+                row = column.row(align=True)
+                for show, label, icon in ((True, "Show All", "HIDE_OFF"), (False, "Hide All", "HIDE_ON")):
+                    op = row.operator("object.polygroups_texture_plane_visibility", text=label, icon=icon)
+                    op.kind = kind
+                    op.show = show
+            column.operator("object.polygroups_clear_render_textures", icon="TRASH")
 
         content = draw_topic(layout, context, "render_0", 'Render Queue', "RENDER_STILL")
         if content is not None:
@@ -4030,6 +4090,7 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                     ),
                 )
 
+            column.operator("object.polygroups_render_selected_auto", icon="CAMERA_DATA")
             current_row = column.row(align=True)
             current_row.enabled = not settings.is_running
             current_row.operator(
@@ -4081,6 +4142,13 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             if settings.last_output_path:
                 column.label(text=t(context, "render_last_output", value=settings.last_output_path), icon="FILE_IMAGE")
 
+        content = draw_topic(layout, context, "render_8", "Color Palettes", "COLOR")
+        if content is not None:
+            from .core.render_palettes import draw_library
+            column = content.column(align=True)
+            column.enabled = not settings.is_running
+            draw_library(column, settings)
+
         content = draw_topic(layout, context, "render_5", 'Animation', "RENDER_ANIMATION")
         if content is not None:
             column = content.column(align=True)
@@ -4104,6 +4172,7 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             render_row.enabled = not settings.is_running and bool(settings.animation_collection_name)
             render_row.operator("object.polygroups_render_turnaround_animation",
                                 text=t(context, "animation_render"), icon="RENDER_ANIMATION")
+            column.prop(settings, "animation_views_image_format")
             views_row = column.row(align=True)
             views_row.enabled = not settings.is_running and bool(settings.animation_collection_name)
             views_row.operator("object.polygroups_render_turnaround_views",

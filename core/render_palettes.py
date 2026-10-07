@@ -1,5 +1,7 @@
-"""Editable scene palette library and portable JSON exchange."""
+"""Shared, auto-saved palette catalog with scene mirrors and JSON exchange."""
 import json
+import os
+from pathlib import Path
 import bpy
 import bpy.utils.previews
 from bpy.app.handlers import persistent
@@ -49,19 +51,91 @@ def apply_line_color(context, rgba):
             area.tag_redraw()
 
 
+LIBRARY_PATH = Path(__file__).resolve().parents[1] / 'user_data' / 'color_palettes.json'
+_syncing = False
+_pending_scene = None
+_save_error = ''
+
+
+def palette_changed(self, context):
+    global _pending_scene
+    if _syncing:
+        return
+    scene = self.id_data
+    if isinstance(scene, bpy.types.Scene):
+        _pending_scene = scene.name
+        if not bpy.app.timers.is_registered(flush_library):
+            bpy.app.timers.register(flush_library, first_interval=0.3)
+
+
+def populate_library(settings, groups):
+    settings.palette_groups.clear()
+    for source_group in groups:
+        group = settings.palette_groups.add()
+        group.name = source_group['name']
+        for source_palette in source_group['palettes']:
+            palette = group.palettes.add()
+            palette.name = source_palette['name']
+            for source_color in source_palette['colors']:
+                color = palette.colors.add()
+                color.name, color.color = source_color['name'], source_color['color']
+    settings.palette_group_index = min(settings.palette_group_index, max(0, len(groups) - 1))
+    settings.palette_library_initialized = True
+
+
+def save_library(settings):
+    global _syncing, _save_error, _pending_scene
+    groups = library_data(settings)
+    try:
+        LIBRARY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary = LIBRARY_PATH.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps({'version': 1, 'groups': groups}, ensure_ascii=False, indent=2), encoding='utf-8')
+        os.replace(temporary, LIBRARY_PATH)
+        _save_error = ''
+    except OSError as error:
+        _save_error = str(error)
+        print('Palette library save failed:', error)
+        return
+    _pending_scene = None
+    _syncing = True
+    try:
+        for scene in bpy.data.scenes:
+            other = scene.polygroups_render_settings
+            if other.as_pointer() != settings.as_pointer():
+                populate_library(other, groups)
+    finally:
+        _syncing = False
+
+
+@persistent
+def flush_library(*args):
+    global _pending_scene
+    if _pending_scene:
+        scene = bpy.data.scenes.get(_pending_scene)
+        _pending_scene = None
+        if scene:
+            save_library(scene.polygroups_render_settings)
+
+
+def stop_library():
+    flush_library()
+    if bpy.app.timers.is_registered(flush_library):
+        bpy.app.timers.unregister(flush_library)
+
+
 class RenderPaletteColor(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(default="Color")
-    color: bpy.props.FloatVectorProperty(size=4, subtype="COLOR", min=0, max=1, default=(1, 1, 1, 1))
+    name: bpy.props.StringProperty(default="Color", update=palette_changed)
+    color: bpy.props.FloatVectorProperty(size=4, subtype="COLOR", min=0, max=1, default=(1, 1, 1, 1), update=palette_changed)
 
 
 class RenderPalette(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(default="Palette")
+    name: bpy.props.StringProperty(default="Palette", update=palette_changed)
     colors: bpy.props.CollectionProperty(type=RenderPaletteColor)
     color_index: bpy.props.IntProperty(default=0, min=0)
 
 
 class RenderPaletteGroup(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(default="Group")
+    name: bpy.props.StringProperty(default="Group", update=palette_changed)
     palettes: bpy.props.CollectionProperty(type=RenderPalette)
     palette_index: bpy.props.IntProperty(default=0, min=0)
 
@@ -80,19 +154,49 @@ def srgb_to_linear(value):
 
 @persistent
 def ensure_libraries(*args):
-    for scene in bpy.data.scenes:
-        settings = scene.polygroups_render_settings
-        if settings.palette_library_initialized:
-            continue
-        group = settings.palette_groups.add()
-        group.name = "Example Collection"
-        palette = group.palettes.add()
-        palette.name = "Primary Colors"
-        for name, code in EXAMPLE:
-            color = palette.colors.add()
-            color.name = name
-            color.color = tuple(srgb_to_linear(int(code[i:i+2], 16) / 255) for i in (0, 2, 4)) + (1,)
-        settings.palette_library_initialized = True
+    global _syncing, _save_error
+    if _syncing:
+        return
+    flush_library()
+    _syncing = True
+    try:
+        if LIBRARY_PATH.exists():
+            document = json.loads(LIBRARY_PATH.read_text(encoding='utf-8'))
+            if document.get('version') != 1 or not isinstance(document.get('groups'), list):
+                raise ValueError('Unsupported palette catalog')
+            groups = document['groups']
+            # Validate before clearing any scene mirror.
+            for group in groups:
+                if not isinstance(group['name'], str) or not isinstance(group['palettes'], list):
+                    raise ValueError('Invalid palette group')
+                for palette in group['palettes']:
+                    if not isinstance(palette['name'], str) or not isinstance(palette['colors'], list):
+                        raise ValueError('Invalid palette')
+                    for color in palette['colors']:
+                        if (not isinstance(color['name'], str) or len(color['color']) != 4
+                                or not all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in color['color'])):
+                            raise ValueError('Invalid palette color')
+        else:
+            # Migrate the currently loaded file once. Afterwards the external
+            # catalog is authoritative; opening an older blend cannot replace it.
+            groups = []
+            for scene in bpy.data.scenes:
+                for group in library_data(scene.polygroups_render_settings):
+                    if group not in groups:
+                        groups.append(group)
+            if not groups:
+                groups = [{'name': 'Example Collection', 'palettes': [{'name': 'Primary Colors',
+                    'colors': [{'name': name, 'color': [srgb_to_linear(int(code[i:i+2], 16)/255) for i in (0,2,4)] + [1]}
+                               for name, code in EXAMPLE]}]}]
+        for scene in bpy.data.scenes:
+            populate_library(scene.polygroups_render_settings, groups)
+        if not LIBRARY_PATH.exists() and bpy.data.scenes:
+            save_library(bpy.data.scenes[0].polygroups_render_settings)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        _save_error = str(error)
+        print('Palette library load failed:', error)
+    finally:
+        _syncing = False
 
 
 def selected(settings):
@@ -109,7 +213,9 @@ class RENDER_OT_palette_edit(bpy.types.Operator):
     action: bpy.props.EnumProperty(items=[(s, s, "") for s in ("ADD_GROUP", "REMOVE_GROUP", "ADD_PALETTE", "REMOVE_PALETTE", "ADD_COLOR", "REMOVE_COLOR", "CAPTURE", "APPLY")])
 
     def execute(self, context):
-        ensure_libraries()
+        flush_library()
+        if not context.scene.polygroups_render_settings.palette_library_initialized:
+            ensure_libraries()
         settings = context.scene.polygroups_render_settings
         group, palette, color = selected(settings)
         action = self.action
@@ -137,6 +243,8 @@ class RENDER_OT_palette_edit(bpy.types.Operator):
             apply_line_color(context, color.color)
         else:
             return {"CANCELLED"}
+        if action != "APPLY":
+            save_library(settings)
         return {"FINISHED"}
 
 
@@ -194,6 +302,7 @@ class RENDER_OT_palette_import(bpy.types.Operator, ImportHelper):
                     color = palette.colors.add()
                     color.name, color.color = source_color["name"], source_color["color"]
         settings.palette_group_index = max(0, len(settings.palette_groups) - 1)
+        save_library(settings)
         return {"FINISHED"}
 
 
@@ -213,6 +322,8 @@ def draw_library(layout, settings):
         layout.label(text="Initializing palette library...")
         return
     group, palette, color = selected(settings)
+    if _save_error:
+        layout.label(text="Catalog save/load error: " + _save_error, icon="ERROR")
     layout.label(text="Groups", icon="FILE_FOLDER")
     row = layout.row()
     row.template_list("UI_UL_list", "render_palette_groups", settings, "palette_groups", settings, "palette_group_index", rows=2)
@@ -276,7 +387,9 @@ class RENDER_OT_palette_popup(bpy.types.Operator):
     bl_options = {"INTERNAL"}
 
     def invoke(self, context, event):
-        ensure_libraries()
+        flush_library()
+        if not context.scene.polygroups_render_settings.palette_library_initialized:
+            ensure_libraries()
         return context.window_manager.invoke_popup(self, width=300)
 
     def execute(self, context):
