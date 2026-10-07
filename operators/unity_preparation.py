@@ -1,6 +1,7 @@
 """Unity naming and self-contained per-mesh FBX exports."""
 import os
 import re
+from contextlib import ExitStack
 from array import array
 
 import bpy
@@ -243,6 +244,7 @@ class UnityRenderProgressMixin:
         self._settings = self._scene.polygroups_render_settings
         self._window_manager = context.window_manager
         self._area = context.area
+        self._cursor_status = 'Export' if self.bl_idname == 'object.polygroups_export_unity' else 'Render'
         self._region = next((r for r in self._area.regions if r.type == 'WINDOW'), None)
         self._mouse_x = event.mouse_x - self._region.x if self._region else 32
         self._mouse_y = event.mouse_y - self._region.y if self._region else 32
@@ -469,16 +471,31 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                     # Unity Prepare assigns one common material and texture set to all LODs.
                     if export_format == "FBX":
                         save_textures(lods[0], folder)
+                    combined = export_format == 'GLTF' and settings.unity_gltf_mode == 'COMBINED'
+                    combined_path = os.path.join(folder, _safe_path_token(asset_name) + '.gltf')
+                    if combined:
+                        bpy.ops.object.select_all(action='DESELECT')
+                        for obj in lods:
+                            obj.select_set(True)
+                        context.view_layer.objects.active = lods[0]
+                        with ExitStack() as stack:
+                            for obj in lods:
+                                stack.enter_context(_export_at_world_origin(obj, context.view_layer))
+                            result = _export_gltf_asset(combined_path, True)
+                        if 'FINISHED' not in result:
+                            raise RuntimeError(f'GLTF export failed: {asset_name}')
                     mesh_info = []
                     for obj in lods:
                         bpy.ops.object.select_all(action="DESELECT")
                         obj.select_set(True)
-                        filepath = os.path.join(folder, _safe_path_token(obj.name) + (".fbx" if export_format == "FBX" else ".gltf"))
+                        filepath = combined_path if combined else os.path.join(folder, _safe_path_token(obj.name) + (".fbx" if export_format == "FBX" else ".gltf"))
                         use_rig = rig is not None and obj.name == asset_name
                         with _export_at_world_origin(obj, context.view_layer, rig if use_rig else None):
-                            if export_format == "GLTF":
+                            if combined:
+                                result = {'FINISHED'}
+                            elif export_format == "GLTF":
                                 context.view_layer.objects.active = obj
-                                result = _export_gltf_asset(filepath, True)
+                                result = _export_gltf_asset(filepath, False)
                             elif use_rig:
                                 rig.select_set(True)
                                 context.view_layer.objects.active = rig

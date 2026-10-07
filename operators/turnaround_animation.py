@@ -82,8 +82,11 @@ def _draw_animation_cursor():
     region = bpy.context.region
     if region is None:
         return
-    x = min(max(task._mouse_x + 18, 8), max(8, region.width - 308))
-    y = min(max(task._mouse_y - 67, 8), max(8, region.height - 66))
+    cursor_status = getattr(task, '_cursor_status', 'Render')
+    blf.size(0, 12)
+    width, height = blf.dimensions(0, cursor_status)
+    x = min(max(task._mouse_x + 18, 8), max(8, region.width - width - 8))
+    y = min(max(task._mouse_y - 24, 8), max(8, region.height - height - 8))
     factor = min(1.0, max(0.0, task._settings.animation_progress / 100.0))
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
 
@@ -98,16 +101,12 @@ def _draw_animation_cursor():
 
     gpu.state.blend_set("ALPHA")
     try:
-        rectangle(x, y, 300, 62, (0.06, 0.06, 0.07, 0.88))
-        rectangle(x + 7, y + 7, 286, 7, (0.25, 0.25, 0.27, 1.0))
-        if factor:
-            rectangle(x + 7, y + 7, 286 * factor, 7, (0.44, 0.30, 0.83, 1.0))
-        blf.size(0, 12)
-        blf.position(0, x + 7, y + 20, 0)
+        blf.position(0, x + 1, y - 1, 0)
+        blf.color(0, 0.0, 0.0, 0.0, 1.0)
+        blf.draw(0, cursor_status)
+        blf.position(0, x, y, 0)
         blf.color(0, 1.0, 1.0, 1.0, 1.0)
-        blf.draw(0, f"Render {task._frames_done}/{task._total_frames}  {factor * 100:.0f}%")
-        blf.position(0, x + 7, y + 42, 0)
-        blf.draw(0, task._settings.animation_status)
+        blf.draw(0, cursor_status)
         rectangle(16, 16, 360, 62, (0.06, 0.06, 0.07, 0.88))
         rectangle(24, 24, 344, 7, (0.25, 0.25, 0.27, 1.0))
         if factor:

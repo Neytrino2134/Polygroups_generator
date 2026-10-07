@@ -76,13 +76,13 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     assert (folder / ('Konduktor_01.png')).is_file()
     assert not list(folder.glob('*AlphaMap*.png'))
     gltf_folder = folder.parent / 'GLTF'
-    gltf = json.loads((gltf_folder / (obj.name + '.gltf')).read_text(encoding='utf-8'))
+    gltf = json.loads((gltf_folder / 'Konduktor_01.gltf').read_text(encoding='utf-8'))
     assert gltf.get('buffers') and gltf.get('images')
     assert all(resource['uri'].startswith('data:') for category in ('buffers','images') for resource in gltf[category])
     assert not list(gltf_folder.glob('*.bin')) and not list(gltf_folder.glob('*.png'))
     assert not (gltf_folder / 'Textures').exists()
     gltf_info = json.loads((gltf_folder / 'MeshInfo.json').read_text(encoding='utf-8'))
-    assert gltf_info['meshes'][0]['file'] == obj.name + '.gltf'
+    assert gltf_info['meshes'][0]['file'] == 'Konduktor_01.gltf'
     settings.unity_export_gltf = False
     from polygroups_generator.operators.unity_preparation import texture_nodes
     assert any(node.image == alpha_image for node in texture_nodes(obj.active_material.node_tree))
@@ -95,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     assert bpy.ops.object.polygroups_export_unity() == {'FINISHED'}
     gltf_only = Path(settings.unity_export_directory) / 'Konduktor_01'
     assert not (gltf_only / 'FBX').exists()
-    assert (gltf_only / 'GLTF' / (obj.name + '.gltf')).is_file()
+    assert (gltf_only / 'GLTF' / 'Konduktor_01.gltf').is_file()
     assert tuple(obj.location) == (3.0, 4.0, 5.0)
     settings.unity_export_directory = export_directory
     settings.unity_export_fbx = True

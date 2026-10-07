@@ -1961,7 +1961,11 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unity_export_directory: bpy.props.StringProperty(name="Directory", subtype="DIR_PATH", default="//!Unity")
     unity_export_overwrite: bpy.props.BoolProperty(name="Overwrite Existing", default=False)
     unity_export_fbx: bpy.props.BoolProperty(name="FBX", default=True)
-    unity_export_gltf: bpy.props.BoolProperty(name="GLTF", description="Single .gltf file with embedded textures and binary data", default=False)
+    unity_export_gltf: bpy.props.BoolProperty(name="GLTF", default=False)
+    unity_gltf_mode: bpy.props.EnumProperty(name="GLTF Mode", items=(
+        ("COMBINED", "All LODs in One GLTF", "One embedded GLTF containing all selected asset LODs and one shared texture set"),
+        ("SHARED", "Separate LODs / Shared Textures", "Separate GLTF and BIN files for LODs referencing one common Textures folder")),
+        default="COMBINED")
     unity_export_all_renders: bpy.props.BoolProperty(name="Export All Renders",
         description="Render each selected LOD and the asset turnaround into the Unity asset folder", default=False)
     unity_export_info_format: bpy.props.EnumProperty(

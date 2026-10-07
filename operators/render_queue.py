@@ -15,7 +15,7 @@ class RenderQueueCursor(RemeshCursor):
     def __init__(self, context):
         super().__init__(context)
         self.primary_in_corner = True
-        self.status_line = "Rendering..."
+        self.status_line = "Render"
 
     def draw(self):
         settings = bpy.context.scene.polygroups_render_settings

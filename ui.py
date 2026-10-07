@@ -3772,6 +3772,8 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             formats = column.row(align=True)
             formats.prop(settings, "unity_export_fbx")
             formats.prop(settings, "unity_export_gltf")
+            if settings.unity_export_gltf:
+                column.prop(settings, "unity_gltf_mode")
             column.prop(settings, "unity_export_all_renders")
             rs = context.scene.polygroups_render_settings
             if settings.unity_export_all_renders:
