@@ -164,3 +164,11 @@ are suppressed. Stale hover descriptions are not drawn after layout changes.
 CUSTOM_UI_BLENDER_TESTS_PASSED includes above-control, viewport-edge and cursor
 exclusion checks at scales 1, 1.5 and 2. CUSTOM_UI_TOOLTIP_TESTS_PASSED verifies
 actual GPU tooltip placement after simulated hover in docked and floating modes.
+
+## Docked top clearance (2026-10-09)
+
+Docked UI Panel reserves 100 physical pixels at the top of the WINDOW region
+for viewport toolbars and overlays. Its available height is reduced accordingly;
+floating geometry is unchanged. Very small regions clamp safely. The real GUI
+docking regression passed, including 100 px geometry checks before and after
+maximize/restore, Detach/Dock clicks and free dragging.

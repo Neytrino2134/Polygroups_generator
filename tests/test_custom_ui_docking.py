@@ -75,18 +75,18 @@ def tick():
                 assert prefs.ui_mode=='UI_PANEL' and prefs.ui_panel_docked
                 x,top,width,height=s.geometry(r)
                 assert abs(x+width-(r.width-8))<.01
-                assert height==r.height-16
+                assert top==r.height-100 and height==r.height-108
                 assert not any(h[1][0] in {'move','resize'} for h in s.hits)
                 for rw,rh in ((400,300),(1400,900)):
                     x,top,width,height=s.geometry(SimpleNamespace(width=rw,height=rh))
-                    assert abs(x+width-(rw-8))<.01 and top==rh-8
+                    assert abs(x+width-(rw-8))<.01 and top==rh-100
                 bpy.ops.screen.screen_full_area(use_hide_panels=False)
                 state['step']=4
                 return .6
             if step==4:
                 assert prefs.ui_panel_docked and s is state['session']
                 x,top,width,height=s.geometry(r)
-                assert abs(x+width-(r.width-8))<.01
+                assert abs(x+width-(r.width-8))<.01 and top==r.height-100
                 bpy.ops.screen.screen_full_area(use_hide_panels=False)
                 state['step']=5
                 return .6
