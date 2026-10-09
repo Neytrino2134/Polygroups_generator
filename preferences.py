@@ -437,7 +437,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     custom_ui_scale: bpy.props.FloatProperty(name='Custom UI Scale', default=1.0, min=.75, max=2,
                                              update=_update_custom_interface)
     custom_ui_accent: bpy.props.FloatVectorProperty(name='Accent', subtype='COLOR', size=3,
-        default=(.031, .659, .961), min=0, max=1, update=_update_custom_interface)
+        default=(0.0, .835, .961), min=0, max=1, update=_update_custom_interface)
     custom_ui_brightness: bpy.props.FloatProperty(name='Surface Brightness', default=1, min=.6, max=1.5,
                                                   update=_update_custom_interface)
     custom_ui_rounding: bpy.props.FloatProperty(name='Corner Rounding', default=8, min=0, max=16,

@@ -35,7 +35,7 @@ def edit_key(edit, event, clipboard):
     elif insert and not event.alt and (not event.ctrl or event.type == 'V'):
         if edit['all']:
             text, cursor = '', 0
-        insert = insert.replace('\r','').replace('\n',' ')
+        insert = insert.replace('\r\n','\n').replace('\r','\n')
         edit.update(text=text[:cursor]+insert+text[cursor:], cursor=cursor+len(insert), all=False)
     return 'wait'
 

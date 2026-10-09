@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import bpy
 import addon_utils
+bpy.context.preferences.use_preferences_save = False
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
@@ -87,7 +88,7 @@ def run():
         # Stale / arbitrary commands cannot mutate RNA.
         session.handle(dict(type='action', id=item['id'], revision='stale', value=previous))
         assert getattr(binding[1], binding[2]) == (not previous)
-        group = next(g for g in groups if g['group'].endswith('show_selection_group'))
+        group = next(g for g in groups if g['group'].endswith('topic_seam_prep_0'))
         session.handle(dict(type='select', **group))
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')

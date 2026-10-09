@@ -1,15 +1,19 @@
 """Actual Blender event simulation; use --enable-event-simulate, without -b."""
 from pathlib import Path
 import sys
+import os
 import traceback
 import time
 import bpy
 import addon_utils
 import bmesh
+bpy.context.preferences.use_preferences_save = False
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT.parent))
-LOG = ROOT / 'docs/custom_ui/input_test.log'
+OUT=Path(os.environ.get('AIRETOPO_UI_VALIDATION_OUTPUT',ROOT/'docs/custom_ui'))
+OUT.mkdir(parents=True,exist_ok=True)
+LOG = OUT / 'input_test.log'
 LOG.write_text('Starting\n')
 addon_utils.enable(ROOT.name,default_set=True)
 from polygroups_generator.custom_ui import lifecycle
@@ -125,6 +129,25 @@ def run():
     assert getattr(binding[1],binding[2])==expected
     s.query=''
     LOG.write_text(LOG.read_text()+'Custom enum dropdown passed\n')
+    # Native Save As handoff opens Blender's file browser and can be cancelled
+    # without saving anything or losing the originating custom session.
+    s.query='Save Project'
+    s.refresh(bpy.context)
+    area.tag_redraw()
+    yield .5
+    hit=binding_hit(s,lambda b:b[0]=='operator' and b[1]=='object.polygroups_save_blend_file_as')
+    click(hit)
+    yield .8
+    browsers=[w for w in bpy.context.window_manager.windows if any(a.type=='FILE_BROWSER' for a in w.screen.areas)]
+    assert browsers, 'Save As did not open the native Blender file browser: '+s.note
+    browser=browsers[0]
+    browser.event_simulate(type='ESC',value='PRESS',x=100,y=100)
+    browser.event_simulate(type='ESC',value='RELEASE',x=100,y=100)
+    yield .8
+    assert s.key in lifecycle.SESSIONS and not s.closed
+    assert not bpy.data.filepath
+    s.query=''
+    LOG.write_text(LOG.read_text()+'Native file browser handoff/cancel passed\n')
     # Repeated mode changes leave one modal session and no duplicate handlers.
     for _ in range(3):
         prefs.ui_mode='CLASSIC'
@@ -140,8 +163,10 @@ def run():
 iterator=run()
 def tick():
     try:
-        with bpy.context.temp_override(window=window,area=area,region=region):
-            return next(iterator)
+        if area in window.screen.areas[:]:
+            with bpy.context.temp_override(window=window,area=area,region=region):
+                return next(iterator)
+        return next(iterator)
     except StopIteration:
         addon_utils.disable(ROOT.name)
         bpy.ops.wm.quit_blender()

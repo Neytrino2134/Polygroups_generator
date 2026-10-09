@@ -1,13 +1,17 @@
 """GUI lifecycle: per-area sessions, file load, cleanup and same-module reload."""
 from pathlib import Path
 import sys
+import os
 import tempfile
 import traceback
 import bpy
 import addon_utils
+bpy.context.preferences.use_preferences_save = False
 
 ROOT=Path(__file__).resolve().parents[1]
-LOG=ROOT/'docs/custom_ui/lifecycle_test.log'
+OUT=Path(os.environ.get('AIRETOPO_UI_VALIDATION_OUTPUT',ROOT/'docs/custom_ui'))
+OUT.mkdir(parents=True,exist_ok=True)
+LOG=OUT/'lifecycle_test.log'
 LOG.write_text('Starting\n')
 sys.path.insert(0,str(ROOT.parent))
 addon_utils.enable(ROOT.name,default_set=True)

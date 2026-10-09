@@ -4,8 +4,10 @@ import io
 import json
 from pathlib import Path
 import sys
+import os
 import addon_utils
 import bpy
+bpy.context.preferences.use_preferences_save = False
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
@@ -86,10 +88,13 @@ with bpy.context.temp_override(window=window, area=area, region=region), context
         prefs.custom_ui_scale = scale
         x, top, width, h = session.geometry(region)
         assert width <= region.width and h <= region.height
+        for small in (SimpleNamespace(width=400,height=250),SimpleNamespace(width=128,height=96)):
+            x,top,width,h=session.geometry(small)
+            assert x>=0 and top<=small.height and x+width<=small.width and top-h>=0
     bpy.ops.wm.airetopo_reset_custom_appearance()
     assert prefs.custom_ui_scale == 1
 assert 'failed to draw' not in errors.getvalue(), errors.getvalue()
-out = ROOT / 'docs' / 'custom_ui'
+out = Path(os.environ.get('AIRETOPO_UI_VALIDATION_OUTPUT',ROOT / 'docs' / 'custom_ui'))
 out.mkdir(parents=True, exist_ok=True)
 (out / 'control_inventory.json').write_text(json.dumps(dict(baseline='b67e6c8',runtime=records,static_calls=collect(ROOT)), indent=2, ensure_ascii=False, default=lambda value: sorted(value) if isinstance(value,set) else str(value)), encoding='utf8')
 addon_utils.disable(ROOT.name)

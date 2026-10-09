@@ -4,6 +4,7 @@ import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
 from . import theme as T
+from . import icons
 
 _shader = None
 _geometry = {}
@@ -13,6 +14,7 @@ def clear():
     global _shader
     _shader = None
     _geometry.clear()
+    icons.clear()
 
 
 def rect(x, y, w, h, color, radius=6):
@@ -149,7 +151,9 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
             text(node['text'],x+12*scale,top-25*scale,14*scale,T.accent(prefs),width-24*scale)
             top -= 38*scale
         if kind == 'group':
-            text(('▾  ' if node['opened'] or query else '▸  ') + node['text'], x+12*scale, top-25*scale, 14*scale, T.TEXT, width-24*scale)
+            text('▾' if node['opened'] or query else '▸',x+10*scale,top-25*scale,12*scale,T.MUTED)
+            icons.draw(node.get('icon',''),x+26*scale,top-29*scale,18*scale,accent)
+            text(node['text'], x+52*scale, top-25*scale, 14*scale, T.TEXT, width-64*scale)
             session.hit((x, top-38*scale, width, 38*scale), ('binding', node['id']), node['text'])
             if not node['opened'] and not query:
                 return h
@@ -191,15 +195,20 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
         rect(x, bottom+4*scale, width*min(1, max(0, node['value'])), h-8*scale, accent)
         text(label, x+10*scale, top-23*scale, 12*scale, color, width-20*scale)
         return h
-    boolean = kind == 'property' and node.get('type') == 'BOOLEAN'
+    boolean = kind == 'property' and node.get('type') == 'BOOLEAN' and not node.get('array')
     picked = node.get('depress', False)
     if boolean:
         rect(x+4*scale, bottom+10*scale, 34*scale, 18*scale, accent if node['value'] else T.BORDER, 9*scale)
         rect(x+(21 if node['value'] else 6)*scale, bottom+12*scale, 14*scale, 14*scale, T.TEXT, 7*scale)
         text(label or node.get('property', ''), x+46*scale, top-23*scale, 12*scale, color, width-50*scale)
     else:
-        primary = kind=='button' and enabled and any(word in label.casefold() for word in ('save ', 'start ', 'bake ', 'calculate ', 'generate ', 'import ', 'remesh', 'unwrap'))
-        rect(x, bottom+2*scale, width, h-4*scale, accent if picked or primary else T.surface(T.RAISED if hot else T.SURFACE, prefs), prefs.custom_ui_rounding*scale)
+        operator = node['id'].rsplit('/',1)[-1].split(':')[0]
+        intent = label.casefold()+' '+operator.casefold()
+        primary = (kind=='button' and enabled
+                   and any(word in intent for word in ('save', 'start', 'bake', 'calculate', 'generate', 'import', 'remesh', 'unwrap'))
+                   and not any(word in intent for word in ('cancel','undo','delete','save as'))
+                   and not operator.endswith('_as'))
+        rect(x, bottom+2*scale, width, h-4*scale, T.BLUE if primary else accent if picked else T.surface(T.RAISED if hot else T.SURFACE, prefs), prefs.custom_ui_rounding*scale)
         rect(x, bottom+2*scale, 2*scale, h-4*scale, accent if hot or picked else T.BORDER, 0)
         if kind == 'property':
             rendered = ('••••••' if node.get('secret') else value_text(node))
@@ -228,9 +237,14 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
                      'PLAY':'▶','PAUSE':'Ⅱ','HIDE_ON':'◉','HIDE_OFF':'○','XRAY':'▣'}.get(node.get('icon'),'⋯')
             text(label or glyph, x+10*scale, top-23*scale, 12*scale, T.BACKGROUND if picked or primary else color, width-20*scale)
     if enabled:
-        session.hit((x, bottom, width, h), ('binding', node['id']), node.get('description') or label, node['id'])
+        tip=node.get('description') or label
+        if kind=='property' and not node.get('secret') and node.get('type')=='STRING':
+            tip += '\n'+value_text(node)
+        session.hit((x, bottom, width, h), ('binding', node['id']), tip, node['id'])
         if slider_node(node):
             session.hit((x+10*scale,bottom+3*scale,width-20*scale,12*scale),('slider',node['id']),node.get('description',''),node['id'])
+    else:
+        session.hit((x,bottom,width,h),('disabled',),node.get('description') or label,node['id'])
     return h
 
 
@@ -248,14 +262,17 @@ def draw(session, region):
     try:
         gpu.state.blend_set('ALPHA')
         rect(x, bottom, width, h, T.surface(T.BACKGROUND, prefs), prefs.custom_ui_rounding*scale)
-        text('AI Retopo Toolkit', x+18*scale, top-29*scale, 17*scale)
+        icons.draw('LOGO',x+14*scale,top-33*scale,25*scale,T.accent(prefs))
+        text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, width=width-200*scale)
+        if width>=570*scale:
+            text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.MUTED)
         for offset, label, action in ((116, 'Classic', 'classic'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
             text(label, x+width-offset*scale, top-28*scale, 12*scale, T.MUTED)
             session.hit((x+width-offset*scale-4*scale, top-40*scale, 40*scale, 34*scale), (action,), label)
         session.hit((x, top-42*scale, width-100*scale, 42*scale), ('move',), 'Drag to move')
-        if session.collapsed:
+        if session.collapsed or h<190*scale:
             return
-        nav = 220*scale if width >= 670*scale else 0
+        nav = 220*scale if width >= 670*scale and h>=620*scale else 0
         content_x = x+nav+14*scale
         content_w = width-nav-28*scale
         content_top = top-102*scale
@@ -268,13 +285,15 @@ def draw(session, region):
                 if index == session.section and not session.show_header:
                     rect(x+8*scale, yt-30*scale, nav-16*scale, 32*scale, T.SELECTED)
                     rect(x+8*scale, yt-30*scale, 3*scale, 32*scale, T.accent(prefs), 1)
-                text(title, x+18*scale, yt-19*scale, 12*scale, T.TEXT, nav-30*scale)
+                icons.draw(session.icons[index],x+17*scale,yt-23*scale,19*scale,T.accent(prefs) if index==session.section else T.MUTED)
+                text(title, x+44*scale, yt-19*scale, 12*scale, T.TEXT, nav-54*scale)
                 session.hit((x+8*scale, yt-30*scale, nav-16*scale, 32*scale), ('section', index), title)
             text('Session / Settings', x+18*scale, top-78*scale, 12*scale, T.accent(prefs))
             session.hit((x+8*scale, top-90*scale, nav-16*scale, 32*scale), ('header',), 'Autosave, restart and settings')
         title = ('Search Results' if session.query and not session.show_header else
                  'Session / Settings' if session.show_header else session.titles[session.section])
-        text(title, content_x, top-66*scale, 17*scale, T.TEXT, content_w-155*scale)
+        icons.draw(session.icons[session.section] if not session.show_header else 'PREFERENCES',content_x,top-74*scale,29*scale,T.accent(prefs))
+        text(title, content_x+42*scale, top-66*scale, 17*scale, T.TEXT, content_w-197*scale)
         if not nav:
             session.hit((content_x, top-78*scale, content_w-150*scale, 32*scale), ('sections',), 'Choose workflow section')
         for offset, label, action in ((145, 'Search', 'search'), (82, 'All', 'expand'), (40, 'Fold', 'fold')):
@@ -301,7 +320,7 @@ def draw(session, region):
         session.hit((x+width-22*scale, bottom, 22*scale, 22*scale), ('resize',), 'Drag to resize')
         text('◢', x+width-18*scale, bottom+6*scale, 12*scale, T.MUTED)
         # Ignore controls clipped outside the content viewport.
-        session.hits = [hit for hit in session.hits if hit[1][0] != 'binding' or (hit[0][1] >= view_bottom and hit[0][1]+hit[0][3] <= content_top)]
+        session.hits = [hit for hit in session.hits if hit[1][0] not in {'binding','slider','disabled'} or (hit[0][1] >= view_bottom and hit[0][1]+hit[0][3] <= content_top)]
         if session.dropdown:
             options = session.dropdown['node']['options']
             offset = session.dropdown['offset']
@@ -323,8 +342,23 @@ def draw(session, region):
             tw = min(420*scale, width-30*scale)
             tx = min(max(x+10*scale, tx), x+width-tw-10*scale)
             ty = max(bottom+30*scale, min(top-50*scale, ty))
-            rect(tx, ty-30*scale, tw, 30*scale, T.RAISED)
-            text(session.tooltip, tx+10*scale, ty-20*scale, 11*scale, T.TEXT, tw-20*scale)
+            lines=[]
+            blf.size(0,11*scale)
+            for source_line in session.tooltip.splitlines():
+                line=''
+                for char in source_line:
+                    if blf.dimensions(0,line+char)[0]>tw-20*scale:
+                        lines.append(line)
+                        line=''
+                    line+=char
+                if line:
+                    lines.append(line)
+            lines=lines[:8]
+            tip_h=(len(lines)*15+14)*scale
+            ty=max(bottom+tip_h+10*scale,ty)
+            rect(tx,ty-tip_h,tw,tip_h,T.RAISED)
+            for index,line in enumerate(lines):
+                text(line,tx+10*scale,ty-(index*15+20)*scale,11*scale,T.TEXT)
     finally:
         gpu.state.scissor_set(*scissor)
         gpu.state.scissor_test_set(scissor_test)

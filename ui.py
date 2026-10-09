@@ -633,7 +633,7 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         layout = self.layout
         visible_layout = layout
         visibility = context.scene.airetopo_panel_visibility_settings
-        search_query = visibility.panel_search.strip()
+        search_query = '' if _CUSTOM_HEADER_ONLY else visibility.panel_search.strip()
         if search_query:
             # Search results replace unrelated header/status UI while the real
             # search field is drawn directly above the first matching section.

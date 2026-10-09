@@ -61,8 +61,8 @@ class Session:
 
     def geometry(self, region):
         s = self.scale
-        width = min(self.width*s, max(180, region.width-16))
-        h = min((44 if self.collapsed else self.height)*s, max(44*s, region.height-16))
+        width = min(self.width*s, max(1, region.width-16))
+        h = min((44 if self.collapsed else self.height)*s, max(1, region.height-16))
         x = min(max(8, self.x*s), max(8, region.width-width-8))
         top = min(region.height-8, max(h+8, region.height-self.y*s))
         return x, top, width, h
@@ -85,6 +85,8 @@ class Session:
             self.edit = self.dropdown = self.slider = None
             self.scroll = 0
         self.titles = [f'{p.bl_order:02d} | {t(context, p.bl_text_key)}' for p in ui.SECTION_PANEL_CLASSES]
+        self.icons = [p.bl_icon for p in ui.SECTION_PANEL_CLASSES]
+        self.version = ui.addon_version_string()
         if self.show_header:
             model = Layout(key='global')
             old = ui._CUSTOM_CAPTURING, ui._CUSTOM_HEADER_ONLY
@@ -295,6 +297,8 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
         if s.closed or s.key not in SESSIONS or not _registered or preferences(context).ui_mode != 'CUSTOM':
             self.cancel(context)
             return {'CANCELLED'}
+        if getattr(s.window.screen,'is_temporary',False):
+            return {'PASS_THROUGH'}
         mx, my = event.mouse_x-s.region.x, event.mouse_y-s.region.y
         if s.edit:
             action = edit_key(s.edit, event, context.window_manager)
@@ -395,6 +399,10 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                     node = next(n for n in walk(s.model.node) if n['id'] == action[1])
                     s.slider = dict(id=node['id'], x=hit[0][0], width=hit[0][2],
                         min=node['soft_min'], max=node['soft_max'], type=node['type'], value=node['value'])
+                    fraction = max(0,min(1,(mx-hit[0][0])/hit[0][2]))
+                    s.slider['value'] = node['soft_min']+fraction*(node['soft_max']-node['soft_min'])
+                    if node['type']=='INT':
+                        s.slider['value'] = round(s.slider['value'])
                 elif action[0] == 'section':
                     s.select(action[1])
                     s.refresh(context)
@@ -492,6 +500,9 @@ def _tick():
         return .5
     live = set()
     for window in bpy.context.window_manager.windows:
+        if getattr(window.screen,'is_temporary',False):
+            live.update(key for key,s in SESSIONS.items() if s.window==window)
+            continue
         for area in window.screen.areas:
             if area.type != 'VIEW_3D':
                 continue

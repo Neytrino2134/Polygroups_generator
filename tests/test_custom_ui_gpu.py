@@ -3,6 +3,7 @@
 Launch without --background. Captures the actual POST_PIXEL framebuffer.
 """
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -11,9 +12,10 @@ import tempfile
 import bpy
 import addon_utils
 import gpu
+bpy.context.preferences.use_preferences_save = False
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'docs' / 'custom_ui'
+OUT = Path(os.environ.get('AIRETOPO_UI_VALIDATION_OUTPUT',ROOT / 'docs' / 'custom_ui'))
 OUT.mkdir(parents=True, exist_ok=True)
 LOG = OUT / 'gpu_test.log'
 LOG.write_text('Starting\n')
@@ -81,6 +83,9 @@ def step():
             s = state['session']
             if s.closed:
                 raise RuntimeError('GPU renderer failed: '+s.note)
+            if state['results'] and state['step']<=14:
+                state['results'][-1]['draw_ms'] = getattr(s,'draw_ms',None)
+                state['results'][-1]['capture_ms'] = getattr(s,'capture_ms',None)
             index = state['step']-1
             if index < 13:
                 s.select(index)
@@ -112,6 +117,13 @@ def step():
                 state['step'] += 1
                 area.tag_redraw()
                 return 1
+            if index == 15:
+                state['idle_frames']=state['frames']
+                state['step']+=1
+                return 1.5
+            idle=state['frames']-state['idle_frames']
+            assert idle<=8, f'Unexpected continuous redraw: {idle} frames in 1.5 seconds'
+            state['results'][-1]['idle_redraws_in_1_5_seconds']=idle
             assert state['frames'] > 10
             assert s.hits
             prefs.ui_mode = 'CLASSIC'
