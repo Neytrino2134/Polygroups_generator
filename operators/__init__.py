@@ -1,4 +1,10 @@
+from .unity_export_workflow import (OBJECT_OT_polygroups_prepare_and_export_unity, OBJECT_OT_polygroups_save_unity_export_preset, OBJECT_OT_polygroups_load_unity_export_preset)
+from .smart_lods import OBJECT_OT_polygroups_smart_lods_prepare
+from .unity_preparation import OBJECT_OT_polygroups_unity_collection_step
+from .unity_preparation import OBJECT_OT_polygroups_fix_unity_textures
+from .unity_preparation import OBJECT_OT_polygroups_rename_unity_meshes
 from .unity_preparation import OBJECT_OT_polygroups_render_unity_turnaround
+from .unity_preparation import OBJECT_OT_polygroups_unity_random_color_tag
 from .unity_preparation import OBJECT_OT_polygroups_unity_index_step, OBJECT_OT_polygroups_render_unity_assets
 from .smart_lods import OBJECT_OT_polygroups_render_smart_lods
 from .render_textures import CLASSES as TEXTURE_RENDER_CLASSES
@@ -221,6 +227,7 @@ from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_w
 CLASSES = (
     OBJECT_OT_polygroups_render_unity_turnaround,
     OBJECT_OT_polygroups_unity_index_step,
+    OBJECT_OT_polygroups_unity_random_color_tag,
     OBJECT_OT_polygroups_render_unity_assets,
     OBJECT_OT_polygroups_render_smart_lods,
     *SELECTED_RENDER_CLASSES,
@@ -347,7 +354,13 @@ CLASSES = (
     OBJECT_OT_polygroups_rename_existing_fab,
     OBJECT_OT_polygroups_fab_variant_visibility,
     OBJECT_OT_polygroups_prepare_unity,
+    OBJECT_OT_polygroups_rename_unity_meshes,
+    OBJECT_OT_polygroups_fix_unity_textures,
+    OBJECT_OT_polygroups_unity_collection_step,
     OBJECT_OT_polygroups_export_unity,
+    OBJECT_OT_polygroups_prepare_and_export_unity,
+    OBJECT_OT_polygroups_save_unity_export_preset,
+    OBJECT_OT_polygroups_load_unity_export_preset,
     OBJECT_OT_polygroups_auto_prepare_fab_selection,
     OBJECT_OT_polygroups_auto_prepare_all_generated,
     OBJECT_OT_polygroups_stop_fab_prepare,
@@ -409,6 +422,7 @@ CLASSES = (
     OBJECT_OT_polygroups_delete_all_decimated,
     OBJECT_OT_polygroups_show_all_low,
     OBJECT_OT_polygroups_generate_smart_lods,
+    OBJECT_OT_polygroups_smart_lods_prepare,
     OBJECT_OT_polygroups_draw_cutter_plane,
     OBJECT_OT_polygroups_draw_cutter_grid,
     OBJECT_OT_polygroups_generate_cutter_grid,

@@ -6,7 +6,7 @@ import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
-from .render_queue import image_extension
+from .render_queue import image_extension, ensure_render_support_visible
 
 
 TURNAROUND_COLLECTION_PROP = "polygroups_turnaround_collection"
@@ -21,6 +21,38 @@ VIDEO_CONTAINERS = {
     "QUICKTIME": (".mov", "H264"),
 }
 _ACTIVE_RENDER_TASK = None
+
+
+def remove_turnaround_collection(context, collection_name):
+    """Remove only the tagged temporary rig and its unused generated data."""
+    collection = bpy.data.collections.get(collection_name)
+    if collection is None or not collection.get(TURNAROUND_COLLECTION_PROP):
+        return
+    source = next((bpy.data.objects.get(obj.get(TURNAROUND_SOURCE_PROP, ''))
+                   for obj in collection.objects if obj.get(TURNAROUND_SOURCE_PROP)), None)
+    for obj in list(collection.objects):
+        data = obj.data
+        label_materials = list(data.materials) if data and obj.get(TURNAROUND_LABEL_PROP) else []
+        action = obj.animation_data.action if obj.animation_data else None
+        bpy.data.objects.remove(obj, do_unlink=True)
+        if data is not None and data.users == 0:
+            if isinstance(data, bpy.types.Mesh):
+                bpy.data.meshes.remove(data)
+            elif isinstance(data, bpy.types.Curve):
+                bpy.data.curves.remove(data)
+        for material in label_materials:
+            if material.users == 0:
+                bpy.data.materials.remove(material)
+        if action is not None and action.users == 0:
+            bpy.data.actions.remove(action)
+    bpy.data.collections.remove(collection)
+    settings = context.scene.polygroups_render_settings
+    if settings.animation_collection_name == collection_name:
+        settings.animation_collection_name = ''
+        settings.animation_object_name = ''
+    if source is not None and context.view_layer.objects.active is None:
+        source.select_set(True)
+        context.view_layer.objects.active = source
 
 
 def _create_turnaround_labels(collection, source_name):
@@ -304,6 +336,7 @@ def unity_turnaround_render_steps(context):
     collection = bpy.data.collections[settings.animation_collection_name]
     duplicate = bpy.data.objects[settings.animation_object_name]
     root = duplicate.parent
+    ensure_render_support_visible(context)
     render_state = _render_snapshot(scene)
     visibility = _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
     rotation = root.rotation_euler.copy()
@@ -454,6 +487,7 @@ class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
 
         root = duplicate.parent
         render_state = _render_snapshot(scene)
+        ensure_render_support_visible(context)
         visibility = _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
         saved_rotation = root.rotation_euler.copy()
         animation_data = root.animation_data
@@ -548,8 +582,10 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
         name = bpy.path.clean_name(settings.animation_object_name or collection.name)
         output_base = os.path.join(output_directory, name)
         self._scene = scene
+        self._collection_name = collection.name
         self._settings = settings
         self._window_manager = context.window_manager
+        ensure_render_support_visible(context)
         self._render_state = _render_snapshot(scene)
         self._visibility = _isolate_turnaround(
             scene, collection, settings.animation_keep_scene_collections,
@@ -629,6 +665,7 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             self._settings.animation_status = f"Render failed: {error}"
             self.report({"ERROR"}, self._settings.animation_status)
         elif completed:
+            remove_turnaround_collection(bpy.context, self._collection_name)
             self._settings.animation_progress = 100.0
             self._settings.animation_last_output = self._output_file
             self._settings.animation_status = f"Saved: {self._output_file}"

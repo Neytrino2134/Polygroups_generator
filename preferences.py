@@ -792,16 +792,16 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         layout = self.layout
         draw_global_notices(layout, context, self)
         sections = [
-            ("show_preferences_info", t(context, "preferences_info"), self.draw_info),
-            ("show_preferences_updates", t(context, "updates"), self.draw_updates),
-            ("show_preferences_icons", "Custom Icons", self.draw_icons),
             ("show_preferences_language", t(context, "preferences_language"), self.draw_language),
-            ("show_preferences_operations", t(context, "preferences_operations"), self.draw_operations),
             ("show_preferences_autosave", t(context, "preferences_autosave"), self.draw_autosave),
-            ("show_preferences_remesh", t(context, "preferences_remesh"), self.draw_remesh),
-            ("show_preferences_api", t(context, "preferences_api"), self.draw_api),
+            ("show_preferences_operations", t(context, "preferences_operations"), self.draw_operations),
             ("show_preferences_hotkeys", t(context, "hotkeys"), self.draw_hotkeys),
             ("show_preferences_pie_menu", t(context, "preferences_pie_menu"), self.draw_pie_menu),
+            ("show_preferences_icons", "Custom Icons", self.draw_icons),
+            ("show_preferences_remesh", t(context, "preferences_remesh"), self.draw_remesh),
+            ("show_preferences_api", t(context, "preferences_api"), self.draw_api),
+            ("show_preferences_updates", t(context, "updates"), self.draw_updates),
+            ("show_preferences_info", t(context, "preferences_info"), self.draw_info),
         ]
         if self.enable_experimental_features:
             sections.append(("show_preferences_windows", "Floating Windows", self.draw_windows))
@@ -809,6 +809,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         for property_name, label, draw_content in sections:
             box = layout.box()
             header = box.row(align=True)
+            header.alignment = "LEFT"
             expanded = getattr(self, property_name)
             header.prop(self, property_name, text=label, icon="TRIA_DOWN" if expanded else "TRIA_RIGHT", emboss=False)
             if expanded:

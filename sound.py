@@ -28,7 +28,8 @@ def play_operation_done_sound(context=None):
         global _DEVICE
         if _DEVICE is None:
             _DEVICE = aud.Device()
-        handle = _DEVICE.play(aud.Sound(path))
+        # Decode before playback so shutdown never retains an FFmpeg file reader.
+        handle = _DEVICE.play(aud.Sound(path).cache())
         _HANDLES.append(handle)
         del _HANDLES[:-8]
     except Exception:

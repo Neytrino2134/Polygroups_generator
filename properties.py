@@ -6,6 +6,13 @@ import bpy
 from .core.render_palettes import PROPERTY_CLASSES as PALETTE_PROPERTY_CLASSES, RenderPaletteGroup
 from .core.render_resolution import preset_resolution
 
+def _update_unity_name_index(self, context):
+    digits = ''.join(char for char in self.unity_name_index if char in '0123456789')
+    normalized = digits[-2:].zfill(2)
+    if self.unity_name_index != normalized:
+        self.unity_name_index = normalized
+
+
 REMESH_PRESET_ITEMS = (
     ("LOW", "LOW", "Use the LOW quad count from add-on preferences"),
     ("MID", "MID", "Use the MID quad count from add-on preferences"),
@@ -1933,8 +1940,18 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
 
 class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=False)
+    show_unity_asset_render_settings: bpy.props.BoolProperty(name="Render Unity Assets", default=False)
+    show_unity_turnaround_settings: bpy.props.BoolProperty(name="Turnaround", default=False)
     unity_asset_name: bpy.props.StringProperty(name="Asset Name", default="Asset")
-    unity_generate_text_labels: bpy.props.BoolProperty(name="Generate Text Labels", default=False)
+    unity_asset_suffix: bpy.props.StringProperty(name="Suffix", description="Optional name suffix after the asset index", default="")
+    unity_collection_color_tag: bpy.props.EnumProperty(name="Collection Color Tag",
+        description="Color assigned to Unity LOD collections", items=(
+            ("NONE", "None", "No collection color", "OUTLINER_COLLECTION", 0),
+            *((f"COLOR_{i:02d}", f"Color {i}", "", f"COLLECTION_COLOR_{i:02d}", i) for i in range(1, 9))),
+        default="NONE")
+    unity_random_collection_color: bpy.props.BoolProperty(name="Random Color Tag",
+        description="Automatically choose a collection color before preparing Auto LOD meshes", default=True)
+    unity_generate_text_labels: bpy.props.BoolProperty(name="Generate Text Labels", default=True)
     unity_label_size: bpy.props.FloatProperty(name="Label Size", default=0.1, min=0.001, unit="LENGTH")
     unity_render_mode: bpy.props.EnumProperty(name="Unity Render Mode",
         items=(("ALL", "All Asset LODs Together", "Render all LODs of the active Unity asset in 4K"),
@@ -1955,27 +1972,31 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unity_render_image_format: bpy.props.EnumProperty(name="Image Format",
         items=(("PNG", "PNG", "PNG image"), ("JPEG", "JPEG", "JPEG image"),
                ("WEBP", "WebP", "WebP image")), default="WEBP")
-    unity_asset_index: bpy.props.StringProperty(name="Index", default="01")
+    unity_name_index: bpy.props.StringProperty(name="Name Index", default="00", maxlen=2, update=_update_unity_name_index)
+    unity_asset_index: bpy.props.StringProperty(name="Version Index", default="01")
     unity_auto_increment_index: bpy.props.BoolProperty(name="Auto Increment Index", default=True)
     unity_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
     unity_export_directory: bpy.props.StringProperty(name="Directory", subtype="DIR_PATH", default="//!Unity")
+    unity_export_clear_asset_folder: bpy.props.BoolProperty(name="Clear Asset Folder Before Start", description="Remove existing contents of each exported asset folder before exporting", default=True)
+    unity_export_autosave: bpy.props.BoolProperty(name="Autosave Before Start", description="Save the current blend file before starting Unity export", default=True)
     unity_export_overwrite: bpy.props.BoolProperty(name="Overwrite Existing", default=False)
     unity_export_fbx: bpy.props.BoolProperty(name="FBX", default=True)
-    unity_export_gltf: bpy.props.BoolProperty(name="GLTF", default=False)
+    unity_export_gltf: bpy.props.BoolProperty(name="GLTF", default=True)
     unity_gltf_mode: bpy.props.EnumProperty(name="GLTF Mode", items=(
         ("COMBINED", "All LODs in One GLTF", "One embedded GLTF containing all selected asset LODs and one shared texture set"),
         ("SHARED", "Separate LODs / Shared Textures", "Separate GLTF and BIN files for LODs referencing one common Textures folder")),
         default="COMBINED")
     unity_export_all_renders: bpy.props.BoolProperty(name="Export All Renders",
-        description="Render each selected LOD and the asset turnaround into the Unity asset folder", default=False)
+        description="Render each selected LOD and the asset turnaround into the Unity asset folder", default=True)
     unity_export_info_format: bpy.props.EnumProperty(
         name="Mesh Info",
         description="Write vertex and triangle counts for each exported LOD",
         items=(("NONE", "None", "Do not write a mesh info report"),
                ("JSON", "JSON", "Write MeshInfo.json for each asset"),
                ("TXT", "TXT", "Write MeshInfo.txt for each asset")),
-        default="NONE",
+        default="JSON",
     )
+    unity_export_status: bpy.props.StringProperty(name="Export Status", default="Not exported")
     unity_use_auto_rig_pro: bpy.props.BoolProperty(
         name="Auto-Rig Pro Export",
         description="Export LOD0 together with the selected rig using the saved Auto-Rig Pro export settings",
@@ -1986,15 +2007,16 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         default=False,
     )
     show_smart_lods_settings: bpy.props.BoolProperty(name="Smart LODs", default=False)
+    smart_lods_prepare_mode: bpy.props.EnumProperty(name="Prepare For", items=(("UNITY", "Unity", "Prepare generated LODs for Unity"), ("UNREAL", "Unreal", "Prepare three generated meshes as a FAB HIGH/MID/LOW set")), default="UNITY")
     smart_lods_count: bpy.props.IntProperty(
         name="LOD Count", description="Number of generated LOD meshes",
         default=5, min=1, max=5,
     )
-    smart_lods_target_1: bpy.props.IntProperty(name="LOD.1", default=3000, min=1)
-    smart_lods_target_2: bpy.props.IntProperty(name="LOD.2", default=1500, min=1)
-    smart_lods_target_3: bpy.props.IntProperty(name="LOD.3", default=1000, min=1)
-    smart_lods_target_4: bpy.props.IntProperty(name="LOD.4", default=500, min=1)
-    smart_lods_target_5: bpy.props.IntProperty(name="LOD.5", default=150, min=1)
+    smart_lods_target_1: bpy.props.IntProperty(name="LOD.1", default=2900, min=1, step=100)
+    smart_lods_target_2: bpy.props.IntProperty(name="LOD.2", step=100, default=1500, min=1)
+    smart_lods_target_3: bpy.props.IntProperty(name="LOD.3", step=100, default=1000, min=1)
+    smart_lods_target_4: bpy.props.IntProperty(name="LOD.4", step=100, default=500, min=1)
+    smart_lods_target_5: bpy.props.IntProperty(name="LOD.5", step=100, default=150, min=1)
     smart_lods_final_decimate: bpy.props.BoolProperty(
         name="Final Decimate Fallback",
         description="If seam-aware decimation cannot reach a triangle limit, add an unrestricted Decimate pass",
@@ -2316,7 +2338,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         description="Movement distance in metres for all studio arrow buttons",
         default=0.1, min=0.001, soft_max=10, precision=3,
     )
-    studio_width: bpy.props.FloatProperty(name="Width", default=12, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
+    studio_width: bpy.props.FloatProperty(name="Width", default=20, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
     studio_depth: bpy.props.FloatProperty(name="Depth", default=8, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
     studio_height: bpy.props.FloatProperty(name="Height", default=5, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
     studio_distance: bpy.props.FloatProperty(name="Distance", default=3, min=0.1, soft_max=20, unit="LENGTH", update=_update_studio_backdrop)
@@ -2542,7 +2564,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     freestyle_line_thickness: bpy.props.FloatProperty(
         name="Line Thickness",
         description="Absolute Freestyle line thickness in pixels",
-        default=0.1,
+        default=1.0,
         min=0.01,
         soft_max=5.0,
         precision=3,
@@ -2550,7 +2572,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     freestyle_line_color: bpy.props.FloatVectorProperty(
         name="Line Color",
         description="Freestyle line color",
-        default=(1.0, 1.0, 1.0, 1.0),
+        default=(1.0, 0.1946178304415758, 0.0, 1.0),
         min=0.0,
         max=1.0,
         size=4,

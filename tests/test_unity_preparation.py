@@ -34,6 +34,23 @@ sys.path.insert(0, str(ROOT.parent))
 addon_utils.enable(ROOT.name, default_set=True)
 context = bpy.context
 settings = context.scene.polygroups_mesh_finalization_settings
+from polygroups_generator.operators.unity_preparation import unity_name
+assert settings.unity_export_info_format == 'JSON'
+assert settings.unity_generate_text_labels
+assert settings.unity_collection_color_tag == 'NONE'
+assert settings.unity_random_collection_color
+settings.unity_collection_color_tag = 'COLOR_04'
+assert bpy.ops.object.polygroups_unity_random_color_tag() == {'FINISHED'}
+assert settings.unity_collection_color_tag in {f'COLOR_{i:02d}' for i in range(1,9)} - {'COLOR_04'}
+settings.unity_collection_color_tag = 'COLOR_04'
+assert settings.unity_asset_suffix == ''
+assert unity_name(settings, 'LOD0') == 'Asset_01'
+settings.unity_asset_suffix = 'Stone'
+assert unity_name(settings, 'LOD0') == 'Asset_01_Stone'
+assert unity_name(settings, 'LOD2') == 'Asset_01_Stone.LOD2'
+settings.unity_asset_suffix = '   '
+assert unity_name(settings, 'LOD0') == 'Asset_01'
+settings.unity_asset_suffix = ''
 obj = context.active_object
 material = bpy.data.materials.new("SharedSource")
 material.use_nodes = True
@@ -69,6 +86,7 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     obj.location = (3.0, 4.0, 5.0)
     assert bpy.ops.object.polygroups_export_unity() == {'FINISHED'}
     assert tuple(obj.location) == (3.0, 4.0, 5.0)
+    assert all(collection.color_tag == 'COLOR_04' for collection in obj.users_collection)
     folder = Path(settings.unity_export_directory) / 'Konduktor_01' / 'FBX'
     info = json.loads((folder / 'MeshInfo.json').read_text(encoding='utf-8'))
     assert [entry['lod'] for entry in info['meshes']] == ['LOD1']
@@ -120,18 +138,24 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
         batch.append(item)
     context.view_layer.objects.active = batch[0]
     settings.unity_asset_name = 'Batch'
+    previous_color = settings.unity_collection_color_tag
     assert bpy.ops.object.polygroups_prepare_unity(auto_lods=True) == {'FINISHED'}
+    assert settings.unity_collection_color_tag != previous_color
     assert settings.unity_asset_index == '03'
     for lod, item in enumerate(reversed(batch)):
         assert item.name == ('Batch_02' if lod == 0 else f'Batch_02.LOD{lod}')
         assert len(item.users_collection) == 1
         assert item.users_collection[0].name == f'Batch_02_LOD{lod}_Collection'
+        assert item.users_collection[0].color_tag == settings.unity_collection_color_tag
         assert item.active_material == batch[-1].active_material
     assert batch[0].active_material.name == 'Batch_02'
     assert (Path(directory) / 'Textures' / 'Batch_02' / 'Batch_02.png').is_file()
     # Repeating preparation reuses the common material and preserves exact names.
     settings.unity_asset_index = '02'
+    settings.unity_random_collection_color = False
+    previous_color = settings.unity_collection_color_tag
     assert bpy.ops.object.polygroups_prepare_unity(auto_lods=True) == {'FINISHED'}
+    assert settings.unity_collection_color_tag == previous_color
     assert batch[-1].name == 'Batch_02'
     assert batch[-1].active_material.name == 'Batch_02'
     settings.unity_export_overwrite = False
@@ -139,6 +163,13 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     rig = bpy.data.objects.new('Rig', armature_data)
     context.collection.objects.link(rig)
     rig.select_set(True)
+    saved_active = context.view_layer.objects.active
+    context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode='EDIT')
+    bone = rig.data.edit_bones.new('c_traj')
+    bone.tail = (0,0,1)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    context.view_layer.objects.active = saved_active
     settings.unity_use_auto_rig_pro = True
     settings.unity_export_info_format = 'TXT'
     for lod, item in enumerate(reversed(batch)):

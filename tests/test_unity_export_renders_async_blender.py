@@ -49,10 +49,13 @@ def finish(error=None):
             assert all(item['uri'].startswith('data:') for item in document['buffers'])
             if CANCEL:
                 assert 'cancelled' in result['status'] and result['final_progress']<100
+                assert state.get('sound_calls',0)==0
             else:
                 assert result['lod_images']==4 and result['views']==4 and result['videos']==1, result
                 assert result['final_progress']==100 and any(0<p<100 for p in state['progress'])
                 assert (folder/'TestAsset_LODS'/'MeshInfo.json').is_file()
+                assert '8 renders\n1 videos x 2 frames' in result['status']
+                assert state.get('sound_calls',0)==1
         except Exception as exc:
             result['error']=repr(exc)
     RESULT.write_text(json.dumps(result),encoding='utf-8')
@@ -80,6 +83,8 @@ def check():
 def start():
     try:
         addon_utils.enable(ROOT.name,default_set=False)
+        from polygroups_generator import sound
+        sound.play_operation_done_sound=lambda context: state.update(sound_calls=state.get('sound_calls',0)+1)
         scene=bpy.context.scene
         source=bpy.context.active_object
         source.name='TestAsset'

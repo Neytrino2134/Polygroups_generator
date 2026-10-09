@@ -308,15 +308,41 @@ def _tool_collection(cutter_type):
     return collection
 
 
+def _is_local_contour_cutter(obj):
+    if obj.type != "MESH" or obj.get(CUTTER_BACKUP_OWNER_PROP):
+        return False
+    base, dot, suffix = obj.name.rpartition(".")
+    name = base if dot and suffix.isdigit() else obj.name
+    return (
+        name == "Local_Contour_Sketch"
+        or bool(obj.get("polygroups_local_contour_sketch"))
+        or any(collection.name == CUTTER_COLLECTION_BY_TOOL["LOCAL_CONTOUR"]
+               for collection in obj.users_collection)
+    )
+
+
+def _is_cutter_object(obj):
+    return obj.type in {"MESH", "CURVE"} and (
+        bool(obj.get(CUTTER_PROP)) or _is_local_contour_cutter(obj)
+    )
+
+
+def _ensure_local_contour_cutter(obj):
+    if _is_local_contour_cutter(obj):
+        obj[CUTTER_PROP] = True
+        if not obj.get(CUTTER_TYPE_PROP):
+            obj[CUTTER_TYPE_PROP] = "LOCAL_CONTOUR"
+
+
 def _tool_collection_type_for_cutter(cutter):
     cutter_type = cutter.get(CUTTER_TYPE_PROP)
     if cutter_type == "DRAW_STROKE":
         return "DRAW"
-    return cutter_type or ""
+    return cutter_type or ("LOCAL_CONTOUR" if _is_local_contour_cutter(cutter) else "")
 
 
 def _collection_objects_recursive(collection, seen=None):
-    seen = seen or set()
+    seen = set() if seen is None else seen
     objects = []
     for obj in collection.objects:
         if obj.name in seen:
@@ -329,10 +355,13 @@ def _collection_objects_recursive(collection, seen=None):
 
 
 def _cutter_collection_objects():
-    collection = bpy.data.collections.get(CUTTER_COLLECTION_NAME)
-    if collection is None:
-        return []
-    return _collection_objects_recursive(collection)
+    objects = []
+    seen = set()
+    for name in (CUTTER_COLLECTION_NAME, *CUTTER_COLLECTION_BY_TOOL.values()):
+        collection = bpy.data.collections.get(name)
+        if collection is not None:
+            objects.extend(_collection_objects_recursive(collection, seen))
+    return objects
 
 
 def _material(alpha):
@@ -1005,7 +1034,7 @@ def _selected_cutters(context, target):
     cutters = [
         obj
         for obj in context.selected_objects
-        if obj != target and obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+        if obj != target and _is_cutter_object(obj)
     ]
     if cutters:
         return cutters
@@ -1013,7 +1042,7 @@ def _selected_cutters(context, target):
     return [
         obj
         for obj in _cutter_collection_objects()
-        if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+        if _is_cutter_object(obj)
     ]
 
 
@@ -1021,7 +1050,7 @@ def _selected_cutters_only(context):
     return [
         obj
         for obj in context.selected_objects
-        if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+        if _is_cutter_object(obj)
     ]
 
 
@@ -1048,6 +1077,9 @@ def _copy_mirror_cutter(cutter, mirror_matrix):
     mirrored = cutter.copy()
     mirrored.data = cutter.data.copy()
     mirrored.animation_data_clear()
+    if _is_local_contour_cutter(cutter):
+        mirrored[CUTTER_PROP] = True
+        mirrored[CUTTER_TYPE_PROP] = cutter.get(CUTTER_TYPE_PROP) or "LOCAL_CONTOUR"
     mirrored.name = f"{cutter.name}_Mirror"
     mirrored.matrix_world = mirror_matrix @ cutter.matrix_world
 
@@ -1056,8 +1088,8 @@ def _copy_mirror_cutter(cutter, mirror_matrix):
     return mirrored
 
 
-def _apply_all_object_transforms(context, objects):
-    """Apply location, rotation, and scale only to the supplied objects."""
+def _apply_mirrored_cutter_scales(context, objects):
+    """Apply only scale to the supplied objects, preserving location and rotation."""
     objects = [obj for obj in objects if obj is not None and obj.name in bpy.data.objects]
     if not objects:
         return False
@@ -1069,7 +1101,7 @@ def _apply_all_object_transforms(context, objects):
         obj.select_set(True)
     context.view_layer.objects.active = objects[0]
     try:
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     except RuntimeError:
         return False
     finally:
@@ -1136,7 +1168,7 @@ def _is_target_mesh_candidate(obj):
     return (
         obj is not None
         and obj.type == "MESH"
-        and not obj.get(CUTTER_PROP)
+        and not _is_cutter_object(obj)
         and not obj.get("polygroups_local_contour_sketch")
         and not _is_cutter_name(obj)
     )
@@ -2000,6 +2032,8 @@ def _apply_plane_cutters_to_mesh(target, cutters):
 
 
 def _prepare_cutters_for_apply(context, cutters):
+    for cutter in cutters:
+        _ensure_local_contour_cutter(cutter)
     settings = context.scene.polygroups_object_seam_cutter_settings
     if settings.auto_convert_draw_strokes_on_apply:
         converted_cutters = []
@@ -3685,11 +3719,11 @@ class OBJECT_OT_polygroups_copy_mirror_cutters(bpy.types.Operator):
             self.report({"WARNING"}, "Selected cutters could not be mirrored")
             return {"CANCELLED"}
 
-        if not _apply_all_object_transforms(context, mirrored_cutters):
+        if not _apply_mirrored_cutter_scales(context, mirrored_cutters):
             for mirrored in mirrored_cutters:
                 if mirrored.name in bpy.data.objects:
                     bpy.data.objects.remove(mirrored, do_unlink=True)
-            self.report({"ERROR"}, "Could not apply transforms to mirrored cutters")
+            self.report({"ERROR"}, "Could not apply scale to mirrored cutters")
             return {"CANCELLED"}
 
         context.view_layer.objects.active = target
@@ -4242,7 +4276,7 @@ class OBJECT_OT_polygroups_select_cutter_planes(bpy.types.Operator):
         cutters = [
             obj
             for obj in _cutter_collection_objects()
-            if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+            if _is_cutter_object(obj)
         ]
         if not cutters:
             return {"CANCELLED"}
@@ -4266,7 +4300,7 @@ class OBJECT_OT_polygroups_clear_cutter_planes(bpy.types.Operator):
         cutters = [
             obj
             for obj in _cutter_collection_objects()
-            if obj.type in {"MESH", "CURVE"} and obj.get(CUTTER_PROP)
+            if _is_cutter_object(obj)
         ]
         if not cutters:
             return {"CANCELLED"}

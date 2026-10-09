@@ -11,6 +11,44 @@ from ..sound import play_operation_done_sound
 from ..core.remesh_cursor import RemeshCursor, update_remesh_cursor
 
 
+def ensure_render_support_visible(context):
+    """Enable studio collections and their parent layer paths before rendering."""
+    scene = context.scene
+    needed = set()
+    def visit(collection, parents=(), inside=False):
+        named = collection.name.casefold().startswith(('scene', 'camera', 'light'))
+        inside = inside or named
+        support = any(obj.type in {'CAMERA', 'LIGHT'} or obj.get('polygroups_studio_role') for obj in collection.objects)
+        if inside or support:
+            needed.update((*parents, collection))
+            for obj in collection.objects:
+                obj.hide_viewport = False
+                obj.hide_render = False
+                obj.hide_select = False
+                try:
+                    obj.hide_set(False)
+                except RuntimeError:
+                    pass
+        for child in collection.children:
+            visit(child, (*parents, collection), inside)
+    visit(scene.collection)
+    for col in needed:
+        col.hide_viewport = col.hide_render = col.hide_select = False
+    def enable(layer):
+        if layer.collection in needed:
+            layer.exclude = False
+            layer.hide_viewport = False
+        for child in layer.children:
+            enable(child)
+    for view_layer in scene.view_layers:
+        enable(view_layer.layer_collection)
+    context.view_layer.update()
+    for col in needed:
+        for obj in col.objects:
+            if obj.type in {'CAMERA', 'LIGHT'} or col.name.casefold().startswith(('scene', 'camera', 'light')):
+                obj.hide_set(False)
+
+
 class RenderQueueCursor(RemeshCursor):
     def __init__(self, context):
         super().__init__(context)

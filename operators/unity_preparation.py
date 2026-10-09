@@ -1,5 +1,6 @@
 """Unity naming and self-contained per-mesh FBX exports."""
 import os
+import shutil
 import re
 from contextlib import ExitStack
 from array import array
@@ -19,7 +20,9 @@ from .mesh_export import (
 def unity_name(settings, lod):
     base = "_".join(filter(None, (
         _safe_path_token(settings.unity_asset_name, "Asset"),
+        settings.unity_name_index.zfill(2),
         _safe_path_token(settings.unity_asset_index, ""),
+        _safe_path_token(settings.unity_asset_suffix.strip(), ""),
     )))
     return base if lod in {"", "LOD0"} else f"{base}.{lod}"
 
@@ -34,6 +37,29 @@ def texture_nodes(tree, seen=None):
             yield node
         elif node.type == "GROUP":
             yield from texture_nodes(node.node_tree, seen)
+
+
+def normalize_unity_texture_names(meshes):
+    images = {node.image for obj in meshes for mat in obj.data.materials if mat
+              for node in texture_nodes(mat.node_tree)}
+    for image in sorted(images, key=lambda item: item.name):
+        clean = re.sub(r'(?:\.\d{3})+$', '', image.name)
+        if clean == image.name:
+            continue
+        other = bpy.data.images.get(clean)
+        if other is not None and other != image:
+            other.name = clean + '__Duplicate'
+        image.name = clean
+
+
+def validate_unity_arp_selection(context):
+    settings = context.scene.polygroups_mesh_finalization_settings
+    if not settings.unity_use_auto_rig_pro:
+        return None
+    rigs = [obj for obj in context.selected_objects if obj.type == 'ARMATURE']
+    if len(rigs) != 1 or rigs[0].data.bones.get('c_traj') is None:
+        return 'Select one Auto-Rig Pro rig (with c_traj) together with the Unity mesh before exporting'
+    return None
 
 
 def isolate_groups(tree):
@@ -143,6 +169,7 @@ def move_to_lod_collection(context, obj, lod):
     collection = bpy.data.collections.get(name)
     if collection is None:
         collection = bpy.data.collections.new(name)
+    collection.color_tag = context.scene.polygroups_mesh_finalization_settings.unity_collection_color_tag
     if collection.name not in context.scene.collection.children:
         context.scene.collection.children.link(collection)
     if obj.name not in collection.objects:
@@ -159,6 +186,21 @@ def polygon_count(obj, depsgraph):
         return len(mesh.polygons)
     finally:
         evaluated.to_mesh_clear()
+
+
+class OBJECT_OT_polygroups_unity_random_color_tag(bpy.types.Operator):
+    bl_idname = 'object.polygroups_unity_random_color_tag'
+    bl_label = 'Random Collection Color Tag'
+    bl_description = 'Choose a random color for the collections created by Unity Prepare'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        from random import choice
+        settings = context.scene.polygroups_mesh_finalization_settings
+        settings.unity_collection_color_tag = choice([
+            f'COLOR_{index:02d}' for index in range(1, 9)
+            if f'COLOR_{index:02d}' != settings.unity_collection_color_tag])
+        return {'FINISHED'}
 
 
 class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
@@ -198,6 +240,8 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
                 existing = bpy.data.objects.get(name)
                 if existing is not None and existing not in meshes:
                     raise ValueError(f"An object named {name} already exists; choose another index")
+            if self.auto_lods and settings.unity_random_collection_color:
+                bpy.ops.object.polygroups_unity_random_color_tag()
             for item in meshes:
                 if item.data.users > 1:
                     item.data = item.data.copy()
@@ -205,6 +249,7 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
             for item, name, lod in zip(meshes, names, lods):
                 prepare_unity(item, name, unity_name(settings, ""))
                 move_to_lod_collection(context, item, lod)
+            normalize_unity_texture_names(meshes)
             if settings.unity_copy_textures:
                 asset_folder = _safe_path_token(unity_name(settings, ""))
                 texture_dir = os.path.join(os.path.dirname(bpy.data.filepath), "Textures", asset_folder)
@@ -222,6 +267,244 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
                 settings.unity_asset_index = f"{prefix}{int(digits) + 1:0{len(digits)}d}"
         self.report({"INFO"}, f"Prepared {len(meshes)} mesh(es): " + ", ".join(item.name for item in meshes))
         return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_rename_unity_meshes(bpy.types.Operator):
+    bl_idname = "object.polygroups_rename_unity_meshes"
+    bl_label = "Rename Meshes"
+    bl_description = "Rename selected meshes preserving their LOD numbers and material slots; copy renamed textures"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT' and any(obj.type == 'MESH' for obj in context.selected_objects)
+
+    def execute(self, context):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        if not bpy.data.filepath:
+            self.report({'ERROR'}, 'Save the blend file before copying renamed textures')
+            return {'CANCELLED'}
+        base = unity_name(settings, '')
+        plans = []
+        for obj in meshes:
+            match = re.search(r'[._]LOD(\d+)$', re.sub(r'(?:\.\d{3})+$', '', obj.name))
+            lod = int(match.group(1)) if match else 0
+            plans.append((obj, unity_name(settings, f'LOD{lod}'), lod))
+        names = [name for _, name, _ in plans]
+        if len(set(names)) != len(names) or any(bpy.data.objects.get(name) not in [None, *meshes] for name in names):
+            self.report({'ERROR'}, 'Conflicting mesh names: select one asset with distinct LOD numbers or choose another index')
+            return {'CANCELLED'}
+        try:
+            materials = {mat for obj in meshes for mat in obj.data.materials if mat}
+            images = {}
+            used = set()
+            for material in sorted(materials, key=lambda mat: mat.name):
+                for node in texture_nodes(material.node_tree):
+                    if node.image in images or _texture_suffix(node.image, node) == 'AlphaMap':
+                        continue
+                    suffix = _texture_suffix(node.image, node)
+                    color = node.outputs.get('Color')
+                    for link in color.links if color else []:
+                        if link.to_node.type == 'NORMAL_MAP':
+                            suffix = 'Normal'
+                        elif link.to_socket.name in {'Base Color', 'Metallic', 'Roughness'}:
+                            suffix = link.to_socket.name.replace(' ', '')
+                    target = base if suffix == 'BaseColor' else f'{base}_{suffix.lower()}'
+                    candidate, index = target, 2
+                    while candidate in used:
+                        candidate = f'{target}_{index}'
+                        index += 1
+                    used.add(candidate)
+                    images[node.image] = candidate
+                    if node.image.source not in {'FILE', 'GENERATED'} or not node.image.has_data:
+                        raise ValueError(f'Texture has no supported loaded pixels: {node.image.name}')
+            for obj, _, _ in plans:
+                obj.name = '__Unity_Rename__'
+            for obj, name, lod in plans:
+                if obj.data.users > 1:
+                    obj.data = obj.data.copy()
+                obj.name = obj.data.name = name
+                obj['unity_prepared'] = True
+                for collection in obj.users_collection:
+                    if len(collection.objects) == 1 and collection.name.endswith('_Collection'):
+                        collection.name = f'{base}_LOD{lod}_Collection'
+                if any(child.get(UNITY_LABEL) for child in obj.children):
+                    ensure_unity_label(context, obj, lod)
+            for index, material in enumerate(sorted(materials, key=lambda mat: mat.name)):
+                material.name = base if index == 0 else f'{base}_Material_{index + 1}'
+                material['unity_asset_name'] = base
+            for image, name in images.items():
+                other = bpy.data.images.get(name)
+                if other is not None and other != image:
+                    other.name = name + '__Duplicate'
+                image.name = name
+            normalize_unity_texture_names(meshes)
+            directory = os.path.join(os.path.dirname(bpy.data.filepath), 'Textures', base)
+            for obj in meshes:
+                save_textures(obj, directory)
+        except (RuntimeError, ValueError, OSError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        self.report({'INFO'}, f'Renamed {len(meshes)} meshes; copied {len(images)} textures to {directory}')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_fix_unity_textures(bpy.types.Operator):
+    bl_idname = "object.polygroups_fix_unity_textures"
+    bl_label = "Fix Textures"
+    bl_description = "Fix selected assets' texture names and copy textures into their asset folders without renaming meshes"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT' and any(obj.type == 'MESH' for obj in context.selected_objects)
+
+    def execute(self, context):
+        if not bpy.data.filepath:
+            self.report({'ERROR'}, 'Save the blend file before copying textures')
+            return {'CANCELLED'}
+        groups = {}
+        for obj in context.selected_objects:
+            if obj.type == 'MESH':
+                clean = re.sub(r'(?:\.\d{3})+$', '', obj.name)
+                base = re.sub(r'[._]LOD\d+$', '', clean)
+                groups.setdefault(base, []).append(obj)
+        # Validate all textures before changing data or writing files.
+        try:
+            for meshes in groups.values():
+                for obj in meshes:
+                    for mat in obj.data.materials:
+                        if not mat:
+                            continue
+                        for node in texture_nodes(mat.node_tree):
+                            image = node.image
+                            if _texture_suffix(image, node) != 'AlphaMap' and (
+                                    image.source not in {'FILE', 'GENERATED'} or not image.has_data):
+                                raise ValueError(f'Texture has no supported loaded pixels: {image.name}')
+            fixed = 0
+            for base, meshes in groups.items():
+                base = _safe_path_token(base)
+                # Isolate materials shared with other assets, retaining all slots and links.
+                materials = {mat for obj in meshes for mat in obj.data.materials if mat}
+                copies = {}
+                for mat in materials:
+                    external = any(obj.type == 'MESH' and obj not in meshes and mat in tuple(obj.data.materials)
+                                   for obj in bpy.data.objects)
+                    if external:
+                        copies[mat] = mat.copy()
+                        isolate_groups(copies[mat].node_tree)
+                for obj in meshes:
+                    if obj.data.users > 1:
+                        obj.data = obj.data.copy()
+                    for index, mat in enumerate(tuple(obj.data.materials)):
+                        if mat in copies:
+                            obj.data.materials[index] = copies[mat]
+                images, used = {}, set()
+                for obj in meshes:
+                    for mat in obj.data.materials:
+                        if not mat:
+                            continue
+                        for node in texture_nodes(mat.node_tree):
+                            source = node.image
+                            if source in images.values():
+                                continue
+                            suffix = _texture_suffix(source, node)
+                            if suffix == 'AlphaMap':
+                                continue
+                            if source not in images:
+                                color = node.outputs.get('Color')
+                                for link in color.links if color else []:
+                                    if link.to_node.type == 'NORMAL_MAP':
+                                        suffix = 'Normal'
+                                    elif link.to_socket.name in {'Base Color', 'Metallic', 'Roughness'}:
+                                        suffix = link.to_socket.name.replace(' ', '')
+                                target = base if suffix == 'BaseColor' else f'{base}_{suffix.lower()}'
+                                name, index = target, 2
+                                while name in used:
+                                    name = f'{target}_{index}'
+                                    index += 1
+                                used.add(name)
+                                # Keep other assets' textures intact when sharing images.
+                                external = any(other not in meshes and other.type == 'MESH' and
+                                    any(n.image == source for m in other.data.materials if m
+                                        for n in texture_nodes(m.node_tree)) for other in bpy.data.objects)
+                                image = source
+                                if external:
+                                    pixels = array('f', [0.0]) * len(source.pixels)
+                                    source.pixels.foreach_get(pixels)
+                                    image = source.copy()
+                                    image.pixels.foreach_set(pixels)
+                                    image.update()
+                                other = bpy.data.images.get(name)
+                                if other is not None and other != image:
+                                    other.name = name + '__Duplicate'
+                                image.name = name
+                                images[source] = image
+                                fixed += 1
+                            node.image = images[source]
+                normalize_unity_texture_names(meshes)
+                directory = os.path.join(os.path.dirname(bpy.data.filepath), 'Textures', base)
+                for obj in meshes:
+                    save_textures(obj, directory)
+        except (RuntimeError, ValueError, OSError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        self.report({'INFO'}, f'Fixed and copied {fixed} textures for {len(groups)} assets')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_unity_collection_step(bpy.types.Operator):
+    bl_idname = "object.polygroups_unity_collection_step"
+    bl_label = "Switch Unity Collections"
+    bl_description = "Show all LOD collections of the previous or next asset index and disable the other indices in viewports"
+    bl_options = {'REGISTER', 'UNDO'}
+    delta: bpy.props.IntProperty(default=1, min=-1, max=1)
+
+    def execute(self, context):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        asset = _safe_path_token(settings.unity_asset_name, 'Asset')
+        suffix = _safe_path_token(settings.unity_asset_suffix.strip(), '')
+        pattern = re.compile(r'^' + re.escape(asset) + '(?:_' + re.escape(settings.unity_name_index.zfill(2)) + ')?' + r'_(\d+)'  +
+                             (r'_' + re.escape(suffix) if suffix else '') + r'_LOD(\d+)_Collection$')
+        groups = {}
+        for collection in context.scene.collection.children_recursive:
+            match = pattern.fullmatch(collection.name)
+            if match:
+                groups.setdefault(int(match.group(1)), []).append((collection, match.group(1), int(match.group(2))))
+        if not groups:
+            self.report({'ERROR'}, f'No LOD collections matching {asset}_Index_LODN_Collection')
+            return {'CANCELLED'}
+        indices = sorted(groups)
+        visible = [index for index in indices if any(not col.hide_viewport for col, _, _ in groups[index])]
+        try:
+            configured = int(settings.unity_asset_index)
+        except ValueError:
+            configured = None
+        # The visible group is authoritative after navigation; initially use the configured index.
+        current = visible[0] if len(visible) == 1 else configured
+        if current not in groups and context.active_object:
+            current = next((index for index in indices if any(context.active_object in col.all_objects[:]
+                            for col, _, _ in groups[index])), None)
+        if current in groups:
+            position = max(0, min(len(indices) - 1, indices.index(current) + self.delta))
+        else:
+            position = 0 if self.delta >= 0 else len(indices) - 1
+        target = indices[position]
+        for index, collections in groups.items():
+            for collection, _, _ in collections:
+                collection.hide_viewport = index != target
+        settings.unity_asset_index = groups[target][0][1]
+        context.view_layer.update()
+        meshes = [(lod, obj) for col, _, lod in groups[target] for obj in col.all_objects if obj.type == 'MESH']
+        if meshes:
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            obj = min(meshes, key=lambda entry: (entry[0], entry[1].name))[1]
+            obj.select_set(True)
+            context.view_layer.objects.active = obj
+        self.report({'INFO'}, f'Visible asset: {asset}_{settings.unity_asset_index}')
+        return {'FINISHED'}
 
 
 class UnityRenderProgressMixin:
@@ -367,7 +650,7 @@ class UnityRenderProgressMixin:
             if completed:
                 self._frames_done = self._total_frames
                 self._settings.animation_progress = 100
-                self._settings.animation_status = 'Unity: export/render completed'
+                self._settings.animation_status = getattr(self, '_completion_status', 'Unity: export/render completed')
             else:
                 self._settings.animation_status = f'Unity: render failed: {error}' if error else 'Unity: render cancelled'
             ta._redraw_animation_ui(self._window_manager)
@@ -395,6 +678,11 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
         return not context.scene.polygroups_render_settings.is_running and any(obj.type == "MESH" for obj in context.selected_objects)
 
     def invoke(self, context, event):
+        error = validate_unity_arp_selection(context)
+        if error:
+            context.scene.polygroups_mesh_finalization_settings.unity_export_status = error
+            self.report({'ERROR'}, error)
+            return {'CANCELLED'}
         if not context.scene.polygroups_mesh_finalization_settings.unity_export_all_renders:
             return self.execute(context)
         return UnityRenderProgressMixin.invoke(self, context, event)
@@ -410,6 +698,11 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
 
     def _steps(self, context, interactive=False):
         settings = context.scene.polygroups_mesh_finalization_settings
+        error = validate_unity_arp_selection(context)
+        if error:
+            settings.unity_export_status = error
+            self.report({'ERROR'}, error)
+            return {'CANCELLED'}
         if settings.unity_export_all_renders and context.scene.camera is None:
             self.report({'ERROR'}, "Set a scene camera before exporting renders")
             return {'CANCELLED'}
@@ -442,6 +735,7 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             if not hasattr(getattr(bpy.ops, "arp", None), "arp_export_fbx_panel"):
                 self.report({"ERROR"}, "Auto-Rig Pro export operator is unavailable; enable Auto-Rig Pro")
                 return {"CANCELLED"}
+        normalize_unity_texture_names(meshes)
         paths = {node.image: node.image.filepath_raw for obj in meshes
                  for mat in obj.data.materials if mat for node in texture_nodes(mat.node_tree)}
         alpha_nodes = {
@@ -450,19 +744,45 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             for node in texture_nodes(mat.node_tree)
             if _texture_suffix(node.image, node) == "AlphaMap"
         }
+        texture_count = len(set(paths) - set(alpha_nodes.values()))
+        render_count = video_count = 0
         try:
             if mode != "OBJECT":
                 bpy.ops.object.mode_set(mode="OBJECT")
-            for node in alpha_nodes:
-                node.image = None
             groups = {}
             for obj in meshes:
                 asset_name = re.sub(r"\.LOD\d+$", "", obj.name, flags=re.IGNORECASE)
                 groups.setdefault(asset_name, []).append(obj)
             for asset_name in groups:
                 folder = os.path.join(root, _safe_path_token(asset_name))
-                if os.path.exists(folder) and not settings.unity_export_overwrite:
+                if os.path.exists(folder) and not (settings.unity_export_overwrite or settings.unity_export_clear_asset_folder):
                     raise ValueError(f"Folder already exists: {folder}. Enable Overwrite to replace files")
+            if settings.unity_export_clear_asset_folder:
+                # Validate every exact asset destination before removing any contents.
+                resolved_root = os.path.realpath(root)
+                for asset_name in groups:
+                    folder = os.path.join(root, _safe_path_token(asset_name))
+                    resolved = os.path.realpath(folder)
+                    if os.path.dirname(resolved) != resolved_root or os.path.islink(folder):
+                        raise ValueError(f'Unsafe asset folder: {folder}')
+                    if bpy.data.filepath and os.path.commonpath((resolved, os.path.realpath(bpy.data.filepath))) == resolved:
+                        raise ValueError('The asset folder contains the current blend file; choose another export directory')
+            if settings.unity_export_autosave:
+                if not bpy.data.filepath:
+                    raise ValueError('Save the blend file before enabling Autosave Before Start')
+                if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath):
+                    raise RuntimeError('Autosave failed; export was not started')
+            if settings.unity_export_clear_asset_folder:
+                for asset_name in groups:
+                    folder = os.path.join(root, _safe_path_token(asset_name))
+                    if os.path.isdir(folder):
+                        for entry in os.scandir(folder):
+                            if entry.is_dir(follow_symlinks=False):
+                                shutil.rmtree(entry.path)
+                            else:
+                                os.unlink(entry.path)
+            for node in alpha_nodes:
+                node.image = None
             for asset_name, lods in groups.items():
                 asset_folder = os.path.join(root, _safe_path_token(asset_name))
                 for export_format in formats:
@@ -530,6 +850,7 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                         output_directory=os.path.join(asset_folder, f'{_safe_path_token(asset_name)}_LODS'))
                     if result != {'FINISHED'}:
                         return {'CANCELLED'}
+                    render_count += len(render_lods) * (2 if rs.transparent_background else 1)
                     source = min(render_lods, key=lambda obj: int(re.search(r'\.LOD(\d+)$', obj.name).group(1))
                                  if re.search(r'\.LOD(\d+)$', obj.name) else 0)
                     bpy.ops.object.select_all(action='DESELECT')
@@ -541,6 +862,8 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                         video_container=rs.animation_container, asset_name=asset_name)
                     if result != {'FINISHED'}:
                         return {'CANCELLED'}
+                    render_count += 4
+                    video_count += 1
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
@@ -555,7 +878,20 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             context.view_layer.objects.active = active
             if active and mode != "OBJECT":
                 bpy.ops.object.mode_set(mode=mode)
-        self.report({"INFO"}, f"Exported {len(meshes)} Unity asset(s) to {root}")
+        counts = []
+        if settings.unity_export_fbx:
+            counts.append(f'{len(meshes)} FBX')
+        if settings.unity_export_gltf:
+            counts.append(f'{len(groups) if settings.unity_gltf_mode == "COMBINED" else len(meshes)} GLTF')
+        self._completion_status = (f'{len(groups)} meshes exported ({len(meshes)} LODs)\n' + ' / '.join(counts) +
+            f'\n{texture_count} textures\n{render_count} renders\n{video_count} videos x ' +
+            f'{max(2, int(context.scene.polygroups_render_settings.animation_frame_count)) if video_count else 0} frames')
+        settings.unity_export_status = self._completion_status
+        context.scene.polygroups_render_settings.animation_status = self._completion_status
+        self.report({'INFO'}, self._completion_status)
+        if not bpy.app.background:
+            from ..sound import play_operation_done_sound
+            play_operation_done_sound(context)
         return {"FINISHED"}
 
 
@@ -804,6 +1140,7 @@ class OBJECT_OT_polygroups_render_unity_turnaround(UnityRenderProgressMixin, bpy
         camera = scene.camera
         matrix, data = camera.matrix_world.copy(), camera.data
         constraints = [(c, c.mute) for c in camera.constraints]
+        rq.ensure_render_support_visible(context)
         snapshot = rq._snapshot_visibility()
         frames = (scene.frame_start, scene.frame_end, scene.frame_current)
         properties = ('resolution_x', 'resolution_y', 'resolution_scale', 'animation_media_type',
@@ -813,7 +1150,7 @@ class OBJECT_OT_polygroups_render_unity_turnaround(UnityRenderProgressMixin, bpy
         temporary = data.copy()
         saved_freestyle = scene.render.use_freestyle
         light_root, light_matrix = None, None
-        collection = None
+        collection_name = None
         try:
             if mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
@@ -823,7 +1160,7 @@ class OBJECT_OT_polygroups_render_unity_turnaround(UnityRenderProgressMixin, bpy
             if asset_name:
                 from .turnaround_animation import TURNAROUND_SOURCE_PROP
                 duplicate[TURNAROUND_SOURCE_PROP] = asset_name
-            collection = bpy.data.collections.get(rs.animation_collection_name)
+            collection_name = rs.animation_collection_name
             context.view_layer.update()
             corners = [duplicate.matrix_world @ Vector(c) for c in duplicate.bound_box]
             radius = max(hypot(p.x, p.y) for p in corners)
@@ -868,9 +1205,9 @@ class OBJECT_OT_polygroups_render_unity_turnaround(UnityRenderProgressMixin, bpy
             if light_root:
                 light_root.matrix_world = light_matrix
             rq._restore_visibility(snapshot)
-            if collection:
-                collection.hide_render = True
-                collection.hide_viewport = True
+            if collection_name:
+                from .turnaround_animation import remove_turnaround_collection
+                remove_turnaround_collection(context, collection_name)
             for name, value in values.items():
                 setattr(rs, name, value)
             scene.render.resolution_x, scene.render.resolution_y, scene.render.pixel_aspect_x, scene.render.pixel_aspect_y = resolution

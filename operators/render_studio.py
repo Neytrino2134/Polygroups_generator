@@ -3,12 +3,12 @@ import math
 import bpy
 
 TAG = 'polygroups_studio_role'
-CAMERA_POSITION = (0, -8, 0.5)
+CAMERA_POSITION = (0, -3.5, 0.5)
 AIM_POSITION = (0, 0, 0.5)
 LIGHT_DEFAULTS = (
-    ('key', 'Key', (-2, -3, 3), 50, 2),
-    ('fill', 'Fill', (2, -2, 1.8), 50, 2.5),
-    ('rim', 'Rim', (0, 2, 2.8), 100, 1.5),
+    ('key', 'Key', (-2, -3, 3), 80, 2),
+    ('fill', 'Fill', (2, -2, 1.8), 80, 2.5),
+    ('rim', 'Rim', (0, 2, 2.8), 150, 1.5),
 )
 
 
@@ -273,9 +273,33 @@ def ensure_light_position(context):
 def position_lights(context, center):
     from mathutils import Vector
     settings = context.scene.polygroups_render_settings
+    from .render_queue import ensure_render_support_visible
+    ensure_render_support_visible(context)
     root = settings.studio_light_position
+    if root is None or root.name not in context.scene.objects:
+        root = next((obj for obj in context.scene.objects if obj.type == 'EMPTY' and
+                     (obj.get(TAG) == 'light_position' or obj.name == 'Light Position')), None)
+        if root:
+            root[TAG] = 'light_position'
+            settings.studio_light_position = root
+    lights = [obj for obj in context.scene.objects if obj.type == 'LIGHT']
     if root is None:
-        return None, None
+        if not lights:
+            return None, None
+        root = ensure_light_position(context)
+    # Repair older rigs where the empty exists but the lights were never parented.
+    for obj in lights + [getattr(settings, 'studio_' + role + '_aim') for role in ('key', 'fill', 'rim')]:
+        if obj is None or obj == root:
+            continue
+        ancestor = obj.parent
+        while ancestor is not None and ancestor != root:
+            ancestor = ancestor.parent
+        if ancestor == root:
+            continue
+        matrix = obj.matrix_world.copy()
+        obj.parent = root
+        obj.matrix_world = matrix
+    context.view_layer.update()
     original = root.matrix_world.copy()
     reference = settings.studio_camera_aim.matrix_world.translation if settings.studio_camera_aim else Vector(AIM_POSITION)
     matrix = original.copy()

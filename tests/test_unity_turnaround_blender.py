@@ -44,5 +44,6 @@ assert rs.freestyle_edges and scene.render.use_freestyle
 assert (scene.render.resolution_x,scene.render.resolution_y)==original_resolution
 assert (rs.resolution_x,rs.resolution_y,rs.output_directory,scene.camera.matrix_world)==original
 assert bpy.context.active_object==source
-assert bpy.data.collections[rs.animation_collection_name].hide_render
+assert not rs.animation_collection_name
+assert not any(c.get(ta.TURNAROUND_COLLECTION_PROP) for c in bpy.data.collections)
 print('UNITY_TURNAROUND_TEST_PASSED')

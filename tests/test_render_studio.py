@@ -46,7 +46,9 @@ assert all(collection.color_tag == 'NONE' for collection in studio)
 settings.studio_collection_color_tag = 'COLOR_08'
 
 assert scene.camera == settings.studio_camera
-assert tuple(scene.camera.location) == (0, -8, 0.5)
+assert tuple(scene.camera.location) == (0, -3.5, 0.5)
+assert settings.studio_width == 20
+assert abs(settings.studio_backdrop.dimensions.x - 20) < 1e-5
 assert tuple(settings.studio_camera_aim.location) == (0, 0, 0.5)
 assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 10
 assert settings.studio_light_position is not None
@@ -65,8 +67,8 @@ for role in ('camera', 'key', 'fill', 'rim'):
     assert actual.dot(direction) > 0.9999
 
 # Arrow controls move each controller exactly 0.1m and obey camera axis limits.
-assert settings.studio_key.data.energy == settings.studio_fill.data.energy == 50
-assert settings.studio_rim.data.energy == 100
+assert settings.studio_key.data.energy == settings.studio_fill.data.energy == 80
+assert settings.studio_rim.data.energy == 150
 for role in ('camera', 'camera_aim', 'key', 'key_aim', 'fill', 'fill_aim', 'rim', 'rim_aim'):
     obj = getattr(settings, 'studio_' + role)
     original = obj.matrix_world.translation.copy()
@@ -158,18 +160,18 @@ settings.studio_fill.data.energy = 789
 settings.studio_color = (0.1, 0.2, 0.3)
 settings.studio_width = 19
 assert bpy.ops.render.polygroups_reset_studio(scope='CAMERA') == {'FINISHED'}
-assert tuple(settings.studio_camera.location) == (0, -8, 0.5)
+assert tuple(settings.studio_camera.location) == (0, -3.5, 0.5)
 assert tuple(settings.studio_camera_aim.location) == (0, 0, 0.5)
 assert settings.studio_camera.data.type == 'PERSP' and settings.studio_camera.data.lens == 85
 assert settings.studio_key.data.energy == 456 and settings.studio_width == 19
 assert bpy.ops.render.polygroups_reset_studio(scope='KEY') == {'FINISHED'}
 assert tuple(settings.studio_key.location) == (-2, -3, 3)
-assert settings.studio_key.data.energy == 50 and settings.studio_fill.data.energy == 789
+assert settings.studio_key.data.energy == 80 and settings.studio_fill.data.energy == 789
 settings.studio_rim.data.color = (1, 0, 0)
 settings.studio_rim.hide_render = True
 settings.studio_rim_aim.location = (1, 2, 3)
 assert bpy.ops.render.polygroups_reset_studio(scope='LIGHTS') == {'FINISHED'}
-assert settings.studio_fill.data.energy == 50 and settings.studio_rim.data.energy == 100
+assert settings.studio_fill.data.energy == 80 and settings.studio_rim.data.energy == 150
 assert tuple(settings.studio_rim.data.color) == (1, 1, 1)
 assert not settings.studio_rim.hide_render
 assert tuple(settings.studio_rim_aim.location) == (0, 0, 0.5)
@@ -179,7 +181,7 @@ settings.studio_fill.data.energy = 321
 settings.studio_backdrop.location = (1, 2, 3)
 settings.studio_backdrop.scale = (2, 2, 2)
 assert bpy.ops.render.polygroups_reset_studio(scope='SCENE') == {'FINISHED'}
-assert settings.studio_width == 12
+assert settings.studio_width == 20
 assert tuple(settings.studio_color) == tuple(settings.bl_rna.properties['studio_color'].default_array)
 assert tuple(settings.studio_backdrop.location) == (0, 0, 0)
 assert tuple(settings.studio_backdrop.scale) == (1, 1, 1)
@@ -187,7 +189,7 @@ assert settings.studio_camera.data.lens == 40 and settings.studio_fill.data.ener
 settings.studio_move_step = 1
 assert bpy.ops.render.polygroups_reset_studio(scope='ALL') == {'FINISHED'}
 assert abs(settings.studio_move_step - 0.1) < 1e-6
-assert settings.studio_camera.data.lens == 85 and settings.studio_fill.data.energy == 50
+assert settings.studio_camera.data.lens == 85 and settings.studio_fill.data.energy == 80
 assert counts == (len(bpy.data.objects), len(bpy.data.collections), len(bpy.data.materials))
 bpy.data.objects.remove(settings.studio_camera_aim, do_unlink=True)
 assert bpy.ops.render.polygroups_reset_studio(scope='CAMERA') == {'FINISHED'}

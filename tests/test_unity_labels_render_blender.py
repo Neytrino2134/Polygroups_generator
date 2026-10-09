@@ -23,7 +23,7 @@ s.unity_generate_text_labels=True
 bpy.ops.mesh.primitive_cube_add()
 source=bpy.context.object
 assert bpy.ops.object.polygroups_prepare_unity(lod='LOD0')=={'FINISHED'}
-assert source.name=='TestUnity_01'
+assert source.name=='TestUnity_00_01'
 labels=[o for o in bpy.data.objects if o.get(up.UNITY_LABEL)]
 assert len(labels)==1 and 'LOD 0' in labels[0].data.body and '12 tris' in labels[0].data.body
 bpy.ops.object.camera_add()
@@ -39,7 +39,7 @@ def fake(self,context):
     assert rs.resolution_x==4096 and rs.resolution_y==4096
     assert rs.freestyle_edges and not rs.freestyle_as_render_pass
     assert Path(self.output_path).parent.name=='Render Unity Assets'
-    assert Path(self.output_path).name=='TestUnity_01_All.png'
+    assert Path(self.output_path).name=='TestUnity_00_01_All.png'
     checked.append(True)
     return {'FINISHED'}
 assert not s.unity_render_mesh_info
@@ -64,7 +64,28 @@ camera_frames=[]
 camera=bpy.context.scene.camera
 original_camera=(camera.matrix_world.copy(),camera.data.ortho_scale,camera.data.lens)
 from polygroups_generator.operators import render_queue
+# Simulate an older file: existing root with lost pointer and an unparented, locked light.
+from mathutils import Vector
+light_collection=bpy.data.collections.new('Light_Test')
+bpy.context.scene.collection.children.link(light_collection)
+light_root=bpy.data.objects.new('Light Position',None)
+light_collection.objects.link(light_root)
+light_data=bpy.data.lights.new('Test Key','AREA')
+light=bpy.data.objects.new('Test Key',light_data)
+light_collection.objects.link(light)
+light.location=(1,-2,3)
+bpy.context.view_layer.update()
+light_initial=light.matrix_world.copy()
+light_collection.hide_select=True
+light.hide_select=True
+rs.studio_light_position=None
+light_frames=[]
+
 def fake_separate(context,settings,job):
+    assert light.parent == light_root
+    assert not light.hide_select and not light_collection.hide_select
+    light_frames.append(light.matrix_world.copy())
+    assert light.matrix_world.translation.x > light_initial.translation.x - 1e-5
     paths.append(Path(job['output_path']).name)
     resolutions.append((context.scene.render.resolution_x,context.scene.render.resolution_y))
     camera_frames.append((camera.matrix_world.copy(),camera.data.ortho_scale,camera.data.lens))
@@ -83,16 +104,21 @@ with TemporaryDirectory() as output:
         {'lod':'LOD0','name':source.name,'file':source.name+'.LOD0.png','vertices':8,'triangles':12},
         {'lod':'LOD1','name':lod.name,'file':lod.name+'.png','vertices':8,'triangles':12},
     ]
+assert len(light_frames)==2
+assert abs((light_frames[1].translation.x-light_frames[0].translation.x) -
+           (camera_frames[1][0].translation.x-camera_frames[0][0].translation.x))<1e-5
+assert max(abs(light.matrix_world[i][j]-light_initial[i][j]) for i in range(4) for j in range(4))<1e-5
+assert rs.studio_light_position==light_root
 assert len(resolutions)==2 and resolutions[0]==resolutions[1]
-assert abs(camera_frames[1][0].translation.x-camera_frames[0][0].translation.x-5)<1e-5
+assert abs(camera_frames[1][0].translation.x-camera_frames[0][0].translation.x-5)<.01
 assert abs(camera_frames[1][0].translation.y-camera_frames[0][0].translation.y)<1e-5
 assert abs(camera_frames[1][0].translation.z-camera_frames[0][0].translation.z)<1e-5
 assert camera_frames[0][0].to_quaternion().rotation_difference(camera_frames[1][0].to_quaternion()).angle<1e-5
 assert camera_frames[0][1:]==camera_frames[1][1:]
 assert (camera.matrix_world,camera.data.ortho_scale,camera.data.lens)==original_camera
 assert resolutions[0][0]!=resolutions[0][1]
-assert paths==['TestUnity_01.LOD0.png','TestUnity_01.LOD1.png']
-assert source.name=='TestUnity_01'
+assert paths==['TestUnity_00_01.LOD0.png','TestUnity_00_01.LOD1.png']
+assert source.name=='TestUnity_00_01'
 assert before==(rs.resolution_x,rs.resolution_y,rs.freestyle_edges,rs.freestyle_as_render_pass)
 s.unity_render_image_format='WEBP'
 paths.clear()
@@ -102,6 +128,6 @@ with TemporaryDirectory() as output:
         assert bpy.ops.object.polygroups_render_unity_assets()=={'FINISHED'}
     info=json.loads((Path(output)/'Render Unity Assets'/'MeshInfo.json').read_text(encoding='utf-8'))
     assert all(entry['file'].endswith('.webp') for entry in info['meshes'])
-assert paths==['TestUnity_01.LOD0.webp','TestUnity_01.LOD1.webp']
+assert paths==['TestUnity_00_01.LOD0.webp','TestUnity_00_01.LOD1.webp']
 assert rs.image_format=='PNG'
 print('UNITY_LABELS_RENDER_TEST_PASSED')

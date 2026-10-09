@@ -115,6 +115,7 @@ class OBJECT_OT_render_selected_auto(bpy.types.Operator):
         constraints = [(c, c.mute) for c in camera.constraints]
         aim = settings.studio_camera_aim if settings.studio_camera == camera else None
         aim_matrix = aim.matrix_world.copy() if aim else None
+        rq.ensure_render_support_visible(context)
         snapshot = rq._snapshot_visibility()
         resolution = (scene.render.resolution_x, scene.render.resolution_y, scene.render.use_file_extension)
         settings_resolution = (settings.resolution_x, settings.resolution_y)
@@ -133,7 +134,13 @@ class OBJECT_OT_render_selected_auto(bpy.types.Operator):
             for constraint, mute in constraints:
                 constraint.mute = True
             from .render_studio import position_lights
-            light_root, light_matrix = position_lights(context, center)
+            light_center = center.copy()
+            if fixed_camera:
+                # Separate LOD renders retain the framing of LOD0: lights must
+                # follow that camera's X/Z rather than each LOD's label bounds.
+                light_center.x = camera.matrix_world.translation.x
+                light_center.z = camera.matrix_world.translation.z
+            light_root, light_matrix = position_lights(context, light_center)
             if aim:
                 moved = aim_matrix.copy()
                 moved.translation = center

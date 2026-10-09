@@ -3460,40 +3460,67 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             layout, settings, "show_unity_rename_settings", "Unity Rename", icon="OUTLINER_OB_MESH",
         )
         if unity_content is not None:
+            navigation = unity_content.row(align=True)
+            navigation.operator("object.polygroups_unity_collection_step", text="Prev Collections", icon="TRIA_LEFT").delta = -1
+            navigation.operator("object.polygroups_unity_collection_step", text="Next Collections", icon="TRIA_RIGHT").delta = 1
             unity_content.label(text="Unity Prepare")
             unity_content.prop(settings, "unity_asset_name", text=t(context, "fab_asset_name"))
+            unity_content.prop(settings, "unity_name_index")
             row = unity_content.row(align=True)
             row.operator("object.polygroups_unity_index_step", text="", icon="TRIA_LEFT").delta = -1
-            row.prop(settings, "unity_asset_index", text=t(context, "fab_asset_index"))
+            row.prop(settings, "unity_asset_index", text="Version Index")
             row.operator("object.polygroups_unity_index_step", text="", icon="TRIA_RIGHT").delta = 1
             row.prop(settings, "unity_auto_increment_index", text="", icon="ADD")
+            unity_content.prop(settings, "unity_asset_suffix")
             unity_content.prop(settings, "unity_generate_text_labels")
             unity_content.prop(settings, "unity_label_size")
             unity_content.prop(settings, "unity_copy_textures", text=t(context, "copy_textures"))
+            rename_row = unity_content.row(align=True)
+            rename_row.operator("object.polygroups_rename_unity_meshes", text="Rename Meshes", icon="GREASEPENCIL")
+            rename_row.operator("object.polygroups_fix_unity_textures", text="Fix Textures", icon="IMAGE_DATA")
             row = unity_content.row(align=True)
             for lod in range(6):
                 row.operator("object.polygroups_prepare_unity", text=f"LOD{lod}").lod = f"LOD{lod}"
-            unity_content.operator(
+            prepare_row = unity_content.row(align=True)
+            prepare_row.operator(
                 "object.polygroups_prepare_unity", text="Prepare Meshes (Auto LOD)", icon="SORTSIZE",
             ).auto_lods = True
-            box = unity_content.box().column(align=True)
-            box.prop(settings, "unity_render_mode")
-            box.prop(settings, "unity_render_separate")
-            box.prop(settings, "unity_render_text")
-            box.prop(settings, "unity_render_freestyle")
-            box.prop(settings, "unity_render_mesh_info")
-            box.prop(settings, "unity_render_image_format")
-            box.operator("object.polygroups_render_unity_assets", icon="RENDER_STILL")
-            animation_box = unity_content.box().column(align=True)
-            animation_box.label(text="Unity Turnaround")
-            rs = context.scene.polygroups_render_settings
-            animation_box.prop(rs, "animation_frame_count")
-            animation_box.prop(rs, "animation_fps")
-            animation_box.operator("object.polygroups_render_unity_turnaround", icon="RENDER_ANIMATION")
-            if rs.is_running or rs.animation_progress > 0:
-                animation_box.progress(factor=rs.animation_progress / 100.0, type='BAR',
-                                       text=f'{rs.animation_progress:.0f}%')
-                animation_box.label(text=rs.animation_status)
+            color_icon = ('OUTLINER_COLLECTION' if settings.unity_collection_color_tag == 'NONE'
+                          else 'COLLECTION_' + settings.unity_collection_color_tag)
+            prepare_row.prop(settings, "unity_collection_color_tag", text="", icon=color_icon, icon_only=True)
+            prepare_row.prop(settings, "unity_random_collection_color", text="", icon="FILE_REFRESH", toggle=True)
+            box = draw_collapsible_box(unity_content, settings, "show_unity_asset_render_settings",
+                                       "Render Unity Assets", icon="RENDER_STILL")
+            if box is not None:
+                box.label(text="Render Settings", icon="SETTINGS")
+                box.separator()
+                box.prop(settings, "unity_render_mode")
+                box.prop(settings, "unity_render_separate")
+                box.prop(settings, "unity_render_text")
+                box.prop(settings, "unity_render_freestyle")
+                render_settings = context.scene.polygroups_render_settings
+                color_row = box.row(align=True)
+                color_row.enabled = settings.unity_render_freestyle and not render_settings.is_running
+                color_row.prop(render_settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+                color_row.operator("render.polygroups_palette_popup", text="", icon="COLOR")
+                box.prop(settings, "unity_render_mesh_info")
+                box.prop(settings, "unity_render_image_format")
+                box.separator()
+                box.operator("object.polygroups_render_unity_assets", icon="RENDER_STILL")
+            animation_box = draw_collapsible_box(unity_content, settings, "show_unity_turnaround_settings",
+                                                 "Turnaround", icon="RENDER_ANIMATION")
+            if animation_box is not None:
+                animation_box.label(text="Animation Settings", icon="SETTINGS")
+                animation_box.separator()
+                rs = context.scene.polygroups_render_settings
+                animation_box.prop(rs, "animation_frame_count")
+                animation_box.prop(rs, "animation_fps")
+                animation_box.separator()
+                animation_box.operator("object.polygroups_render_unity_turnaround", icon="RENDER_ANIMATION")
+                if rs.is_running or rs.animation_progress > 0:
+                    animation_box.progress(factor=rs.animation_progress / 100.0, type='BAR',
+                                           text=f'{rs.animation_progress:.0f}%')
+                    animation_box.label(text=rs.animation_status)
 
         export_content = draw_collapsible_box(
             layout,
@@ -3563,6 +3590,12 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         column.prop(settings, "smart_lods_create_text")
         column.prop(settings, "smart_lods_text_size")
         column.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")
+        prepare_box = column.box().column(align=True)
+        prepare_box.prop(settings, "smart_lods_prepare_mode", expand=True)
+        prepare_box.prop(settings, "unity_asset_name", text="Asset Name")
+        prepare_box.prop(settings, "unity_name_index")
+        prepare_box.prop(settings, "unity_asset_index", text="Version Index")
+        prepare_box.operator("object.polygroups_smart_lods_prepare", icon="MOD_DECIM")
         box = column.box().column(align=True)
         box.prop(settings, "smart_lods_render_mode")
         box.prop(settings, "smart_lods_render_text")
@@ -3767,8 +3800,17 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         content = draw_topic(layout, context, "export_1", 'Unity Export', "EXPORT")
         if content is not None:
             column = content.column(align=True)
+            navigation = column.row(align=True)
+            navigation.operator("object.polygroups_unity_collection_step", text="Prev Collections", icon="TRIA_LEFT").delta = -1
+            navigation.operator("object.polygroups_unity_collection_step", text="Next Collections", icon="TRIA_RIGHT").delta = 1
+            column.operator("object.polygroups_prepare_and_export_unity", icon="EXPORT")
+            presets = column.row(align=True)
+            presets.operator("object.polygroups_save_unity_export_preset", text="Save Preset", icon="FILE_TICK")
+            presets.operator("object.polygroups_load_unity_export_preset", text="Load Preset", icon="IMPORT")
             column.prop(settings, "unity_export_directory")
             column.prop(settings, "unity_export_overwrite")
+            column.prop(settings, "unity_export_clear_asset_folder")
+            column.prop(settings, "unity_export_autosave")
             formats = column.row(align=True)
             formats.prop(settings, "unity_export_fbx")
             formats.prop(settings, "unity_export_gltf")
@@ -3777,6 +3819,11 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column.prop(settings, "unity_export_all_renders")
             rs = context.scene.polygroups_render_settings
             if settings.unity_export_all_renders:
+                column.prop(settings, "unity_render_freestyle")
+                color_row = column.row(align=True)
+                color_row.enabled = settings.unity_render_freestyle and not rs.is_running
+                color_row.prop(rs, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+                color_row.operator("render.polygroups_palette_popup", text="", icon="COLOR")
                 column.prop(settings, "unity_render_image_format", text="LOD Image Format")
                 column.prop(rs, "animation_views_image_format")
                 column.prop(rs, "animation_container")
@@ -3788,6 +3835,8 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column.prop(settings, "unity_export_info_format", text=t(context, "mesh_export_info_format"))
             column.prop(settings, "unity_use_auto_rig_pro")
             column.operator("object.polygroups_export_unity", icon="EXPORT")
+            for status_line in settings.unity_export_status.splitlines():
+                column.label(text=status_line)
 
         content = draw_topic(layout, context, "export_2", 'Export Blend Assets', "FILE_BLEND")
         if content is not None:

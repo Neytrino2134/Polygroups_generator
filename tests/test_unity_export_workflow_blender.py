@@ -1,0 +1,48 @@
+import sys, json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+import bpy, addon_utils
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT.parent))
+addon_utils.enable(ROOT.name,default_set=False)
+from polygroups_generator.operators import unity_export_workflow as workflow
+scene=bpy.context.scene
+s=scene.polygroups_mesh_finalization_settings
+rs=scene.polygroups_render_settings
+assert s.unity_export_clear_asset_folder and s.unity_export_autosave
+assert s.unity_export_gltf and s.unity_export_all_renders
+assert s.unity_gltf_mode == 'COMBINED'
+color=tuple(rs.freestyle_line_color)
+assert abs(color[1] - ((122/255+0.055)/1.055)**2.4) < 1e-6
+with TemporaryDirectory() as directory:
+    bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory)/'Test.blend'))
+    preset=Path(directory)/'global_presets.json'
+    with patch.object(workflow,'preset_path',return_value=preset):
+        assert bpy.ops.object.polygroups_save_unity_export_preset(name='Orange') == {'FINISHED'}
+        other=bpy.data.scenes.new('Other')
+        bpy.context.window.scene=other
+        other.polygroups_mesh_finalization_settings.unity_export_gltf=False
+        other.polygroups_render_settings.freestyle_line_color=(0,0,1,1)
+        assert bpy.ops.object.polygroups_load_unity_export_preset(preset='Orange') == {'FINISHED'}
+        assert other.polygroups_mesh_finalization_settings.unity_export_gltf
+        assert tuple(other.polygroups_render_settings.freestyle_line_color) == color
+        bpy.context.window.scene=scene
+    s.unity_export_all_renders=False
+    s.unity_export_fbx=False
+    s.unity_auto_increment_index=False
+    s.unity_export_directory=str(Path(directory)/'!Unity')
+    s.smart_lods_count=2
+    s.smart_lods_target_1=80
+    s.smart_lods_target_2=40
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=12,ring_count=6)
+    source=bpy.context.object
+    source.name='Source'
+    assert bpy.ops.object.polygroups_prepare_and_export_unity(asset_name='Tree',name_index='13',version_index='02') == {'FINISHED'}
+    assert source not in bpy.context.selected_objects and source.name == 'Source'
+    assert {o.name for o in bpy.context.selected_objects} == {'Tree_13_02','Tree_13_02.LOD1'}
+    output=Path(directory)/'!Unity'/'Tree_13_02'/'GLTF'/'Tree_13_02.gltf'
+    data=json.loads(output.read_text())
+    assert len(data['meshes']) == 2
+    assert '2 LODs' in s.unity_export_status
+print('UNITY_EXPORT_WORKFLOW_PASSED')

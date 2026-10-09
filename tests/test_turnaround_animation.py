@@ -151,15 +151,23 @@ with TemporaryDirectory() as directory:
     assert settings.animation_last_output.endswith(".mkv")
     assert Path(settings.animation_last_output).is_file()
     assert Path(settings.animation_last_output).parent.name == "Turnaround_Test_Turnaround"
+    assert not settings.animation_collection_name
+    bpy.context.view_layer.objects.active = source
+    assert bpy.ops.object.polygroups_prepare_turnaround_animation() == {"FINISHED"}
+    _restore_render(scene, render_state)
     settings.animation_media_type = "IMAGE"
     assert bpy.ops.object.polygroups_render_turnaround_animation() == {"FINISHED"}
     mesh_output = Path(directory) / "Turnaround_Test_Turnaround"
     assert not (Path(directory) / "Render Animation").exists()
     assert len(list(mesh_output.glob("Turnaround_Test_Turnaround_*.png"))) == 2
+    assert not settings.animation_collection_name
+    bpy.context.view_layer.objects.active = source
+    assert bpy.ops.object.polygroups_prepare_turnaround_animation() == {"FINISHED"}
+    _restore_render(scene, render_state)
     assert bpy.ops.object.polygroups_render_turnaround_views() == {"FINISHED"}
     for angle in (0, 90, 180, 270):
         assert (mesh_output / f"Turnaround_Test_Turnaround_{angle:03d}.png").is_file()
-    assert all(abs(value) < 1.0e-6 for value in root.rotation_euler)
+    assert all(abs(value) < 1.0e-6 for value in bpy.data.objects[settings.animation_object_name].parent.rotation_euler)
 assert _render_snapshot(scene) == render_state
 
 addon_utils.disable(ROOT.name, default_set=True)

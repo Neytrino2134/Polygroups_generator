@@ -278,7 +278,7 @@ class OBJECT_OT_polygroups_render_smart_lods(bpy.types.Operator):
                         ensure_lod_label(context, lod, source_name, index).select_set(True)
                 context.view_layer.objects.active = batch[0]
                 suffix = f"LOD_{int(batch[0].get(LOD_INDEX) or batch[0].name.rsplit('.', 1)[-1]):02d}" if render_mode == 'INDIVIDUAL' else 'All_LODs'
-                filepath = os.path.join(directory, f"{_safe_path_token(source_name)}_{suffix}_{stamp}{image_extension(rs.image_format)}")
+                filepath = os.path.join(directory, f"{_safe_path_token(source_name)}_{suffix}_{stamp}{image_extension(render_settings.image_format)}")
                 result = bpy.ops.object.polygroups_render_selected_auto(output_path=filepath)
                 if 'FINISHED' not in result:
                     return {'CANCELLED'}
@@ -391,3 +391,60 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
             if original_mode != "OBJECT":
                 bpy.ops.object.mode_set(mode=original_mode)
         return {"FINISHED"} if success else {"CANCELLED"}
+
+
+class OBJECT_OT_polygroups_smart_lods_prepare(bpy.types.Operator):
+    bl_idname = "object.polygroups_smart_lods_prepare"
+    bl_label = "Smart LODs + Prepare Assets"
+    bl_description = "Generate LODs, then prepare only generated meshes for Unity or Unreal/FAB"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT' and context.active_object is not None and context.active_object.type == 'MESH'
+
+    def execute(self, context):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        source = context.active_object
+        if (settings.unity_copy_textures if settings.smart_lods_prepare_mode == 'UNITY' else settings.fab_copy_textures) and not bpy.data.filepath:
+            self.report({'ERROR'}, 'Save the blend file before copying textures')
+            return {'CANCELLED'}
+        if not settings.unity_name_index.isdigit():
+            self.report({'ERROR'}, 'Name Index must be a two-digit number')
+            return {'CANCELLED'}
+        before = set(bpy.data.objects)
+        original_count = settings.smart_lods_count
+        try:
+            if settings.smart_lods_prepare_mode == 'UNREAL':
+                settings.smart_lods_count = 3
+            result = bpy.ops.object.polygroups_generate_smart_lods()
+        finally:
+            settings.smart_lods_count = original_count
+        if 'FINISHED' not in result:
+            return {'CANCELLED'}
+        lods = sorted((obj for obj in bpy.data.objects if obj not in before and obj.type == 'MESH'
+                       and obj.get(LOD_SOURCE) == source.name), key=lambda obj: obj.get(LOD_INDEX, 0))
+        if not lods:
+            return {'CANCELLED'}
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in lods:
+            obj.select_set(True)
+        context.view_layer.objects.active = lods[0]
+        if settings.smart_lods_prepare_mode == 'UNITY':
+            result = bpy.ops.object.polygroups_prepare_unity(auto_lods=True)
+        else:
+            saved = (settings.fab_asset_name, settings.fab_asset_index, settings.fab_auto_increment_index)
+            try:
+                settings.fab_asset_name = settings.unity_asset_name + '_' + settings.unity_name_index.zfill(2)
+                settings.fab_asset_index = settings.unity_asset_index
+                settings.fab_auto_increment_index = False
+                for obj, variant in zip(lods, ('HIGH', 'MID', 'LOW')):
+                    obj.name = f'SM_Generated_{variant}'
+                result = bpy.ops.object.polygroups_auto_prepare_fab_selection('EXEC_DEFAULT')
+            finally:
+                settings.fab_asset_name, settings.fab_asset_index, settings.fab_auto_increment_index = saved
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in lods:
+            obj.select_set(True)
+        context.view_layer.objects.active = lods[0]
+        return result
