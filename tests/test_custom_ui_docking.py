@@ -50,12 +50,13 @@ def tick():
                     assert not model.errors,model.errors
                     rail=[b for b in model.bindings.values() if b[0]=='operator' and b[1]=='wm.airetopo_custom_section']
                     assert len(rail)==13
+                bpy.ops.wm.airetopo_custom_ui('INVOKE_DEFAULT')
                 bpy.ops.wm.airetopo_custom_placement(placement='FLOATING')
                 state['step']=1
                 return 1
             s=lifecycle.SESSIONS[lifecycle.key_for(bpy.context)]
             if step==1:
-                assert prefs.ui_mode=='UI_PANEL' and not prefs.ui_panel_docked
+                assert prefs.ui_mode=='UI_PANEL' and not s.docked
                 assert s.section==12
                 s.width=400
                 a.tag_redraw()
@@ -72,21 +73,21 @@ def tick():
                 return .6
             if step==3:
                 assert s is state['session'] and s.section==9
-                assert prefs.ui_mode=='UI_PANEL' and prefs.ui_panel_docked
+                assert prefs.ui_mode=='UI_PANEL' and s.docked
                 x,top,width,height=s.geometry(r)
-                assert abs(x+width-(r.width-8))<.01
+                assert abs(x+width-(r.width-22))<.01
                 assert top==r.height-200 and height==r.height-208
                 assert not any(h[1][0] in {'move','resize'} for h in s.hits)
                 for rw,rh in ((400,300),(1400,900)):
                     x,top,width,height=s.geometry(SimpleNamespace(width=rw,height=rh))
-                    assert abs(x+width-(rw-8))<.01 and top==rh-200
+                    assert abs(x+width-(rw-22))<.01 and top==rh-200
                 bpy.ops.screen.screen_full_area(use_hide_panels=False)
                 state['step']=4
                 return .6
             if step==4:
-                assert prefs.ui_panel_docked and s is state['session']
+                assert s.docked and s is state['session']
                 x,top,width,height=s.geometry(r)
-                assert abs(x+width-(r.width-8))<.01 and top==r.height-200
+                assert abs(x+width-(r.width-22))<.01 and top==r.height-200
                 bpy.ops.screen.screen_full_area(use_hide_panels=False)
                 state['step']=5
                 return .6
@@ -100,7 +101,7 @@ def tick():
                 return .6
             assert s is state['session'] and s.section==9
             if step==6:
-                assert prefs.ui_mode=='UI_PANEL' and not prefs.ui_panel_docked
+                assert prefs.ui_mode=='UI_PANEL' and not s.docked
                 assert any(h[1][0]=='resize' for h in s.hits)
                 state['position']=(s.x,s.y)
                 rect=next(h[0] for h in s.hits if h[1][0]=='move')
@@ -120,7 +121,7 @@ def tick():
                 w.event_simulate(type='LEFTMOUSE',value='RELEASE',x=x,y=y)
                 state['step']=8
                 return .6
-            assert prefs.ui_panel_docked and prefs.ui_mode=='UI_PANEL'
+            assert s.docked and prefs.ui_mode=='UI_PANEL'
             assert not any(h[1][0]=='move' for h in s.hits)
             assert not state['capture']
             LOG.write_text(LOG.read_text()+'13 sidebar sections, detach/dock state preservation and 13 compact icon targets passed\nCUSTOM_UI_DOCKING_TESTS_PASSED\n')

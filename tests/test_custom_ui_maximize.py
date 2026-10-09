@@ -6,8 +6,10 @@ sys.path.insert(0,str(ROOT.parent))
 bpy.context.preferences.use_preferences_save=False
 addon_utils.enable(ROOT.name,default_set=True)
 from polygroups_generator.custom_ui import lifecycle as ui
-bpy.context.preferences.addons[ROOT.name].preferences.ui_panel_docked=False
 bpy.context.preferences.addons[ROOT.name].preferences.ui_mode='UI_PANEL'
+sys.path.insert(0,str(ROOT/'tests'))
+from custom_ui_test_support import open_panel
+open_panel(floating=True)
 LOG=ROOT/'docs/custom_ui/maximize_test.log'
 state={'step':0}
 def tick():

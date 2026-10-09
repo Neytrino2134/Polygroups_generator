@@ -641,7 +641,11 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                 return
         if not _CUSTOM_CAPTURING and preferences and preferences.ui_mode == 'UI_PANEL':
             self.layout.operator('wm.airetopo_custom_ui', text='Open UI Panel', icon='WINDOW')
-            self.layout.prop(preferences, 'ui_panel_docked', text='Dock on Right')
+            from .custom_ui.lifecycle import SESSIONS, key_for
+            session = SESSIONS.get(key_for(context))
+            if session:
+                self.layout.operator('wm.airetopo_custom_placement',
+                    text='Detach' if session.docked else 'Dock on Right', icon='WINDOW').placement = 'FLOATING' if session.docked else 'DOCKED'
             return
         layout = self.layout
         visible_layout = layout

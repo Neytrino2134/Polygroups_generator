@@ -3,7 +3,7 @@
 Choose **Classic**, **Custom**, or **UI Panel** in the AI Retopo sidebar or addon
 preferences. Classic is the original sidebar; Custom is the compact native
 sidebar with icon navigation. UI Panel is the flat blue/cyan GPU interface.
-**Open UI Panel** restores a closed card.
+**Open UI Panel** opens or restores a docked card only in the invoking 3D editor.
 Blender's normal preference saving controls persistence of the selected mode.
 
 The left navigation contains all 13 workflow stages. Click group headings to
@@ -14,7 +14,8 @@ saved group states. Empty the search text to return to the selected stage.
 settings, plus appearance controls. Narrow cards use an icon-only navigation
 column with stage names in tooltips.
 
-UI Panel starts docked to the right of the viewport, occupying its available
+UI Panel starts docked to the right of the viewport, leaving 200 px above and
+22 px at the right, occupying its available
 height. **Detach** in the title enables free movement and resizing; **Dock**
 anchors the same card to the right again. Its colors, groups, controls and active
 stage remain the same. Docked width is configurable in addon preferences.
@@ -92,4 +93,4 @@ Dock anchors that GPU panel to the viewport right edge, and Detach frees it.
 Neither action switches it to native Blender controls. Narrow floating windows use a
 compact icon column; wide windows keep numbered text navigation. Section,
 scene fold settings and the floating window geometry survive placement changes.
-UI Panel docking can also be selected in addon preferences.
+Dock/Detach are local to each open panel. Appearance preferences never open additional panels.

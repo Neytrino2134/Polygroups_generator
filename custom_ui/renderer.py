@@ -288,7 +288,7 @@ def draw(session, region):
         text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, width=width-200*scale)
         if width>=570*scale:
             text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.MUTED)
-        docked = prefs.ui_mode == 'UI_PANEL' and prefs.ui_panel_docked
+        docked = prefs.ui_mode == 'UI_PANEL' and session.docked
         for offset, label, action in ((116, 'Detach' if docked else 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
             text(label, x+width-offset*scale, top-28*scale, 12*scale, T.MUTED)
             session.hit((x+width-offset*scale-4*scale, top-40*scale, 40*scale, 34*scale), (action,), label)

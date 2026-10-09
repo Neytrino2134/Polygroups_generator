@@ -18,8 +18,10 @@ LOG.write_text('Starting\n')
 addon_utils.enable(ROOT.name,default_set=True)
 from polygroups_generator.custom_ui import lifecycle
 prefs=bpy.context.preferences.addons[ROOT.name].preferences
-prefs.ui_panel_docked=False
 prefs.ui_mode='UI_PANEL'
+sys.path.insert(0,str(ROOT/'tests'))
+from custom_ui_test_support import open_panel
+open_panel(floating=True)
 window=bpy.context.window_manager.windows[0]
 area=next(a for a in window.screen.areas if a.type=='VIEW_3D')
 region=next(r for r in area.regions if r.type=='WINDOW')
@@ -154,7 +156,6 @@ def run():
         prefs.ui_mode='CLASSIC'
         yield .6
         assert not lifecycle.SESSIONS
-        prefs.ui_panel_docked=False
         prefs.ui_mode='UI_PANEL'
         yield .6
         assert len(lifecycle.SESSIONS)==1

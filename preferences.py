@@ -25,6 +25,11 @@ ADDON_AUTHOR = "Meowmaster"
 def _update_custom_interface(self, context):
     from .custom_ui.lifecycle import request_update
     request_update()
+
+
+def _update_interface_mode(self, context):
+    from .custom_ui.lifecycle import request_update
+    request_update(context, open_current=self.ui_mode == 'UI_PANEL')
 ADDON_CONTACT_EMAIL = "meowmasterart@gmail.com"
 ADDON_GITHUB_URL = "https://github.com/Neytrino2134"
 ADDON_REPOSITORY_URL = "https://github.com/Neytrino2134/Polygroups_generator"
@@ -434,7 +439,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         name='Interface', items=(('CLASSIC', 'Classic', 'Blender sidebar'),
                                  ('CUSTOM', 'Custom', 'Compact native sidebar'),
                                  ('UI_PANEL', 'UI Panel', 'Blue/cyan panel docked right or freely floating')),
-        default='CLASSIC', update=_update_custom_interface)
+        default='CLASSIC', update=_update_interface_mode)
     custom_ui_scale: bpy.props.FloatProperty(name='Custom UI Scale', default=1.0, min=.75, max=2,
                                              update=_update_custom_interface)
     custom_ui_accent: bpy.props.FloatVectorProperty(name='Accent', subtype='COLOR', size=3,
@@ -445,8 +450,6 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
                                                 update=_update_custom_interface)
     custom_ui_section: bpy.props.IntProperty(default=0, min=0, max=12, options={'HIDDEN'})
     custom_ui_geometry: bpy.props.FloatVectorProperty(size=4, default=(80,80,1100,850), options={'HIDDEN'})
-    ui_panel_docked: bpy.props.BoolProperty(name='Dock UI Panel', default=True,
-        description='Anchor the blue/cyan panel to the right of the viewport', update=_update_custom_interface)
     ui_panel_width: bpy.props.IntProperty(name='Docked Width', default=420, min=260, max=1000,
         update=_update_custom_interface)
     panel_python_executable: bpy.props.StringProperty(
@@ -818,9 +821,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         box.label(text='Interface', icon='WINDOW')
         box.prop(self, 'ui_mode', expand=True)
         if self.ui_mode == 'UI_PANEL':
-            box.prop(self, 'ui_panel_docked')
-            if self.ui_panel_docked:
-                box.prop(self, 'ui_panel_width')
+            box.prop(self, 'ui_panel_width')
             box.prop(self, 'custom_ui_scale')
             box.prop(self, 'custom_ui_accent')
             box.prop(self, 'custom_ui_brightness')

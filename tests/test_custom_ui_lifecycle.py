@@ -17,8 +17,10 @@ sys.path.insert(0,str(ROOT.parent))
 addon_utils.enable(ROOT.name,default_set=True)
 from polygroups_generator.custom_ui import lifecycle
 prefs=bpy.context.preferences.addons[ROOT.name].preferences
-prefs.ui_panel_docked=False
 prefs.ui_mode='UI_PANEL'
+sys.path.insert(0,str(ROOT/'tests'))
+from custom_ui_test_support import open_panel
+open_panel(floating=True)
 state={'step':0}
 TEMP=tempfile.TemporaryDirectory(prefix='airetopo-ui-lifecycle-')
 
@@ -61,6 +63,8 @@ def tick():
                 state['step']=3
                 return 1
             if step==3:
+                # File load clears sessions; reopening must target this editor.
+                bpy.ops.wm.airetopo_custom_ui('INVOKE_DEFAULT')
                 assert lifecycle.SESSIONS
                 for session in lifecycle.SESSIONS.values():
                     assert session.scene==bpy.context.scene.as_pointer()

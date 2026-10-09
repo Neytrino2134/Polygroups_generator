@@ -10,7 +10,7 @@ from .events import edit_key, parsed_value
 SESSIONS = {}
 _handle = None
 _registered = False
-_autostart = True
+_pending_open = set()
 _HANDLE_KEY = 'airetopo.custom_ui.draw_handle'
 _CLEANUP_KEY = 'airetopo.custom_ui.cleanup'
 
@@ -51,6 +51,7 @@ class Session:
         self.window, self.area, self.region = context.window, context.area, context.region
         self.scene = context.scene.as_pointer()
         self.prefs = preferences(context)
+        self.docked = True
         self.section = self.prefs.custom_ui_section
         self.show_header = False
         self.scrolls = {}
@@ -82,13 +83,13 @@ class Session:
 
     def geometry(self, region):
         s = self.scale
-        if self.prefs.ui_mode == 'UI_PANEL' and self.prefs.ui_panel_docked:
-            width = min(self.prefs.ui_panel_width*s, max(1, region.width-16))
+        if self.prefs.ui_mode == 'UI_PANEL' and self.docked:
+            width = min(self.prefs.ui_panel_width*s, max(1, region.width-30))
             # Reserve physical viewport pixels for its top toolbars/overlays.
             top = max(1, min(region.height-1, max(9, region.height-200)))
             available = max(1, top-8)
             h = min(44*s if self.collapsed else available, available)
-            return max(8, region.width-width-8), top, width, h
+            return max(8, region.width-width-22), top, width, h
         width = min(self.width*s, max(1, region.width-16))
         h = min((44 if self.collapsed else self.height)*s, max(1, region.height-16))
         x = min(max(8, self.x*s), max(8, region.width-width-8))
@@ -297,14 +298,14 @@ class AIRETOPO_OT_custom_placement(bpy.types.Operator):
 
     def execute(self, context):
         prefs = preferences(context)
-        prefs.ui_mode = 'UI_PANEL'
-        prefs.ui_panel_docked = self.placement == 'DOCKED'
         session = SESSIONS.get(key_for(context))
-        if session:
-            session.select(prefs.custom_ui_section)
-            session.refresh(context)
-        for area in context.screen.areas:
-            area.tag_redraw()
+        if not session:
+            return {'CANCELLED'}
+        prefs.ui_mode = 'UI_PANEL'
+        _pending_open.discard(session.key)
+        session.docked = self.placement == 'DOCKED'
+        session.refresh(context)
+        redraw(session)
         request_update()
         return {'FINISHED'}
 
@@ -331,7 +332,6 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
         return context.area is not None and context.area.type == 'VIEW_3D' and not bpy.app.background
 
     def invoke(self, context, event):
-        global _autostart
         if context.region.type != 'WINDOW':
             region = next(r for r in context.area.regions if r.type == 'WINDOW')
             with context.temp_override(region=region):
@@ -339,12 +339,14 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
         key = key_for(context)
         if preferences(context).ui_mode != 'UI_PANEL':
             preferences(context).ui_mode = 'UI_PANEL'
+        _pending_open.discard(key)
         if key in SESSIONS:
+            SESSIONS[key].docked = True
+            SESSIONS[key].collapsed = False
             redraw(SESSIONS[key])
-            return {'CANCELLED'}
+            return {'FINISHED'}
         self.session = Session(context)
         SESSIONS[key] = self.session
-        _autostart = False
         context.window_manager.modal_handler_add(self)
         context.area.tag_redraw()
         return {'RUNNING_MODAL'}
@@ -460,7 +462,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                 action = hit[1]
                 s.note = ''
                 if action[0] == 'dock':
-                    bpy.ops.wm.airetopo_custom_placement(placement='FLOATING' if s.prefs.ui_panel_docked else 'DOCKED')
+                    bpy.ops.wm.airetopo_custom_placement(placement='FLOATING' if s.docked else 'DOCKED')
                 elif action[0] == 'binding':
                     _dispatch(s, action[1])
                 elif action[0] == 'slider':
@@ -485,7 +487,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                 elif action[0] == 'collapse':
                     s.collapsed = not s.collapsed
                 elif action[0] in {'move', 'resize'}:
-                    if s.prefs.ui_panel_docked:
+                    if s.docked:
                         return {'RUNNING_MODAL'}
                     s.drag = (action[0], mx, my, (s.x, s.y, s.width, s.height))
                 elif action[0] == 'search':
@@ -535,6 +537,7 @@ def cleanup():
     for session in list(SESSIONS.values()):
         session.closed = True
     SESSIONS.clear()
+    _pending_open.clear()
     renderer.clear()
 
 
@@ -551,15 +554,15 @@ def _load_post(_):
     request_update()
 
 
-def request_update():
-    global _autostart
-    _autostart = True
+def request_update(context=None, open_current=False):
+    if (open_current and context and context.window and context.area
+            and context.area.type == 'VIEW_3D'):
+        _pending_open.add(key_for(context))
     if _registered and not bpy.app.background and not bpy.app.timers.is_registered(_tick):
         bpy.app.timers.register(_tick, first_interval=.1)
 
 
 def _tick():
-    global _autostart
     if not _registered or bpy.app.background:
         return None
     prefs = preferences()
@@ -579,13 +582,14 @@ def _tick():
                 key = key_for(bpy.context)
                 session = SESSIONS.get(key)
                 if session:
+                    _pending_open.discard(key)
                     session.window, session.area, session.region = window, area, region
                     try:
                         if session.refresh(bpy.context) or (session.tooltip and .6 < session.tooltip_age < 1.2):
                             area.tag_redraw()
                     except (ReferenceError, RuntimeError) as exc:
                         session.note = str(exc)
-                elif _autostart:
+                elif key in _pending_open:
                     try:
                         bpy.ops.wm.airetopo_custom_ui('INVOKE_DEFAULT')
                     except Exception as exc:
@@ -600,7 +604,6 @@ def _tick():
         window_id, space_id = key.split(':')
         if window_id not in windows or space_id not in spaces:
             SESSIONS.pop(key).closed = True
-    _autostart = False
     return .5
 
 

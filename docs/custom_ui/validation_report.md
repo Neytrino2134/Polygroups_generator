@@ -176,3 +176,19 @@ maximize/restore, Detach/Dock clicks and free dragging.
 Docked top clearance increased to 200 physical pixels at the user's request.
 The real Blender docking regression passed the updated geometry checks,
 maximize/restore, Dock/Detach and floating movement (supersedes 100 px above).
+
+## Per-editor launch and placement (2026-10-09)
+
+Docked right clearance is now 22 physical pixels (top remains 200 px).
+Open UI Panel always opens/reopens docked in its invoking editor. Docking is
+stored on each Session, rather than a shared addon preference. Dock/Detach
+modify only that session and never invoke a panel in a different editor.
+The timer maintains existing sessions; it can create a new session only for an
+explicitly requested editor key. Switching to UI Panel from a VIEW_3D schedules
+that editor alone; appearance changes, registration and file-load callbacks do
+not launch panels across the workspace. File-load tests now reopen explicitly.
+
+Real GUI: CUSTOM_UI_VIEWPORT_SCOPE_TESTS_PASSED checks a two-editor split,
+origin-only opening, independent placements, Open resetting only its own card to
+docked, 22 px right clearance and no automatic resurrection of a closed card.
+Docking, input, lifecycle and 12 maximize/restore regressions also passed.

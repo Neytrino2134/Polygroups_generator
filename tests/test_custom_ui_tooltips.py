@@ -8,6 +8,9 @@ addon_utils.enable(ROOT.name,default_set=True)
 from polygroups_generator.custom_ui import lifecycle,renderer
 prefs=bpy.context.preferences.addons[ROOT.name].preferences
 prefs.ui_mode='UI_PANEL'
+sys.path.insert(0,str(ROOT/'tests'))
+from custom_ui_test_support import open_panel
+open_panel(floating=False)
 LOG=ROOT/'docs/custom_ui/tooltip_test.log'
 LOG.write_text('Starting\n')
 original=renderer.tooltip_bounds
@@ -44,7 +47,7 @@ def tick():
             assert not (x<=mx<=x+width and y<=my<=y+height)
             assert x>=0 and y>=0 and x+width<=r.width and y+height<=r.height
             if step==1:
-                prefs.ui_panel_docked=False
+                bpy.ops.wm.airetopo_custom_placement(placement='FLOATING')
                 s.width=400
                 state['step']=2
                 return .6
