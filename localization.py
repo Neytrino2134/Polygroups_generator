@@ -6,6 +6,7 @@ LANGUAGE_ITEMS = (
 
 TEXT = {
     "EN": {
+        "relocate_project": "Save to New Folder and Restart",
         "studio_collection_color_tag": "Collection Color Tag",
         "fab_rename_asset_warning": "Do not forget to change the Asset Name",
         "fab_queue_title": "Preparation Queue",
@@ -870,6 +871,7 @@ TEXT = {
         "open_prompt_folder": "Open Folder",
     },
     "RU": {
+        "relocate_project": "Пересохранить в новый каталог и перезапустить",
         "studio_collection_color_tag": "Цветовой тег коллекций",
         "fab_rename_asset_warning": "Не забудьте изменить Asset Name",
         "fab_queue_title": "Очередь подготовки",

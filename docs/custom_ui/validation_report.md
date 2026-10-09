@@ -192,3 +192,26 @@ Real GUI: CUSTOM_UI_VIEWPORT_SCOPE_TESTS_PASSED checks a two-editor split,
 origin-only opening, independent placements, Open resetting only its own card to
 docked, 22 px right clearance and no automatic resurrection of a closed card.
 Docking, input, lifecycle and 12 maximize/restore regressions also passed.
+
+## Relocate project with used textures (2026-10-10)
+
+Added wm.airetopo_relocate_project to the shared Autosave and Restart section.
+Custom now has an explicit session-section action; UI Panel has an Autosave
+header button. All modes expose the same relocation operator. Output is a new
+or empty directory, with collision-free per-image folders and relative paths.
+Image reachability starts at active material outputs on mesh face-used slots,
+traverses groups and excludes disconnected images/unused material slots.
+
+Real Blender 5.2: test_relocate_project_blender.py passed saved and unsaved
+project variants, clean source-byte copies, packed images, generated/edited
+pixel export, UDIM sets, nested material groups, missing-file preflight and
+reopening after the original texture directory was renamed away. It also
+verified the new operator in Classic/Custom/UI Panel captures. Linked IDs are
+explicitly rejected; no paid services or unrelated files were touched.
+
+Real GUI: test_relocate_project_restart.py launched an actual second factory
+Blender, checked its new .blend path and loaded texture pixels, retained the
+production ready handshake, and verified the original test Blender exited.
+PROJECT_RELOCATION_RESTART_TESTS_PASSED was recorded. The docking regression
+also passed a real Autosave header click and relocation-button availability.
+Sequence/movie code paths are implemented but were not exercised with video.

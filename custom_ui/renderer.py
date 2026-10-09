@@ -285,15 +285,15 @@ def draw(session, region):
         gpu.state.blend_set('ALPHA')
         rect(x, bottom, width, h, T.surface(T.BACKGROUND, prefs), prefs.custom_ui_rounding*scale)
         icons.draw('LOGO',x+14*scale,top-33*scale,25*scale,T.accent(prefs))
-        text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, width=width-200*scale)
+        text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, width=width-260*scale)
         if width>=570*scale:
             text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.MUTED)
         docked = prefs.ui_mode == 'UI_PANEL' and session.docked
-        for offset, label, action in ((116, 'Detach' if docked else 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
+        for offset, label, action in ((186, 'Autosave', 'header'), (116, 'Detach' if docked else 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
             text(label, x+width-offset*scale, top-28*scale, 12*scale, T.MUTED)
-            session.hit((x+width-offset*scale-4*scale, top-40*scale, 40*scale, 34*scale), (action,), label)
+            session.hit((x+width-offset*scale-4*scale, top-40*scale, (65 if action=='header' else 40)*scale, 34*scale), (action,), 'Autosave and Restart' if action=='header' else label)
         if not docked:
-            session.hit((x, top-42*scale, width-130*scale, 42*scale), ('move',), 'Drag to move')
+            session.hit((x, top-42*scale, width-195*scale, 42*scale), ('move',), 'Drag to move')
         if session.collapsed or h<190*scale:
             return
         compact = width < 670*scale

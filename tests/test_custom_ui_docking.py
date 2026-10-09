@@ -49,7 +49,7 @@ def tick():
                     ui.VIEW3D_PT_polygroups_generator.draw(SimpleNamespace(layout=model),bpy.context)
                     assert not model.errors,model.errors
                     rail=[b for b in model.bindings.values() if b[0]=='operator' and b[1]=='wm.airetopo_custom_section']
-                    assert len(rail)==13
+                    assert len(rail)==14
                 bpy.ops.wm.airetopo_custom_ui('INVOKE_DEFAULT')
                 bpy.ops.wm.airetopo_custom_placement(placement='FLOATING')
                 state['step']=1
@@ -123,6 +123,16 @@ def tick():
                 return .6
             assert s.docked and prefs.ui_mode=='UI_PANEL'
             assert not any(h[1][0]=='move' for h in s.hits)
+            if step==8:
+                rect=next(h[0] for h in s.hits if h[1][0]=='header')
+                x,y=int(r.x+rect[0]+rect[2]/2),int(r.y+rect[1]+rect[3]/2)
+                w.event_simulate(type='MOUSEMOVE',value='NOTHING',x=x,y=y)
+                w.event_simulate(type='LEFTMOUSE',value='PRESS',x=x,y=y)
+                w.event_simulate(type='LEFTMOUSE',value='RELEASE',x=x,y=y)
+                state['step']=9
+                return .6
+            assert s.show_header and not s.model.errors
+            assert any(b[0]=='operator' and b[1]=='wm.airetopo_relocate_project' for b in s.model.bindings.values())
             assert not state['capture']
             LOG.write_text(LOG.read_text()+'13 sidebar sections, detach/dock state preservation and 13 compact icon targets passed\nCUSTOM_UI_DOCKING_TESTS_PASSED\n')
             addon_utils.disable(ROOT.name)

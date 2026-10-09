@@ -53,7 +53,7 @@ class Session:
         self.prefs = preferences(context)
         self.docked = True
         self.section = self.prefs.custom_ui_section
-        self.show_header = False
+        self.show_header = self.prefs.custom_ui_show_session
         self.scrolls = {}
         self.scroll = 0
         self.query = ''
@@ -147,6 +147,7 @@ class Session:
         return changed
 
     def select(self, index, header=False):
+        self.prefs.custom_ui_show_session = header
         self.scrolls[(self.section, self.show_header)] = self.scroll
         self.section, self.show_header = index, header
         self.prefs.custom_ui_section = index
@@ -277,14 +278,18 @@ class AIRETOPO_OT_custom_section(bpy.types.Operator):
     def description(cls, context, properties):
         from .. import ui
         from ..localization import t
+        if properties.section == 13:
+            return t(context, 'panel_session_status')
         panel = ui.SECTION_PANEL_CLASSES[max(0, min(12, properties.section))]
         return f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}'
 
     def execute(self, context):
-        preferences(context).custom_ui_section = max(0, min(12, self.section))
+        if self.section != 13:
+            preferences(context).custom_ui_section = max(0, min(12, self.section))
+        preferences(context).custom_ui_show_session = self.section == 13
         session = SESSIONS.get(self.session_key or key_for(context))
         if session:
-            session.select(max(0, min(12, self.section)), self.section == 13)
+            session.select(session.section if self.section == 13 else max(0, min(12, self.section)), self.section == 13)
             session.refresh(context)
             redraw(session)
         return {'FINISHED'}

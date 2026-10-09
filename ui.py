@@ -622,12 +622,13 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     bl_order = 0
 
     def draw(self, context):
-        global _SEARCH_FILTER_GROUPS, _SEARCH_FILTER_TERMS
+        global _SEARCH_FILTER_GROUPS, _SEARCH_FILTER_TERMS, _CUSTOM_CAPTURING, _CUSTOM_HEADER_ONLY
         preferences = get_preferences(context)
         if not _CUSTOM_CAPTURING:
             self.layout.prop(preferences, 'ui_mode', expand=True) if preferences else None
             if preferences and preferences.ui_mode == 'CUSTOM':
                 self.layout.operator('wm.airetopo_custom_ui', text='Open UI Panel', icon='WINDOW')
+                self.layout.operator('wm.airetopo_custom_section', text=t(context, 'panel_session_status'), icon='FILE_REFRESH').section = 13
                 split = self.layout.split(factor=.12)
                 rail = split.column(align=True)
                 body = split.column()
@@ -635,9 +636,17 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                     item = rail.operator('wm.airetopo_custom_section', text='', icon=panel.bl_icon,
                         depress=index == preferences.custom_ui_section)
                     item.section = index
-                panel, visibility_property = SECTION_PANEL_VISIBILITY[preferences.custom_ui_section]
-                body.label(text=f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}', icon=panel.bl_icon)
-                draw_section_panel_content(panel, context, body, '')
+                if preferences.custom_ui_show_session:
+                    old_flags = _CUSTOM_CAPTURING, _CUSTOM_HEADER_ONLY
+                    _CUSTOM_CAPTURING, _CUSTOM_HEADER_ONLY = True, True
+                    try:
+                        VIEW3D_PT_polygroups_generator.draw(SimpleNamespace(layout=body), context)
+                    finally:
+                        _CUSTOM_CAPTURING, _CUSTOM_HEADER_ONLY = old_flags
+                else:
+                    panel, visibility_property = SECTION_PANEL_VISIBILITY[preferences.custom_ui_section]
+                    body.label(text=f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}', icon=panel.bl_icon)
+                    draw_section_panel_content(panel, context, body, '')
                 return
         if not _CUSTOM_CAPTURING and preferences and preferences.ui_mode == 'UI_PANEL':
             self.layout.operator('wm.airetopo_custom_ui', text='Open UI Panel', icon='WINDOW')
@@ -678,6 +687,8 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             session_header.label(text=t(context, "panel_session_status"), icon="TRIA_DOWN")
 
         if session_expanded:
+            session_box.operator('wm.airetopo_relocate_project',
+                text=t(context, 'relocate_project'), icon='FILE_NEW')
             save_status = custom_autosave.status_snapshot()
             status_row = session_box.row(align=True)
             event = save_status["event"]

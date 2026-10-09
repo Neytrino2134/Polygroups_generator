@@ -449,6 +449,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     custom_ui_rounding: bpy.props.FloatProperty(name='Corner Rounding', default=8, min=0, max=16,
                                                 update=_update_custom_interface)
     custom_ui_section: bpy.props.IntProperty(default=0, min=0, max=12, options={'HIDDEN'})
+    custom_ui_show_session: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
     custom_ui_geometry: bpy.props.FloatVectorProperty(size=4, default=(80,80,1100,850), options={'HIDDEN'})
     ui_panel_width: bpy.props.IntProperty(name='Docked Width', default=420, min=260, max=1000,
         update=_update_custom_interface)

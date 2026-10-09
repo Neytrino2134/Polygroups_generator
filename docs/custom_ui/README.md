@@ -94,3 +94,20 @@ Neither action switches it to native Blender controls. Narrow floating windows u
 compact icon column; wide windows keep numbered text navigation. Section,
 scene fold settings and the floating window geometry survive placement changes.
 Dock/Detach are local to each open panel. Appearance preferences never open additional panels.
+
+## Save Project to New Folder and Restart
+
+Available in Autosave and Restart in Classic, the Autosave and Restart button
+in Custom, and the Autosave header action in UI Panel. Choose a new or empty
+folder and a project filename. The operator copies reachable image textures from
+materials actually assigned to mesh polygons across all scenes into textures/,
+updates relative paths, saves the project and restarts from the new .blend.
+The original project and source texture files remain untouched.
+
+Disconnected image nodes and materials in unused slots are excluded. Node groups
+are traversed. File, packed, generated/edited single images, UDIM sets, image
+sequences and movie files are supported. Linked mesh/material/image data must be
+made local first; missing used files and edited tiled/animated buffers stop the
+operation before saving. Unused datablocks are retained; no orphan purge runs.
+A replacement Blender must confirm it opened the saved file before the current
+process quits. A failed launch leaves the current Blender open at the saved file.
