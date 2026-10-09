@@ -152,3 +152,15 @@ The real framebuffer capture is ui_panel_docked.png.
 Final validation also passed CUSTOM_UI_INPUT_TESTS_PASSED,
 CUSTOM_UI_MAXIMIZE_TESTS_PASSED (12 transitions and post-restore clicks),
 CUSTOM_UI_LIFECYCLE_TESTS_PASSED and CUSTOM_UI_BLENDER_TESTS_PASSED.
+
+## Anchored tooltips (2026-10-09)
+
+GPU tooltips anchor above the current hovered hit rectangle with a 12 px scaled
+gap, rather than following the cursor. They clamp horizontally to the viewport;
+when the upper edge has insufficient room, placement falls back below or beside
+the control. Candidates covering the cursor are rejected; impossible placements
+are suppressed. Stale hover descriptions are not drawn after layout changes.
+
+CUSTOM_UI_BLENDER_TESTS_PASSED includes above-control, viewport-edge and cursor
+exclusion checks at scales 1, 1.5 and 2. CUSTOM_UI_TOOLTIP_TESTS_PASSED verifies
+actual GPU tooltip placement after simulated hover in docked and floating modes.

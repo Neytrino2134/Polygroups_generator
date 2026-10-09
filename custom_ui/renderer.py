@@ -10,6 +10,28 @@ _shader = None
 _geometry = {}
 
 
+def tooltip_bounds(anchor, size, viewport, mouse, scale=1):
+    """Anchor above a control; fall back below/alongside at viewport edges."""
+    ax, ay, aw, ah = anchor
+    vw, vh = viewport
+    margin, gap = 8*scale, 12*scale
+    tw, th = size
+    tw, th = min(tw, vw-2*margin), min(th, vh-2*margin)
+    if tw <= 0 or th <= 0:
+        return None
+    center = min(max(margin, ax+(aw-tw)/2), vw-margin-tw)
+    candidates = ((center, ay+ah+gap), (center, ay-gap-th),
+                  (ax-gap-tw, ay+(ah-th)/2), (ax+aw+gap, ay+(ah-th)/2))
+    mx, my = mouse
+    for tx, ty in candidates:
+        if tx < margin or ty < margin or tx+tw > vw-margin or ty+th > vh-margin:
+            continue
+        if tx-gap <= mx <= tx+tw+gap and ty-gap <= my <= ty+th+gap:
+            continue
+        return tx, ty, tw, th
+    return None
+
+
 def clear():
     global _shader
     _shader = None
@@ -347,11 +369,10 @@ def draw(session, region):
                     rect(dx+4*scale,cy,dw-8*scale,30*scale,T.SELECTED)
                 text(label,dx+12*scale,cy+10*scale,12*scale,T.TEXT,dw-24*scale)
                 session.hit((dx,cy,dw,32*scale),('choice',code),description)
-        if session.tooltip and session.tooltip_age > .6:
-            tx, ty = session.mouse
-            tw = min(420*scale, width-30*scale)
-            tx = min(max(x+10*scale, tx), x+width-tw-10*scale)
-            ty = max(bottom+30*scale, min(top-50*scale, ty))
+        hovered = session.find(*session.mouse)
+        if (session.tooltip and session.tooltip_age > .6 and hovered
+                and hovered[2] == session.tooltip):
+            tw = min(420*scale, region.width-16*scale)
             lines=[]
             blf.size(0,11*scale)
             for source_line in session.tooltip.splitlines():
@@ -363,12 +384,15 @@ def draw(session, region):
                     line+=char
                 if line:
                     lines.append(line)
-            lines=lines[:8]
+            lines=lines[:max(0, min(8, int((region.height-30*scale)/(15*scale))))]
             tip_h=(len(lines)*15+14)*scale
-            ty=max(bottom+tip_h+10*scale,ty)
-            rect(tx,ty-tip_h,tw,tip_h,T.RAISED)
-            for index,line in enumerate(lines):
-                text(line,tx+10*scale,ty-(index*15+20)*scale,11*scale,T.TEXT)
+            bounds = tooltip_bounds(hovered[0], (tw, tip_h),
+                                    (region.width, region.height), session.mouse, scale)
+            if bounds and lines:
+                tx, ty, tw, tip_h = bounds
+                rect(tx,ty,tw,tip_h,T.RAISED)
+                for index,line in enumerate(lines):
+                    text(line,tx+10*scale,ty+tip_h-(index*15+20)*scale,11*scale,T.TEXT)
     finally:
         gpu.state.scissor_set(*scissor)
         gpu.state.scissor_test_set(scissor_test)

@@ -94,6 +94,18 @@ with bpy.context.temp_override(window=window, area=area, region=region), context
     bpy.ops.wm.airetopo_reset_custom_appearance()
     assert prefs.custom_ui_scale == 1
 assert 'failed to draw' not in errors.getvalue(), errors.getvalue()
+for scale in (1, 1.5, 2):
+    viewport = (1000*scale, 700*scale)
+    for anchor in ((200,200,160,40), (820,200,160,40), (200,630,160,40)):
+        anchor = tuple(value*scale for value in anchor)
+        mouse = (anchor[0]+anchor[2]/2, anchor[1]+anchor[3]/2)
+        bounds = renderer.tooltip_bounds(anchor, (320*scale, 60*scale), viewport, mouse, scale)
+        assert bounds
+        x,y,w,h = bounds
+        assert 0 <= x and x+w <= viewport[0] and 0 <= y and y+h <= viewport[1]
+        assert not (x <= mouse[0] <= x+w and y <= mouse[1] <= y+h)
+        if anchor[1]+anchor[3]+72*scale <= viewport[1]-8*scale:
+            assert y > anchor[1]+anchor[3], 'Tooltip should be above the hovered control'
 out = Path(os.environ.get('AIRETOPO_UI_VALIDATION_OUTPUT',ROOT / 'docs' / 'custom_ui'))
 out.mkdir(parents=True, exist_ok=True)
 (out / 'control_inventory.json').write_text(json.dumps(dict(baseline='b67e6c8',runtime=records,static_calls=collect(ROOT)), indent=2, ensure_ascii=False, default=lambda value: sorted(value) if isinstance(value,set) else str(value)), encoding='utf8')
