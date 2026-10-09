@@ -82,6 +82,10 @@ class Session:
 
     def geometry(self, region):
         s = self.scale
+        if self.prefs.ui_mode == 'UI_PANEL' and self.prefs.ui_panel_docked:
+            width = min(self.prefs.ui_panel_width*s, max(1, region.width-16))
+            h = min(44*s if self.collapsed else region.height-16, max(1, region.height-16))
+            return max(8, region.width-width-8), region.height-8, width, h
         width = min(self.width*s, max(1, region.width-16))
         h = min((44 if self.collapsed else self.height)*s, max(1, region.height-16))
         x = min(max(8, self.x*s), max(8, region.width-width-8))
@@ -290,13 +294,12 @@ class AIRETOPO_OT_custom_placement(bpy.types.Operator):
 
     def execute(self, context):
         prefs = preferences(context)
-        prefs.custom_ui_presentation = self.placement
+        prefs.ui_mode = 'UI_PANEL'
+        prefs.ui_panel_docked = self.placement == 'DOCKED'
         session = SESSIONS.get(key_for(context))
         if session:
             session.select(prefs.custom_ui_section)
             session.refresh(context)
-        if self.placement == 'DOCKED':
-            context.space_data.show_region_ui = True
         for area in context.screen.areas:
             area.tag_redraw()
         request_update()
@@ -331,11 +334,11 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             with context.temp_override(region=region):
                 return bpy.ops.wm.airetopo_custom_ui('INVOKE_DEFAULT')
         key = key_for(context)
+        if preferences(context).ui_mode != 'UI_PANEL':
+            preferences(context).ui_mode = 'UI_PANEL'
         if key in SESSIONS:
+            redraw(SESSIONS[key])
             return {'CANCELLED'}
-        if preferences(context).ui_mode != 'CUSTOM':
-            preferences(context).ui_mode = 'CUSTOM'
-        preferences(context).custom_ui_presentation = 'FLOATING'
         self.session = Session(context)
         SESSIONS[key] = self.session
         _autostart = False
@@ -345,13 +348,20 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
 
     def modal(self, context, event):
         s = self.session
-        if s.closed or s.key not in SESSIONS or not _registered or preferences(context).ui_mode != 'CUSTOM':
+        if s.closed or s.key not in SESSIONS or not _registered or preferences(context).ui_mode == 'CLASSIC':
             self.cancel(context)
             return {'CANCELLED'}
         if not resolve(s):
             return {'PASS_THROUGH'}
-        if s.prefs.custom_ui_presentation != 'FLOATING':
+        if s.prefs.ui_mode != 'UI_PANEL':
             return {'PASS_THROUGH'}
+        # After screen restoration Blender may deliver modal events without an
+        # Area context. Bind the live editor before invoking any native operator.
+        with context.temp_override(window=s.window, area=s.area, region=s.region):
+            return self._modal_view(context, event)
+
+    def _modal_view(self, context, event):
+        s = self.session
         mx, my = event.mouse_x-s.region.x, event.mouse_y-s.region.y
         if s.edit:
             action = edit_key(s.edit, event, context.window_manager)
@@ -447,7 +457,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                 action = hit[1]
                 s.note = ''
                 if action[0] == 'dock':
-                    bpy.ops.wm.airetopo_custom_placement(placement='DOCKED')
+                    bpy.ops.wm.airetopo_custom_placement(placement='FLOATING' if s.prefs.ui_panel_docked else 'DOCKED')
                 elif action[0] == 'binding':
                     _dispatch(s, action[1])
                 elif action[0] == 'slider':
@@ -472,6 +482,8 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                 elif action[0] == 'collapse':
                     s.collapsed = not s.collapsed
                 elif action[0] in {'move', 'resize'}:
+                    if s.prefs.ui_panel_docked:
+                        return {'RUNNING_MODAL'}
                     s.drag = (action[0], mx, my, (s.x, s.y, s.width, s.height))
                 elif action[0] == 'search':
                     bpy.ops.wm.airetopo_custom_search('INVOKE_DEFAULT', session_key=s.key)
@@ -504,7 +516,7 @@ def _draw():
     if not context.window or not context.area or not context.region or context.region.type != 'WINDOW':
         return
     session = SESSIONS.get(key_for(context))
-    if session and not session.closed and session.prefs.custom_ui_presentation == 'FLOATING':
+    if session and not session.closed and session.prefs.ui_mode == 'UI_PANEL':
         try:
             started = time.perf_counter()
             renderer.draw(session, context.region)
@@ -548,10 +560,10 @@ def _tick():
     if not _registered or bpy.app.background:
         return None
     prefs = preferences()
-    if not prefs or prefs.ui_mode != 'CUSTOM':
+    if not prefs or prefs.ui_mode == 'CLASSIC':
         cleanup()
         return .5
-    if prefs.custom_ui_presentation != 'FLOATING':
+    if prefs.ui_mode != 'UI_PANEL':
         return .5
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:

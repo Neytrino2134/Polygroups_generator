@@ -133,3 +133,22 @@ select FLOATING, since Custom placement now defaults to DOCKED.
 The existing input regression and 39 mode/stage schema captures also passed
 on the final implementation (CUSTOM_UI_INPUT_TESTS_PASSED and
 CUSTOM_UI_BLENDER_TESTS_PASSED).
+
+## Three interface modes and GPU docking (2026-10-09)
+
+This supersedes the preceding presentation description. Interface now exposes
+CLASSIC, CUSTOM and UI_PANEL. CUSTOM preserves the compact native N-panel.
+UI_PANEL uses the same blue/cyan GPU renderer both when docked and detached.
+Dock anchors that renderer at the right edge and fills the available height;
+Detach restores its saved floating geometry. Docked movement/resize handles are
+removed. Docked width, placement and mode are persisted in addon preferences.
+
+Real GUI regression passed native Custom captures for all 13 sections, three
+mode availability, right-edge geometry at different viewport sizes, actual
+maximize/restore while docked, simulated Detach and Dock clicks, and simulated
+free dragging after detach. The native modal context is rebound to the live
+Area/Region after screen transitions before invoking Blender operators.
+The real framebuffer capture is ui_panel_docked.png.
+Final validation also passed CUSTOM_UI_INPUT_TESTS_PASSED,
+CUSTOM_UI_MAXIMIZE_TESTS_PASSED (12 transitions and post-restore clicks),
+CUSTOM_UI_LIFECYCLE_TESTS_PASSED and CUSTOM_UI_BLENDER_TESTS_PASSED.

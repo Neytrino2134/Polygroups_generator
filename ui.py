@@ -627,22 +627,22 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         if not _CUSTOM_CAPTURING:
             self.layout.prop(preferences, 'ui_mode', expand=True) if preferences else None
             if preferences and preferences.ui_mode == 'CUSTOM':
-                if preferences.custom_ui_presentation == 'FLOATING':
-                    self.layout.operator('wm.airetopo_custom_placement', text='Dock in Sidebar', icon='BACK').placement = 'DOCKED'
-                    self.layout.operator('wm.airetopo_custom_ui', text='Open Custom UI', icon='WINDOW')
-                else:
-                    self.layout.operator('wm.airetopo_custom_placement', text='Detach', icon='WINDOW').placement = 'FLOATING'
-                    split = self.layout.split(factor=.12)
-                    rail = split.column(align=True)
-                    body = split.column()
-                    for index, panel in enumerate(SECTION_PANEL_CLASSES):
-                        item = rail.operator('wm.airetopo_custom_section', text='', icon=panel.bl_icon,
-                            depress=index == preferences.custom_ui_section)
-                        item.section = index
-                    panel, visibility_property = SECTION_PANEL_VISIBILITY[preferences.custom_ui_section]
-                    body.label(text=f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}', icon=panel.bl_icon)
-                    draw_section_panel_content(panel, context, body, '')
+                self.layout.operator('wm.airetopo_custom_ui', text='Open UI Panel', icon='WINDOW')
+                split = self.layout.split(factor=.12)
+                rail = split.column(align=True)
+                body = split.column()
+                for index, panel in enumerate(SECTION_PANEL_CLASSES):
+                    item = rail.operator('wm.airetopo_custom_section', text='', icon=panel.bl_icon,
+                        depress=index == preferences.custom_ui_section)
+                    item.section = index
+                panel, visibility_property = SECTION_PANEL_VISIBILITY[preferences.custom_ui_section]
+                body.label(text=f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}', icon=panel.bl_icon)
+                draw_section_panel_content(panel, context, body, '')
                 return
+        if not _CUSTOM_CAPTURING and preferences and preferences.ui_mode == 'UI_PANEL':
+            self.layout.operator('wm.airetopo_custom_ui', text='Open UI Panel', icon='WINDOW')
+            self.layout.prop(preferences, 'ui_panel_docked', text='Dock on Right')
+            return
         layout = self.layout
         visible_layout = layout
         visibility = context.scene.airetopo_panel_visibility_settings

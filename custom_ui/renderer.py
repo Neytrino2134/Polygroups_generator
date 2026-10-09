@@ -266,10 +266,12 @@ def draw(session, region):
         text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, width=width-200*scale)
         if width>=570*scale:
             text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.MUTED)
-        for offset, label, action in ((116, 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
+        docked = prefs.ui_mode == 'UI_PANEL' and prefs.ui_panel_docked
+        for offset, label, action in ((116, 'Detach' if docked else 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
             text(label, x+width-offset*scale, top-28*scale, 12*scale, T.MUTED)
             session.hit((x+width-offset*scale-4*scale, top-40*scale, 40*scale, 34*scale), (action,), label)
-        session.hit((x, top-42*scale, width-100*scale, 42*scale), ('move',), 'Drag to move')
+        if not docked:
+            session.hit((x, top-42*scale, width-130*scale, 42*scale), ('move',), 'Drag to move')
         if session.collapsed or h<190*scale:
             return
         compact = width < 670*scale
@@ -323,9 +325,10 @@ def draw(session, region):
             thumb = max(24*scale, view_h*view_h/max(view_h, total))
             ty = content_top-thumb-(track-thumb)*session.scroll/session.max_scroll
             rect(x+width-9*scale, ty, 3*scale, thumb, T.accent(prefs), scale)
-        text(session.note or 'Drag title to move · corner to resize · wheel to scroll', content_x, bottom+9*scale, 10*scale, T.ERROR if session.note else T.MUTED, content_w)
-        session.hit((x+width-22*scale, bottom, 22*scale, 22*scale), ('resize',), 'Drag to resize')
-        text('◢', x+width-18*scale, bottom+6*scale, 12*scale, T.MUTED)
+        text(session.note or ('Docked right · Detach to move · wheel to scroll' if docked else 'Drag title to move · corner to resize · wheel to scroll'), content_x, bottom+9*scale, 10*scale, T.ERROR if session.note else T.MUTED, content_w)
+        if not docked:
+            session.hit((x+width-22*scale, bottom, 22*scale, 22*scale), ('resize',), 'Drag to resize')
+            text('◢', x+width-18*scale, bottom+6*scale, 12*scale, T.MUTED)
         # Ignore controls clipped outside the content viewport.
         session.hits = [hit for hit in session.hits if hit[1][0] not in {'binding','slider','disabled'} or (hit[0][1] >= view_bottom and hit[0][1]+hit[0][3] <= content_top)]
         if session.dropdown:

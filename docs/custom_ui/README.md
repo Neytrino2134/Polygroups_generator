@@ -1,8 +1,9 @@
-# Flat Custom Interface
+# Interface Modes
 
-Enable the add-on, then choose **Custom** in Preferences → Add-ons → AI Retopo
-Toolkit → Interface, or in the AI Retopo sidebar. **Open Custom UI** restores a
-closed card. The **Classic** action in the card restores the original sidebar.
+Choose **Classic**, **Custom**, or **UI Panel** in the AI Retopo sidebar or addon
+preferences. Classic is the original sidebar; Custom is the compact native
+sidebar with icon navigation. UI Panel is the flat blue/cyan GPU interface.
+**Open UI Panel** restores a closed card.
 Blender's normal preference saving controls persistence of the selected mode.
 
 The left navigation contains all 13 workflow stages. Click group headings to
@@ -10,10 +11,14 @@ fold their children; **All** and **Fold** affect the current stage. **Search**
 searches every stage and temporarily reveals matching branches without changing
 saved group states. Empty the search text to return to the selected stage.
 **Session / Settings** contains the existing autosave/restart, notices and global
-settings, plus appearance controls. A narrow card uses a workflow selector in
-place of the navigation column; click the workflow heading to choose a stage.
+settings, plus appearance controls. Narrow cards use an icon-only navigation
+column with stage names in tooltips.
 
-Drag the title to move the card, drag the bottom-right corner to resize, and use
+UI Panel starts docked to the right of the viewport, occupying its available
+height. **Detach** in the title enables free movement and resizing; **Dock**
+anchors the same card to the right again. Its colors, groups, controls and active
+stage remain the same. Docked width is configurable in addon preferences.
+When detached, drag the title to move the card, drag the bottom-right corner to resize, and use
 the mouse wheel to scroll. Position, size and active workflow stage are add-on
 preferences; scroll offsets are remembered per stage while the card is open.
 The minus button collapses the card, and the cross closes it in the current
@@ -77,13 +82,14 @@ does not indicate success. They use isolated factory-startup scenes and close
 their own Blender instance. No user preference save, paid AI generation, or
 production asset overwrite is performed.
 
-## Sidebar and floating placement
+## Custom sidebar and UI Panel
 
-Custom mode starts docked in the AI Retopo N-panel. Its compact icon column
+Custom mode lives in the AI Retopo N-panel. Its compact icon column
 selects the 13 workflow stages; hover an icon for its numbered stage name.
 The sidebar uses native Blender RNA controls and group boxes, inheriting the
-Blender theme. Detach opens the existing flat blue/cyan viewport renderer.
-Dock in its title bar returns to the N-panel. Narrow floating windows use a
+Blender theme. Open UI Panel switches to the separate blue/cyan GPU mode.
+Dock anchors that GPU panel to the viewport right edge, and Detach frees it.
+Neither action switches it to native Blender controls. Narrow floating windows use a
 compact icon column; wide windows keep numbered text navigation. Section,
 scene fold settings and the floating window geometry survive placement changes.
-Placement can also be selected in addon preferences.
+UI Panel docking can also be selected in addon preferences.
