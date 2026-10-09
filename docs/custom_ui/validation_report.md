@@ -95,3 +95,24 @@ Before any recovery, preserve subsequent work with a commit or backup. Inspect
 checkpoint. To inspect the baseline without changing this checkout, use a
 separate Git worktree at that revision. No destructive reset or remote push was
 performed.
+
+## Viewport maximize and crash repair (2026-10-09)
+
+The supplied crash log identifies EXCEPTION_ACCESS_VIOLATION in
+blender::ED_area_tag_redraw, called by custom_ui/lifecycle.py cancel().
+The old implementation kept an Area wrapper after Blender replaced that Area.
+Sessions now use the surviving SpaceView3D identity and resolve current native
+Area/Region wrappers before input, deferred dispatch and redraw. Hidden editors
+remain parked during maximization; deleted spaces and closed windows are cleaned
+up using live Blender data, without touching stale wrappers.
+
+Real Blender 5.2 validation: test_custom_ui_maximize.py passed 12 alternating
+screen.screen_full_area(use_hide_panels=False) transitions (the Ctrl+Space
+operator), asserting the screen really changed and the same rendered session and
+Baking section survived. This tests the operator directly, not physical keyboard
+input. The lifecycle regression also passed independent viewports, file load and
+addon disable/re-enable. Preferences were not saved during these tests.
+The restored panel also passed simulated mouse clicks on collapse/reopen,
+confirming its modal input handler remained active. The full input regression
+passed mesh operator dispatch, checkbox/numeric editing, slider rollback, groups,
+enum dropdowns, native file-browser cancel and Classic/Custom switching.

@@ -21,7 +21,28 @@ def preferences(context=None):
 
 
 def key_for(context):
-    return str(context.window.as_pointer()) + ':' + str(context.area.as_pointer())
+    # SpaceView3D moves between Areas when Blender maximizes/restores an editor.
+    return str(context.window.as_pointer()) + ':' + str(context.space_data.as_pointer())
+
+
+def resolve(session):
+    """Refresh native wrappers exclusively from currently live screens."""
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type != 'VIEW_3D':
+                continue
+            key = str(window.as_pointer()) + ':' + str(area.spaces.active.as_pointer())
+            if key == session.key:
+                region = next((r for r in area.regions if r.type == 'WINDOW'), None)
+                if region:
+                    session.window, session.area, session.region = window, area, region
+                    return True
+    return False
+
+
+def redraw(session):
+    if resolve(session):
+        session.area.tag_redraw()
 
 
 class Session:
@@ -129,7 +150,7 @@ def _dispatch(session, identifier):
     scene = session.scene
     binding = session.model.bindings.get(identifier)
     def run():
-        if session.closed or session.key not in SESSIONS:
+        if session.closed or session.key not in SESSIONS or not resolve(session):
             return None
         try:
             with bpy.context.temp_override(window=session.window, area=session.area, region=session.region):
@@ -169,10 +190,10 @@ def _dispatch(session, identifier):
                 else:
                     bpy.ops.wm.airetopo_custom_property('INVOKE_DEFAULT', session_key=session.key, control=identifier)
                 session.refresh(bpy.context)
-                session.area.tag_redraw()
+                redraw(session)
         except Exception as exc:
             session.note = str(exc)
-            session.area.tag_redraw()
+            redraw(session)
         return None
     bpy.app.timers.register(run, first_interval=0)
 
@@ -234,7 +255,7 @@ class AIRETOPO_OT_custom_search(bpy.types.Operator):
             session.query = self.query.strip()
             session.scroll = 0
             session.refresh(context)
-            session.area.tag_redraw()
+            redraw(session)
         return {'FINISHED'}
 
 
@@ -249,7 +270,7 @@ class AIRETOPO_OT_custom_section(bpy.types.Operator):
         if session:
             session.select(max(0, min(12, self.section)), self.section == 13)
             session.refresh(context)
-            session.area.tag_redraw()
+            redraw(session)
         return {'FINISHED'}
 
 
@@ -297,7 +318,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
         if s.closed or s.key not in SESSIONS or not _registered or preferences(context).ui_mode != 'CUSTOM':
             self.cancel(context)
             return {'CANCELLED'}
-        if getattr(s.window.screen,'is_temporary',False):
+        if not resolve(s):
             return {'PASS_THROUGH'}
         mx, my = event.mouse_x-s.region.x, event.mouse_y-s.region.y
         if s.edit:
@@ -313,7 +334,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                     s.refresh(context)
                 except (ValueError, KeyError, TypeError) as exc:
                     s.note = str(exc)
-            s.area.tag_redraw()
+            redraw(s)
             return {'RUNNING_MODAL'}
         if s.slider:
             if event.type == 'ESC' and event.value == 'PRESS':
@@ -330,7 +351,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                     setattr(binding[1], binding[2], s.slider['value'])
                 s.slider = None
                 s.refresh(context)
-            s.area.tag_redraw()
+            redraw(s)
             return {'RUNNING_MODAL'}
         if s.dropdown:
             if event.type == 'ESC' and event.value == 'PRESS':
@@ -353,7 +374,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                     s.refresh(context)
                 else:
                     s.dropdown = None
-            s.area.tag_redraw()
+            redraw(s)
             return {'RUNNING_MODAL'}
         if s.drag:
             action, sx, sy, original = s.drag
@@ -370,7 +391,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                     s.x, s.y = max(0, ox+dx), max(0, oy-dy)
                 else:
                     s.width, s.height = max(360, ow+dx), max(240, oh-dy)
-            s.area.tag_redraw()
+            redraw(s)
             return {'RUNNING_MODAL'}
         hit = s.find(mx, my)
         x, top, width, h = s.geometry(s.region)
@@ -380,14 +401,14 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             if identity != s.hover or (hit[2] if hit else '') != s.tooltip:
                 s.hover, s.tooltip = identity, hit[2] if hit else ''
                 s.hover_since = time.monotonic()
-                s.area.tag_redraw()
+                redraw(s)
             s.mouse = mx, my
             return {'PASS_THROUGH'}
         if not inside:
             return {'PASS_THROUGH'}
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             s.scroll = min(s.max_scroll, max(0, s.scroll + (-70 if event.type == 'WHEELUPMOUSE' else 70)*s.scale))
-            s.area.tag_redraw()
+            redraw(s)
             return {'RUNNING_MODAL'}
         if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             if hit:
@@ -432,23 +453,21 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                             binding = s.model.bindings[node['id']]
                             setattr(binding[1], binding[2], action[0] == 'expand')
                     s.refresh(context)
-            s.area.tag_redraw()
+            redraw(s)
             return {'RUNNING_MODAL'}
         # Keyboard shortcuts and other modal tools retain viewport control.
         return {'PASS_THROUGH'}
 
     def cancel(self, context):
         self.session.closed = True
-        SESSIONS.pop(self.session.key, None)
-        try:
-            self.session.area.tag_redraw()
-        except ReferenceError:
-            pass
+        if SESSIONS.get(self.session.key) is self.session:
+            SESSIONS.pop(self.session.key, None)
+        redraw(self.session)
 
 
 def _draw():
     context = bpy.context
-    if not context.window or not context.area or context.region.type != 'WINDOW':
+    if not context.window or not context.area or not context.region or context.region.type != 'WINDOW':
         return
     session = SESSIONS.get(key_for(context))
     if session and not session.closed:
@@ -498,11 +517,7 @@ def _tick():
     if not prefs or prefs.ui_mode != 'CUSTOM':
         cleanup()
         return .5
-    live = set()
     for window in bpy.context.window_manager.windows:
-        if getattr(window.screen,'is_temporary',False):
-            live.update(key for key,s in SESSIONS.items() if s.window==window)
-            continue
         for area in window.screen.areas:
             if area.type != 'VIEW_3D':
                 continue
@@ -511,9 +526,9 @@ def _tick():
                 continue
             with bpy.context.temp_override(window=window, area=area, region=region):
                 key = key_for(bpy.context)
-                live.add(key)
                 session = SESSIONS.get(key)
                 if session:
+                    session.window, session.area, session.region = window, area, region
                     try:
                         if session.refresh(bpy.context) or (session.tooltip and .6 < session.tooltip_age < 1.2):
                             area.tag_redraw()
@@ -525,8 +540,15 @@ def _tick():
                     except Exception as exc:
                         print('AI Retopo Custom UI startup:', exc)
                         prefs.ui_mode = 'CLASSIC'
-    for key in set(SESSIONS)-live:
-        SESSIONS.pop(key).closed = True
+    # Hidden editors remain parked during maximization and native file browsers.
+    # Their modal handlers must never dereference the old Area/Region wrappers.
+    windows = {str(w.as_pointer()) for w in bpy.context.window_manager.windows}
+    spaces = {str(space.as_pointer()) for screen in bpy.data.screens
+              for area in screen.areas for space in area.spaces}
+    for key in list(SESSIONS):
+        window_id, space_id = key.split(':')
+        if window_id not in windows or space_id not in spaces:
+            SESSIONS.pop(key).closed = True
     _autostart = False
     return .5
 
