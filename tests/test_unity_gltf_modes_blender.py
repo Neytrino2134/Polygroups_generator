@@ -12,6 +12,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT.parent))
 addon_utils.enable(ROOT.name,default_set=False)
 settings=bpy.context.scene.polygroups_mesh_finalization_settings
+settings.unity_export_autosave=False  # Disposable unsaved scene; this test validates GLTF, not autosave.
+settings.unity_export_all_renders=False  # Rendering has separate dedicated regression tests.
 settings.unity_export_fbx=False
 settings.unity_export_gltf=True
 settings.unity_export_info_format='JSON'

@@ -82,6 +82,8 @@ _GROUP_DISCOVERY = None
 _SEARCH_PROBING = False
 _SEARCH_FILTER_GROUPS = None
 _SEARCH_FILTER_TERMS = ()
+_CUSTOM_CAPTURING = False
+_CUSTOM_HEADER_ONLY = False
 
 
 def _normalized_search_terms(value):
@@ -287,6 +289,8 @@ def draw_topic(layout, context, key, label, icon):
 
 
 def draw_collapsible_box(layout, settings, property_name, label, icon):
+    if _CUSTOM_CAPTURING and hasattr(layout, 'grouped'):
+        return layout.grouped(settings, property_name, label, icon)
     key = settings.path_from_id() + "." + property_name
     if isinstance(layout, _SearchProbeLayout):
         return layout.grouped(key, label)
@@ -409,6 +413,8 @@ def update_panel_labels(context=None):
 
 
 def section_content_visible(panel, context):
+    if _CUSTOM_CAPTURING:
+        return True
     if _SEARCH_PROBING or _SEARCH_FILTER_GROUPS is not None:
         return True
     if _DETACHED_TARGET is not None:
@@ -441,6 +447,8 @@ def draw_section_panel_content(panel_class, context, layout, visibility_property
         panel_class.draw(panel, context)
     except Exception as error:
         print(f"AI Retopo Toolkit: failed to draw {panel_class.__name__}: {error}")
+        if hasattr(layout, 'errors'):
+            layout.errors.append(f'{panel_class.__name__}: {error}')
         layout.label(text="Section draw error. Check console.", icon="ERROR")
     finally:
         _DRAWING_SECTION = previous_section
@@ -616,6 +624,12 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
     def draw(self, context):
         global _SEARCH_FILTER_GROUPS, _SEARCH_FILTER_TERMS
         preferences = get_preferences(context)
+        if not _CUSTOM_CAPTURING:
+            self.layout.prop(preferences, 'ui_mode', expand=True) if preferences else None
+            if preferences and preferences.ui_mode == 'CUSTOM':
+                self.layout.operator('wm.airetopo_custom_ui', text='Open Custom UI', icon='WINDOW')
+                self.layout.label(text='Flat blue / cyan viewport interface')
+                return
         layout = self.layout
         visible_layout = layout
         visibility = context.scene.airetopo_panel_visibility_settings
@@ -881,6 +895,8 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             )
             box.prop(preferences, "gemini_api_key", text=t(context, "gemini_api_key"))
 
+        if _CUSTOM_HEADER_ONLY:
+            return
         layout = visible_layout
         search_row = layout.row(align=True)
         search_row.prop(

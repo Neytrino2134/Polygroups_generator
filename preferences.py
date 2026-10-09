@@ -20,6 +20,11 @@ from .localization import t
 
 
 ADDON_AUTHOR = "Meowmaster"
+
+
+def _update_custom_interface(self, context):
+    from .custom_ui.lifecycle import request_update
+    request_update()
 ADDON_CONTACT_EMAIL = "meowmasterart@gmail.com"
 ADDON_GITHUB_URL = "https://github.com/Neytrino2134"
 ADDON_REPOSITORY_URL = "https://github.com/Neytrino2134/Polygroups_generator"
@@ -425,6 +430,20 @@ def draw_global_notices(layout, context, preferences):
 
 
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
+    ui_mode: bpy.props.EnumProperty(
+        name='Interface', items=(('CLASSIC', 'Classic', 'Blender sidebar'),
+                                 ('CUSTOM', 'Custom', 'Flat blue/cyan viewport interface')),
+        default='CLASSIC', update=_update_custom_interface)
+    custom_ui_scale: bpy.props.FloatProperty(name='Custom UI Scale', default=1.0, min=.75, max=2,
+                                             update=_update_custom_interface)
+    custom_ui_accent: bpy.props.FloatVectorProperty(name='Accent', subtype='COLOR', size=3,
+        default=(.031, .659, .961), min=0, max=1, update=_update_custom_interface)
+    custom_ui_brightness: bpy.props.FloatProperty(name='Surface Brightness', default=1, min=.6, max=1.5,
+                                                  update=_update_custom_interface)
+    custom_ui_rounding: bpy.props.FloatProperty(name='Corner Rounding', default=8, min=0, max=16,
+                                                update=_update_custom_interface)
+    custom_ui_section: bpy.props.IntProperty(default=0, min=0, max=12, options={'HIDDEN'})
+    custom_ui_geometry: bpy.props.FloatVectorProperty(size=4, default=(80,80,1100,850), options={'HIDDEN'})
     panel_python_executable: bpy.props.StringProperty(
         name="Development Python Fallback", subtype='FILE_PATH', default='',
         description="Optional Python with Tkinter, used only when the bundled window client is missing",
@@ -790,6 +809,15 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
+        box = layout.box()
+        box.label(text='Interface', icon='WINDOW')
+        box.prop(self, 'ui_mode', expand=True)
+        if self.ui_mode == 'CUSTOM':
+            box.prop(self, 'custom_ui_scale')
+            box.prop(self, 'custom_ui_accent')
+            box.prop(self, 'custom_ui_brightness')
+            box.prop(self, 'custom_ui_rounding')
+            box.operator('wm.airetopo_reset_custom_appearance', text='Reset Appearance')
         draw_global_notices(layout, context, self)
         sections = [
             ("show_preferences_language", t(context, "preferences_language"), self.draw_language),

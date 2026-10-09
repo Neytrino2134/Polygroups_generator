@@ -54,12 +54,16 @@ def register():
     register_uv_seam_overlay()
     register_hotkeys()
     register_remesh_defaults_timer()
+    from .custom_ui import register as register_custom_ui
+    register_custom_ui()
 
 
 def unregister():
     from .operators.import_queue import stop_import_queue
 
     stop_import_queue()
+    from .custom_ui import unregister as unregister_custom_ui
+    unregister_custom_ui()
     unregister_custom_autosave()
     unregister_remesh_defaults_timer()
     unregister_hotkeys()

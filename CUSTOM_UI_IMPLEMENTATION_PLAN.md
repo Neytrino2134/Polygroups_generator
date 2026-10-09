@@ -1,5 +1,10 @@
 # AI Retopo Toolkit — Custom Cyan UI Implementation Plan
 
+Design update (2026-10-09): the user's second reference supersedes the first.
+Use a modern flat style: solid dark surfaces, thin separators, a blue selected
+navigation row with a cyan side marker, flat primary buttons, restrained
+rounding, and no glow. Earlier references to gradients are superseded.
+
 ## Agent mission and scope
 
 Implement a complete, production-ready Blender viewport interface for AI Retopo Toolkit, with persistent Classic / Custom selection in Add-on Preferences. Preserve all existing functionality, operator identifiers, RNA settings, localization, undo behavior, queues, hotkeys, integrations, and scene compatibility. Work in large cohesive implementation blocks, validate each block, and create verified local commits before implementation and after completion. Do not push unless separately requested.
