@@ -266,29 +266,36 @@ def draw(session, region):
         text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, width=width-200*scale)
         if width>=570*scale:
             text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.MUTED)
-        for offset, label, action in ((116, 'Classic', 'classic'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
+        for offset, label, action in ((116, 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
             text(label, x+width-offset*scale, top-28*scale, 12*scale, T.MUTED)
             session.hit((x+width-offset*scale-4*scale, top-40*scale, 40*scale, 34*scale), (action,), label)
         session.hit((x, top-42*scale, width-100*scale, 42*scale), ('move',), 'Drag to move')
         if session.collapsed or h<190*scale:
             return
-        nav = 220*scale if width >= 670*scale and h>=620*scale else 0
+        compact = width < 670*scale
+        nav = (42 if compact else 220)*scale
         content_x = x+nav+14*scale
         content_w = width-nav-28*scale
         content_top = top-102*scale
         if nav:
             rect(x+nav, bottom+12*scale, scale, h-62*scale, T.BORDER, 0)
             for index, title in enumerate(session.titles):
-                yt = top-108*scale-index*36*scale
+                step = min(36*scale, max(8, (h-155*scale)/13)) if compact else 36*scale
+                yt = top-108*scale-index*step
                 if yt < bottom+40*scale:
                     break
                 if index == session.section and not session.show_header:
-                    rect(x+8*scale, yt-30*scale, nav-16*scale, 32*scale, T.SELECTED)
-                    rect(x+8*scale, yt-30*scale, 3*scale, 32*scale, T.accent(prefs), 1)
-                icons.draw(session.icons[index],x+17*scale,yt-23*scale,19*scale,T.accent(prefs) if index==session.section else T.MUTED)
-                text(title, x+44*scale, yt-19*scale, 12*scale, T.TEXT, nav-54*scale)
-                session.hit((x+8*scale, yt-30*scale, nav-16*scale, 32*scale), ('section', index), title)
-            text('Session / Settings', x+18*scale, top-78*scale, 12*scale, T.accent(prefs))
+                    rect(x+8*scale, yt-step+3*scale, nav-16*scale, step-2*scale, T.SELECTED)
+                    rect(x+8*scale, yt-step+3*scale, 3*scale, step-2*scale, T.accent(prefs), 1)
+                size = min(19*scale, step-5*scale)
+                icons.draw(session.icons[index],x+(13 if compact else 17)*scale,yt-step+6*scale,size,T.accent(prefs) if index==session.section else T.MUTED)
+                if not compact:
+                    text(title, x+44*scale, yt-19*scale, 12*scale, T.TEXT, nav-54*scale)
+                session.hit((x+8*scale, yt-step+3*scale, nav-16*scale, step-2*scale), ('section', index), title)
+            if compact:
+                icons.draw('PREFERENCES',x+13*scale,top-78*scale,19*scale,T.accent(prefs))
+            else:
+                text('Session / Settings', x+18*scale, top-78*scale, 12*scale, T.accent(prefs))
             session.hit((x+8*scale, top-90*scale, nav-16*scale, 32*scale), ('header',), 'Autosave, restart and settings')
         title = ('Search Results' if session.query and not session.show_header else
                  'Session / Settings' if session.show_header else session.titles[session.section])

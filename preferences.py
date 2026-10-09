@@ -443,6 +443,10 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     custom_ui_rounding: bpy.props.FloatProperty(name='Corner Rounding', default=8, min=0, max=16,
                                                 update=_update_custom_interface)
     custom_ui_section: bpy.props.IntProperty(default=0, min=0, max=12, options={'HIDDEN'})
+    custom_ui_presentation: bpy.props.EnumProperty(name='Custom UI Placement',
+        items=(('DOCKED', 'Sidebar', 'Dock in the AI Retopo N-panel'),
+               ('FLOATING', 'Floating', 'Detach into the viewport')),
+        default='DOCKED', update=_update_custom_interface)
     custom_ui_geometry: bpy.props.FloatVectorProperty(size=4, default=(80,80,1100,850), options={'HIDDEN'})
     panel_python_executable: bpy.props.StringProperty(
         name="Development Python Fallback", subtype='FILE_PATH', default='',
@@ -813,6 +817,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         box.label(text='Interface', icon='WINDOW')
         box.prop(self, 'ui_mode', expand=True)
         if self.ui_mode == 'CUSTOM':
+            box.prop(self, 'custom_ui_presentation', expand=True)
             box.prop(self, 'custom_ui_scale')
             box.prop(self, 'custom_ui_accent')
             box.prop(self, 'custom_ui_brightness')

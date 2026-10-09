@@ -265,12 +265,41 @@ class AIRETOPO_OT_custom_section(bpy.types.Operator):
     session_key: bpy.props.StringProperty()
     section: bpy.props.IntProperty()
 
+    @classmethod
+    def description(cls, context, properties):
+        from .. import ui
+        from ..localization import t
+        panel = ui.SECTION_PANEL_CLASSES[max(0, min(12, properties.section))]
+        return f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}'
+
     def execute(self, context):
-        session = SESSIONS.get(self.session_key)
+        preferences(context).custom_ui_section = max(0, min(12, self.section))
+        session = SESSIONS.get(self.session_key or key_for(context))
         if session:
             session.select(max(0, min(12, self.section)), self.section == 13)
             session.refresh(context)
             redraw(session)
+        return {'FINISHED'}
+
+
+class AIRETOPO_OT_custom_placement(bpy.types.Operator):
+    """Move the toolkit between its sidebar and floating presentation."""
+    bl_idname = 'wm.airetopo_custom_placement'
+    bl_label = 'Move Custom UI'
+    placement: bpy.props.EnumProperty(items=(('DOCKED', 'Sidebar', ''), ('FLOATING', 'Floating', '')))
+
+    def execute(self, context):
+        prefs = preferences(context)
+        prefs.custom_ui_presentation = self.placement
+        session = SESSIONS.get(key_for(context))
+        if session:
+            session.select(prefs.custom_ui_section)
+            session.refresh(context)
+        if self.placement == 'DOCKED':
+            context.space_data.show_region_ui = True
+        for area in context.screen.areas:
+            area.tag_redraw()
+        request_update()
         return {'FINISHED'}
 
 
@@ -306,6 +335,7 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             return {'CANCELLED'}
         if preferences(context).ui_mode != 'CUSTOM':
             preferences(context).ui_mode = 'CUSTOM'
+        preferences(context).custom_ui_presentation = 'FLOATING'
         self.session = Session(context)
         SESSIONS[key] = self.session
         _autostart = False
@@ -319,6 +349,8 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             self.cancel(context)
             return {'CANCELLED'}
         if not resolve(s):
+            return {'PASS_THROUGH'}
+        if s.prefs.custom_ui_presentation != 'FLOATING':
             return {'PASS_THROUGH'}
         mx, my = event.mouse_x-s.region.x, event.mouse_y-s.region.y
         if s.edit:
@@ -414,7 +446,9 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             if hit:
                 action = hit[1]
                 s.note = ''
-                if action[0] == 'binding':
+                if action[0] == 'dock':
+                    bpy.ops.wm.airetopo_custom_placement(placement='DOCKED')
+                elif action[0] == 'binding':
                     _dispatch(s, action[1])
                 elif action[0] == 'slider':
                     node = next(n for n in walk(s.model.node) if n['id'] == action[1])
@@ -470,7 +504,7 @@ def _draw():
     if not context.window or not context.area or not context.region or context.region.type != 'WINDOW':
         return
     session = SESSIONS.get(key_for(context))
-    if session and not session.closed:
+    if session and not session.closed and session.prefs.custom_ui_presentation == 'FLOATING':
         try:
             started = time.perf_counter()
             renderer.draw(session, context.region)
@@ -517,6 +551,8 @@ def _tick():
     if not prefs or prefs.ui_mode != 'CUSTOM':
         cleanup()
         return .5
+    if prefs.custom_ui_presentation != 'FLOATING':
+        return .5
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
             if area.type != 'VIEW_3D':
@@ -554,7 +590,7 @@ def _tick():
 
 
 CLASSES = (AIRETOPO_OT_custom_property, AIRETOPO_OT_custom_search, AIRETOPO_OT_custom_section,
-           AIRETOPO_OT_reset_custom_appearance, AIRETOPO_OT_custom_ui)
+           AIRETOPO_OT_custom_placement, AIRETOPO_OT_reset_custom_appearance, AIRETOPO_OT_custom_ui)
 
 
 def register():

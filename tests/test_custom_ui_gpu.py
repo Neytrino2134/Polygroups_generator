@@ -24,6 +24,7 @@ addon_utils.enable(ROOT.name, default_set=True)
 from polygroups_generator.custom_ui import lifecycle, renderer
 prefs = bpy.context.preferences.addons[ROOT.name].preferences
 prefs.enable_dev_mode = False
+prefs.custom_ui_presentation = 'FLOATING'
 prefs.ui_mode = 'CUSTOM'
 window = bpy.context.window_manager.windows[0]
 area = next(a for a in window.screen.areas if a.type == 'VIEW_3D')

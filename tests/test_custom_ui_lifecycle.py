@@ -17,6 +17,7 @@ sys.path.insert(0,str(ROOT.parent))
 addon_utils.enable(ROOT.name,default_set=True)
 from polygroups_generator.custom_ui import lifecycle
 prefs=bpy.context.preferences.addons[ROOT.name].preferences
+prefs.custom_ui_presentation='FLOATING'
 prefs.ui_mode='CUSTOM'
 state={'step':0}
 TEMP=tempfile.TemporaryDirectory(prefix='airetopo-ui-lifecycle-')

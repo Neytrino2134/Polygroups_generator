@@ -116,3 +116,20 @@ The restored panel also passed simulated mouse clicks on collapse/reopen,
 confirming its modal input handler remained active. The full input regression
 passed mesh operator dispatch, checkbox/numeric editing, slider rollback, groups,
 enum dropdowns, native file-browser cancel and Classic/Custom switching.
+
+## Docked / floating presentation (2026-10-09)
+
+Added default DOCKED placement in the actual AI Retopo N-panel, with native
+Blender controls and 13 icon-only stage selectors with descriptive tooltips.
+FLOATING retains the blue/cyan GPU surface and saved geometry. Detach / Dock
+preserve the active stage and existing session. Narrow floating navigation uses
+an icon rail instead of hiding stages behind a section menu.
+
+Real Blender GUI: test_custom_ui_docking.py passed all 13 sidebar content
+captures, detach/dock state retention and 13 interactive compact navigation
+hits. test_custom_ui_maximize.py passed 12 maximize/restore transitions plus
+collapse/reopen input after restoration. The existing floating tests explicitly
+select FLOATING, since Custom placement now defaults to DOCKED.
+The existing input regression and 39 mode/stage schema captures also passed
+on the final implementation (CUSTOM_UI_INPUT_TESTS_PASSED and
+CUSTOM_UI_BLENDER_TESTS_PASSED).

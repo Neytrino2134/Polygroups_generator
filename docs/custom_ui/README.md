@@ -76,3 +76,14 @@ GUI tests write explicit pass/failure results to `gpu_test.log`,
 does not indicate success. They use isolated factory-startup scenes and close
 their own Blender instance. No user preference save, paid AI generation, or
 production asset overwrite is performed.
+
+## Sidebar and floating placement
+
+Custom mode starts docked in the AI Retopo N-panel. Its compact icon column
+selects the 13 workflow stages; hover an icon for its numbered stage name.
+The sidebar uses native Blender RNA controls and group boxes, inheriting the
+Blender theme. Detach opens the existing flat blue/cyan viewport renderer.
+Dock in its title bar returns to the N-panel. Narrow floating windows use a
+compact icon column; wide windows keep numbered text navigation. Section,
+scene fold settings and the floating window geometry survive placement changes.
+Placement can also be selected in addon preferences.
