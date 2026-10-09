@@ -172,3 +172,7 @@ for viewport toolbars and overlays. Its available height is reduced accordingly;
 floating geometry is unchanged. Very small regions clamp safely. The real GUI
 docking regression passed, including 100 px geometry checks before and after
 maximize/restore, Detach/Dock clicks and free dragging.
+
+Docked top clearance increased to 200 physical pixels at the user's request.
+The real Blender docking regression passed the updated geometry checks,
+maximize/restore, Dock/Detach and floating movement (supersedes 100 px above).

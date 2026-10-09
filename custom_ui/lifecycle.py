@@ -85,7 +85,7 @@ class Session:
         if self.prefs.ui_mode == 'UI_PANEL' and self.prefs.ui_panel_docked:
             width = min(self.prefs.ui_panel_width*s, max(1, region.width-16))
             # Reserve physical viewport pixels for its top toolbars/overlays.
-            top = max(1, min(region.height-1, max(9, region.height-100)))
+            top = max(1, min(region.height-1, max(9, region.height-200)))
             available = max(1, top-8)
             h = min(44*s if self.collapsed else available, available)
             return max(8, region.width-width-8), top, width, h
