@@ -1,6 +1,7 @@
 """One-click asset preparation and global Unity export presets."""
 import json
 import os
+import re
 from pathlib import Path
 import bpy
 
@@ -17,6 +18,60 @@ RENDER_FIELDS = (
     'transparent_background',
 )
 _PRESET_ITEMS = []
+
+
+def unity_name_from_filepath(filepath):
+    """Read Name_NameID_VersionID without treating underscores in Name as separators."""
+    if not filepath:
+        raise ValueError('Save the blend file before loading its name')
+    stem = re.sub(r'\.LOD[0-9]+$', '', Path(filepath).stem, flags=re.IGNORECASE)
+    match = re.fullmatch(r'(.+)_([0-9]{1,2})_(.+)', stem)
+    return (match[1], match[2].zfill(2), match[3]) if match else (stem, '00', '01')
+
+
+def step_naming_index(value, delta, name_index=False):
+    match = re.fullmatch(r'(.*?)([0-9]+)', value.strip() or '00')
+    if not match or (name_index and match[1]):
+        return value
+    prefix, digits = match.groups()
+    number = max(0, int(digits) + delta)
+    if name_index:
+        number = min(99, number)
+    return prefix + str(number).zfill(max(2, len(digits)))
+
+
+def _load_dialog_name(self, context):
+    if not self.load_from_file:
+        return
+    self.load_from_file = False
+    if bpy.data.filepath:
+        self.asset_name, self.name_index, self.version_index = unity_name_from_filepath(bpy.data.filepath)
+
+
+def _index_button(field, delta):
+    button = field + ('_decrease' if delta < 0 else '_increase')
+    def update(self, context):
+        if not getattr(self, button):
+            return
+        setattr(self, button, False)
+        setattr(self, field, step_naming_index(getattr(self, field), delta, field == 'name_index'))
+    return update
+
+
+class OBJECT_OT_polygroups_unity_load_from_file(bpy.types.Operator):
+    bl_idname = 'object.polygroups_unity_load_from_file'
+    bl_label = 'Load from File'
+    bl_description = 'Load the asset name, Name Index and Version Index from the current blend filename'
+    bl_options = {'UNDO', 'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        return bool(bpy.data.filepath)
+
+    def execute(self, context):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        settings.unity_asset_name, settings.unity_name_index, settings.unity_asset_index = unity_name_from_filepath(bpy.data.filepath)
+        return {'FINISHED'}
 
 
 def preset_path():
@@ -144,6 +199,16 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
     asset_name: bpy.props.StringProperty(name='Asset Name')
     name_index: bpy.props.StringProperty(name='Name Index', default='00', maxlen=2)
     version_index: bpy.props.StringProperty(name='Version Index', default='01')
+    load_from_file: bpy.props.BoolProperty(name='Load from File', options={'HIDDEN', 'SKIP_SAVE'},
+        description='Load the name and indices from the current blend filename', update=_load_dialog_name)
+    name_index_decrease: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Decrease Name Index', update=_index_button('name_index', -1))
+    name_index_increase: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Increase Name Index', update=_index_button('name_index', 1))
+    version_index_decrease: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Decrease Version Index', update=_index_button('version_index', -1))
+    version_index_increase: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Increase Version Index', update=_index_button('version_index', 1))
 
     @classmethod
     def poll(cls, context):
@@ -160,8 +225,14 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
 
     def draw(self, context):
         self.layout.prop(self, 'asset_name')
-        self.layout.prop(self, 'name_index')
-        self.layout.prop(self, 'version_index')
+        for field in ('name_index', 'version_index'):
+            row = self.layout.row(align=True)
+            row.prop(self, field + '_decrease', text='', icon='TRIA_LEFT', toggle=True)
+            row.prop(self, field)
+            row.prop(self, field + '_increase', text='', icon='TRIA_RIGHT', toggle=True)
+        row = self.layout.row()
+        row.enabled = bool(bpy.data.filepath)
+        row.prop(self, 'load_from_file', text='Load from File', icon='FILE_BLEND', toggle=True)
 
     def execute(self, context):
         from .unity_preparation import unity_name

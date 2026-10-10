@@ -3534,6 +3534,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             row.prop(settings, "unity_asset_index", text="Version Index")
             row.operator("object.polygroups_unity_index_step", text="", icon="TRIA_RIGHT").delta = 1
             row.prop(settings, "unity_auto_increment_index", text="", icon="ADD")
+            unity_content.operator("object.polygroups_unity_load_from_file", text="Load from File", icon="FILE_BLEND")
             unity_content.prop(settings, "unity_asset_suffix")
             unity_content.prop(settings, "unity_generate_text_labels")
             unity_content.prop(settings, "unity_label_size")
@@ -3658,6 +3659,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         prepare_box.prop(settings, "unity_asset_name", text="Asset Name")
         prepare_box.prop(settings, "unity_name_index")
         prepare_box.prop(settings, "unity_asset_index", text="Version Index")
+        prepare_box.operator("object.polygroups_unity_load_from_file", text="Load from File", icon="FILE_BLEND")
         prepare_box.operator("object.polygroups_smart_lods_prepare", icon="MOD_DECIM")
         box = column.box().column(align=True)
         box.prop(settings, "smart_lods_render_mode")

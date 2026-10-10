@@ -286,3 +286,20 @@ redraws after each step. PROJECT_RELOCATION_NAMING_TESTS_PASSED verifies the fou
 arrow controls and naming. PROJECT_RELOCATION_DIALOG_UI_PASSED invokes both real
 index-step operators in the file browser, including zero, 09/10, 99/100, retained
 three-digit padding and empty input; the updated screenshot was visually inspected.
+
+## Unity names from current blend file (2026-10-10)
+
+Unity Rename / Unity Prepare and the adjacent Smart LOD Unity preparation fields
+now expose Load from File below their name/index inputs. The shared operator loads
+Name_NameID_VersionID from bpy.data.filepath, retaining underscores in the asset
+name and version prefixes. Unsuffixed filenames use Name/00/01; LOD suffixes are
+stripped. The Prepare and Export native popup has the same load action and arrows
+for both indices. Popup actions use the popup's own RNA properties, keeping edits
+local until Start; transient button values immediately reset. Name Index clamps
+to its existing 00–99 range, while Version Index preserves prefixes and padding.
+
+UNITY_FILENAME_CONTROLS_TESTS_PASSED verifies the real panel operator, shared schema
+button exposure, filename parsing, actual popup RNA callbacks, leading zeros,
+prefixes, bounds and popup-local edits. The real popup screenshot was visually
+inspected. UNITY_EXPORT_WORKFLOW_PASSED verifies Smart LOD generation, Unity
+preparation and an actual two-LOD glTF export with the existing workflow.
