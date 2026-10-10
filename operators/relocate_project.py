@@ -140,7 +140,7 @@ def relocate_project(directory, project_name, put_in_subfolder=False):
         raise RuntimeError('Choose a valid project filename')
     name = project_name if project_name.lower().endswith('.blend') else project_name + '.blend'
     if put_in_subfolder:
-        root = root / name[:-6]
+        root = root / (name[:-6] + '_Main_Folder')
     if not root.parent.is_dir() or (root.exists() and (not root.is_dir() or any(root.iterdir()))):
         raise RuntimeError('Choose a new or empty destination folder')
     if bpy.data.filepath and root == Path(bpy.data.filepath).resolve().parent:
@@ -248,8 +248,8 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
         description='Numeric name index; one digit is padded to two digits')
     version_index: bpy.props.StringProperty(name='Version Index', default='01',
         description='Numeric version index; one digit is padded to two digits')
-    put_in_subfolder: bpy.props.BoolProperty(name='Put in Subfolder', default=False,
-        description='Create Name_NameID_VersionID inside the selected directory and put the blend and used textures there')
+    put_in_subfolder: bpy.props.BoolProperty(name='Put in Subfolder', default=True,
+        description='Create Name_NameID_VersionID_Main_Folder inside the selected directory and put the blend and used textures there')
     filter_folder: bpy.props.BoolProperty(default=True, options={'HIDDEN'})
 
     @classmethod
@@ -292,7 +292,7 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
             preview.label(text=t(context, 'relocate_invalid_name'), icon='ERROR')
         else:
             if self.put_in_subfolder:
-                preview.label(text=stem + '/', icon='FILE_FOLDER')
+                preview.label(text=stem + '_Main_Folder/', icon='FILE_FOLDER')
             preview.label(text=stem + '.blend', icon='FILE_BLEND')
         layout.label(text=t(context, 'relocate_choose_parent' if self.put_in_subfolder
                             else 'relocate_choose_empty'), icon='INFO')

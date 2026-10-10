@@ -22,7 +22,7 @@ bpy.ops.wm.save_as_mainfile(filepath=str(source/'original.blend'))
 (test_root/'destination').mkdir()
 child_script=test_root/'verify_child.py'
 child_script.write_text("import bpy\nfrom pathlib import Path\n"+
-    f"assert Path(bpy.data.filepath).resolve()==Path({str(test_root/'destination/Relocated_16_02/Relocated_16_02.blend')!r}).resolve()\n"+
+    f"assert Path(bpy.data.filepath).resolve()==Path({str(test_root/'destination/Relocated_16_02_Main_Folder/Relocated_16_02.blend')!r}).resolve()\n"+
     "image=bpy.data.images['used.png']\nassert image.filepath.replace('\\\\','/').startswith('//textures/')\n"+
     "assert Path(bpy.path.abspath(image.filepath)).is_file()\nassert len(image.pixels)>0\n"+
     f"Path({str(LOG)!r}).write_text('PROJECT_RELOCATION_RESTART_TESTS_PASSED\\n')\n"+

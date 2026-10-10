@@ -14,6 +14,8 @@ bpy.context.preferences.use_preferences_save = False
 addon_utils.enable(ROOT.name, default_set=True)
 from polygroups_generator.operators import relocate_project as rp
 
+assert bpy.ops.wm.airetopo_relocate_project.get_rna_type().properties['put_in_subfolder'].default is True
+
 assert rp.split_project_name('Tree_16_01') == ('Tree', '16', '01')
 assert rp.split_project_name('Tree_With_Underscores_03_12') == ('Tree_With_Underscores', '03', '12')
 assert rp.split_project_name('Tree') == ('Tree', '00', '01')
@@ -62,7 +64,7 @@ for language in ('EN', 'RU'):
         arrows = [data['icon'] for kind, data in layout.calls if kind == 'operator']
         assert arrows == ['TRIA_LEFT', 'TRIA_RIGHT', 'TRIA_LEFT', 'TRIA_RIGHT']
         assert any(kind == 'label' and data['text'] == 'Tree_16_01.blend' for kind, data in layout.calls)
-        assert any(kind == 'label' and data['text'] == 'Tree_16_01/' for kind, data in layout.calls) == nested
+        assert any(kind == 'label' and data['text'] == 'Tree_16_01_Main_Folder/' for kind, data in layout.calls) == nested
 
 with TemporaryDirectory() as directory:
     root = Path(directory)
@@ -85,7 +87,7 @@ with TemporaryDirectory() as directory:
     with patch.object(rp, '_execute_restart', return_value={'FINISHED'}) as restart:
         assert rp.WM_OT_airetopo_relocate_project.execute(op, bpy.context) == {'FINISHED'}
         restart.assert_called_once_with(op, bpy.context, False, use_saved_current=True)
-    expected = parent/'Tree_16_02'/'Tree_16_02.blend'
+    expected = parent/'Tree_16_02_Main_Folder'/'Tree_16_02.blend'
     assert Path(bpy.data.filepath) == expected and expected.is_file()
     assert (parent/'keep.txt').read_text() == 'untouched'
     assert hashlib.sha256(original.read_bytes()).hexdigest() == digest

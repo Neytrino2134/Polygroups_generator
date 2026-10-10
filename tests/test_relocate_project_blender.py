@@ -70,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix='airetopo-relocate-test-') as temp:
         (destination/'keep.txt').write_text('Existing parent contents')
     stem='Relocated_16_01' if nested else 'Relocated'
     saved,count=relocate_project(str(destination),stem,put_in_subfolder=nested)
-    expected=(destination/stem if nested else destination)/(stem+'.blend')
+    expected=(destination/(stem+'_Main_Folder') if nested else destination)/(stem+'.blend')
     assert saved == expected
     if nested:
         assert (destination/'keep.txt').read_text()=='Existing parent contents'
