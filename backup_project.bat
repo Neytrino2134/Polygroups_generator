@@ -3,7 +3,7 @@ setlocal
 
 set "SOURCE=%~dp0"
 set "SOURCE=%SOURCE:~0,-1%"
-set "BACKUP_ROOT=D:\Projects\polygroups\_generator"
+set "BACKUP_ROOT=D:\Projects\polygroups_generator"
 set "PAUSE_AT_END=1"
 if /I "%~1"=="--no-pause" set "PAUSE_AT_END=0"
 
