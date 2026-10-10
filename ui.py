@@ -2689,9 +2689,12 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             pass_row.prop(settings, "bake_normal", text=t(context, "normal"))
             column.prop(settings, "bake_artifact_mask", text=t(context, "bake_artifact_mask"))
             if settings.bake_artifact_mask:
+                column.prop(settings, "bake_artifact_match_normal")
+                if not settings.bake_artifact_match_normal:
+                    column.prop(settings, "bake_artifact_resolution", text=t(context, "bake_artifact_resolution"))
+                column.prop(settings, "bake_artifact_geometry")
                 column.prop(settings, "bake_artifact_self_intersections", text=t(context, "bake_artifact_self_intersections"))
-                column.prop(settings, "bake_artifact_resolution", text=t(context, "bake_artifact_resolution"))
-                column.prop(settings, "bake_artifact_radius", text=t(context, "bake_artifact_radius"))
+                column.prop(settings, "bake_artifact_radius", text="Safety Padding")
                 column.label(text=t(context, "bake_artifact_mask_hint"), icon="INFO")
             column.prop(
                 settings,

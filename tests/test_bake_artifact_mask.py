@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT.parent))
 addon_utils.enable(ROOT.name, default_set=True)
 
 from polygroups_generator.operators.baking import (
-    _generate_bake_artifact_mask,
+    _generate_legacy_geometric_artifact_mask as _generate_bake_artifact_mask,
     _save_image_as_png,
 )
 

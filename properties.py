@@ -2810,8 +2810,8 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         default=True,
     )
     bake_artifact_mask: bpy.props.BoolProperty(
-        name="Artifact Intersection Mask",
-        description="Project cage/highpoly intersections and enclosed areas to a black-and-white lowpoly UV mask",
+        name="Projection Artifact Mask",
+        description="Mark reversed tangent normals and proven ray misses using native Cycles coverage passes",
         default=True,
     )
     bake_artifact_self_intersections: bpy.props.BoolProperty(
@@ -2819,14 +2819,22 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         description="Also mark areas where the cage intersects itself in the artifact mask",
         default=False,
     )
+    bake_artifact_geometry: bpy.props.BoolProperty(
+        name="Include Geometric Intersections", default=False,
+        description="Add legacy cage/highpoly warnings, which may include harmless intersections",
+    )
+    bake_artifact_match_normal: bpy.props.BoolProperty(
+        name="Match Normal Resolution", default=True,
+        description="Classify at actual normal resolution; manual mode only conservatively downsamples the output",
+    )
     bake_artifact_resolution: bpy.props.IntProperty(
         name="Artifact Mask Resolution",
-        description="Width and height of the diagnostic mask in pixels",
-        default=2048, min=16, max=4096, soft_max=2048,
+        description="Advanced output downsampling; cannot exceed the actual normal resolution",
+        default=2048, min=16, max=16384, soft_max=8192,
     )
     bake_artifact_radius: bpy.props.IntProperty(
-        name="Mark Radius",
-        description="Width in pixels around each detected intersection curve",
+        name="Safety Padding",
+        description="Conservative padding inside the same UV island; gutters are not extended",
         default=2, min=0, max=32,
     )
     auto_save_textures_after_bake: bpy.props.BoolProperty(
