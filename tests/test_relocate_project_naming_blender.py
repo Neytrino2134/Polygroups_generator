@@ -35,6 +35,11 @@ class DrawLayout:
         return DrawLayout(self.calls)
     def column(self, **kwargs):
         return DrawLayout(self.calls)
+    def row(self, **kwargs):
+        return DrawLayout(self.calls)
+    def operator(self, name, **kwargs):
+        self.calls.append(('operator', dict(operator=name, **kwargs)))
+        return SimpleNamespace()
     def label(self, **kwargs):
         self.calls.append(('label', kwargs))
     def prop(self, owner, name, **kwargs):
@@ -52,7 +57,10 @@ for language in ('EN', 'RU'):
         for prop in ('project_name', 'name_index', 'version_index'):
             index = next(i for i, (kind, data) in enumerate(layout.calls) if kind == 'prop' and data['property'] == prop)
             assert layout.calls[index][1]['text'] == ''
-            assert layout.calls[index-1][0] == 'label' and layout.calls[index-1][1]['text']
+            prior = index-1 if prop == 'project_name' else index-2
+            assert layout.calls[prior][0] == 'label' and layout.calls[prior][1]['text']
+        arrows = [data['icon'] for kind, data in layout.calls if kind == 'operator']
+        assert arrows == ['TRIA_LEFT', 'TRIA_RIGHT', 'TRIA_LEFT', 'TRIA_RIGHT']
         assert any(kind == 'label' and data['text'] == 'Tree_16_01.blend' for kind, data in layout.calls)
         assert any(kind == 'label' and data['text'] == 'Tree_16_01/' for kind, data in layout.calls) == nested
 

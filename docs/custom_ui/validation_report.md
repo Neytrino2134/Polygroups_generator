@@ -276,3 +276,13 @@ actual reopening. PROJECT_RELOCATION_RESTART_TESTS_PASSED verifies the real pare
 process handoff and replacement Blender opening the nested file with texture pixels.
 PROJECT_RELOCATION_DIALOG_UI_PASSED captures the real factory GUI file-browser
 sidebar; the screenshot was visually inspected for unclipped fields and save icons.
+
+## Relocation index arrows (2026-10-10)
+
+Both Name Index and Version Index now have left/right buttons around the editable
+field. Each changes only the active relocation dialog's index by one, clamps at
+zero and preserves leading zeros (minimum two digits). The destination preview
+redraws after each step. PROJECT_RELOCATION_NAMING_TESTS_PASSED verifies the four
+arrow controls and naming. PROJECT_RELOCATION_DIALOG_UI_PASSED invokes both real
+index-step operators in the file browser, including zero, 09/10, 99/100, retained
+three-digit padding and empty input; the updated screenshot was visually inspected.

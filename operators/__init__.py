@@ -221,12 +221,13 @@ from .dev_restart import (
     WM_OT_airetopo_dev_restart_current,
     WM_OT_airetopo_dev_restart_without_saving,
 )
-from .relocate_project import WM_OT_airetopo_relocate_project
+from .relocate_project import WM_OT_airetopo_relocate_project, WM_OT_airetopo_relocate_index_step
 
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
     WM_OT_airetopo_relocate_project,
+    WM_OT_airetopo_relocate_index_step,
     OBJECT_OT_polygroups_render_unity_turnaround,
     OBJECT_OT_polygroups_unity_index_step,
     OBJECT_OT_polygroups_unity_random_color_tag,

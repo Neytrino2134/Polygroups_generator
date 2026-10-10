@@ -28,6 +28,14 @@ def capture_dialog():
             op.name_index = '16'
             op.version_index = '01'
             op.put_in_subfolder = True
+            with bpy.context.temp_override(window=window, area=area):
+                for field in ('name_index', 'version_index'):
+                    for initial, delta, expected in (('00', -1, '00'), ('09', 1, '10'),
+                            ('99', 1, '100'), ('100', -1, '099'), ('001', 1, '002'), ('', 1, '01')):
+                        setattr(op, field, initial)
+                        assert bpy.ops.wm.airetopo_relocate_index_step(field=field, delta=delta) == {'FINISHED'}
+                        assert getattr(op, field) == expected, (field, initial, delta, getattr(op, field))
+                op.name_index, op.version_index = '16', '01'
             area.tag_redraw()
             def screenshot():
                 with bpy.context.temp_override(window=window, area=area):

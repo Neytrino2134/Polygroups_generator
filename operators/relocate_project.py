@@ -213,6 +213,30 @@ def relocate_project(directory, project_name, put_in_subfolder=False):
     return root/name, len(images)
 
 
+class WM_OT_airetopo_relocate_index_step(bpy.types.Operator):
+    bl_idname = 'wm.airetopo_relocate_index_step'
+    bl_label = 'Change Project Index'
+    bl_description = 'Change the name or version index by one, keeping leading zeros'
+    field: bpy.props.EnumProperty(items=(('name_index', 'Name Index', ''),
+                                       ('version_index', 'Version Index', '')))
+    delta: bpy.props.IntProperty(default=1, min=-1, max=1)
+
+    @classmethod
+    def poll(cls, context):
+        op = getattr(context.space_data, 'active_operator', None)
+        return op is not None and op.bl_rna.identifier == 'WM_OT_airetopo_relocate_project'
+
+    def execute(self, context):
+        op = context.space_data.active_operator
+        value = getattr(op, self.field).strip()
+        if value and not re.fullmatch(r'[0-9]+', value):
+            self.report({'WARNING'}, 'Enter a numeric index first')
+            return {'CANCELLED'}
+        setattr(op, self.field, str(max(0, int(value or '0') + self.delta)).zfill(max(2, len(value))))
+        context.area.tag_redraw()
+        return {'FINISHED'}
+
+
 class WM_OT_airetopo_relocate_project(bpy.types.Operator):
     bl_idname = 'wm.airetopo_relocate_project'
     bl_label = 'Save Project to New Folder and Restart'
@@ -250,7 +274,15 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
                             ('version_index', 'relocate_version_index')):
             column = box.column(align=True)
             column.label(text=t(context, label))
-            column.prop(self, prop, text='')
+            if prop == 'project_name':
+                column.prop(self, prop, text='')
+            else:
+                row = column.row(align=True)
+                left = row.operator('wm.airetopo_relocate_index_step', text='', icon='TRIA_LEFT')
+                left.field, left.delta = prop, -1
+                row.prop(self, prop, text='')
+                right = row.operator('wm.airetopo_relocate_index_step', text='', icon='TRIA_RIGHT')
+                right.field, right.delta = prop, 1
         layout.prop(self, 'put_in_subfolder', text=t(context, 'relocate_subfolder'))
         preview = layout.box()
         preview.label(text=t(context, 'relocate_output'), icon='FILE_TICK')
