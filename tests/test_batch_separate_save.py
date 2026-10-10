@@ -167,6 +167,10 @@ with tempfile.TemporaryDirectory() as directory:
     assert records[0]["failed_stage"] == "REMESH_WAIT"
     assert records[0]["failed_pass"] == 2
     assert "Injected Quad Remesher failure" in records[0]["traceback"]
+    assert bpy.data.objects.get("FailedArtifact") is not None
+    assert records[0]['output_file']
+    with bpy.data.libraries.load(records[0]['output_file']) as (source, _target):
+        assert 'FailedArtifact' in source.objects
     assert records[1]["input_tris"] == records[1]["output_tris"] == 1
     with bpy.data.libraries.load(records[1]["output_file"]) as (source, _target):
         assert len([name for name in source.collections if name.startswith("Generated")]) == 1

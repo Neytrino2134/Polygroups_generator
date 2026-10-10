@@ -61,6 +61,13 @@ def find_import_operator(extension):
     return None
 
 
+def import_path_sort_key(path):
+    """Compare each folder and filename naturally (2 precedes 10)."""
+    return tuple(tuple((0, int(part)) if part.isdigit() else (1, part.casefold())
+                       for part in re.split(r'(\d+)', component))
+                 for component in path.replace('\\', '/').split('/'))
+
+
 def collect_import_files(directory, import_format, include_subfolders=False):
     if import_format == "AUTO":
         extensions = AUTO_EXTENSIONS
@@ -88,7 +95,7 @@ def collect_import_files(directory, import_format, include_subfolders=False):
         if extension in extensions:
             files.append(filepath)
 
-    files.sort(key=lambda path: os.path.relpath(path, directory).lower())
+    files.sort(key=lambda path: import_path_sort_key(os.path.relpath(path, directory)))
     return files
 
 
@@ -105,7 +112,7 @@ def collect_selected_import_files(directory, selected_files, import_format):
         if os.path.isfile(filepath) and extension in extensions:
             files.append(filepath)
 
-    files.sort(key=lambda path: os.path.basename(path).lower())
+    files.sort(key=lambda path: import_path_sort_key(os.path.relpath(path, directory)))
     return files
 
 
@@ -124,12 +131,13 @@ def object_world_bounds(obj):
     return min_corner, max_corner
 
 
-def arrange_objects_zx(objects, spacing=0.1, mode="LINE", rows=1, plane="ZX", alignment="BOUNDS", secondary_spacing=None):
+def arrange_objects_zx(objects, spacing=0.1, mode="LINE", rows=1, plane="ZX", alignment="BOUNDS", secondary_spacing=None, preserve_order=False):
     arranged_objects = [obj for obj in objects if obj and obj.type == "MESH"]
     if not arranged_objects:
         return 0
 
-    arranged_objects.sort(key=lambda obj: obj.name.lower())
+    if not preserve_order:
+        arranged_objects.sort(key=lambda obj: obj.name.lower())
     rows = max(1, int(rows))
     if mode == "LINE":
         rows = 1
@@ -612,7 +620,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
 
     def cancel(self, context):
         if getattr(self, "_queue", None) is not None:
-            self._queue.finish(context, "CANCELLED", rollback=True)
+            self._queue.finish(context, "CANCELLED")
         self._finish(context)
 
 

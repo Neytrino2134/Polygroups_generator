@@ -710,7 +710,7 @@ with tempfile.TemporaryDirectory() as directory:
         bake_settings.bake_task_stage = "DONE"
         queue.step(context)
         assert queue.finished and settings.batch_stage == "CANCELLED"
-        assert set(bpy.data.objects) == existing
+        assert set(bpy.data.objects) > existing
     settings.batch_autobake_enabled = False
 
     # Verify actual progress-file protocol and failure handling without launching engine.

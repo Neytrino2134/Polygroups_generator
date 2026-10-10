@@ -200,7 +200,7 @@ def generated_collection_files(blend_filepath):
     return sorted(files, key=lambda item: item[0])
 
 
-def restore_retopo_collection(filepath, collection_name, scene):
+def restore_retopo_collection(filepath, collection_name, scene, keep_all=False):
     """Append only Retopo_* objects from one separately saved Generated.N."""
     with bpy.data.libraries.load(filepath, link=False) as (source, target):
         if collection_name not in source.collections:
@@ -233,7 +233,7 @@ def restore_retopo_collection(filepath, collection_name, scene):
     imported_objects = set(imported_collection.all_objects)
     restored = []
     for obj in imported_objects:
-        if obj.name.startswith("Retopo_"):
+        if keep_all or obj.name.startswith("Retopo_"):
             destination.objects.link(obj)
             restored.append(obj)
 
@@ -258,34 +258,34 @@ def write_collection_blend(filepath, collection):
     # Blender's regular full-file writer and does not change bpy.data.filepath.
     # Remove other generated datablocks, not merely their view-layer visibility.
     # Keep empty placeholders in the working file for Restore Separate Retopo.
-    placeholders = []
-    for other in list(bpy.data.collections):
-        if other in set(bpy.data.collections) and other != collection and re.fullmatch(r"Generated(?:\.\d+)?", other.name):
-            placeholders.append(other.name)
-            for obj in list(other.all_objects):
-                if obj not in set(collection.all_objects):
-                    bpy.data.objects.remove(obj, do_unlink=True)
-            pending = [other]
-            hierarchy = []
-            while pending:
-                child = pending.pop()
-                if child not in hierarchy and child != collection:
-                    hierarchy.append(child)
-                    pending.extend(child.children)
-            for child in reversed(hierarchy):
-                if child.name in bpy.data.collections:
-                    bpy.data.collections.remove(child, do_unlink=True)
-    try:
-        with idle_import_state_for_copy():
-            result = bpy.ops.wm.save_as_mainfile(
-                filepath=filepath, copy=True, relative_remap=True, check_existing=False,
-            )
-        if "FINISHED" not in result:
-            raise RuntimeError("Blender did not finish saving the Generated.N copy")
-    finally:
-        for name in placeholders:
-            placeholder = bpy.data.collections.new(name)
-            bpy.context.scene.collection.children.link(placeholder)
+    with idle_import_state_for_copy():
+        result = bpy.ops.wm.save_as_mainfile(
+            filepath=filepath, copy=True, relative_remap=True, check_existing=False,
+        )
+    if "FINISHED" not in result:
+        raise RuntimeError("Blender did not finish saving the Generated.N copy")
+    # Isolate the COPY in another Blender process. Removing IDs in the working
+    # scene used to destroy earlier partial imports and invalidate queue refs.
+    import subprocess
+    script = f"""import bpy, re
+keep = bpy.data.collections[{collection.name!r}]
+keep_objects = set(keep.all_objects)
+for other in list(bpy.data.collections):
+    if other != keep and re.fullmatch(r'Generated(?:\\.\\d+)?', other.name):
+        for obj in list(other.all_objects):
+            if obj not in keep_objects and obj.name in bpy.data.objects:
+                bpy.data.objects.remove(obj, do_unlink=True)
+        bpy.data.collections.remove(other, do_unlink=True)
+bpy.context.preferences.filepaths.save_version = 0
+assert 'FINISHED' in bpy.ops.wm.save_as_mainfile(filepath={filepath!r}, check_existing=False)
+"""
+    process = subprocess.run(
+        [bpy.app.binary_path, '--background', '--factory-startup', filepath,
+         '--python-exit-code', '1', '--python-expr', script],
+        capture_output=True, text=True, timeout=120, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+    )
+    if process.returncode:
+        raise RuntimeError(f'Could not isolate separate output: {process.stderr[-2000:]}')
 
 
 def move_to_collection(objects, collection):
@@ -392,6 +392,7 @@ class ImportQueue:
             and self.separate
             and settings.batch_save_generated_separately
         )
+        self.separately_saved_files = []
         self.separately_saved_count = 0
         self.separately_saved_object_count = 0
         self.pause_after_each = bool(
@@ -872,7 +873,7 @@ class ImportQueue:
             self.stage == "BAKE_WAIT"
             and self.scene.polygroups_baking_settings.bake_task_is_running
         ):
-            self.finish(context, "CANCELLED", rollback=True)
+            self.finish(context, "CANCELLED")
             return
         if self.stage == "NEXT":
             if settings.batch_stop_requested:
@@ -957,9 +958,8 @@ class ImportQueue:
             settings.batch_last_error = f"{settings.batch_current_file}: {error}"
             self.report({"WARNING"}, settings.batch_last_error)
             settings.batch_failed_count += 1
+            self.preserve_partial_file()
             self.complete_file(success=False)
-            if self.save_generated_separately and not self.redo_mode:
-                self.clear_failed_file()
         self.update_progress()
         self.update_timing()
 
@@ -1395,7 +1395,7 @@ class ImportQueue:
         # Translate each file as a unit so highpoly/retopo pairs stay aligned.
         anchors = [anchor for anchor, objects in self.groups]
         old_positions = {obj: obj.matrix_world.translation.copy() for obj in anchors}
-        arrange_objects_zx(anchors, *self.arrange_options)
+        arrange_objects_zx(anchors, *self.arrange_options, preserve_order=True)
         self.view_layer.update()
         deltas = {obj: obj.matrix_world.translation - old_positions[obj] for obj in anchors}
         for anchor in anchors:
@@ -1427,6 +1427,37 @@ class ImportQueue:
                 self.batch_report.event(event, data)
             except OSError as error:
                 self.report({"WARNING"}, f"Cannot update batch reports: {error}")
+
+    def preserve_partial_file(self):
+        """Keep imported and completed meshes, and persist partial separate output."""
+        if self.redo_mode:
+            return
+        existing = set(bpy.data.objects)
+        before = getattr(self, 'file_owned_before', {}).get('objects', set())
+        objects = (self.owned_objects - before) & existing
+        if not objects:
+            return
+        if self.separate and self.collection is None:
+            number = 1
+            while bpy.data.collections.get(f"Generated.{number:03d}"):
+                number += 1
+            self.collection = bpy.data.collections.new(f"Generated.{number:03d}")
+            self.scene.collection.children.link(self.collection)
+            self.owned_collections.add(self.collection)
+        if self.collection is not None:
+            move_to_collection(objects, self.collection)
+        for obj in objects:
+            obj.hide_viewport = False
+            obj.hide_set(False)
+        if self.save_generated_separately and self.collection is not None:
+            try:
+                path = generated_collection_output_path(bpy.data.filepath, self.collection.name)
+                write_collection_blend(path, self.collection)
+                if self.file_record is not None:
+                    self.file_record['output_file'] = path
+                save_current_blend_file()
+            except Exception as error:
+                self.report({'WARNING'}, f'Partial batch results remain in scene; save failed: {error}')
 
     def clear_failed_file(self):
         collection_name = self.collection.name if self.collection else None
@@ -1510,6 +1541,8 @@ class ImportQueue:
         if bpy.data.filepath != working_path:
             raise RuntimeError("Separate saving unexpectedly changed the working blend path")
 
+        if hasattr(self, 'separately_saved_files'):
+            self.separately_saved_files.append((output_path, collection.name))
         saved_object_count = len(self.meshes)
         removed_objects = list(collection.all_objects)
         for obj in removed_objects:
@@ -1646,6 +1679,15 @@ class ImportQueue:
         if self.cursor is not None:
             self.cursor.close()
             self.cursor = None
+        if not rollback and not self.redo_mode and status != 'DONE':
+            self.preserve_partial_file()
+            for filepath, name in self.separately_saved_files:
+                collection = bpy.data.collections.get(name)
+                if collection is not None and not collection.all_objects:
+                    try:
+                        restore_retopo_collection(filepath, name, self.scene, keep_all=True)
+                    except Exception as error:
+                        self.report({'WARNING'}, f'Could not restore {name}: {error}')
         if rollback:
             for obj in self.owned_objects & set(bpy.data.objects):
                 bpy.data.objects.remove(obj, do_unlink=True)
@@ -1708,6 +1750,12 @@ class ImportQueue:
                     self.report({"WARNING"}, "Automatic Retopo restore did not complete")
             except Exception as error:
                 self.report({"WARNING"}, f"Automatic Retopo restore failed: {error}")
+        if not rollback and not self.redo_mode and status != 'DONE':
+            if self.save_generated_separately and bpy.data.filepath:
+                try:
+                    save_current_blend_file()
+                except Exception as error:
+                    self.report({'WARNING'}, f'Could not save recovered batch: {error}')
         redraw(context)
 
 
