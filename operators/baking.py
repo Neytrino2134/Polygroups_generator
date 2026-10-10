@@ -1125,13 +1125,25 @@ def _run_normal_and_artifact(context, target, sources, settings, normal_node):
             if session:
                 session.capture_normal()
         if session:
-            return _generate_bake_artifact_mask(context, target, sources, settings, session=session)
+            _generate_bake_artifact_mask(context, target, sources, settings, session=session)
+            return session.repair
     except Exception:
         _invalidate_artifact_mask(target)
         raise
     finally:
         if session:
             session.close()
+
+
+def _finalize_with_artifact_autofill(target, settings, repair, report):
+    try:
+        _finalize_bake_images(target, settings)
+        if repair is not None:
+            repair.apply(report)
+        seal_mask(target)
+    except Exception:
+        _invalidate_artifact_mask(target)
+        raise
 
 
 def _collect_bake_texture_packs(objects, settings):
@@ -1989,6 +2001,7 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
     def _finish(self, context, success, message, cancelled=False):
         global _BAKE_CURSOR_HANDLE
         settings = context.scene.polygroups_baking_settings
+        self.artifact_repair = None
         projection = getattr(self, 'projection', None)
         if projection is not None:
             projection.close()
@@ -2119,13 +2132,16 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             image, metadata = self.projection.result()
             if metadata['overlaps']:
                 self.report({'WARNING'}, 'Overlapping UVs: projection ownership is ambiguous')
+            self.artifact_repair = self.projection.repair
             self.projection.close()
             self.projection = None
             self.stage = 'POSTPROCESS'
         elif self.stage == "POSTPROCESS":
             self._set_status(context, self.stage, 93, "Creating Alpha map and filling background")
-            _finalize_bake_images(self.target, self.settings)
-            seal_mask(self.target)
+            if getattr(self, 'artifact_repair', None) is not None:
+                self._set_status(context, 'AUTOFILL', 94, 'Filling masked Normal and Base Color pixels')
+            _finalize_with_artifact_autofill(self.target, self.settings, getattr(self, 'artifact_repair', None), self.report)
+            self.artifact_repair = None
             self.stage = "SAVE"
         elif self.stage == "SAVE":
             self._set_status(context, self.stage, 95, "Saving bake textures")
@@ -2148,6 +2164,7 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         self.render_visibility = _isolate_bake_render_objects(self.target, self.sources)
         self.stage = "FIX_INDEX"
         self.wait_ticks = 0
+        self.artifact_repair = None
         self.cancel_requested = False
         self.settings.bake_task_is_running = True
         self.settings.bake_task_stage = "STARTING"
@@ -2255,12 +2272,11 @@ class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
             _bake_to_node(context, target, base_node, "DIFFUSE", settings)
 
         try:
-            _run_normal_and_artifact(context, target, sources, settings, normal_node)
+            repair = _run_normal_and_artifact(context, target, sources, settings, normal_node)
+            _finalize_with_artifact_autofill(target, settings, repair, self.report)
         except Exception as error:
             self.report({'ERROR'}, f'Normal/projection bake failed: {error}')
             return {'CANCELLED'}
-        _finalize_bake_images(target, settings)
-        seal_mask(target)
         _disable_highpoly_sources_after_bake(settings, sources)
         self.report({"INFO"}, "Bake finished")
         return {"FINISHED"}
@@ -2308,12 +2324,11 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
             _bake_to_node(context, target, base_node, "DIFFUSE", settings)
 
         try:
-            _run_normal_and_artifact(context, target, sources, settings, normal_node)
+            repair = _run_normal_and_artifact(context, target, sources, settings, normal_node)
+            _finalize_with_artifact_autofill(target, settings, repair, self.report)
         except Exception as error:
             self.report({'ERROR'}, f'Normal/projection bake failed: {error}')
             return {'CANCELLED'}
-        _finalize_bake_images(target, settings)
-        seal_mask(target)
         if settings.auto_save_textures_after_bake:
             try:
                 save_result = bpy.ops.object.polygroups_save_bake_textures()

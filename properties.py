@@ -2846,6 +2846,14 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         description="Extra pixels added to the inherited Bake Margin, or the entire expansion when inheritance is disabled",
         default=2, min=0, max=32,
     )
+    bake_artifact_autofill: bpy.props.BoolProperty(
+        name="Autofill Artifacts", default=True,
+        description="Fill masked Normal and Base Color texels inward from healthy pixels in the same UV island",
+    )
+    bake_artifact_autofill_blur: bpy.props.IntProperty(
+        name="Autofill Blur (px)", default=2, min=0, max=16,
+        description="Gaussian smoothing radius applied only to newly filled pixels; normal vectors are normalized",
+    )
     auto_save_textures_after_bake: bpy.props.BoolProperty(
         name="Auto Save Textures After Bake",
         description="Run Save Textures automatically after Prepare And Bake finishes",

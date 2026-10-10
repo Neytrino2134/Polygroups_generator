@@ -175,6 +175,7 @@ class ProjectionSession:
         self.settings = SimpleNamespace(**{name: getattr(settings, name) for name in (
             'bake_artifact_mode', 'bake_artifact_radius', 'bake_artifact_inherit_margin', 'bake_artifact_geometry', 'bake_artifact_self_intersections',
             'bake_artifact_match_normal', 'bake_artifact_resolution', 'bake_artifact_mask', 'bake_resolution',
+            'bake_artifact_autofill', 'bake_artifact_autofill_blur', 'bake_base_color',
             'autogenerate_smart_cage', 'smart_cage_object', 'use_selected_to_active', 'cage_extrusion', 'image_prefix')})
         self.scene = context.scene
         self.original_engine = self.scene.render.engine
@@ -186,6 +187,7 @@ class ProjectionSession:
         self.handlers = []
         self.native_cancelled = False
         self.closed = False
+        self.repair = None
         self.normal = normal if settings.bake_normal else None
         self.z_epsilon = .001 if not self.normal or self.normal.is_float else .004
         if normal is None:
@@ -388,6 +390,10 @@ class ProjectionSession:
             cage=self.bake_snapshot['cage_object'].name if self.bake_snapshot['cage_object'] else '',
             extrusion=self.bake_snapshot['cage_extrusion'], ray_distance=self.bake_snapshot['max_ray_distance'],
             selected_to_active=self.bake_snapshot['use_selected_to_active'], margin=self.bake_snapshot['margin'])
+        metadata['autofill'] = dict(enabled=self.settings.bake_artifact_autofill, pending=self.settings.bake_artifact_autofill)
+        if self.settings.bake_artifact_autofill:
+            from .bake_autofill import AutofillPlan
+            self.repair = AutofillPlan.create(self, mask, radius)
         image[META_PROP] = json.dumps(metadata, sort_keys=True)
         image[RUN_PROP] = self.frozen.run
         return image, metadata

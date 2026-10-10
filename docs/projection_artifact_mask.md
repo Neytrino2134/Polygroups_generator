@@ -58,12 +58,50 @@ a time and waits before reading pixels or rolling back materials. Esc/Reset and
 native object_bake_cancel cannot publish a current mask. UI controls are drawn by
 the shared baking layout and appear in Classic, Custom and UI Panel modes.
 
+## Autofill Artifacts
+
+`Autofill Artifacts` is enabled by default. After normal classification and
+background/alpha processing, it repairs requested Normal and Base Color textures
+using the prepared white mask, including inherited margin and extra expansion.
+Healthy donors are outside the mask, inside native UV coverage, have a confirmed
+projection hit in Full Projection, and belong to the same unambiguous UV island.
+An advancing eight-neighbor front averages boundary pixels inward; every wave
+reads before writing. Islands and ambiguous gutter ownership cannot exchange
+colors. Manual mask downsampling is expanded back to its native texel footprint
+for repair, so the saved mask and repaired area agree.
+
+`Autofill Blur (px)` defaults to 2 (0 disables smoothing). A separable Gaussian
+with radius 2 and sigma 1 smooths only synthesized pixels, using valid neighbors
+from the same island. Normal channels are decoded with signed/permuted XYZ
+swizzles, averaged as vectors, normalized, and encoded again. Opposing vectors
+use a valid donor fallback. Original pixels outside the mask are untouched by
+Autofill; background processing still follows the existing bake settings.
+
+The mask remains the original diagnostic map. Alpha coverage includes repaired
+texels; the normal hash is sealed after repair, before texture export. Only enabled
+bake maps are repaired; a private diagnostic normal is never published as a repaired
+Normal output. A masked component with no healthy same-island boundary stays
+unchanged and warns rather than borrowing from another island. Duplicate-axis
+normal swizzles skip normal repair with a warning. Pixel-write failures restore
+all already written regions and invalidate the current run through the bake caller.
+JSON metadata records fill counts, unresolved counts and smoothing radius.
+
+Work is bounded around the mask with a competing-island/blur halo. Memory and
+runtime still scale with the repaired region, boundary size and maximum distance
+to a healthy boundary; large mostly white 8K masks can require substantial work.
+This propagates neighboring appearance, rather than recovering lost highpoly
+detail. Acceptance includes native partial-hit bakes, both requested maps,
+private-normal/Base-only baking, exact exterior preservation, unit normals,
+island isolation, no-donor cases, PNG reload, write rollback, GUI async processing
+and cancellation/reset (`tests/test_bake_artifact_fill_blender.py` and the modal
+regression suite).
+
 ## Persistence
 
 Every new bake invalidates the old run association while reusing its image slot.
 The mask is retained through an unlinked image node in the target bake material,
 so batch ownership/cleanup and blend saving follow real datablock references.
-After background filling, the normal's pixel hash seals the association. Save
+After background filling and optional Autofill, the normal's pixel hash seals the association. Save
 Textures rejects stale/edited-normal associations and missing current-run masks.
 Existing externally assembled texture packs with no projection run still save.
 Disabling mask generation allows saving the other texture maps without a mask.

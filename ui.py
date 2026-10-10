@@ -2702,6 +2702,9 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                     margin=inherited_margin, extra=settings.bake_artifact_radius,
                     total=inherited_margin + settings.bake_artifact_radius,
                 ))
+                column.prop(settings, "bake_artifact_autofill", text=t(context, "bake_artifact_autofill"))
+                if settings.bake_artifact_autofill:
+                    column.prop(settings, "bake_artifact_autofill_blur", text=t(context, "bake_artifact_autofill_blur"))
                 column.label(text=t(context, "bake_artifact_mask_hint"), icon="INFO")
             column.prop(
                 settings,

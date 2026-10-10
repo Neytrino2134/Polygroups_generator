@@ -1,5 +1,6 @@
 """Factory GUI acceptance: actual async jobs, cancellation/reset and injected failure."""
 from pathlib import Path
+import json
 import sys
 import time
 import addon_utils
@@ -9,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
 bpy.context.preferences.use_preferences_save = False
 from polygroups_generator.operators import baking
-from polygroups_generator.core.bake_projection import current_mask
+from polygroups_generator.core.bake_projection import current_mask, META_PROP
 
 mode = 'success'
 stages = []
@@ -57,11 +58,14 @@ scene.cycles.samples = 1
 area = next(a for a in bpy.context.screen.areas if a.type == 'VIEW_3D')
 region = next(r for r in area.regions if r.type == 'WINDOW')
 started = time.monotonic()
-modes = ['success', 'cancel', 'failure']
+modes = ['success', 'autofill', 'cancel', 'failure']
 
 def launch():
     global mode
     mode = modes.pop(0)
+    high.rotation_euler.x = 0 if mode == 'autofill' else 3.141592653589793
+    high.location.x = 2 if mode == 'autofill' else 0
+    settings.bake_base_color = mode == 'autofill'
     baking._select_sources_and_target(bpy.context, [high], low)
     with bpy.context.temp_override(area=area, region=region):
         assert bpy.ops.object.polygroups_bake_task('INVOKE_DEFAULT', prepare_materials=True) == {'RUNNING_MODAL'}
@@ -69,7 +73,7 @@ def launch():
 def poll():
     try:
         assert time.monotonic() - started < 90, 'GUI bake timeout'
-        expected = {'success': 'DONE', 'cancel': 'CANCELLED', 'failure': 'FAILED'}[mode]
+        expected = {'success': 'DONE', 'autofill': 'DONE', 'cancel': 'CANCELLED', 'failure': 'FAILED'}[mode]
         if settings.bake_task_stage != expected:
             return .15
         assert not bpy.app.is_job_running('OBJECT_BAKE')
@@ -77,7 +81,12 @@ def poll():
         assert scene.render.bake.margin == settings.bake_margin
         assert not [i for i in bpy.data.images if i.name.startswith('Projection private')]
         normal = bpy.data.images[low[baking.BAKE_NORMAL_IMAGE_PROP]]
-        assert (current_mask(low, normal) is not None) == (mode == 'success')
+        mask = current_mask(low, normal)
+        assert (mask is not None) == (mode in ('success', 'autofill'))
+        if mode == 'autofill':
+            textures = json.loads(mask[META_PROP])['autofill']['textures']
+            for kind in ('normal', 'base_color'):
+                assert textures[kind]['filled'] > 0 and textures[kind]['unfilled'] == 0
         assert not settings.bake_task_is_running
         print('PROJECTION_MODAL_CASE_OK', mode, flush=True)
         if modes:
