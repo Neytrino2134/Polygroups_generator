@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import addon_utils
 import bpy
+bpy.context.preferences.use_preferences_save = False
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
@@ -180,5 +181,15 @@ with tempfile.TemporaryDirectory() as directory:
         child.name == "Generated.007"
         for child in bpy.context.scene.collection.children
     )
+    # Copies written by the running queue must open idle too, including the
+    # successful item following a failed import. No manual reset is required.
+    for output in (queued_output, Path(records[1]["output_file"])):
+        assert bpy.ops.wm.open_mainfile(filepath=str(output)) == {"FINISHED"}
+        loaded = bpy.context.scene.polygroups_model_preparation_settings
+        assert not loaded.batch_is_running and not loaded.batch_is_paused
+        assert loaded.batch_stage == "" and loaded.batch_current_file == ""
+        assert loaded.batch_import_progress == loaded.batch_current_progress == 0
+        assert loaded.batch_remaining_count == loaded.batch_total_count == 0
+        assert loaded.batch_last_error == "" and loaded.batch_failed_count == 0
 
 print("batch separate save test passed")

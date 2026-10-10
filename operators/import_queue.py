@@ -4,6 +4,7 @@ import os
 import re
 import traceback
 import time
+from contextlib import contextmanager
 
 from ..core.batch_report import BatchReport
 
@@ -94,28 +95,68 @@ def redraw(context):
                 area.tag_redraw()
 
 
+_BATCH_IMPORT_IDLE_STATE = {
+    "batch_is_running": False,
+    "batch_is_paused": False,
+    "batch_stop_requested": False,
+    "batch_cancel_requested": False,
+    "batch_stage": "",
+    "batch_last_error": "",
+    "batch_total_count": 0,
+    "batch_imported_count": 0,
+    "batch_imported_object_count": 0,
+    "batch_failed_count": 0,
+    "batch_remaining_count": 0,
+    "batch_import_progress": 0.0,
+    "batch_current_progress": 0.0,
+    "batch_remesh_progress": 0.0,
+    "batch_baking_progress": 0.0,
+    "batch_current_file": "",
+    "batch_elapsed_seconds": 0.0,
+    "batch_current_seconds": 0.0,
+    "batch_average_seconds": 0.0,
+    "batch_eta_seconds": -1.0,
+}
+
+
 def reset_batch_import_settings(settings):
     """Return persisted/stale queue UI state to a clean idle state."""
-    settings.batch_is_running = False
-    settings.batch_is_paused = False
-    settings.batch_stop_requested = False
-    settings.batch_cancel_requested = False
-    settings.batch_stage = ""
-    settings.batch_last_error = ""
-    settings.batch_total_count = 0
-    settings.batch_imported_count = 0
-    settings.batch_imported_object_count = 0
-    settings.batch_failed_count = 0
-    settings.batch_remaining_count = 0
-    settings.batch_import_progress = 0.0
-    settings.batch_current_progress = 0.0
-    settings.batch_remesh_progress = 0.0
-    settings.batch_baking_progress = 0.0
-    settings.batch_current_file = ""
-    settings.batch_elapsed_seconds = 0.0
-    settings.batch_current_seconds = 0.0
-    settings.batch_average_seconds = 0.0
-    settings.batch_eta_seconds = -1.0
+    for name, value in _BATCH_IMPORT_IDLE_STATE.items():
+        setattr(settings, name, value)
+
+
+@contextmanager
+def idle_import_state_for_copy():
+    """Serialize idle results without stopping or changing the live queue."""
+    snapshots = []
+    try:
+        for scene in bpy.data.scenes:
+            groups = (
+                (scene.polygroups_model_preparation_settings, _BATCH_IMPORT_IDLE_STATE),
+                (scene.polygroups_baking_settings, {
+                    "bake_task_is_running": False, "bake_task_stage": "",
+                    "bake_task_progress": 0.0, "bake_task_message": "",
+                }),
+                (scene.polygroups_remesh_status, {
+                    "is_running": False, "cancel_requested": False, "stage": "",
+                    "progress": 0.0, "message": "",
+                }),
+            )
+            for settings, defaults in groups:
+                snapshots.append((settings, {
+                    name: (getattr(settings, name), settings.is_property_set(name))
+                    for name in defaults
+                }))
+                for name, value in defaults.items():
+                    setattr(settings, name, value)
+        yield
+    finally:
+        for settings, values in reversed(snapshots):
+            for name, (value, was_set) in values.items():
+                if was_set:
+                    setattr(settings, name, value)
+                else:
+                    settings.property_unset(name)
 
 
 def save_current_blend_file():
@@ -235,9 +276,10 @@ def write_collection_blend(filepath, collection):
                 if child.name in bpy.data.collections:
                     bpy.data.collections.remove(child, do_unlink=True)
     try:
-        result = bpy.ops.wm.save_as_mainfile(
-            filepath=filepath, copy=True, relative_remap=True, check_existing=False,
-        )
+        with idle_import_state_for_copy():
+            result = bpy.ops.wm.save_as_mainfile(
+                filepath=filepath, copy=True, relative_remap=True, check_existing=False,
+            )
         if "FINISHED" not in result:
             raise RuntimeError("Blender did not finish saving the Generated.N copy")
     finally:
