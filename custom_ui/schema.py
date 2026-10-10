@@ -178,7 +178,11 @@ class Layout:
 
     def grouped(self, settings, name, label, icon):
         settings = getattr(settings,'_rna',settings)
-        key = settings.path_from_id() + '.' + name
+        try:
+            owner = settings.path_from_id()
+        except (ValueError, TypeError):
+            owner = type(settings).__name__
+        key = owner + '.' + name
         group = Layout(self, 'group', key, text=label, icon=icon,
                        enabled=self.usable(), opened=bool(getattr(settings, name)))
         group.root.bindings[key] = ('property', settings, name, -1)

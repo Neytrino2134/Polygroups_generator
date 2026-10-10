@@ -133,6 +133,17 @@ def tick():
                 return .6
             assert s.show_header and not s.model.errors
             assert any(b[0]=='operator' and b[1]=='wm.airetopo_relocate_project' for b in s.model.bindings.values())
+            if step in (9,10):
+                if step==10:
+                    assert not prefs.show_panel_save_restart and prefs.show_panel_autosave
+                rect=next(h[0] for h in s.hits if h[1][0]=='binding' and h[1][1].endswith('.show_panel_save_restart'))
+                x,y=int(r.x+rect[0]+rect[2]/2),int(r.y+rect[1]+rect[3]/2)
+                w.event_simulate(type='MOUSEMOVE',value='NOTHING',x=x,y=y)
+                w.event_simulate(type='LEFTMOUSE',value='PRESS',x=x,y=y)
+                w.event_simulate(type='LEFTMOUSE',value='RELEASE',x=x,y=y)
+                state['step']+=1
+                return .6
+            assert prefs.show_panel_save_restart and prefs.show_panel_autosave
             assert not state['capture']
             LOG.write_text(LOG.read_text()+'13 sidebar sections, detach/dock state preservation and 13 compact icon targets passed\nCUSTOM_UI_DOCKING_TESTS_PASSED\n')
             addon_utils.disable(ROOT.name)

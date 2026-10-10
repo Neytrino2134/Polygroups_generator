@@ -481,6 +481,8 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         description="Show recent custom autosave files for unsaved sessions",
         default=False,
     )
+    show_panel_save_restart: bpy.props.BoolProperty(name='Save and Restart', default=True)
+    show_panel_autosave: bpy.props.BoolProperty(name='Autosave', default=True)
     enable_dev_mode: bpy.props.BoolProperty(
         name="Enable Dev Mode",
         description="Show developer restart controls in the AI Retopo N-panel",

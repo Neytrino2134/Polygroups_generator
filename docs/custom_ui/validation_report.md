@@ -215,3 +215,18 @@ production ready handshake, and verified the original test Blender exited.
 PROJECT_RELOCATION_RESTART_TESTS_PASSED was recorded. The docking regression
 also passed a real Autosave header click and relocation-button availability.
 Sequence/movie code paths are implemented but were not exercised with video.
+
+## Save / autosave subgroups (2026-10-10)
+
+Autosave and Restart now contains independently collapsible Save and Restart
+and Autosave groups in all three modes. Relocation, regular-save status/actions
+and existing developer restart controls are in Save and Restart. Autosave
+status, latest autosave actions, recovery and recent autosaves are in Autosave.
+The GPU capture adapter now supports preference-owned group IDs.
+
+The relocation dialog explicitly labels its rename field Blend Filename / Имя
+файла .blend; it saves the destination with that name and adds .blend if needed.
+The original file keeps its name. Runtime tests passed subgroup membership in
+Classic/Custom/UI Panel, real independent collapse/reopen clicks, project rename
+and texture relocation; CUSTOM_UI_BLENDER_TESTS_PASSED,
+PROJECT_RELOCATION_TESTS_PASSED and CUSTOM_UI_DOCKING_TESTS_PASSED.

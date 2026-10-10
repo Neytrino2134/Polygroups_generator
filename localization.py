@@ -6,6 +6,9 @@ LANGUAGE_ITEMS = (
 
 TEXT = {
     "EN": {
+        "relocate_blend_filename": "Blend Filename",
+        "save_and_restart_group": "Save and Restart",
+        "autosave_group": "Autosave",
         "relocate_project": "Save to New Folder and Restart",
         "studio_collection_color_tag": "Collection Color Tag",
         "fab_rename_asset_warning": "Do not forget to change the Asset Name",
@@ -871,6 +874,9 @@ TEXT = {
         "open_prompt_folder": "Open Folder",
     },
     "RU": {
+        "relocate_blend_filename": "Имя файла .blend",
+        "save_and_restart_group": "Сохранение и перезапуск",
+        "autosave_group": "Автосохранение",
         "relocate_project": "Пересохранить в новый каталог и перезапустить",
         "studio_collection_color_tag": "Цветовой тег коллекций",
         "fab_rename_asset_warning": "Не забудьте изменить Asset Name",

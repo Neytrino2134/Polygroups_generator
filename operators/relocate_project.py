@@ -198,7 +198,8 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
     bl_label = 'Save Project to New Folder and Restart'
     bl_description = 'Copy only textures connected to used mesh materials, save in a new/empty folder and restart from that file'
     directory: bpy.props.StringProperty(subtype='DIR_PATH')
-    project_name: bpy.props.StringProperty(name='Project Name', default='Project')
+    project_name: bpy.props.StringProperty(name='Blend Filename', default='Project',
+        description='Rename the destination .blend file; the original file keeps its name')
     filter_folder: bpy.props.BoolProperty(default=True, options={'HIDDEN'})
 
     @classmethod
@@ -212,7 +213,8 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def draw(self, context):
-        self.layout.prop(self, 'project_name')
+        from ..localization import t
+        self.layout.prop(self, 'project_name', text=t(context, 'relocate_blend_filename'))
         self.layout.label(text='Choose a new or empty folder', icon='INFO')
 
     def execute(self, context):

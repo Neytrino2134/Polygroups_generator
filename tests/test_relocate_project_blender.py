@@ -101,4 +101,13 @@ with tempfile.TemporaryDirectory(prefix='airetopo-relocate-test-') as temp:
                 ui.VIEW3D_PT_polygroups_generator.draw(SimpleNamespace(layout=model),bpy.context)
             assert not model.errors,model.errors
             assert any(b[0]=='operator' and b[1]=='wm.airetopo_relocate_project' for b in model.bindings.values()),mode
+            save_group=next(n for n in walk(model.node) if n['kind']=='group' and n['id'].endswith('.show_panel_save_restart'))
+            auto_group=next(n for n in walk(model.node) if n['kind']=='group' and n['id'].endswith('.show_panel_autosave'))
+            def operators(group):
+                return {model.bindings[n['id']][1] for n in walk(group)
+                        if n['id'] in model.bindings and model.bindings[n['id']][0]=='operator'}
+            assert 'wm.airetopo_relocate_project' in operators(save_group),mode
+            assert 'wm.airetopo_relocate_project' not in operators(auto_group),mode
+            assert 'wm.airetopo_open_recent_autosave' in operators(auto_group),mode
+            assert 'wm.airetopo_open_saved_file' in operators(save_group),mode
 print('PROJECT_RELOCATION_TESTS_PASSED')

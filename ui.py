@@ -288,6 +288,20 @@ def draw_topic(layout, context, key, label, icon):
                                  "topic_" + key, t(context, label), icon)
 
 
+def draw_session_subgroup(layout, context, preferences, property_name, text_key, icon):
+    label = t(context, text_key)
+    if preferences and _CUSTOM_CAPTURING and hasattr(layout, 'grouped'):
+        return layout.grouped(preferences, property_name, label, icon)
+    box = layout.box()
+    opened = preferences is None or getattr(preferences, property_name)
+    if preferences:
+        box.prop(preferences, property_name, text=label,
+                 icon='TRIA_DOWN' if opened else 'TRIA_RIGHT', emboss=False)
+    else:
+        box.label(text=label, icon=icon)
+    return box if opened else None
+
+
 def draw_collapsible_box(layout, settings, property_name, label, icon):
     if _CUSTOM_CAPTURING and hasattr(layout, 'grouped'):
         return layout.grouped(settings, property_name, label, icon)
@@ -687,148 +701,153 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             session_header.label(text=t(context, "panel_session_status"), icon="TRIA_DOWN")
 
         if session_expanded:
-            session_box.operator('wm.airetopo_relocate_project',
-                text=t(context, 'relocate_project'), icon='FILE_NEW')
             save_status = custom_autosave.status_snapshot()
-            status_row = session_box.row(align=True)
-            event = save_status["event"]
-            if event == "CUSTOM":
-                status_row.label(text=t(context, "autosave_status_success"), icon="CHECKMARK")
-            elif event == "REGULAR":
-                status_row.label(text=t(context, "regular_save_status_success"), icon="CHECKMARK")
-            elif event == "ERROR":
-                status_row.alert = True
-                status_row.label(text=t(context, "autosave_status_error"), icon="ERROR")
-            elif event == "RECOVERY":
-                status_row.label(text=t(context, "autosave_recovery_created"), icon="RECOVER_LAST")
-            else:
-                status_row.label(text=t(context, "save_status_waiting"), icon="TIME")
-            autosave_row = session_box.row(align=True)
-            autosave_row.label(
-                text=t(context, "last_autosave_time", value=save_status["autosave_time"]),
-                icon="RECOVER_LAST",
-            )
-            autosave_actions = autosave_row.row(align=True)
-            autosave_actions.enabled = bool(save_status["autosave_path"])
-            open_autosave = autosave_actions.operator(
-                "wm.airetopo_open_recent_autosave",
-                text=t(context, "load_latest_autosave"),
-                icon="FILE_REFRESH",
-            )
-            open_autosave.filepath = save_status["autosave_path"]
-            show_autosave = autosave_actions.operator(
-                "wm.airetopo_show_file_in_browser",
-                text="",
-                icon="FILE_FOLDER",
-            )
-            show_autosave.filepath = save_status["autosave_path"]
-
-            regular_row = session_box.row(align=True)
-            regular_row.label(
-                text=t(context, "last_regular_save_time", value=save_status["regular_save_time"]),
-                icon="FILE_TICK",
-            )
-            regular_actions = regular_row.row(align=True)
-            regular_actions.enabled = bool(save_status["regular_save_path"])
-            open_regular = regular_actions.operator(
-                "wm.airetopo_open_saved_file",
-                text=t(context, "load_latest_save"),
-                icon="FILE_BLEND",
-            )
-            open_regular.filepath = save_status["regular_save_path"]
-            show_regular = regular_actions.operator(
-                "wm.airetopo_show_file_in_browser",
-                text="",
-                icon="FILE_FOLDER",
-            )
-            show_regular.filepath = save_status["regular_save_path"]
-            recovery = custom_autosave.recovery_snapshot()
-            if recovery["active"]:
-                session_box.separator()
-                recovery_box = session_box.box()
-                recovery_box.label(
-                    text=t(context, "recovered_file", value=os.path.basename(recovery["restored"])),
-                    icon="FILE_BLEND",
-                )
-                if recovery["original"]:
-                    recovery_box.label(
-                        text=t(context, "original_file", value=os.path.basename(recovery["original"])),
-                        icon="FILE_TICK",
-                    )
-                    save_original = recovery_box.row(align=True)
-                    save_original.alert = True
-                    save_original.operator(
-                        "wm.airetopo_save_recovery_to_original",
-                        text=t(context, "save_recovery_to_original"),
-                        icon="FILE_TICK",
-                    )
-                    recovery_box.label(text=t(context, "save_recovery_warning"), icon="ERROR")
-                else:
-                    recovery_box.operator(
-                        "wm.save_as_mainfile",
-                        text=t(context, "save_recovery_as"),
-                        icon="FILE_NEW",
-                    )
-            if not getattr(bpy.data, "filepath", ""):
-                session_box.separator()
-                recent_box = session_box.box()
-                recent_expanded = bool(
-                    preferences is None or preferences.show_panel_recent_autosaves
-                )
-                recent_header = recent_box.row(align=True)
-                if preferences is not None:
-                    recent_header.prop(
-                        preferences,
-                        "show_panel_recent_autosaves",
-                        text=t(context, "recent_autosaves"),
-                        icon="TRIA_DOWN" if recent_expanded else "TRIA_RIGHT",
-                        emboss=False,
-                    )
-                else:
-                    recent_header.label(text=t(context, "recent_autosaves"), icon="TRIA_DOWN")
-                if recent_expanded:
-                    recent_entries = custom_autosave.recent_autosaves()
-                    if recent_entries:
-                        recent_column = recent_box.column(align=True)
-                        for entry in recent_entries:
-                            modified = time.strftime(
-                                "%d.%m.%Y %H:%M",
-                                time.localtime(entry["modified"]),
-                            )
-                            entry_row = recent_column.row(align=True)
-                            operator = entry_row.operator(
-                                "wm.airetopo_open_recent_autosave",
-                                text=f'{entry["name"]}  ·  {modified}',
-                                icon="FILE_BLEND",
-                            )
-                            operator.filepath = entry["filepath"]
-                            show_file = entry_row.operator(
-                                "wm.airetopo_show_file_in_browser",
-                                text="",
-                                icon="FILE_FOLDER",
-                            )
-                            show_file.filepath = entry["filepath"]
-                        recent_box.label(text=t(context, "recent_autosave_save_as_hint"), icon="INFO")
-                    else:
-                        recent_box.label(text=t(context, "no_recent_autosaves"), icon="INFO")
-            if preferences and preferences.enable_dev_mode:
-                session_box.separator()
-                restart_column = session_box.column(align=True)
-                restart_column.operator(
-                    "wm.airetopo_dev_restart",
-                    text=t(context, "dev_restart"),
-                    icon="FILE_REFRESH",
-                )
-                restart_column.operator(
-                    "wm.airetopo_dev_restart_current",
-                    text=t(context, "dev_restart_current"),
+            save_group = draw_session_subgroup(session_box, context, preferences, 'show_panel_save_restart', 'save_and_restart_group', 'FILE_TICK')
+            if save_group is not None:
+                save_group.operator('wm.airetopo_relocate_project',
+                    text=t(context, 'relocate_project'), icon='FILE_NEW')
+                regular_row = save_group.row(align=True)
+                regular_row.label(
+                    text=t(context, "last_regular_save_time", value=save_status["regular_save_time"]),
                     icon="FILE_TICK",
                 )
-                restart_column.operator(
-                    "wm.airetopo_dev_restart_without_saving",
-                    text=t(context, "dev_restart_without_saving"),
-                    icon="LOOP_BACK",
+                regular_actions = regular_row.row(align=True)
+                regular_actions.enabled = bool(save_status["regular_save_path"])
+                open_regular = regular_actions.operator(
+                    "wm.airetopo_open_saved_file",
+                    text=t(context, "load_latest_save"),
+                    icon="FILE_BLEND",
                 )
+                open_regular.filepath = save_status["regular_save_path"]
+                show_regular = regular_actions.operator(
+                    "wm.airetopo_show_file_in_browser",
+                    text="",
+                    icon="FILE_FOLDER",
+                )
+                show_regular.filepath = save_status["regular_save_path"]
+                if preferences and preferences.enable_dev_mode:
+                    save_group.separator()
+                    restart_column = save_group.column(align=True)
+                    restart_column.operator(
+                        "wm.airetopo_dev_restart",
+                        text=t(context, "dev_restart"),
+                        icon="FILE_REFRESH",
+                    )
+                    restart_column.operator(
+                        "wm.airetopo_dev_restart_current",
+                        text=t(context, "dev_restart_current"),
+                        icon="FILE_TICK",
+                    )
+                    restart_column.operator(
+                        "wm.airetopo_dev_restart_without_saving",
+                        text=t(context, "dev_restart_without_saving"),
+                        icon="LOOP_BACK",
+                    )
+
+                autosave_group = draw_session_subgroup(session_box, context, preferences, 'show_panel_autosave', 'autosave_group', 'RECOVER_LAST')
+            if autosave_group is not None:
+                status_row = autosave_group.row(align=True)
+                event = save_status["event"]
+                if event == "CUSTOM":
+                    status_row.label(text=t(context, "autosave_status_success"), icon="CHECKMARK")
+                elif event == "REGULAR":
+                    status_row.label(text=t(context, "regular_save_status_success"), icon="CHECKMARK")
+                elif event == "ERROR":
+                    status_row.alert = True
+                    status_row.label(text=t(context, "autosave_status_error"), icon="ERROR")
+                elif event == "RECOVERY":
+                    status_row.label(text=t(context, "autosave_recovery_created"), icon="RECOVER_LAST")
+                else:
+                    status_row.label(text=t(context, "save_status_waiting"), icon="TIME")
+                autosave_row = autosave_group.row(align=True)
+                autosave_row.label(
+                    text=t(context, "last_autosave_time", value=save_status["autosave_time"]),
+                    icon="RECOVER_LAST",
+                )
+                autosave_actions = autosave_row.row(align=True)
+                autosave_actions.enabled = bool(save_status["autosave_path"])
+                open_autosave = autosave_actions.operator(
+                    "wm.airetopo_open_recent_autosave",
+                    text=t(context, "load_latest_autosave"),
+                    icon="FILE_REFRESH",
+                )
+                open_autosave.filepath = save_status["autosave_path"]
+                show_autosave = autosave_actions.operator(
+                    "wm.airetopo_show_file_in_browser",
+                    text="",
+                    icon="FILE_FOLDER",
+                )
+                show_autosave.filepath = save_status["autosave_path"]
+
+                recovery = custom_autosave.recovery_snapshot()
+                if recovery["active"]:
+                    autosave_group.separator()
+                    recovery_box = autosave_group.box()
+                    recovery_box.label(
+                        text=t(context, "recovered_file", value=os.path.basename(recovery["restored"])),
+                        icon="FILE_BLEND",
+                    )
+                    if recovery["original"]:
+                        recovery_box.label(
+                            text=t(context, "original_file", value=os.path.basename(recovery["original"])),
+                            icon="FILE_TICK",
+                        )
+                        save_original = recovery_box.row(align=True)
+                        save_original.alert = True
+                        save_original.operator(
+                            "wm.airetopo_save_recovery_to_original",
+                            text=t(context, "save_recovery_to_original"),
+                            icon="FILE_TICK",
+                        )
+                        recovery_box.label(text=t(context, "save_recovery_warning"), icon="ERROR")
+                    else:
+                        recovery_box.operator(
+                            "wm.save_as_mainfile",
+                            text=t(context, "save_recovery_as"),
+                            icon="FILE_NEW",
+                        )
+                if not getattr(bpy.data, "filepath", ""):
+                    autosave_group.separator()
+                    recent_box = autosave_group.box()
+                    recent_expanded = bool(
+                        preferences is None or preferences.show_panel_recent_autosaves
+                    )
+                    recent_header = recent_box.row(align=True)
+                    if preferences is not None:
+                        recent_header.prop(
+                            preferences,
+                            "show_panel_recent_autosaves",
+                            text=t(context, "recent_autosaves"),
+                            icon="TRIA_DOWN" if recent_expanded else "TRIA_RIGHT",
+                            emboss=False,
+                        )
+                    else:
+                        recent_header.label(text=t(context, "recent_autosaves"), icon="TRIA_DOWN")
+                    if recent_expanded:
+                        recent_entries = custom_autosave.recent_autosaves()
+                        if recent_entries:
+                            recent_column = recent_box.column(align=True)
+                            for entry in recent_entries:
+                                modified = time.strftime(
+                                    "%d.%m.%Y %H:%M",
+                                    time.localtime(entry["modified"]),
+                                )
+                                entry_row = recent_column.row(align=True)
+                                operator = entry_row.operator(
+                                    "wm.airetopo_open_recent_autosave",
+                                    text=f'{entry["name"]}  ·  {modified}',
+                                    icon="FILE_BLEND",
+                                )
+                                operator.filepath = entry["filepath"]
+                                show_file = entry_row.operator(
+                                    "wm.airetopo_show_file_in_browser",
+                                    text="",
+                                    icon="FILE_FOLDER",
+                                )
+                                show_file.filepath = entry["filepath"]
+                            recent_box.label(text=t(context, "recent_autosave_save_as_hint"), icon="INFO")
+                        else:
+                            recent_box.label(text=t(context, "no_recent_autosaves"), icon="INFO")
 
         header = layout.row(align=True)
         expand_operator = header.operator(
