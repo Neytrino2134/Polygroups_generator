@@ -6,7 +6,7 @@ import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
-from .render_queue import image_extension, ensure_render_support_visible
+from .render_queue import image_extension, ensure_render_support_visible, is_render_support_collection
 
 
 TURNAROUND_COLLECTION_PROP = "polygroups_turnaround_collection"
@@ -206,8 +206,7 @@ def _isolate_turnaround(scene, collection, keep_named_collections=False):
     def include_named_collections(candidate, inside_named=False):
         named = (
             keep_named_collections
-            and candidate != scene.collection
-            and candidate.name.casefold().startswith(("scene", "light", "camera"))
+            and is_render_support_collection(scene, candidate)
         )
         inside_named = inside_named or named
         if inside_named:
@@ -336,9 +335,10 @@ def unity_turnaround_render_steps(context):
     collection = bpy.data.collections[settings.animation_collection_name]
     duplicate = bpy.data.objects[settings.animation_object_name]
     root = duplicate.parent
+    visibility = _visibility_snapshot(scene)
     ensure_render_support_visible(context)
     render_state = _render_snapshot(scene)
-    visibility = _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
+    _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
     rotation = root.rotation_euler.copy()
     animation_data = root.animation_data
     action = animation_data.action if animation_data else None
@@ -487,8 +487,9 @@ class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
 
         root = duplicate.parent
         render_state = _render_snapshot(scene)
+        visibility = _visibility_snapshot(scene)
         ensure_render_support_visible(context)
-        visibility = _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
+        _isolate_turnaround(scene, collection, settings.animation_keep_scene_collections)
         saved_rotation = root.rotation_euler.copy()
         animation_data = root.animation_data
         saved_action = animation_data.action if animation_data is not None else None
@@ -585,9 +586,10 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
         self._collection_name = collection.name
         self._settings = settings
         self._window_manager = context.window_manager
+        self._visibility = _visibility_snapshot(scene)
         ensure_render_support_visible(context)
         self._render_state = _render_snapshot(scene)
-        self._visibility = _isolate_turnaround(
+        _isolate_turnaround(
             scene, collection, settings.animation_keep_scene_collections,
         )
         self._output_file = ""

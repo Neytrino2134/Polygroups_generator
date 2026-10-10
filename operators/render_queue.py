@@ -11,42 +11,55 @@ from ..sound import play_operation_done_sound
 from ..core.remesh_cursor import RemeshCursor, update_remesh_cursor
 
 
+def is_render_support_collection(scene, collection):
+    """Recognize studio collections without matching the Scene Collection root."""
+    if collection == scene.collection:
+        return False
+    if collection.get('polygroups_studio_role') in {'scene', 'camera', 'light'}:
+        return True
+    return re.match(r'^(scene|camera|light)(?:$|[_ .-])', collection.name, re.IGNORECASE) is not None
+
+
 def ensure_render_support_visible(context):
     """Enable studio collections and their parent layer paths before rendering."""
     scene = context.scene
     needed = set()
+    objects = set()
     def visit(collection, parents=(), inside=False):
-        named = collection.name.casefold().startswith(('scene', 'camera', 'light'))
+        named = is_render_support_collection(scene, collection)
         inside = inside or named
-        support = any(obj.type in {'CAMERA', 'LIGHT'} or obj.get('polygroups_studio_role') for obj in collection.objects)
+        support = {obj for obj in collection.objects
+                   if obj.type in {'CAMERA', 'LIGHT'} or obj.get('polygroups_studio_role')}
         if inside or support:
             needed.update((*parents, collection))
-            for obj in collection.objects:
-                obj.hide_viewport = False
-                obj.hide_render = False
-                obj.hide_select = False
-                try:
-                    obj.hide_set(False)
-                except RuntimeError:
-                    pass
+            # Ancestors and mixed camera/light collections only need their
+            # collection paths enabled; their unrelated meshes stay hidden.
+            objects.update(collection.objects if inside else support)
         for child in collection.children:
             visit(child, (*parents, collection), inside)
     visit(scene.collection)
     for col in needed:
         col.hide_viewport = col.hide_render = col.hide_select = False
-    def enable(layer):
-        if layer.collection in needed:
-            layer.exclude = False
-            layer.hide_viewport = False
+    layers = []
+    def remember(layer):
+        layers.append((layer, layer.exclude, layer.hide_viewport))
         for child in layer.children:
-            enable(child)
+            remember(child)
     for view_layer in scene.view_layers:
-        enable(view_layer.layer_collection)
+        remember(view_layer.layer_collection)
+    # Setting exclude on an ancestor can propagate to its descendants in
+    # Blender. Restore unrelated layer states after enabling each parent.
+    for layer, excluded, hidden in layers:
+        desired = False if layer.collection in needed else excluded
+        if layer.exclude != desired:
+            layer.exclude = desired
+        layer.hide_viewport = False if layer.collection in needed else hidden
     context.view_layer.update()
-    for col in needed:
-        for obj in col.objects:
-            if obj.type in {'CAMERA', 'LIGHT'} or col.name.casefold().startswith(('scene', 'camera', 'light')):
-                obj.hide_set(False)
+    for obj in objects:
+        obj.hide_viewport = obj.hide_render = obj.hide_select = False
+        for view_layer in scene.view_layers:
+            if obj.name in view_layer.objects:
+                obj.hide_set(False, view_layer=view_layer)
 
 
 class RenderQueueCursor(RemeshCursor):
