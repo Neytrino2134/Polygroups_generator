@@ -493,13 +493,15 @@ def register_keymaps():
                 )
                 item.properties.digit = digit
                 KEYMAP_ITEMS.append((number_map, item))
-            for key, visible in (("NUMPAD_PLUS", True), ("NUMPAD_MINUS", False)):
+            for key, visible, shift in (("NUMPAD_PLUS", True, False), ("NUMPAD_MINUS", False, False),
+                                        ("EQUAL", True, True), ("MINUS", False, False)):
                 item = number_map.keymap_items.new(
                     AIRETOPO_OT_section_set_all.bl_idname,
                     key,
                     "PRESS",
                     head=True,
                     repeat=False,
+                    shift=shift,
                 )
                 item.properties.visible = visible
                 KEYMAP_ITEMS.append((number_map, item))

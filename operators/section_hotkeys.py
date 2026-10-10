@@ -159,7 +159,12 @@ class AIRETOPO_OT_section_set_all(bpy.types.Operator):
         from .panel_visibility import set_all_section_visibility
 
         settings = context.scene.airetopo_panel_visibility_settings
-        set_all_section_visibility(settings, self.visible)
+        prefs = get_preferences(context)
+        if prefs.ui_mode in {'CUSTOM', 'UI_PANEL'} and not prefs.custom_ui_show_session:
+            from ..core.ui_folds import section_folds, step_folds
+            step_folds(section_folds(context, prefs.custom_ui_section, include_sections=False), self.visible)
+        else:
+            set_all_section_visibility(settings, self.visible, context)
         context.area.tag_redraw()
         return {"FINISHED"}
 

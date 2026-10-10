@@ -227,12 +227,14 @@ def run():
     yield 0.1
     press("X", "x")
     release("X")
+    press('MINUS', '-')
+    release('MINUS')
     press("THREE", "3")
     release("THREE")
     press("RET", "\r")
     release("RET")
     yield 0.3
-    assert abs(obj.location.x - original - 3) < 0.001, "Transform numeric input failed"
+    assert abs(obj.location.x - original + 3) < 0.001, "Transform numeric input failed"
     assert settings.show_model_preparation_section == before, "Transform input toggled section"
     log("Transform numeric input passed")
 
@@ -270,25 +272,28 @@ def run():
     settings.single_section_mode = False
     log("Single Mode passed")
 
-    press("NUMPAD_PLUS")
-    release("NUMPAD_PLUS")
-    yield 0.2
-    assert all(getattr(settings, name) for name in sections)
-    assert not any(getattr(settings, name) for name in subsections)
+    from polygroups_generator.core.ui_folds import section_folds
+    roots = section_folds(context)
+    def descendants(items, depth=1):
+        for fold in items:
+            yield depth, fold
+            yield from descendants(fold.children, depth+1)
+    for _, fold in descendants(roots):
+        fold.set(False)
+    maximum = max(depth for depth, _ in descendants(roots))
+    for expected in range(1, maximum+1):
+        key = 'EQUAL' if expected == maximum else 'NUMPAD_PLUS'
+        press(key, shift=key == 'EQUAL')
+        release(key)
+        yield 0.3
+        assert all(fold.opened() == (depth <= expected) for depth, fold in descendants(roots))
     assert not settings.single_section_mode
-    press("NUMPAD_PLUS")
-    release("NUMPAD_PLUS")
-    yield 0.2
-    assert all(getattr(settings, name) for name in subsections)
-    press("NUMPAD_MINUS")
-    release("NUMPAD_MINUS")
-    yield 0.2
-    assert not any(getattr(settings, name) for name in subsections)
-    assert all(getattr(settings, name) for name in sections)
-    press("NUMPAD_MINUS")
-    release("NUMPAD_MINUS")
-    yield 0.2
-    assert not any(getattr(settings, name) for name in sections)
+    for expected in range(maximum, 0, -1):
+        key = 'MINUS' if expected == maximum else 'NUMPAD_MINUS'
+        press(key)
+        release(key)
+        yield 0.3
+        assert all(fold.opened() == (depth < expected) for depth, fold in descendants(roots))
     press("NUMPAD_ASTERIX")
     release("NUMPAD_ASTERIX")
     yield 0.2
@@ -311,8 +316,8 @@ def run():
             return {"FINISHED"}
     bpy.utils.register_class(TestInput)
     for field, keys, expected in (
-        ("test_section_text", (("ONE", "1"), ("TWO", "2"), ("THREE", "3")), "123"),
-        ("test_section_number", (("FOUR", "4"), ("TWO", "2")), 42.0),
+        ("test_section_text", (("ONE", "1"), ('MINUS', '-'), ("TWO", "2"), ("THREE", "3")), "1-23"),
+        ("test_section_number", (('MINUS', '-'), ("FOUR", "4"), ("TWO", "2")), -42.0),
     ):
         before = [getattr(settings, name) for name in sections]
         with context.temp_override(window=window, area=area, region=viewport):

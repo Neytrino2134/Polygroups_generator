@@ -9,7 +9,7 @@ import bpy
 
 from .localization import get_preferences
 from .localization import t
-from .properties import SECTION_SUBSECTION_PROPERTIES
+from .properties import SECTION_VISIBILITY_PROPERTIES
 from .core.remesh_defaults import get_remesh_preset_counts
 from .core.import_timing import format_duration
 
@@ -302,6 +302,15 @@ def draw_session_subgroup(layout, context, preferences, property_name, text_key,
     return box if opened else None
 
 
+def draw_section_fold_actions(header, property_name):
+    actions = header.row(align=True)
+    actions.alignment = 'RIGHT'
+    for visible, icon in ((False, 'REMOVE'), (True, 'ADD')):
+        op = actions.operator('object.airetopo_set_section_subsection_visibility', text='', icon=icon)
+        op.section_property = property_name
+        op.visible = visible
+
+
 def draw_collapsible_box(layout, settings, property_name, label, icon):
     if _CUSTOM_CAPTURING and hasattr(layout, 'grouped'):
         return layout.grouped(settings, property_name, label, icon)
@@ -341,24 +350,8 @@ def draw_collapsible_box(layout, settings, property_name, label, icon):
         icon=icon,
         emboss=False,
     )
-    subsection_properties = SECTION_SUBSECTION_PROPERTIES.get(property_name, ())
-    if subsection_properties and _SEARCH_FILTER_GROUPS is None:
-        actions = header.row(align=True)
-        actions.alignment = "RIGHT"
-        collapse = actions.operator(
-            "object.airetopo_set_section_subsection_visibility",
-            text="",
-            icon="REMOVE",
-        )
-        collapse.section_property = property_name
-        collapse.visible = False
-        expand = actions.operator(
-            "object.airetopo_set_section_subsection_visibility",
-            text="",
-            icon="ADD",
-        )
-        expand.section_property = property_name
-        expand.visible = True
+    if property_name in SECTION_VISIBILITY_PROPERTIES and _SEARCH_FILTER_GROUPS is None:
+        draw_section_fold_actions(header, property_name)
     preferences = get_preferences(bpy.context)
     experimental_features = bool(
         preferences and getattr(preferences, "enable_experimental_features", False)
@@ -659,7 +652,9 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                         _CUSTOM_CAPTURING, _CUSTOM_HEADER_ONLY = old_flags
                 else:
                     panel, visibility_property = SECTION_PANEL_VISIBILITY[preferences.custom_ui_section]
-                    body.label(text=f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}', icon=panel.bl_icon)
+                    heading = body.row(align=True)
+                    heading.label(text=f'{panel.bl_order:02d} | {t(context, panel.bl_text_key)}', icon=panel.bl_icon)
+                    draw_section_fold_actions(heading, visibility_property)
                     draw_section_panel_content(panel, context, body, '')
                 return
         if not _CUSTOM_CAPTURING and preferences and preferences.ui_mode == 'UI_PANEL':

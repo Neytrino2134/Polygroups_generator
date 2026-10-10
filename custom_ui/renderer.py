@@ -332,9 +332,10 @@ def draw(session, region):
         text(title, content_x+42*scale, top-66*scale, 17*scale, T.TEXT, content_w-197*scale)
         if not nav:
             session.hit((content_x, top-78*scale, content_w-150*scale, 32*scale), ('sections',), 'Choose workflow section')
-        for offset, label, action in ((145, 'Search', 'search'), (82, 'All', 'expand'), (40, 'Fold', 'fold')):
+        for offset, label, action in ((145, 'Search', 'search'), (82, '+', 'expand'), (40, '−', 'fold')):
             text(label, content_x+content_w-offset*scale, top-66*scale, 11*scale, T.accent(prefs))
-            session.hit((content_x+content_w-offset*scale, top-78*scale, 48*scale, 30*scale), (action,), label)
+            tooltip = {'expand': 'Expand next level', 'fold': 'Collapse deepest open level'}.get(action, label)
+            session.hit((content_x+content_w-offset*scale, top-78*scale, 48*scale, 30*scale), (action,), tooltip)
         if session.query:
             text('Search: '+session.query+'  (click Search to clear/edit)', content_x, top-90*scale, 11*scale, T.MUTED, content_w)
         view_bottom = bottom+26*scale

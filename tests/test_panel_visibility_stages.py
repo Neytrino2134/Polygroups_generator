@@ -14,6 +14,7 @@ addon_utils.enable(ROOT.name, default_set=True)
 from polygroups_generator.properties import SECTION_SUBSECTION_PROPERTIES
 from polygroups_generator.properties import SECTION_VISIBILITY_PROPERTIES
 from polygroups_generator.properties import SUBSECTION_VISIBILITY_PROPERTIES
+from polygroups_generator.core.ui_folds import section_folds
 
 
 settings = bpy.context.scene.airetopo_panel_visibility_settings
@@ -36,7 +37,7 @@ assert all(getattr(settings, name) for name in SECTION_VISIBILITY_PROPERTIES)
 assert not any(getattr(settings, name) for name in SUBSECTION_VISIBILITY_PROPERTIES)
 
 bpy.ops.object.airetopo_set_all_section_visibility(visible=True)
-assert all(getattr(settings, name) for name in SUBSECTION_VISIBILITY_PROPERTIES)
+assert all(fold.opened() for fold in section_folds(bpy.context, include_sections=False))
 
 # Collapse All reverses the order: subsections first, main sections second.
 bpy.ops.object.airetopo_set_all_section_visibility(visible=False)

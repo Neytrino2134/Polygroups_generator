@@ -1,8 +1,6 @@
 import bpy
 
-from ..properties import SECTION_SUBSECTION_PROPERTIES
 from ..properties import SECTION_VISIBILITY_PROPERTIES
-from ..properties import SUBSECTION_VISIBILITY_PROPERTIES
 
 
 PANEL_SETTINGS_GROUPS = (
@@ -38,62 +36,49 @@ def restore_panel_defaults(scene):
     return reset_count
 
 
-def set_all_section_visibility(settings, visible):
-    """Advance the shared two-stage main-section/subsection visibility state."""
+def set_all_section_visibility(settings, visible, context=None):
+    from ..core.ui_folds import section_folds, step_folds
+    context = context or bpy.context
     if visible:
-        if not all(getattr(settings, name) for name in SECTION_VISIBILITY_PROPERTIES):
-            settings.single_section_mode = False
-            for property_name in SECTION_VISIBILITY_PROPERTIES:
-                setattr(settings, property_name, True)
-            return "Sections expanded"
-
-        for property_name in SUBSECTION_VISIBILITY_PROPERTIES:
-            setattr(settings, property_name, True)
-        return "Subsections expanded"
-
-    if any(getattr(settings, name) for name in SUBSECTION_VISIBILITY_PROPERTIES):
-        for property_name in SUBSECTION_VISIBILITY_PROPERTIES:
-            setattr(settings, property_name, False)
-        return "Subsections collapsed"
-
-    for property_name in SECTION_VISIBILITY_PROPERTIES:
-        setattr(settings, property_name, False)
-    return "Sections collapsed"
+        settings.single_section_mode = False
+    depth = step_folds(section_folds(context), visible)
+    return ('Level %d %s' % (depth, 'expanded' if visible else 'collapsed')
+            if depth is not None else 'No further levels')
 
 
 class OBJECT_OT_airetopo_set_all_section_visibility(bpy.types.Operator):
     bl_idname = "object.airetopo_set_all_section_visibility"
     bl_label = "Set All Section Visibility"
-    bl_description = "Expand or collapse all AI Retopo Toolkit sections"
+    bl_description = "Open the next hierarchy level or close the deepest open level across sections 01–13"
     bl_options = {"REGISTER", "UNDO"}
 
     visible: bpy.props.BoolProperty(default=True)
 
     def execute(self, context):
         settings = context.scene.airetopo_panel_visibility_settings
-        self.report({"INFO"}, set_all_section_visibility(settings, self.visible))
+        self.report({"INFO"}, set_all_section_visibility(settings, self.visible, context))
         return {"FINISHED"}
 
 
 class OBJECT_OT_airetopo_set_section_subsection_visibility(bpy.types.Operator):
     bl_idname = "object.airetopo_set_section_subsection_visibility"
     bl_label = "Set Section Subsection Visibility"
-    bl_description = "Expand or collapse every subsection in this section"
+    bl_description = "Open the next subsection level or close the deepest open level within this section"
     bl_options = {"REGISTER", "UNDO"}
 
     section_property: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
     visible: bpy.props.BoolProperty(default=True, options={"HIDDEN", "SKIP_SAVE"})
 
     def execute(self, context):
-        property_names = SECTION_SUBSECTION_PROPERTIES.get(self.section_property)
-        if not property_names:
+        if self.section_property not in SECTION_VISIBILITY_PROPERTIES:
             self.report({"WARNING"}, "This section has no collapsible subsections")
             return {"CANCELLED"}
 
-        settings = context.scene.airetopo_panel_visibility_settings
-        for property_name in property_names:
-            setattr(settings, property_name, self.visible)
-        self.report({"INFO"}, "Subsections expanded" if self.visible else "Subsections collapsed")
+        from ..core.ui_folds import section_folds, step_folds
+        section = SECTION_VISIBILITY_PROPERTIES.index(self.section_property)
+        depth = step_folds(section_folds(context, section, include_sections=False), self.visible)
+        self.report({"INFO"}, 'No further levels' if depth is None else
+                    'Subsection level %d %s' % (depth, 'expanded' if self.visible else 'collapsed'))
         return {"FINISHED"}
 
 

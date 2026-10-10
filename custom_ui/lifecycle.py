@@ -460,6 +460,15 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             return {'PASS_THROUGH'}
         if not inside:
             return {'PASS_THROUGH'}
+        from ..core.ui_folds import fold_key
+        fold_action = fold_key(event)
+        if (fold_action is not None and s.prefs.enable_section_number_hotkeys and not s.show_header):
+            if not getattr(event, 'is_repeat', False):
+                from ..core.ui_folds import model_folds, step_folds
+                step_folds(model_folds(s.model, context), fold_action)
+                s.refresh(context)
+                redraw(s)
+            return {'RUNNING_MODAL'}
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             s.scroll = min(s.max_scroll, max(0, s.scroll + (-70 if event.type == 'WHEELUPMOUSE' else 70)*s.scale))
             redraw(s)
@@ -506,10 +515,8 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
                             op.session_key, op.section = s.key, index
                     context.window_manager.popup_menu(menu, title='AI Retopo Toolkit')
                 elif action[0] in {'expand', 'fold'}:
-                    for node in walk(s.model.node):
-                        if node['kind'] == 'group':
-                            binding = s.model.bindings[node['id']]
-                            setattr(binding[1], binding[2], action[0] == 'expand')
+                    from ..core.ui_folds import model_folds, step_folds
+                    step_folds(model_folds(s.model, context), action[0] == 'expand')
                     s.refresh(context)
             redraw(s)
             return {'RUNNING_MODAL'}
