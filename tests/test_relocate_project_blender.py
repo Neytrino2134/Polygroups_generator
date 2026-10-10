@@ -63,7 +63,17 @@ with tempfile.TemporaryDirectory(prefix='airetopo-relocate-test-') as temp:
         assert 'missing' in str(error).lower()
         assert not (root/'failed').exists()
     file.filepath=missing
-    saved,count=relocate_project(str(root/'destination'),'Relocated')
+    nested=bool(os.environ.get('AIRETOPO_TEST_NESTED'))
+    destination=root/'destination'
+    if nested:
+        destination.mkdir()
+        (destination/'keep.txt').write_text('Existing parent contents')
+    stem='Relocated_16_01' if nested else 'Relocated'
+    saved,count=relocate_project(str(destination),stem,put_in_subfolder=nested)
+    expected=(destination/stem if nested else destination)/(stem+'.blend')
+    assert saved == expected
+    if nested:
+        assert (destination/'keep.txt').read_text()=='Existing parent contents'
     assert count==4 and saved.is_file()
     assert bpy.data.filepath==str(saved)
     if old_blend:

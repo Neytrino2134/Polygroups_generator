@@ -256,3 +256,23 @@ probed sections, unchanged stored workflow folds, native Custom session content,
 UI Panel content measurement and actual search operator dispatch.
 PANEL_SEARCH_TESTS_PASSED, SESSION_GROUP_VISIBILITY_TESTS_PASSED and
 CUSTOM_UI_BLENDER_TESTS_PASSED also passed.
+
+## Structured relocation naming and nested project folder (2026-10-10)
+
+The relocation folder browser now uses a save-icon heading and three vertical
+label/field pairs: Name, Name Index, Version Index, plus a destination preview.
+Existing numeric-suffixed filenames are split on invocation; otherwise indices
+default to 00/01. Numeric indices are padded to at least two digits. Put in
+Subfolder is optional (off by default): the selected directory may contain other
+files, while the new/empty child Name_NameID_VersionID contains the identically
+named .blend and its textures directory. Destination collisions remain rejected.
+Labels and folder-selection hints are localized in EN/RU.
+
+PROJECT_RELOCATION_NAMING_TESTS_PASSED covers parsing, validation, vertical draw
+order, icon/preview, actual operator saving, restart dispatch and collision protection.
+PROJECT_RELOCATION_TESTS_PASSED covers direct saved-project relocation and nested
+unsaved-project relocation with packed/generated/UDIM assets, source removal and
+actual reopening. PROJECT_RELOCATION_RESTART_TESTS_PASSED verifies the real parent
+process handoff and replacement Blender opening the nested file with texture pixels.
+PROJECT_RELOCATION_DIALOG_UI_PASSED captures the real factory GUI file-browser
+sidebar; the screenshot was visually inspected for unclipped fields and save icons.

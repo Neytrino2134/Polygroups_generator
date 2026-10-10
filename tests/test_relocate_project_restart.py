@@ -19,9 +19,10 @@ cube=bpy.data.objects['Cube']; cube.data.materials.clear(); cube.data.materials.
 node=material.node_tree.nodes.new('ShaderNodeTexImage'); node.image=image
 material.node_tree.links.new(node.outputs['Color'],material.node_tree.nodes.get('Principled BSDF').inputs['Base Color'])
 bpy.ops.wm.save_as_mainfile(filepath=str(source/'original.blend'))
+(test_root/'destination').mkdir()
 child_script=test_root/'verify_child.py'
 child_script.write_text("import bpy\nfrom pathlib import Path\n"+
-    f"assert Path(bpy.data.filepath).resolve()==Path({str(test_root/'destination/Relocated.blend')!r}).resolve()\n"+
+    f"assert Path(bpy.data.filepath).resolve()==Path({str(test_root/'destination/Relocated_16_02/Relocated_16_02.blend')!r}).resolve()\n"+
     "image=bpy.data.images['used.png']\nassert image.filepath.replace('\\\\','/').startswith('//textures/')\n"+
     "assert Path(bpy.path.abspath(image.filepath)).is_file()\nassert len(image.pixels)>0\n"+
     f"Path({str(LOG)!r}).write_text('PROJECT_RELOCATION_RESTART_TESTS_PASSED\\n')\n"+
@@ -36,7 +37,7 @@ def spawn(command,*args,**kwargs):
 dev_restart.subprocess.Popen=spawn
 def run():
     try:
-        result=bpy.ops.wm.airetopo_relocate_project(directory=str(test_root/'destination'),project_name='Relocated')
+        result=bpy.ops.wm.airetopo_relocate_project(directory=str(test_root/'destination'),project_name='Relocated',name_index='16',version_index='02',put_in_subfolder=True)
         assert 'FINISHED' in result
         assert dev_restart._restart_pending
     except Exception:

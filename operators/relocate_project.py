@@ -115,12 +115,32 @@ def _image_plan(image):
     return name, [('file', item, item.name) for item in paths]
 
 
-def relocate_project(directory, project_name):
+def indexed_project_name(name, name_index, version_index):
+    """Build a shared destination folder/file stem from the three input fields."""
+    name = name.strip()
+    if name.lower().endswith('.blend'):
+        name = name[:-6]
+    if not name or name != _safe_name(name):
+        raise RuntimeError('Choose a valid project name')
+    indices = [str(value).strip() for value in (name_index, version_index)]
+    if any(not re.fullmatch(r'[0-9]+', value) for value in indices):
+        raise RuntimeError('Name Index and Version Index must contain digits')
+    return f'{name}_{indices[0].zfill(2)}_{indices[1].zfill(2)}'
+
+
+def split_project_name(stem):
+    match = re.fullmatch(r'(.+)_([0-9]+)_([0-9]+)', stem)
+    return match.groups() if match else (stem or 'Project', '00', '01')
+
+
+def relocate_project(directory, project_name, put_in_subfolder=False):
     """Preflight/copy first, then save; do not overwrite an existing project."""
     root = Path(directory).expanduser().resolve()
     if not project_name or project_name != _safe_name(project_name) or '/' in project_name or '\\' in project_name:
         raise RuntimeError('Choose a valid project filename')
     name = project_name if project_name.lower().endswith('.blend') else project_name + '.blend'
+    if put_in_subfolder:
+        root = root / name[:-6]
     if not root.parent.is_dir() or (root.exists() and (not root.is_dir() or any(root.iterdir()))):
         raise RuntimeError('Choose a new or empty destination folder')
     if bpy.data.filepath and root == Path(bpy.data.filepath).resolve().parent:
@@ -198,8 +218,14 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
     bl_label = 'Save Project to New Folder and Restart'
     bl_description = 'Copy only textures connected to used mesh materials, save in a new/empty folder and restart from that file'
     directory: bpy.props.StringProperty(subtype='DIR_PATH')
-    project_name: bpy.props.StringProperty(name='Blend Filename', default='Project',
-        description='Rename the destination .blend file; the original file keeps its name')
+    project_name: bpy.props.StringProperty(name='Name', default='Project',
+        description='Base name for the destination file and optional project folder')
+    name_index: bpy.props.StringProperty(name='Name Index', default='00',
+        description='Numeric name index; one digit is padded to two digits')
+    version_index: bpy.props.StringProperty(name='Version Index', default='01',
+        description='Numeric version index; one digit is padded to two digits')
+    put_in_subfolder: bpy.props.BoolProperty(name='Put in Subfolder', default=False,
+        description='Create Name_NameID_VersionID inside the selected directory and put the blend and used textures there')
     filter_folder: bpy.props.BoolProperty(default=True, options={'HIDDEN'})
 
     @classmethod
@@ -207,15 +233,37 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
         return _restart_poll()
 
     def invoke(self, context, event):
-        self.project_name = Path(bpy.data.filepath).stem if bpy.data.filepath else 'Project'
+        self.project_name, self.name_index, self.version_index = split_project_name(
+            Path(bpy.data.filepath).stem if bpy.data.filepath else 'Project')
         self.directory = str(Path(bpy.data.filepath).parent) if bpy.data.filepath else ''
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def draw(self, context):
         from ..localization import t
-        self.layout.prop(self, 'project_name', text=t(context, 'relocate_blend_filename'))
-        self.layout.label(text='Choose a new or empty folder', icon='INFO')
+        layout = self.layout
+        layout.use_property_split = False
+        box = layout.box()
+        box.label(text=t(context, 'relocate_blend_filename'), icon='FILE_TICK')
+        for prop, label in (('project_name', 'relocate_name'),
+                            ('name_index', 'relocate_name_index'),
+                            ('version_index', 'relocate_version_index')):
+            column = box.column(align=True)
+            column.label(text=t(context, label))
+            column.prop(self, prop, text='')
+        layout.prop(self, 'put_in_subfolder', text=t(context, 'relocate_subfolder'))
+        preview = layout.box()
+        preview.label(text=t(context, 'relocate_output'), icon='FILE_TICK')
+        try:
+            stem = indexed_project_name(self.project_name, self.name_index, self.version_index)
+        except RuntimeError:
+            preview.label(text=t(context, 'relocate_invalid_name'), icon='ERROR')
+        else:
+            if self.put_in_subfolder:
+                preview.label(text=stem + '/', icon='FILE_FOLDER')
+            preview.label(text=stem + '.blend', icon='FILE_BLEND')
+        layout.label(text=t(context, 'relocate_choose_parent' if self.put_in_subfolder
+                            else 'relocate_choose_empty'), icon='INFO')
 
     def execute(self, context):
         if any(bpy.app.is_job_running(job) for job in ('RENDER','OBJECT_BAKE')):
@@ -226,7 +274,8 @@ class WM_OT_airetopo_relocate_project(bpy.types.Operator):
             self.report({'ERROR'}, 'Wait for import or remesh to finish')
             return {'CANCELLED'}
         try:
-            path, count = relocate_project(self.directory, self.project_name)
+            stem = indexed_project_name(self.project_name, self.name_index, self.version_index)
+            path, count = relocate_project(self.directory, stem, self.put_in_subfolder)
         except Exception as exc:
             self.report({'ERROR'}, f'Project relocation failed; Blender remains open: {exc}')
             return {'CANCELLED'}
