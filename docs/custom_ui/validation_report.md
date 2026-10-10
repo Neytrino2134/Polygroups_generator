@@ -239,3 +239,20 @@ could therefore raise UnboundLocalError and abort the rest of panel drawing.
 Autosave initialization is now a sibling branch. SESSION_GROUP_VISIBILITY_TESTS_PASSED
 covers all four Save/Autosave fold combinations on the native draw path in
 Classic and Custom and confirms all 13 Classic stage headers remain present.
+
+## Workflow search scope and pinned session card (2026-10-10)
+
+Classic keeps Autosave and Restart above search results, outside the search
+filter, preserving its independent parent and subgroup fold states. Workflow
+search still probes exactly sections 1–13. Custom's session tab stays accessible.
+UI Panel's session/settings view ignores the retained workflow query when drawing
+or measuring its content. Submitting a nonempty search from that view switches to
+the thirteen workflow search sections; returning to Autosave retains the query
+without filtering the session view or its actions.
+
+Blender 5.2 factory-startup checks passed: PANEL_SEARCH_SCOPE_TESTS_PASSED covers
+EN/RU queries, matching/missing queries, open/closed session cards, exactly thirteen
+probed sections, unchanged stored workflow folds, native Custom session content,
+UI Panel content measurement and actual search operator dispatch.
+PANEL_SEARCH_TESTS_PASSED, SESSION_GROUP_VISIBILITY_TESTS_PASSED and
+CUSTOM_UI_BLENDER_TESTS_PASSED also passed.

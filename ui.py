@@ -675,8 +675,8 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         visibility = context.scene.airetopo_panel_visibility_settings
         search_query = '' if _CUSTOM_HEADER_ONLY else visibility.panel_search.strip()
         if search_query:
-            # Search results replace unrelated header/status UI while the real
-            # search field is drawn directly above the first matching section.
+            # Filter workflow sections only. The session card stays above the
+            # search results and keeps its own independent fold state.
             layout = _NullLayout()
         if preferences is not None:
             from .preferences import draw_global_notices
@@ -684,7 +684,7 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             draw_global_notices(layout, context, preferences)
         from . import custom_autosave
 
-        session_box = layout.box()
+        session_box = visible_layout.box()
         session_expanded = bool(
             preferences is None or preferences.show_panel_session_status
         )

@@ -93,6 +93,11 @@ def visible(node, query):
     return all(word in hay for word in query.casefold().split()) or any(visible(c, query) for c in node.get('children', ()))
 
 
+def workflow_query(session):
+    """Session/settings cards are pinned outside the workflow search scope."""
+    return '' if session.show_header else session.query
+
+
 def children(node, query):
     # A matching group shows all its children; matching controls reveal ancestors.
     hay = node.get('text', '').casefold()
@@ -336,10 +341,11 @@ def draw(session, region):
         view_h = content_top-view_bottom
         gpu.state.scissor_test_set(True)
         gpu.state.scissor_set(int(content_x), int(view_bottom), max(1, int(content_w)), max(1, int(view_h)))
-        total = height(session.model.node, content_w, scale, session.query)
+        query = workflow_query(session)
+        total = height(session.model.node, content_w, scale, query)
         session.max_scroll = max(0, total-view_h)
         session.scroll = min(session.scroll, session.max_scroll)
-        draw_node(session, session.model.node, content_x, content_top+session.scroll, content_w, scale, session.query, (view_bottom, content_top))
+        draw_node(session, session.model.node, content_x, content_top+session.scroll, content_w, scale, query, (view_bottom, content_top))
         gpu.state.scissor_set(*scissor)
         gpu.state.scissor_test_set(scissor_test)
         if session.max_scroll:

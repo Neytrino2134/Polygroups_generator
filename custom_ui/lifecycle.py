@@ -262,6 +262,8 @@ class AIRETOPO_OT_custom_search(bpy.types.Operator):
         session = SESSIONS.get(self.session_key)
         if session:
             session.query = self.query.strip()
+            if session.query and session.show_header:
+                session.select(session.section)
             session.scroll = 0
             session.refresh(context)
             redraw(session)
