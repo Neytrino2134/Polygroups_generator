@@ -999,7 +999,7 @@ def _fill_cage_area_inside_mesh(mask, resolution, target, cage_points, cage_tria
                 mask[y * resolution + x] = 255
 
 
-def _generate_legacy_geometric_artifact_mask(context, target, sources, settings, resolution_override=None, include_source=True):
+def _generate_legacy_geometric_artifact_mask(context, target, sources, settings, resolution_override=None, include_source=True, radius_override=None):
     """Project cage/highpoly and cage/self intersection curves into lowpoly UV."""
     from .smart_cage import closed, geometry, sources_geometry, tree
 
@@ -1035,7 +1035,7 @@ def _generate_legacy_geometric_artifact_mask(context, target, sources, settings,
     cage_tree = tree(points, triangles)
     high_tree = tree(high_points, high_triangles)
     resolution = settings.bake_artifact_resolution if resolution_override is None else resolution_override
-    radius = settings.bake_artifact_radius
+    radius = settings.bake_artifact_radius if radius_override is None else radius_override
     mask = bytearray(resolution * resolution)
     intersection_count = 0
     high_faces_to_fill = set()

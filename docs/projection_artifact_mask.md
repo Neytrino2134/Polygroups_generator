@@ -30,9 +30,23 @@ Without the public Normal pass, a private native NORMAL diagnostic is used.
 `Normal Inversion Only` omits HIT and does **not** detect ray misses. This reduced
 cost mode still runs UV coverage. Default resolution matches the actual normal map,
 including 8K. Manual output resolution only downsamples with conservative any-hit
-resampling; it cannot exceed the normal resolution. Safety padding defaults to
-two texels, within the same UV island. Gutters outside the UV domain are not
-extended: no exact native margin ownership is claimed.
+resampling; it cannot exceed the normal resolution.
+
+`Inherit Bake Margin` is enabled by default. `Additional Expansion (px)` defaults
+to 2 and retains the existing `bake_artifact_radius` setting. Total mask expansion
+is the actual frozen Bake Margin plus these extra pixels: margin 4 + extra 2 = 6.
+With inheritance disabled, expansion is only the extra value. The shared UI shows
+the live formula and total. Values are normal-resolution pixels before any manual
+downsampling and are captured for the bake run.
+
+Expansion uses eight-neighbor dilation inside the original UV island and its
+surrounding gutter. Nearby UV islands compete for empty gutter texels; ambiguous
+ties stop expansion, and other islands' interiors cannot receive padding. At image
+edges, UV overlaps or tightly packed islands, expansion is clipped conservatively.
+This gutter policy covers isolated islands' baked margins but does not claim exact
+Blender native EXTEND ownership parity where competing margins overlap. Confirmed
+core texels are preserved. The work region includes nearby competing islands and
+is bounded around detected defects to avoid scanning empty distant image regions.
 
 Legacy cage/highpoly intersections and cage self-intersections are separate,
 optional additions, disabled by default. Their white pixels are warnings and can
@@ -78,6 +92,9 @@ there is no filesystem transaction covering both files.
 - `tests/test_projection_mask_batch_blender.py`: actual checked Batch AutoBake
   handoff with AutoCage, PNG export, separate blend save/reopen and valid mask
   provenance, with an idle bake state in the reopened project.
+- `tests/test_projection_mask_margin_blender.py`: actual native UV-island gutter
+  expansion and saved PNG dimensions/pixels; 4+2=6, 6+2=8, disabled inheritance=2,
+  diagonal corners, core preservation, neighboring-island protection and shared UI.
 - Existing `test_bake_artifact_mask.py`, `test_bake_alpha_merge.py`,
   `test_batch_autobake.py`, and `test_custom_ui_blender.py`: legacy geometry,
   alpha/merge/background/export, queue handoff and shared UI regression coverage.
@@ -90,6 +107,9 @@ Isolated plane fixture, one Cycles sample, fresh factory process per size. Numbe
 are examples for this host, not timings for production highpoly meshes. Peak
 working set includes Blender, its bake buffers, normal/HIT/UV images and the mask.
 Background filling/AlphaMap work is outside this benchmark.
+These measurements precede inherited-margin gutter expansion; that additional
+cost depends on the padding radius and UV layout. The benchmark's full-domain
+plane has no external UV gutter.
 
 | Resolution | NORMAL | Additional mask | Peak working set |
 | --- | ---: | ---: | ---: |

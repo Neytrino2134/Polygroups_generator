@@ -2695,7 +2695,13 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                     column.prop(settings, "bake_artifact_resolution", text=t(context, "bake_artifact_resolution"))
                 column.prop(settings, "bake_artifact_geometry")
                 column.prop(settings, "bake_artifact_self_intersections", text=t(context, "bake_artifact_self_intersections"))
-                column.prop(settings, "bake_artifact_radius", text="Safety Padding")
+                column.prop(settings, "bake_artifact_inherit_margin", text=t(context, "bake_artifact_inherit_margin"))
+                column.prop(settings, "bake_artifact_radius", text=t(context, "bake_artifact_radius"))
+                inherited_margin = settings.bake_margin if settings.bake_artifact_inherit_margin else 0
+                column.label(text=t(context, "bake_artifact_total_expansion").format(
+                    margin=inherited_margin, extra=settings.bake_artifact_radius,
+                    total=inherited_margin + settings.bake_artifact_radius,
+                ))
                 column.label(text=t(context, "bake_artifact_mask_hint"), icon="INFO")
             column.prop(
                 settings,

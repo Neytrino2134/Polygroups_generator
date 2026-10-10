@@ -2837,9 +2837,13 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         description="Advanced output downsampling; cannot exceed the actual normal resolution",
         default=2048, min=16, max=16384, soft_max=8192,
     )
+    bake_artifact_inherit_margin: bpy.props.BoolProperty(
+        name="Inherit Bake Margin", default=True,
+        description="Expand the artifact mask by Bake Settings margin plus additional pixels",
+    )
     bake_artifact_radius: bpy.props.IntProperty(
-        name="Safety Padding",
-        description="Conservative padding inside the same UV island; gutters are not extended",
+        name="Additional Mask Expansion (px)",
+        description="Extra pixels added to the inherited Bake Margin, or the entire expansion when inheritance is disabled",
         default=2, min=0, max=32,
     )
     auto_save_textures_after_bake: bpy.props.BoolProperty(

@@ -6,6 +6,64 @@ MISS = 2
 EDGE = 4
 PADDING = 8
 GEOMETRY = 16
+NEIGHBORS = ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1))
+
+
+def _slices(shape, dy, dx):
+    source = (slice(max(0, dy), shape[0] + min(0, dy)), slice(max(0, dx), shape[1] + min(0, dx)))
+    target = (slice(max(0, -dy), shape[0] + min(0, -dy)), slice(max(0, -dx), shape[1] + min(0, -dx)))
+    return source, target
+
+
+def _gutter_ownership(ownership, domain, radius):
+    """Nearest-island fronts; ties remain ambiguous and cannot transmit padding."""
+    owners = ownership.copy()
+    owners[~domain] = 0
+    # Native UV edge samples with no unambiguous raster owner remain core-only.
+    owners[domain & (owners == 0)] = -1
+    if not np.any(owners == 0):
+        return owners
+    for _ in range(radius):
+        candidates = np.zeros_like(owners)
+        for dy, dx in NEIGHBORS:
+            source, target = _slices(owners.shape, dy, dx)
+            incoming = owners[source]
+            output = candidates[target]
+            eligible = (owners[target] == 0) & (incoming > 0)
+            conflict = eligible & (output != 0) & (output != incoming)
+            output[eligible & (output == 0)] = incoming[eligible & (output == 0)]
+            output[conflict] = -1
+        changed = (owners == 0) & (candidates != 0)
+        if not np.any(changed):
+            break
+        owners[changed] = candidates[changed]
+    return owners
+
+
+def pad_reasons(reasons, domain, ownership, radius):
+    """Expand inside an island and its gutter, never into another island's area."""
+    if radius <= 0 or not np.any(reasons):
+        return reasons
+    core = reasons != 0
+    rows = np.flatnonzero(core.any(axis=1))
+    columns = np.flatnonzero(core.any(axis=0))
+    # Two radii retain every competing island that could own a padded texel.
+    y0, y1 = max(0, rows[0] - 2*radius), min(core.shape[0], rows[-1] + 2*radius + 1)
+    x0, x1 = max(0, columns[0] - 2*radius), min(core.shape[1], columns[-1] + 2*radius + 1)
+    region = np.s_[y0:y1, x0:x1]
+    owners = _gutter_ownership(ownership[region], domain[region], radius)
+    original = core[region]
+    padded = original.copy()
+    for _ in range(radius):
+        previous = padded.copy()
+        for dy, dx in NEIGHBORS:
+            source, target = _slices(padded.shape, dy, dx)
+            padded[target] |= previous[source] & (owners[target] > 0) & (owners[source] == owners[target])
+        if np.array_equal(previous, padded):
+            break
+    local = reasons[region]
+    local[padded & ~original] |= PADDING
+    return reasons
 
 
 def canonical_z(rgba, swizzle):
@@ -72,19 +130,7 @@ def classify(z, hit, domain, ownership, radius=2, epsilon=0.001, edge_z=0.08):
     reasons[reversed_seed] |= REVERSED
     reasons[miss] |= MISS
     reasons[grown & ~reversed_seed] |= EDGE
-    core = reasons != 0
-    padded = core.copy()
-    # Ownership constraints prevent dilation into adjacent UV islands or overlaps.
-    for _ in range(radius):
-        previous = padded.copy()
-        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            ys = slice(max(0, dy), z.shape[0] + min(0, dy))
-            xs = slice(max(0, dx), z.shape[1] + min(0, dx))
-            yt = slice(max(0, -dy), z.shape[0] + min(0, -dy))
-            xt = slice(max(0, -dx), z.shape[1] + min(0, -dx))
-            padded[yt, xt] |= previous[ys, xs] & domain[yt, xt] & (ownership[yt, xt] > 0) & (ownership[ys, xs] == ownership[yt, xt])
-    reasons[padded & ~core] |= PADDING
-    return reasons
+    return pad_reasons(reasons, domain, ownership, radius)
 
 
 def conservative_resize(mask, size):

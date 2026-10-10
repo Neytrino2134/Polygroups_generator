@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import bpy
 import numpy as np
 
-from .bake_artifact_mask import canonical_z, classify, conservative_resize
+from .bake_artifact_mask import canonical_z, classify, conservative_resize, pad_reasons
 
 RUN_PROP = 'polygroups_projection_run'
 META_PROP = 'polygroups_projection_metadata'
@@ -173,7 +173,7 @@ class ProjectionSession:
     def __init__(self, context, target, sources, settings, normal, read_normal=True):
         self.context, self.target, self.sources = context, target, tuple(sources)
         self.settings = SimpleNamespace(**{name: getattr(settings, name) for name in (
-            'bake_artifact_mode', 'bake_artifact_radius', 'bake_artifact_geometry', 'bake_artifact_self_intersections',
+            'bake_artifact_mode', 'bake_artifact_radius', 'bake_artifact_inherit_margin', 'bake_artifact_geometry', 'bake_artifact_self_intersections',
             'bake_artifact_match_normal', 'bake_artifact_resolution', 'bake_artifact_mask', 'bake_resolution',
             'autogenerate_smart_cage', 'smart_cage_object', 'use_selected_to_active', 'cage_extrusion', 'image_prefix')})
         self.scene = context.scene
@@ -339,17 +339,20 @@ class ProjectionSession:
     def result(self):
         from ..operators.baking import _ensure_target_image, _write_pixels, _generate_legacy_geometric_artifact_mask
         self.validate()
+        inherited_margin = self.bake_snapshot['margin'] if self.settings.bake_artifact_inherit_margin else 0
+        radius = inherited_margin + self.settings.bake_artifact_radius
         reasons = classify(self.z, self.domain if self.hit is None else self.hit, self.domain, self.ownership,
-            self.settings.bake_artifact_radius, epsilon=self.z_epsilon)
+            radius=0, epsilon=self.z_epsilon)
         if self.settings.bake_artifact_geometry or self.settings.bake_artifact_self_intersections:
             # Explicit supplementary geometry diagnostics; never replace native core.
             legacy, _ = _generate_legacy_geometric_artifact_mask(self.context, self.target, self.sources, self.settings,
-                resolution_override=self.frozen.width, include_source=self.settings.bake_artifact_geometry)
+                resolution_override=self.frozen.width, include_source=self.settings.bake_artifact_geometry, radius_override=0)
             geometric = pixels(legacy)[..., 0] > .5
             if geometric.shape != reasons.shape:
                 # Legacy resolution remains independent; supplementary output must match.
                 raise ValueError('Optional geometric diagnostics require matching mask resolution')
             reasons[geometric] |= 16
+        reasons = pad_reasons(reasons, self.domain, self.ownership, radius)
         mask = reasons != 0
         size = self.frozen.width if self.settings.bake_artifact_match_normal else self.settings.bake_artifact_resolution
         if self.frozen.width != self.frozen.height:
@@ -376,7 +379,9 @@ class ProjectionSession:
             geometry=self.frozen.signature, normal=self.frozen.normal_name, normal_size=[self.frozen.width, self.frozen.height],
             materials=self.frozen.materials,
             size=[size, size], swizzle=list(self.swizzle), epsilon=self.z_epsilon, edge_z=.08,
-            radius=self.settings.bake_artifact_radius, padding='same UV island, no gutters',
+            radius=radius, extra_padding=self.settings.bake_artifact_radius,
+            inherit_margin=self.settings.bake_artifact_inherit_margin, inherited_margin=inherited_margin,
+            padding='8-neighbor dilation inside same island and nearest-island gutter; ambiguous ties blocked',
             reversed=int(np.count_nonzero(reasons & 1)), misses=int(np.count_nonzero(reasons & 2)),
             edges=int(np.count_nonzero(reasons & 4)), overlaps=int(np.count_nonzero(self.ownership == -1)),
             caveat='Positive-Z wrong hits are not detected; overlapping UVs are ambiguous',
