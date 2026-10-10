@@ -230,3 +230,12 @@ The original file keeps its name. Runtime tests passed subgroup membership in
 Classic/Custom/UI Panel, real independent collapse/reopen clicks, project rename
 and texture relocation; CUSTOM_UI_BLENDER_TESTS_PASSED,
 PROJECT_RELOCATION_TESTS_PASSED and CUSTOM_UI_DOCKING_TESTS_PASSED.
+
+## Native fold regression repair (2026-10-10)
+
+Fixed an indentation error: autosave_group was initialized only inside the open
+Save and Restart branch. Closing Save and Restart in native Classic/Custom
+could therefore raise UnboundLocalError and abort the rest of panel drawing.
+Autosave initialization is now a sibling branch. SESSION_GROUP_VISIBILITY_TESTS_PASSED
+covers all four Save/Autosave fold combinations on the native draw path in
+Classic and Custom and confirms all 13 Classic stage headers remain present.

@@ -744,7 +744,7 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                         icon="LOOP_BACK",
                     )
 
-                autosave_group = draw_session_subgroup(session_box, context, preferences, 'show_panel_autosave', 'autosave_group', 'RECOVER_LAST')
+            autosave_group = draw_session_subgroup(session_box, context, preferences, 'show_panel_autosave', 'autosave_group', 'RECOVER_LAST')
             if autosave_group is not None:
                 status_row = autosave_group.row(align=True)
                 event = save_status["event"]
