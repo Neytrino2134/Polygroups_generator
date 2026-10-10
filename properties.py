@@ -2827,6 +2827,11 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         name="Match Normal Resolution", default=True,
         description="Classify at actual normal resolution; manual mode only conservatively downsamples the output",
     )
+    bake_artifact_mode: bpy.props.EnumProperty(
+        name="Analysis", default='FULL',
+        items=(('FULL', 'Full Projection', 'Reversed normals and ray misses; two native coverage passes'),
+               ('NORMAL_ONLY', 'Normal Inversion Only', 'Reduced cost: inverted normals only; ray misses are not detected')),
+    )
     bake_artifact_resolution: bpy.props.IntProperty(
         name="Artifact Mask Resolution",
         description="Advanced output downsampling; cannot exceed the actual normal resolution",

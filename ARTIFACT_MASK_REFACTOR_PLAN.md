@@ -1,7 +1,9 @@
 # Projection Artifact Mask — refactoring plan for an implementation agent
 
-Status: researched design, not an implemented production change. Production bake
-and save functions remain unchanged in this planning task.
+Status: implemented and validated in Blender 5.2.0 LTS on 2026-10-10.
+See `docs/projection_artifact_mask.md` for shipped behavior, measurements and
+explicit limitations. The research/design sections below describe the original
+contract; unsupported UDIM/merged output and gutter extension remain explicit.
 
 ## Objective and acceptance contract
 

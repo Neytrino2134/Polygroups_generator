@@ -2689,6 +2689,7 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             pass_row.prop(settings, "bake_normal", text=t(context, "normal"))
             column.prop(settings, "bake_artifact_mask", text=t(context, "bake_artifact_mask"))
             if settings.bake_artifact_mask:
+                column.prop(settings, "bake_artifact_mode")
                 column.prop(settings, "bake_artifact_match_normal")
                 if not settings.bake_artifact_match_normal:
                     column.prop(settings, "bake_artifact_resolution", text=t(context, "bake_artifact_resolution"))

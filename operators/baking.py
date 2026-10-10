@@ -1089,16 +1089,16 @@ def _generate_legacy_geometric_artifact_mask(context, target, sources, settings,
     return image, intersection_count
 
 
-def _generate_bake_artifact_mask(context, target, sources, settings):
+def _generate_bake_artifact_mask(context, target, sources, settings, session=None):
     """Synchronous executor of the same diagnostic stages used by BakeTask."""
     if not settings.bake_artifact_mask:
         return None
-    _configure_bake_settings(context, settings, 'NORMAL')
-    normal = bpy.data.images.get(target.get(BAKE_NORMAL_IMAGE_PROP, ''))
-    session = None
     try:
-        session = ProjectionSession(context, target, sources, settings, normal)
-        for kind in (('NORMAL',) if not settings.bake_normal else ()) + ('HIT', 'UV'):
+        if session is None:
+            _configure_bake_settings(context, settings, 'NORMAL')
+            normal = bpy.data.images.get(target.get(BAKE_NORMAL_IMAGE_PROP, ''))
+            session = ProjectionSession(context, target, sources, settings, normal)
+        for kind in session.passes():
             bake_type = session.prepare(kind)
             if bpy.ops.object.bake(type=bake_type) != {'FINISHED'}:
                 raise RuntimeError(kind + ' diagnostic bake cancelled')
@@ -1109,6 +1109,28 @@ def _generate_bake_artifact_mask(context, target, sources, settings):
         raise
     finally:
         if session is not None:
+            session.close()
+
+
+def _run_normal_and_artifact(context, target, sources, settings, normal_node):
+    session = None
+    try:
+        if settings.bake_artifact_mask:
+            _configure_bake_settings(context, settings, 'NORMAL')
+            session = ProjectionSession(context, target, sources, settings, normal_node.image, read_normal=False)
+        if settings.bake_normal:
+            if session:
+                session.watch()
+            _bake_to_node(context, target, normal_node, 'NORMAL', settings)
+            if session:
+                session.capture_normal()
+        if session:
+            return _generate_bake_artifact_mask(context, target, sources, settings, session=session)
+    except Exception:
+        _invalidate_artifact_mask(target)
+        raise
+    finally:
+        if session:
             session.close()
 
 
@@ -1524,6 +1546,8 @@ def _configure_bake_settings(context, settings, bake_type):
 def _bake_to_node(context, target, node, bake_type, settings):
     _set_active_bake_node(target, node)
     _configure_bake_settings(context, settings, bake_type)
+    if not settings.use_selected_to_active:
+        _select_sources_and_target(context, [], target)
     result = bpy.ops.object.bake(type=bake_type)
     return result
 
@@ -1686,11 +1710,11 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
                 self.report({'WARNING'}, 'Projection masks for merged atlases are unsupported; save each original mesh mask')
         else:
             try:
-                artifact_image = current_mask(target, normal_image)
+                artifact_image = current_mask(target, normal_image) if settings.bake_artifact_mask else None
             except ValueError as error:
                 self.report({'ERROR'}, str(error))
                 return {'CANCELLED'}
-            if settings.bake_artifact_mask and artifact_image is None:
+            if settings.bake_artifact_mask and artifact_image is None and target.get('polygroups_projection_run'):
                 self.report({'ERROR'}, 'No current projection mask; bake again or disable Artifact Mask before saving')
                 return {'CANCELLED'}
 
@@ -1832,6 +1856,8 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
         target = _active_mesh(context)
         settings = context.scene.polygroups_baking_settings
         objects = _selected_bake_targets(context)
+        if any(obj.get(BAKE_ARTIFACT_IMAGE_PROP) for obj in objects):
+            self.report({'WARNING'}, 'Merged projection masks are unsupported; save masks from each original mesh')
         packs = _collect_bake_texture_packs(objects, settings)
         if len(packs) < 2:
             self.report({"WARNING"}, "Select at least two objects with baked textures and Alpha maps")
@@ -1991,6 +2017,8 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
     def _launch_pass(self, context, node, bake_type):
         _set_active_bake_node(self.target, node)
         _configure_bake_settings(context, self.settings, bake_type)
+        if not self.settings.use_selected_to_active:
+            _select_sources_and_target(context, [], self.target)
         if bpy.app.background:
             return bpy.ops.object.bake(type=bake_type)
         return bpy.ops.object.bake("INVOKE_DEFAULT", type=bake_type)
@@ -2046,6 +2074,10 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
                 self._set_status(context, self.stage, 68, "Baking Normal")
                 self.stage = "NORMAL_LAUNCH"
         elif self.stage == "NORMAL_LAUNCH":
+            if self.settings.bake_artifact_mask:
+                _configure_bake_settings(context, self.settings, 'NORMAL')
+                self.projection = ProjectionSession(context, self.target, self.sources, self.settings, self.normal_node.image, read_normal=False)
+                self.projection.watch()
             result = self._launch_pass(context, self.normal_node, "NORMAL")
             if "CANCELLED" in result:
                 return self._finish(context, False, "Normal bake cancelled")
@@ -2054,15 +2086,18 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         elif self.stage == "NORMAL_WAIT":
             self.wait_ticks -= 1
             if self.wait_ticks <= 0 and not bpy.app.is_job_running("OBJECT_BAKE"):
+                if getattr(self, 'projection', None):
+                    self.projection.capture_normal()
                 self._set_status(context, self.stage, 90, "Normal bake complete")
                 self.stage = "ARTIFACT_START"
         elif self.stage == 'ARTIFACT_START':
             if not self.settings.bake_artifact_mask:
                 self.stage = 'POSTPROCESS'
             else:
-                _configure_bake_settings(context, self.settings, 'NORMAL')
-                self.projection = ProjectionSession(context, self.target, self.sources, self.settings, self.normal_node.image)
-                self.diagnostic_passes = list((('NORMAL',) if not self.settings.bake_normal else ()) + ('HIT', 'UV'))
+                if getattr(self, 'projection', None) is None:
+                    _configure_bake_settings(context, self.settings, 'NORMAL')
+                    self.projection = ProjectionSession(context, self.target, self.sources, self.settings, self.normal_node.image)
+                self.diagnostic_passes = list(self.projection.passes())
                 self.stage = 'ARTIFACT_LAUNCH'
         elif self.stage == 'ARTIFACT_LAUNCH':
             kind = self.diagnostic_passes[0]
@@ -2219,14 +2254,11 @@ class OBJECT_OT_polygroups_bake_selected_to_active(bpy.types.Operator):
         if settings.bake_base_color:
             _bake_to_node(context, target, base_node, "DIFFUSE", settings)
 
-        if settings.bake_normal:
-            _bake_to_node(context, target, normal_node, "NORMAL", settings)
-
-        if settings.bake_artifact_mask:
-            try:
-                _generate_bake_artifact_mask(context, target, sources, settings)
-            except Exception as error:
-                self.report({"WARNING"}, f"Artifact mask not created: {error}")
+        try:
+            _run_normal_and_artifact(context, target, sources, settings, normal_node)
+        except Exception as error:
+            self.report({'ERROR'}, f'Normal/projection bake failed: {error}')
+            return {'CANCELLED'}
         _finalize_bake_images(target, settings)
         seal_mask(target)
         _disable_highpoly_sources_after_bake(settings, sources)
@@ -2275,14 +2307,11 @@ class OBJECT_OT_polygroups_prepare_and_bake(bpy.types.Operator):
         if settings.bake_base_color:
             _bake_to_node(context, target, base_node, "DIFFUSE", settings)
 
-        if settings.bake_normal:
-            _bake_to_node(context, target, normal_node, "NORMAL", settings)
-
-        if settings.bake_artifact_mask:
-            try:
-                _generate_bake_artifact_mask(context, target, sources, settings)
-            except Exception as error:
-                self.report({"WARNING"}, f"Artifact mask not created: {error}")
+        try:
+            _run_normal_and_artifact(context, target, sources, settings, normal_node)
+        except Exception as error:
+            self.report({'ERROR'}, f'Normal/projection bake failed: {error}')
+            return {'CANCELLED'}
         _finalize_bake_images(target, settings)
         seal_mask(target)
         if settings.auto_save_textures_after_bake:

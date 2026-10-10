@@ -1,5 +1,6 @@
 """Real native Cycles regression: saved masks, misses, reversals, rollback, swizzle."""
 import json
+import os
 from math import pi
 from pathlib import Path
 import sys
@@ -15,6 +16,7 @@ bpy.context.preferences.use_preferences_save = False
 addon_utils.enable(ROOT.name, default_set=False)
 from polygroups_generator.operators import baking
 from polygroups_generator.core.bake_projection import (ProjectionSession, invalidate, current_mask, pixels, save_mask_png, META_PROP, RUN_PROP)
+from polygroups_generator.core.bake_projection import uv_ownership
 from polygroups_generator.core.bake_artifact_mask import classify, canonical_z, conservative_resize
 
 bpy.ops.object.select_all(action='SELECT')
@@ -50,7 +52,10 @@ scene.cycles.device = 'CPU'
 
 
 def select():
-    baking._select_sources_and_target(bpy.context, [high], low)
+    baking._select_sources_and_target(bpy.context, [high, *extra_sources], low)
+
+
+extra_sources = []
 
 
 def bake_case(name, z, angle, modal=False):
@@ -108,6 +113,134 @@ bake_case('reversed', -.2, pi, modal=True)
 settings.bake_normal = True
 settings.bake_base_color = False
 
+# Mixed good hits and misses: the mask covers the missing half, leaving valid normals black.
+high.rotation_euler.x = 0
+high.location.x = 2
+high.location.z = -.2
+select()
+assert bpy.ops.object.polygroups_prepare_and_bake() == {'FINISHED'}
+normal = bpy.data.images[low[baking.BAKE_NORMAL_IMAGE_PROP]]
+data = pixels(current_mask(low, normal))
+assert np.all(data[4:-4, 4:28, 0] == 1)
+assert np.all(data[4:-4, 38:-4, 0] == 0)
+if os.environ.get('AIRETOPO_MASK_VALIDATION_OUTPUT'):
+    directory = Path(os.environ['AIRETOPO_MASK_VALIDATION_OUTPUT'])
+    directory.mkdir(parents=True, exist_ok=True)
+    baking._save_image_as_png(normal, str(directory / 'partial-normal.png'))
+    save_mask_png(current_mask(low, normal), str(directory / 'partial-mask.png'))
+high.location.x = 0
+
+# Multiple sources: nearest native ray hit wins, independent of source list order.
+bpy.ops.mesh.primitive_plane_add(size=4, location=(0, 0, -.1))
+nearest = bpy.context.object
+extra_sources.append(nearest)
+bake_case('valid', -.2, pi)
+nearest.rotation_euler.x = pi
+bake_case('reversed', -.2, 0)
+extra_sources.clear()
+bpy.data.objects.remove(nearest, do_unlink=True)
+
+# Cage origin entirely inside a closed high mesh: no boundary intersection required.
+bpy.ops.mesh.primitive_cube_add(size=4)
+enclosing = bpy.context.object
+extra_sources.append(enclosing)
+settings.ray_distance = 3
+bake_case('reversed', 5, 0)
+extra_sources.clear()
+bpy.data.objects.remove(enclosing, do_unlink=True)
+
+# Legitimate near-tangent normal region must not seed an artifact by itself.
+high.scale = (100, 100, 1)
+settings.ray_distance = 0
+settings.cage_extrusion = 200
+bake_case('valid', -.2, pi/2-.01)
+high.scale = (1, 1, 1)
+settings.ray_distance = 1
+settings.cage_extrusion = .1
+
+# Custom shading normals are taken from the actual normal bake, not face winding.
+high.data.normals_split_custom_set([(0, 0, -1)] * len(high.data.loops))
+bake_case('reversed', -.2, 0)
+high.data.normals_split_custom_set([(0, 0, 1)] * len(high.data.loops))
+
+# Explicit cage and mirrored/nonuniform transforms use the same native projection.
+high.rotation_euler.x = pi
+high.location.z = -.2
+low.scale = (1.5, .75, 1)
+high.scale = (2, 2, 1)
+bpy.context.view_layer.update()
+cage = low.copy()
+cage.data = low.data.copy()
+bpy.context.collection.objects.link(cage)
+cage.location.z = .1
+settings.smart_cage_object = cage
+settings.autogenerate_smart_cage = True
+select()
+material, base, node = baking._ensure_bake_material(low, settings)
+low.active_material = material
+invalidate(low)
+baking._bake_to_node(bpy.context, low, node, 'NORMAL', settings)
+image, meta = baking._generate_bake_artifact_mask(bpy.context, low, [high], settings)
+assert meta['cage'] == cage.name and meta['reversed'] > 0 and meta['misses'] == 0
+settings.autogenerate_smart_cage = False
+settings.smart_cage_object = None
+bpy.data.objects.remove(cage, do_unlink=True)
+low.scale = (1, 1, 1)
+high.scale = (1, 1, 1)
+
+low.scale = (-1.5, .75, 1)
+high.scale = (-2, 2, 1)
+for obj in (low, high):
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
+bake_case('reversed', -.2, pi)
+low.scale = (1, 1, 1)
+high.scale = (1, 1, 1)
+
+# Fast mode intentionally does not promise ray-miss coverage.
+settings.bake_artifact_mode = 'NORMAL_ONLY'
+image = bake_case('valid', .2, 0)
+assert json.loads(image[META_PROP])['misses'] == 0
+settings.bake_artifact_mode = 'FULL'
+
+# Manual downsampling remains binary and keeps detected defects.
+settings.bake_artifact_match_normal = False
+settings.bake_artifact_resolution = 16
+high.location.z = .2
+select()
+assert bpy.ops.object.polygroups_bake_selected_to_active() == {'FINISHED'}
+assert tuple(bpy.data.images[low[baking.BAKE_ARTIFACT_IMAGE_PROP]].size) == (16, 16)
+settings.bake_artifact_match_normal = True
+
+# Stale masks and externally edited normal images are rejected before export.
+image = bake_case('reversed', -.2, pi)
+normal = bpy.data.images[low[baking.BAKE_NORMAL_IMAGE_PROP]]
+values = pixels(normal)
+values[0, 0, 0] = 0
+normal.pixels.foreach_set(values.ravel())
+normal.update()
+try:
+    current_mask(low, normal)
+    raise AssertionError('Edited normal was accepted')
+except ValueError:
+    pass
+
+# Failed disk verification preserves an existing PNG and restores image path/format.
+with tempfile.TemporaryDirectory() as directory:
+    path = Path(directory) / 'preserved.png'
+    path.write_bytes(b'previous-output')
+    previous = image.filepath_raw, image.file_format
+    values = pixels(image)
+    values[0, 0, 3] = 0
+    image.pixels.foreach_set(values.ravel())
+    try:
+        save_mask_png(image, str(path))
+        raise AssertionError('Non-opaque mask saved')
+    except ValueError:
+        pass
+    assert path.read_bytes() == b'previous-output'
+    assert (image.filepath_raw, image.file_format) == previous
+
 # Failure after a material override must restore slots, nodes, bake settings, selection.
 select()
 normal = bpy.data.images[low[baking.BAKE_NORMAL_IMAGE_PROP]]
@@ -132,6 +265,69 @@ assert high.active_material == source_mat
 assert low.active_material.node_tree.nodes.active == original_active
 assert bpy.context.active_object == low and high.select_get()
 assert current_mask(low, normal) is None
+
+# Object-linked and data-linked slots, including shared source material, restore exactly.
+second = source_mat.copy()
+low.data.materials.append(second)
+high.data.materials.append(second)
+before_slots = [(o, o.active_material_index, [(s.link, s.material) for s in o.material_slots]) for o in (low, high)]
+session = ProjectionSession(bpy.context, low, [high], settings, normal)
+session.prepare('HIT')
+assert all(slot.material not in (source_mat, second) for slot in high.material_slots)
+session.close()
+for obj, index, slots in before_slots:
+    assert obj.active_material_index == index
+    assert [(s.link, s.material) for s in obj.material_slots] == slots
+
+# Displacement graph is kept when the diagnostic replaces Surface with emission.
+output = next(n for n in source_mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL')
+displace = source_mat.node_tree.nodes.new('ShaderNodeDisplacement')
+source_mat.node_tree.links.new(displace.outputs[0], output.inputs['Displacement'])
+session = ProjectionSession(bpy.context, low, [high], settings, normal)
+session.prepare('HIT')
+temporary_output = next(n for n in high.active_material.node_tree.nodes if n.type == 'OUTPUT_MATERIAL')
+assert temporary_output.inputs['Displacement'].is_linked
+session.close()
+assert output.inputs['Displacement'].is_linked
+
+# Native cancel notification is honored even when Esc did not reach the outer modal.
+handler_count = len(bpy.app.handlers.object_bake_cancel)
+session = ProjectionSession(bpy.context, low, [high], settings, normal)
+session.prepare('HIT')
+for handler in list(session.handlers):
+    handler(low)
+try:
+    session.complete()
+    raise AssertionError('Cancelled native pass accepted')
+except RuntimeError:
+    pass
+session.close()
+assert len(bpy.app.handlers.object_bake_cancel) == handler_count
+
+# UDIM is rejected explicitly rather than producing a black success result.
+uv = low.data.uv_layers.active.data[0]
+previous_uv = tuple(uv.uv)
+uv.uv.x += 2
+bpy.context.view_layer.update()
+try:
+    ProjectionSession(bpy.context, low, [high], settings, normal)
+    raise AssertionError('UDIM UV accepted')
+except ValueError as error:
+    assert 'UDIM' in str(error)
+uv.uv = previous_uv
+bpy.context.view_layer.update()
+
+# Two unrelated UV islands at the same coordinates must be reported as ambiguous.
+mesh = bpy.data.meshes.new('Overlap fixture')
+mesh.from_pydata([(0,0,0),(1,0,0),(1,1,0),(0,1,0),(2,0,0),(3,0,0),(3,1,0),(2,1,0)], [], [(0,1,2,3),(4,5,6,7)])
+uvs = mesh.uv_layers.new()
+for i, value in enumerate(((0,0),(1,0),(1,1),(0,1))*2):
+    uvs.data[i].uv = value
+overlap = bpy.data.objects.new('Overlap fixture', mesh)
+bpy.context.collection.objects.link(overlap)
+bpy.context.view_layer.update()
+assert np.count_nonzero(uv_ownership(bpy.context, overlap, 32, 32) == -1) > 900
+bpy.data.objects.remove(overlap, do_unlink=True)
 
 # Mathematical border/ownership containment and single-pixel downsampling.
 z = np.ones((16, 16), np.float32)

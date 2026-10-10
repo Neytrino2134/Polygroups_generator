@@ -5,6 +5,7 @@ import os
 import tempfile
 import uuid
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import bpy
 import numpy as np
@@ -21,8 +22,8 @@ BAKE_FIELDS = ('use_selected_to_active', 'use_cage', 'cage_object', 'cage_extrus
 
 def invalidate(target):
     target[RUN_PROP] = uuid.uuid4().hex
-    if ARTIFACT_PROP in target:
-        del target[ARTIFACT_PROP]
+    # Keep the image slot for reuse: clearing it allocates another full-size image
+    # on every bake. The new run token makes the previous contents unexportable.
 
 
 def pixels(image):
@@ -49,7 +50,7 @@ def geometry_signature(context, objects):
             normals = np.empty(len(mesh.corner_normals) * 3, dtype=np.float32)
             mesh.corner_normals.foreach_get('vector', normals)
             digest.update(normals.tobytes())
-            digest.update(str([(p.loop_start, p.loop_total, p.use_smooth) for p in mesh.polygons]).encode())
+            digest.update(str([(p.loop_start, p.loop_total, p.use_smooth, p.material_index) for p in mesh.polygons]).encode())
             if mesh.uv_layers.active:
                 uv = np.empty(len(mesh.loops) * 2, dtype=np.float32)
                 mesh.uv_layers.active.data.foreach_get('uv', uv)
@@ -58,6 +59,39 @@ def geometry_signature(context, objects):
         finally:
             evaluated.to_mesh_clear()
     return digest.hexdigest()
+
+
+def material_signature(objects):
+    visited = set()
+    data = []
+    def value(socket):
+        item = getattr(socket, 'default_value', None)
+        if isinstance(item, (str, float, int, bool)) or item is None:
+            return item
+        try:
+            return list(item)
+        except TypeError:
+            return getattr(item, 'name_full', str(item))
+    def tree_data(tree):
+        if tree is None or tree in visited:
+            return
+        visited.add(tree)
+        data.append((tree.name_full, [(link.from_node.name, link.from_socket.identifier,
+            link.to_node.name, link.to_socket.identifier) for link in tree.links]))
+        for node in tree.nodes:
+            data.append((node.name, node.bl_idname, [value(socket) for socket in node.inputs],
+                [(name, str(getattr(node, name))) for name in ('operation', 'blend_type', 'uv_map', 'attribute_name', 'space') if hasattr(node, name)]))
+            image = getattr(node, 'image', None)
+            if image:
+                data.append((image.name_full, image.colorspace_settings.name))
+            tree_data(getattr(node, 'node_tree', None))
+    for obj in objects:
+        for slot in obj.material_slots:
+            mat = slot.material
+            data.append((obj.name_full, slot.link, mat.name_full if mat else None))
+            if mat:
+                tree_data(mat.node_tree)
+    return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def uv_ownership(context, target, width, height):
@@ -87,6 +121,7 @@ def uv_ownership(context, target, width, height):
                 else:
                     edges[key] = polygon.index
         owners = np.zeros((height, width), dtype=np.int32)
+        strict_coverage = np.zeros((height, width), dtype=bool)
         for tri in mesh.loop_triangles:
             points = np.asarray([uv[i].uv[:] for i in tri.loops], dtype=np.float64)
             if np.any(points < -1e-6) or np.any(points > 1 + 1e-6):
@@ -97,18 +132,24 @@ def uv_ownership(context, target, width, height):
             if x0 >= x1 or y0 >= y1:
                 continue
             a, b, c = points
-            denominator = np.cross(b-a, c-a).item()
+            denominator = (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0])
             if abs(denominator) < 1e-12:
                 continue
-            xx, yy = np.meshgrid(np.arange(x0, x1) + .5, np.arange(y0, y1) + .5)
-            u = ((xx-a[0])*(c[1]-a[1]) - (yy-a[1])*(c[0]-a[0])) / denominator
-            v = ((b[0]-a[0])*(yy-a[1]) - (b[1]-a[1])*(xx-a[0])) / denominator
-            inside = (u >= -1e-8) & (v >= -1e-8) & (u+v <= 1+1e-8)
-            region = owners[y0:y1, x0:x1]
             owner = root(tri.polygon_index) + 1
-            conflict = inside & (region != 0) & (region != owner)
-            region[inside & (region == 0)] = owner
-            region[conflict] = -1
+            xx = np.arange(x0, x1)[None, :] + .5
+            for start in range(y0, y1, 64):
+                end = min(start + 64, y1)
+                yy = np.arange(start, end)[:, None] + .5
+                u = ((xx-a[0])*(c[1]-a[1]) - (yy-a[1])*(c[0]-a[0])) / denominator
+                v = ((b[0]-a[0])*(yy-a[1]) - (b[1]-a[1])*(xx-a[0])) / denominator
+                inside = (u >= -1e-8) & (v >= -1e-8) & (u+v <= 1+1e-8)
+                region = owners[start:end, x0:x1]
+                seen = strict_coverage[start:end, x0:x1]
+                strict = (u > 1e-8) & (v > 1e-8) & (u+v < 1-1e-8)
+                conflict = inside & (((region != 0) & (region != owner)) | (strict & seen))
+                region[inside & (region == 0)] = owner
+                region[conflict] = -1
+                seen |= strict
         return owners
     finally:
         evaluated.to_mesh_clear()
@@ -119,6 +160,7 @@ class BakeProjectionContext:
     run: str
     frame: int
     signature: str
+    materials: str
     width: int
     height: int
     normal_name: str
@@ -128,8 +170,12 @@ class BakeProjectionContext:
 
 class ProjectionSession:
     """Prepare/launch/complete is shared by synchronous and modal operators."""
-    def __init__(self, context, target, sources, settings, normal):
-        self.context, self.target, self.sources, self.settings = context, target, tuple(sources), settings
+    def __init__(self, context, target, sources, settings, normal, read_normal=True):
+        self.context, self.target, self.sources = context, target, tuple(sources)
+        self.settings = SimpleNamespace(**{name: getattr(settings, name) for name in (
+            'bake_artifact_mode', 'bake_artifact_radius', 'bake_artifact_geometry', 'bake_artifact_self_intersections',
+            'bake_artifact_match_normal', 'bake_artifact_resolution', 'bake_artifact_mask', 'bake_resolution',
+            'autogenerate_smart_cage', 'smart_cage_object', 'use_selected_to_active', 'cage_extrusion', 'image_prefix')})
         self.scene = context.scene
         self.original_engine = self.scene.render.engine
         self.original_type = self.scene.cycles.bake_type
@@ -137,18 +183,28 @@ class ProjectionSession:
         self.selection = tuple(context.selected_objects)
         self.active = context.view_layer.objects.active
         self.material_backups, self.temp_materials, self.temp_images = [], [], []
+        self.handlers = []
+        self.native_cancelled = False
         self.closed = False
         self.normal = normal if settings.bake_normal else None
+        self.z_epsilon = .001 if not self.normal or self.normal.is_float else .004
+        if normal is None:
+            raise ValueError('Missing normal bake target image')
         width, height = tuple(normal.size)
         if normal.source == 'TILED':
             raise ValueError('UDIM projection masks are not supported')
         cage = self.bake_snapshot['cage_object'] if self.bake_snapshot['use_cage'] else None
         self.objects = (target, *self.sources, *((cage,) if cage else ()))
+        # Selected-to-active samples source shaders; target bake image nodes are
+        # outputs and may legitimately be reinitialized by Blender during NORMAL.
+        self.material_objects = self.sources if self.bake_snapshot['use_selected_to_active'] else (target,)
         self.frozen = BakeProjectionContext(target[RUN_PROP], self.scene.frame_current,
-            geometry_signature(context, self.objects), width, height, self.normal.name if self.normal else '',
+            geometry_signature(context, self.objects), material_signature(self.material_objects), width, height, self.normal.name if self.normal else '',
             tuple(self.bake_snapshot.items()), tuple(o.name_full for o in sources))
         self.ownership = uv_ownership(context, target, width, height)
-        self.z = canonical_z(pixels(normal), self.swizzle) if self.normal else None
+        self.z = None
+        if self.normal and read_normal:
+            self.capture_normal()
         self.hit = self.domain = None
 
     @property
@@ -160,6 +216,32 @@ class ProjectionSession:
             raise ValueError('Bake run/frame changed during diagnostics')
         if geometry_signature(self.context, self.objects) != self.frozen.signature:
             raise ValueError('Evaluated geometry/UVs changed during diagnostics')
+        if material_signature(self.material_objects) != self.frozen.materials:
+            raise ValueError('Materials changed during diagnostics')
+
+    def capture_normal(self):
+        if self.native_cancelled:
+            raise RuntimeError('Native normal bake was cancelled')
+        self.validate()
+        if tuple(self.normal.size) != (self.frozen.width, self.frozen.height):
+            raise ValueError('Normal image resolution changed during bake')
+        self.z = canonical_z(pixels(self.normal), self.swizzle)
+        self.unwatch()
+
+    def watch(self):
+        self.unwatch()
+        self.native_cancelled = False
+        def cancelled(obj, *unused):
+            if obj == self.target:
+                self.native_cancelled = True
+        bpy.app.handlers.object_bake_cancel.append(cancelled)
+        self.handlers.append(cancelled)
+
+    def unwatch(self):
+        for handler in self.handlers:
+            if handler in bpy.app.handlers.object_bake_cancel:
+                bpy.app.handlers.object_bake_cancel.remove(handler)
+        self.handlers.clear()
 
     def _override_materials(self, obj, image=None, white=False):
         backup = (obj, obj.active_material_index, [(s.link, s.material) for s in obj.material_slots])
@@ -228,15 +310,18 @@ class ProjectionSession:
                 self._override_materials(self.target, image, white=True)
         for obj in self.context.selected_objects:
             obj.select_set(False)
-        for obj in ((self.target,) if kind == 'UV' else (self.target, *self.sources)):
+        for obj in ((self.target,) if kind == 'UV' or not bake.use_selected_to_active else (self.target, *self.sources)):
             obj.select_set(True)
         self.context.view_layer.objects.active = self.target
         self.current_image, self.kind = image, kind
+        self.watch()
         return 'NORMAL' if kind == 'NORMAL' else 'EMIT'
 
     def complete(self):
         if bpy.app.is_job_running('OBJECT_BAKE'):
             raise RuntimeError('Cannot read a running diagnostic bake')
+        if self.native_cancelled:
+            raise RuntimeError('Native diagnostic bake was cancelled')
         values = pixels(self.current_image)
         if self.kind == 'NORMAL':
             self.z = canonical_z(values, self.swizzle)
@@ -249,11 +334,13 @@ class ProjectionSession:
         self.temp_images.remove(self.current_image)
         bpy.data.images.remove(self.current_image)
         self.current_image = None
+        self.unwatch()
 
     def result(self):
         from ..operators.baking import _ensure_target_image, _write_pixels, _generate_legacy_geometric_artifact_mask
         self.validate()
-        reasons = classify(self.z, self.hit, self.domain, self.ownership, self.settings.bake_artifact_radius)
+        reasons = classify(self.z, self.domain if self.hit is None else self.hit, self.domain, self.ownership,
+            self.settings.bake_artifact_radius, epsilon=self.z_epsilon)
         if self.settings.bake_artifact_geometry or self.settings.bake_artifact_self_intersections:
             # Explicit supplementary geometry diagnostics; never replace native core.
             legacy, _ = _generate_legacy_geometric_artifact_mask(self.context, self.target, self.sources, self.settings,
@@ -269,13 +356,26 @@ class ProjectionSession:
             raise ValueError('Non-square normal maps are not supported by artifact output')
         mask = conservative_resize(mask, size)
         image = _ensure_target_image(self.target, self.settings, ARTIFACT_PROP, 'ArtifactMask', 'Non-Color', resolution=size)
+        # A real datablock reference survives blend copies and follows existing
+        # Batch AutoBake material/image ownership and cleanup. The node is unlinked.
+        tree = self.target.active_material.node_tree
+        node = tree.nodes.get('PolyGroups Bake Artifact Mask')
+        if node is None:
+            node = tree.nodes.new('ShaderNodeTexImage')
+            node.name = 'PolyGroups Bake Artifact Mask'
+            node.label = 'Projection Artifact Mask (diagnostic)'
+            node.location = (-560, -560)
+        node.image = image
+        image.use_fake_user = False
         rgba = np.ones((size, size, 4), dtype=np.float32)
         rgba[..., :3] = mask[..., None]
         _write_pixels(image, rgba.ravel())
         metadata = dict(version=1, producer='native-cycles-projection', run=self.frozen.run,
+            analysis=self.settings.bake_artifact_mode,
             target=self.target.name_full, sources=list(self.frozen.source_names), frame=self.frozen.frame,
             geometry=self.frozen.signature, normal=self.frozen.normal_name, normal_size=[self.frozen.width, self.frozen.height],
-            size=[size, size], swizzle=list(self.swizzle), epsilon=.001, edge_z=.08,
+            materials=self.frozen.materials,
+            size=[size, size], swizzle=list(self.swizzle), epsilon=self.z_epsilon, edge_z=.08,
             radius=self.settings.bake_artifact_radius, padding='same UV island, no gutters',
             reversed=int(np.count_nonzero(reasons & 1)), misses=int(np.count_nonzero(reasons & 2)),
             edges=int(np.count_nonzero(reasons & 4)), overlaps=int(np.count_nonzero(self.ownership == -1)),
@@ -287,12 +387,16 @@ class ProjectionSession:
         image[RUN_PROP] = self.frozen.run
         return image, metadata
 
+    def passes(self):
+        return (('NORMAL',) if self.z is None else ()) + (('HIT',) if self.settings.bake_artifact_mode == 'FULL' else ()) + ('UV',)
+
     def close(self):
         if self.closed:
             return
         if bpy.app.is_job_running('OBJECT_BAKE'):
             raise RuntimeError('Wait for the native bake job before restoring diagnostics')
         self.restore_materials()
+        self.unwatch()
         for image in self.temp_images:
             bpy.data.images.remove(image)
         self.temp_images.clear()
@@ -312,8 +416,10 @@ def current_mask(target, normal):
     image = bpy.data.images.get(target.get(ARTIFACT_PROP, ''))
     if image is None:
         return None
-    if not target.get(RUN_PROP) or image.get(RUN_PROP) != target.get(RUN_PROP):
+    if not target.get(RUN_PROP):
         raise ValueError('Artifact mask belongs to an older bake; bake again')
+    if image.get(RUN_PROP) != target.get(RUN_PROP):
+        return None
     meta = json.loads(image.get(META_PROP, '{}'))
     if meta.get('normal') and (normal is None or normal.name != meta['normal'] or list(normal.size) != meta['normal_size']):
         raise ValueError('Artifact mask normal association changed; bake again')
