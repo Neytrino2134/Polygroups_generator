@@ -18,7 +18,7 @@ with TemporaryDirectory() as directory:
     node.image = image
     bsdf = material.node_tree.nodes.get('Principled BSDF')
     material.node_tree.links.new(node.outputs['Color'], bsdf.inputs['Base Color'])
-    conflict = bpy.data.images.new('Tree_02', 2, 2)
+    conflict = bpy.data.images.new('Tree_00_02', 2, 2)
     meshes = []
     for index in (0, 2, 5):
         bpy.ops.mesh.primitive_cube_add()
@@ -33,23 +33,23 @@ with TemporaryDirectory() as directory:
         obj.select_set(True)
     bpy.context.view_layer.objects.active = meshes[0]
     assert bpy.ops.object.polygroups_rename_unity_meshes() == {'FINISHED'}
-    assert [obj.name for obj in meshes] == ['Tree_02', 'Tree_02.LOD2', 'Tree_02.LOD5']
+    assert [obj.name for obj in meshes] == ['Tree_00_02', 'Tree_00_02.LOD2', 'Tree_00_02.LOD5']
     assert counts == [len(obj.data.polygons) for obj in meshes]
     assert all(list(obj.data.materials) == [material] for obj in meshes)
-    assert image.name == 'Tree_02' and conflict.name == 'Tree_02__Duplicate'
+    assert image.name == 'Tree_00_02' and conflict.name == 'Tree_00_02__Duplicate'
     assert Path(image.filepath).is_file()
-    assert Path(image.filepath).parent.name == 'Tree_02'
-    assert 'Tree_02 | LOD 2' in meshes[1].children[0].data.body
+    assert Path(image.filepath).parent.name == 'Tree_00_02'
+    assert 'Tree_00_02 | LOD 2' in meshes[1].children[0].data.body
     assert bpy.ops.object.polygroups_rename_unity_meshes() == {'FINISHED'}
-    assert image.name == 'Tree_02'
+    assert image.name == 'Tree_00_02'
     assert not any(Path(directory).rglob('*.001.png'))
     names = [obj.name for obj in meshes]
     image.name = 'WrongTexture.001'
     assert bpy.ops.object.polygroups_fix_unity_textures() == {'FINISHED'}
-    assert image.name == 'Tree_02'
+    assert image.name == 'Tree_00_02'
     assert Path(image.filepath).is_file()
     assert [obj.name for obj in meshes] == names
     assert bpy.ops.object.polygroups_fix_unity_textures() == {'FINISHED'}
-    assert image.name == 'Tree_02'
+    assert image.name == 'Tree_00_02'
 
 print('UNITY_RENAME_MESHES_PASSED')

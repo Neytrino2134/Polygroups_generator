@@ -85,4 +85,22 @@ with TemporaryDirectory() as directory:
     assert bpy.ops.object.polygroups_prepare_and_export_unity(
         asset_name='Existing', name_index='14', version_index='03', skip_lods=True,
     ) == {'FINISHED'}
+    # Ready meshes need not already carry Unity LOD suffixes.
+    ordered = sorted(selected, key=lambda obj: -len(obj.data.polygons))
+    for index, obj in enumerate(ordered):
+        obj.name = f'Retopo_Ready_{index}'
+    assert bpy.ops.object.polygroups_prepare_and_export_unity(
+        asset_name='Ready', name_index='15', version_index='01', skip_lods=True,
+    ) == {'FINISHED'}
+    assert [obj.name for obj in ordered] == ['Ready_15_01', 'Ready_15_01.LOD1']
+    assert all((len(obj.data.vertices), len(obj.data.polygons)) == geometry[obj] for obj in selected)
+    # Unprepared Smart LOD naming is one-based and contains a second dot.
+    for index, obj in enumerate(ordered, 1):
+        obj.name = f'Source.LOD.{index}'
+        obj['polygroups_lod_source'] = 'Source'
+        obj['unity_prepared'] = False
+    assert bpy.ops.object.polygroups_prepare_and_export_unity(
+        asset_name='Smart', name_index='16', version_index='01', skip_lods=True,
+    ) == {'FINISHED'}
+    assert [obj.name for obj in ordered] == ['Smart_16_01', 'Smart_16_01.LOD1']
 print('UNITY_EXPORT_WORKFLOW_PASSED')

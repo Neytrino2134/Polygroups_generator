@@ -275,6 +275,9 @@ class OBJECT_OT_polygroups_rename_unity_meshes(bpy.types.Operator):
     bl_description = "Rename selected meshes preserving their LOD numbers and material slots; copy renamed textures"
     bl_options = {'REGISTER', 'UNDO'}
 
+    assign_missing_lods: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'},
+        description='Assign missing LOD numbers by decreasing polygon count')
+
     @classmethod
     def poll(cls, context):
         return context.mode == 'OBJECT' and any(obj.type == 'MESH' for obj in context.selected_objects)
@@ -287,9 +290,26 @@ class OBJECT_OT_polygroups_rename_unity_meshes(bpy.types.Operator):
             return {'CANCELLED'}
         base = unity_name(settings, '')
         plans = []
+        # Smart LODs use one-based .LOD.1 names before Unity preparation.
+        smart_set = all(obj.get('polygroups_lod_source') and not obj.get('unity_prepared')
+                        and re.search(r'\.LOD\.\d+$', obj.name) for obj in meshes)
+        resolved = {}
         for obj in meshes:
-            match = re.search(r'[._]LOD(\d+)$', re.sub(r'(?:\.\d{3})+$', '', obj.name))
-            lod = int(match.group(1)) if match else 0
+            match = re.search(r'[._ -]LOD[._ -]?(\d+)(?:\.\d{3})*$', obj.name, re.IGNORECASE)
+            resolved[obj] = int(match.group(1)) - int(smart_set) if match else None
+        if self.assign_missing_lods:
+            used = {lod for lod in resolved.values() if lod is not None}
+            depsgraph = context.evaluated_depsgraph_get()
+            missing = sorted((obj for obj in meshes if resolved[obj] is None),
+                             key=lambda obj: (-polygon_count(obj, depsgraph), obj.name))
+            for obj in missing:
+                lod = 0
+                while lod in used:
+                    lod += 1
+                resolved[obj] = lod
+                used.add(lod)
+        for obj in meshes:
+            lod = resolved[obj] if resolved[obj] is not None else 0
             plans.append((obj, unity_name(settings, f'LOD{lod}'), lod))
         names = [name for _, name, _ in plans]
         if len(set(names)) != len(names) or any(bpy.data.objects.get(name) not in [None, *meshes] for name in names):

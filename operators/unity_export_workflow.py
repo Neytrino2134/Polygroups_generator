@@ -271,7 +271,12 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
             self.report({'ERROR'}, 'Choose a Unity export directory')
             return {'CANCELLED'}
         if self.skip_lods:
-            if 'FINISHED' not in bpy.ops.object.polygroups_rename_unity_meshes():
+            try:
+                renamed = bpy.ops.object.polygroups_rename_unity_meshes(assign_missing_lods=True)
+            except RuntimeError as error:
+                self.report({'ERROR'}, str(error))
+                return {'CANCELLED'}
+            if 'FINISHED' not in renamed:
                 return {'CANCELLED'}
         else:
             mode = settings.smart_lods_prepare_mode
