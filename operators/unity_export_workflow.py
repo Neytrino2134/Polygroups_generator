@@ -196,9 +196,9 @@ class OBJECT_OT_polygroups_load_unity_export_preset(bpy.types.Operator):
 class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
     bl_idname = 'object.polygroups_prepare_and_export_unity'
     bl_label = 'Prepare and Export'
-    bl_description = 'Generate Smart LODs and prepare for Unity, or skip generation and rename selected existing LODs, then export'
+    bl_description = 'Generate Smart LODs or use selected existing meshes, prepare meshes with Auto LODs for Unity, then export'
     skip_lods: bpy.props.BoolProperty(name='Skip LODs', default=False,
-        description='Use selected existing LODs: start with Unity Rename, then export without generating LODs')
+        description='Skip Generate LODs only; run Prepare Meshes (Auto LODs) on selected meshes, then export')
     asset_name: bpy.props.StringProperty(name='Asset Name')
     name_index: bpy.props.StringProperty(name='Name Index', default='00', maxlen=2)
     version_index: bpy.props.StringProperty(name='Version Index', default='01')
@@ -272,11 +272,11 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
             return {'CANCELLED'}
         if self.skip_lods:
             try:
-                renamed = bpy.ops.object.polygroups_rename_unity_meshes(assign_missing_lods=True)
+                prepared = bpy.ops.object.polygroups_prepare_unity(auto_lods=True)
             except RuntimeError as error:
                 self.report({'ERROR'}, str(error))
                 return {'CANCELLED'}
-            if 'FINISHED' not in renamed:
+            if 'FINISHED' not in prepared:
                 return {'CANCELLED'}
         else:
             mode = settings.smart_lods_prepare_mode

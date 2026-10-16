@@ -1977,7 +1977,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unity_auto_increment_index: bpy.props.BoolProperty(name="Auto Increment Index", default=True)
     unity_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
     unity_skip_lods: bpy.props.BoolProperty(name="Skip LODs", default=False,
-        description="Use selected existing LODs: start with Unity Rename, then export without generating LODs")
+        description="Skip Generate LODs only; run Prepare Meshes (Auto LODs) on selected meshes, then export")
     unity_export_directory: bpy.props.StringProperty(name="Directory", subtype="DIR_PATH", default="//!Unity")
     unity_export_clear_asset_folder: bpy.props.BoolProperty(name="Clear Asset Folder Before Start", description="Remove existing contents of each exported asset folder before exporting", default=True)
     unity_export_autosave: bpy.props.BoolProperty(name="Autosave Before Start", description="Save the current blend file before starting Unity export", default=True)

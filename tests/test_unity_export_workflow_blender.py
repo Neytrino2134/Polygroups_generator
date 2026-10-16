@@ -79,6 +79,8 @@ with TemporaryDirectory() as directory:
     assert set(bpy.data.objects) == existing
     assert set(bpy.context.selected_objects) == selected
     assert {obj.name for obj in selected} == {'Existing_14_03', 'Existing_14_03.LOD1'}
+    for index, obj in enumerate(sorted(selected, key=lambda obj: -len(obj.data.polygons))):
+        assert [collection.name for collection in obj.users_collection] == [f'Existing_14_03_LOD{index}_Collection']
     assert all((len(obj.data.vertices), len(obj.data.polygons)) == geometry[obj] for obj in selected)
     output = Path(directory)/'!Unity'/'Existing_14_03'/'GLTF'/'Existing_14_03.gltf'
     assert len(json.loads(output.read_text())['meshes']) == 2
@@ -89,10 +91,17 @@ with TemporaryDirectory() as directory:
     ordered = sorted(selected, key=lambda obj: -len(obj.data.polygons))
     for index, obj in enumerate(ordered):
         obj.name = f'Retopo_Ready_{index}'
+        # Reproduce existing meshes that have not yet been put into LOD collections.
+        bpy.context.scene.collection.objects.link(obj)
+        for collection in list(obj.users_collection):
+            if collection != bpy.context.scene.collection:
+                collection.objects.unlink(obj)
     assert bpy.ops.object.polygroups_prepare_and_export_unity(
         asset_name='Ready', name_index='15', version_index='01', skip_lods=True,
     ) == {'FINISHED'}
     assert [obj.name for obj in ordered] == ['Ready_15_01', 'Ready_15_01.LOD1']
+    for index, obj in enumerate(ordered):
+        assert [collection.name for collection in obj.users_collection] == [f'Ready_15_01_LOD{index}_Collection']
     assert all((len(obj.data.vertices), len(obj.data.polygons)) == geometry[obj] for obj in selected)
     # Unprepared Smart LOD naming is one-based and contains a second dot.
     for index, obj in enumerate(ordered, 1):
