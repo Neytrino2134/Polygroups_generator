@@ -1,12 +1,17 @@
 import sys, json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import patch, Mock
+from types import SimpleNamespace
 import bpy, addon_utils
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT.parent))
 addon_utils.enable(ROOT.name,default_set=False)
 from polygroups_generator.operators import unity_export_workflow as workflow
+assert not bpy.ops.object.polygroups_prepare_and_export_unity.get_rna_type().properties['skip_lods'].default
+dialog = SimpleNamespace(layout=Mock())
+workflow.OBJECT_OT_polygroups_prepare_and_export_unity.draw(dialog, bpy.context)
+dialog.layout.prop.assert_any_call(dialog, 'skip_lods')
 scene=bpy.context.scene
 s=scene.polygroups_mesh_finalization_settings
 rs=scene.polygroups_render_settings
@@ -45,4 +50,21 @@ with TemporaryDirectory() as directory:
     data=json.loads(output.read_text())
     assert len(data['meshes']) == 2
     assert '2 LODs' in s.unity_export_status
+    selected = set(bpy.context.selected_objects)
+    existing = set(bpy.data.objects)
+    geometry = {obj: (len(obj.data.vertices), len(obj.data.polygons)) for obj in selected}
+    with patch.object(bpy.ops.object, 'polygroups_smart_lods_prepare',
+                      side_effect=AssertionError('Skip LODs generated geometry')):
+        assert bpy.ops.object.polygroups_prepare_and_export_unity(
+            asset_name='Existing', name_index='14', version_index='03', skip_lods=True,
+        ) == {'FINISHED'}
+    assert set(bpy.data.objects) == existing
+    assert set(bpy.context.selected_objects) == selected
+    assert {obj.name for obj in selected} == {'Existing_14_03', 'Existing_14_03.LOD1'}
+    assert all((len(obj.data.vertices), len(obj.data.polygons)) == geometry[obj] for obj in selected)
+    output = Path(directory)/'!Unity'/'Existing_14_03'/'GLTF'/'Existing_14_03.gltf'
+    assert len(json.loads(output.read_text())['meshes']) == 2
+    assert bpy.ops.object.polygroups_prepare_and_export_unity(
+        asset_name='Existing', name_index='14', version_index='03', skip_lods=True,
+    ) == {'FINISHED'}
 print('UNITY_EXPORT_WORKFLOW_PASSED')

@@ -195,7 +195,9 @@ class OBJECT_OT_polygroups_load_unity_export_preset(bpy.types.Operator):
 class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
     bl_idname = 'object.polygroups_prepare_and_export_unity'
     bl_label = 'Prepare and Export'
-    bl_description = 'Generate Smart LODs from the active mesh, prepare them for Unity, and export the generated meshes'
+    bl_description = 'Generate Smart LODs and prepare for Unity, or skip generation and rename selected existing LODs, then export'
+    skip_lods: bpy.props.BoolProperty(name='Skip LODs', default=False,
+        description='Use selected existing LODs: start with Unity Rename, then export without generating LODs')
     asset_name: bpy.props.StringProperty(name='Asset Name')
     name_index: bpy.props.StringProperty(name='Name Index', default='00', maxlen=2)
     version_index: bpy.props.StringProperty(name='Version Index', default='01')
@@ -224,6 +226,7 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self, width=420, confirm_text='Start')
 
     def draw(self, context):
+        self.layout.prop(self, 'skip_lods')
         self.layout.prop(self, 'asset_name')
         for field in ('name_index', 'version_index'):
             row = self.layout.row(align=True)
@@ -255,7 +258,7 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
         settings.unity_asset_name = self.asset_name.strip()
         settings.unity_name_index = self.name_index.zfill(2)
         settings.unity_asset_index = self.version_index.strip()
-        for index in range(settings.smart_lods_count):
+        for index in range(0 if self.skip_lods else settings.smart_lods_count):
             if bpy.data.objects.get(unity_name(settings, f'LOD{index}')):
                 self.report({'ERROR'}, 'Prepared mesh names already exist; choose another index')
                 return {'CANCELLED'}
@@ -266,12 +269,16 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
         if not settings.unity_export_directory.strip():
             self.report({'ERROR'}, 'Choose a Unity export directory')
             return {'CANCELLED'}
-        mode = settings.smart_lods_prepare_mode
-        try:
-            settings.smart_lods_prepare_mode = 'UNITY'
-            if 'FINISHED' not in bpy.ops.object.polygroups_smart_lods_prepare():
+        if self.skip_lods:
+            if 'FINISHED' not in bpy.ops.object.polygroups_rename_unity_meshes():
                 return {'CANCELLED'}
-        finally:
-            settings.smart_lods_prepare_mode = mode
+        else:
+            mode = settings.smart_lods_prepare_mode
+            try:
+                settings.smart_lods_prepare_mode = 'UNITY'
+                if 'FINISHED' not in bpy.ops.object.polygroups_smart_lods_prepare():
+                    return {'CANCELLED'}
+            finally:
+                settings.smart_lods_prepare_mode = mode
         result = bpy.ops.object.polygroups_export_unity('EXEC_DEFAULT' if bpy.app.background else 'INVOKE_DEFAULT')
         return {'FINISHED'} if 'RUNNING_MODAL' in result else result
