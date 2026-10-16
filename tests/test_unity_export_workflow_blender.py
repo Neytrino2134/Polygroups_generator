@@ -15,6 +15,24 @@ dialog.layout.prop.assert_any_call(dialog, 'skip_lods')
 scene=bpy.context.scene
 s=scene.polygroups_mesh_finalization_settings
 rs=scene.polygroups_render_settings
+from polygroups_generator import ui
+from polygroups_generator.custom_ui.schema import capture
+export_section = ui.SECTION_PANEL_CLASSES.index(ui.VIEW3D_PT_polygroups_mesh_finalization)
+assert not s.unity_skip_lods
+for enabled in (False, True):
+    s.unity_skip_lods = enabled
+    model = capture(bpy.context, export_section)
+    assert not model.errors, model.errors
+    bindings = list(model.bindings.values())
+    export_index = next(i for i, b in enumerate(bindings)
+                        if b[0] == 'operator' and b[1] == 'object.polygroups_export_unity')
+    skip_index = next(i for i, b in enumerate(bindings)
+                      if b[0] == 'property' and b[2] == 'unity_skip_lods')
+    prepare_index = next(i for i, b in enumerate(bindings)
+                         if b[0] == 'operator' and b[1] == 'object.polygroups_prepare_and_export_unity')
+    assert export_index < skip_index < prepare_index
+    assert bindings[prepare_index][2].skip_lods == enabled
+s.unity_skip_lods = False
 assert s.unity_export_clear_asset_folder and s.unity_export_autosave
 assert s.unity_export_gltf and s.unity_export_all_renders
 assert s.unity_gltf_mode == 'COMBINED'

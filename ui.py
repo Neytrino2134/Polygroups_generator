@@ -3876,7 +3876,6 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             navigation = column.row(align=True)
             navigation.operator("object.polygroups_unity_collection_step", text="Prev Collections", icon="TRIA_LEFT").delta = -1
             navigation.operator("object.polygroups_unity_collection_step", text="Next Collections", icon="TRIA_RIGHT").delta = 1
-            column.operator("object.polygroups_prepare_and_export_unity", icon="EXPORT")
             presets = column.row(align=True)
             presets.operator("object.polygroups_save_unity_export_preset", text="Save Preset", icon="FILE_TICK")
             presets.operator("object.polygroups_load_unity_export_preset", text="Load Preset", icon="IMPORT")
@@ -3908,6 +3907,9 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column.prop(settings, "unity_export_info_format", text=t(context, "mesh_export_info_format"))
             column.prop(settings, "unity_use_auto_rig_pro")
             column.operator("object.polygroups_export_unity", icon="EXPORT")
+            column.prop(settings, "unity_skip_lods")
+            prepare = column.operator("object.polygroups_prepare_and_export_unity", icon="EXPORT")
+            prepare.skip_lods = settings.unity_skip_lods
             for status_line in settings.unity_export_status.splitlines():
                 column.label(text=status_line)
 

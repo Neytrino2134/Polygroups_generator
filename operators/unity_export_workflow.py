@@ -6,6 +6,7 @@ from pathlib import Path
 import bpy
 
 MESH_FIELDS = (
+    'unity_skip_lods',
     'unity_export_directory', 'unity_export_overwrite', 'unity_export_clear_asset_folder',
     'unity_export_autosave', 'unity_export_fbx', 'unity_export_gltf', 'unity_gltf_mode',
     'unity_export_all_renders', 'unity_export_info_format', 'unity_use_auto_rig_pro',
