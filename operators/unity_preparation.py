@@ -92,9 +92,13 @@ def save_textures(obj, directory):
             image.file_format = "PNG"
             image.save(filepath=path)
             image.filepath_raw = path
+            # Prepared pixel copies must reopen from the newly written file,
+            # rather than regenerating a blank image after reloading the blend.
+            if image.source == 'GENERATED':
+                image.source = 'FILE'
 
 
-def prepare_unity(obj, name, asset_name=None):
+def prepare_unity(obj, name, asset_name=None, shared_material=None):
     asset_name = asset_name or re.sub(r"[._]LOD\d+$", "", name)
     other = bpy.data.objects.get(name)
     if other is not None and other != obj:
@@ -104,8 +108,9 @@ def prepare_unity(obj, name, asset_name=None):
         obj.data = obj.data.copy()
     obj.name = name
     obj.data.name = name
-    shared = next((mat for mat in bpy.data.materials
-                   if mat.get("unity_asset_name") == asset_name), None)
+    # Only share the material prepared in THIS invocation, never a stale asset
+    # material left in the blend from an earlier export with the same name.
+    shared = shared_material
     if shared is not None:
         obj.data.materials.clear()
         obj.data.materials.append(shared)
@@ -155,7 +160,11 @@ def prepare_unity(obj, name, asset_name=None):
                 # Image.copy does not copy the in-memory buffer (generated/painted images).
                 pixels = array("f", [0.0]) * len(source_image.pixels)
                 source_image.pixels.foreach_get(pixels)
-                image = source_image if source_image.users == 1 else source_image.copy()
+                image = bpy.data.images.new(target, width=source_image.size[0],
+                    height=source_image.size[1], alpha=source_image.channels == 4,
+                    float_buffer=source_image.is_float)
+                image.colorspace_settings.name = source_image.colorspace_settings.name
+                image.alpha_mode = source_image.alpha_mode
                 if pixels:
                     image.pixels.foreach_set(pixels)
                     image.update()
@@ -248,8 +257,11 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
                 if item.data.users > 1:
                     item.data = item.data.copy()
                 item.name = "__Unity_Prepare__"
+            shared_material = None
             for item, name, lod in zip(meshes, names, lods):
-                prepare_unity(item, name, unity_name(settings, ""))
+                prepare_unity(item, name, unity_name(settings, ""), shared_material)
+                if self.auto_lods:
+                    shared_material = item.active_material
                 move_to_lod_collection(context, item, lod)
             normalize_unity_texture_names(meshes)
             if settings.unity_copy_textures:

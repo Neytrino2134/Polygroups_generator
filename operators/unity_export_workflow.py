@@ -193,6 +193,37 @@ class OBJECT_OT_polygroups_load_unity_export_preset(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def clear_prepare_asset_folder(context, folder, root):
+    """Load source pixels before clearing only the requested export asset."""
+    import shutil
+    from array import array
+    from .unity_preparation import texture_nodes
+    from .fab_preparation import _texture_suffix
+    resolved = os.path.realpath(folder)
+    if os.path.dirname(resolved) != os.path.realpath(root) or os.path.islink(folder):
+        raise ValueError(f'Unsafe asset folder: {folder}')
+    if bpy.data.filepath and os.path.commonpath((resolved, os.path.realpath(bpy.data.filepath))) == resolved:
+        raise ValueError('The asset folder contains the current blend file')
+    images = {node.image for obj in context.selected_objects if obj.type == 'MESH'
+              for mat in obj.data.materials if mat for node in texture_nodes(mat.node_tree)
+              if _texture_suffix(node.image, node) not in {'AlphaMap', 'MergeMask', 'ArtifactMask'}}
+    for image in images:
+        pixels = array('f', [0.0]) * len(image.pixels)
+        if not pixels:
+            raise ValueError(f'Source texture has no loaded pixels: {image.name}')
+        image.pixels.foreach_get(pixels)
+        # Keep file-backed source pixels resident even when their file is in
+        # the old export folder. Prepare copies this buffer, not stale files.
+        image.pixels.foreach_set(pixels)
+        image.update()
+    if os.path.isdir(folder):
+        for entry in os.scandir(folder):
+            if entry.is_dir(follow_symlinks=False):
+                shutil.rmtree(entry.path)
+            else:
+                os.unlink(entry.path)
+
+
 class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
     bl_idname = 'object.polygroups_prepare_and_export_unity'
     bl_label = 'Prepare and Export'
@@ -270,6 +301,20 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
         if not settings.unity_export_directory.strip():
             self.report({'ERROR'}, 'Choose a Unity export directory')
             return {'CANCELLED'}
+        if settings.unity_export_clear_asset_folder:
+            try:
+                if self.skip_lods:
+                    meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+                    if not 1 <= len(meshes) <= 6:
+                        raise ValueError('Select 1–6 meshes for LOD0–LOD5')
+                    for index in range(len(meshes)):
+                        existing = bpy.data.objects.get(unity_name(settings, f'LOD{index}'))
+                        if existing is not None and existing not in meshes:
+                            raise ValueError(f'An object named {existing.name} already exists; choose another index')
+                clear_prepare_asset_folder(context, folder, bpy.path.abspath(settings.unity_export_directory))
+            except (RuntimeError, ValueError, OSError) as error:
+                self.report({'ERROR'}, str(error))
+                return {'CANCELLED'}
         if self.skip_lods:
             try:
                 prepared = bpy.ops.object.polygroups_prepare_unity(auto_lods=True)
