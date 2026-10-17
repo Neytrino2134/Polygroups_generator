@@ -9,6 +9,8 @@ import bpy
 
 from .fab_preparation import _texture_suffix, _ungroup_source_texture_nodes
 from .mesh_export import (
+    _detach_export_alpha_maps,
+    _restore_export_alpha_maps,
     _evaluated_mesh_counts,
     _export_at_world_origin,
     _safe_path_token,
@@ -77,7 +79,7 @@ def save_textures(obj, directory):
             continue
         for node in texture_nodes(material.node_tree):
             image = node.image
-            if _texture_suffix(image, node) == "AlphaMap":
+            if _texture_suffix(image, node) in {"AlphaMap", "MergeMask", "ArtifactMask"}:
                 continue
             if image in seen:
                 continue
@@ -137,7 +139,7 @@ def prepare_unity(obj, name, asset_name=None):
         _ungroup_source_texture_nodes(material)
         for node in texture_nodes(material.node_tree):
             source_image = node.image
-            if _texture_suffix(source_image, node) == "AlphaMap":
+            if _texture_suffix(source_image, node) in {"AlphaMap", "MergeMask", "ArtifactMask"}:
                 continue
             if source_image not in image_copies:
                 suffix = _texture_suffix(source_image, node)
@@ -321,7 +323,7 @@ class OBJECT_OT_polygroups_rename_unity_meshes(bpy.types.Operator):
             used = set()
             for material in sorted(materials, key=lambda mat: mat.name):
                 for node in texture_nodes(material.node_tree):
-                    if node.image in images or _texture_suffix(node.image, node) == 'AlphaMap':
+                    if node.image in images or _texture_suffix(node.image, node) in {'AlphaMap', 'MergeMask', 'ArtifactMask'}:
                         continue
                     suffix = _texture_suffix(node.image, node)
                     color = node.outputs.get('Color')
@@ -399,7 +401,7 @@ class OBJECT_OT_polygroups_fix_unity_textures(bpy.types.Operator):
                             continue
                         for node in texture_nodes(mat.node_tree):
                             image = node.image
-                            if _texture_suffix(image, node) != 'AlphaMap' and (
+                            if _texture_suffix(image, node) not in {'AlphaMap', 'MergeMask', 'ArtifactMask'} and (
                                     image.source not in {'FILE', 'GENERATED'} or not image.has_data):
                                 raise ValueError(f'Texture has no supported loaded pixels: {image.name}')
             fixed = 0
@@ -430,7 +432,7 @@ class OBJECT_OT_polygroups_fix_unity_textures(bpy.types.Operator):
                             if source in images.values():
                                 continue
                             suffix = _texture_suffix(source, node)
-                            if suffix == 'AlphaMap':
+                            if suffix in {'AlphaMap', 'MergeMask', 'ArtifactMask'}:
                                 continue
                             if source not in images:
                                 color = node.outputs.get('Color')
@@ -762,7 +764,7 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             node: node.image
             for obj in meshes for mat in obj.data.materials if mat
             for node in texture_nodes(mat.node_tree)
-            if _texture_suffix(node.image, node) == "AlphaMap"
+            if _texture_suffix(node.image, node) in {"AlphaMap", "MergeMask", "ArtifactMask"}
         }
         texture_count = len(set(paths) - set(alpha_nodes.values()))
         render_count = video_count = 0
@@ -801,8 +803,7 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                                 shutil.rmtree(entry.path)
                             else:
                                 os.unlink(entry.path)
-            for node in alpha_nodes:
-                node.image = None
+            alpha_nodes = _detach_export_alpha_maps(meshes)
             for asset_name, lods in groups.items():
                 asset_folder = os.path.join(root, _safe_path_token(asset_name))
                 for export_format in formats:
@@ -888,8 +889,7 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
         finally:
-            for node, image in alpha_nodes.items():
-                node.image = image
+            _restore_export_alpha_maps(alpha_nodes)
             for image, path in paths.items():
                 image.filepath_raw = path
             bpy.ops.object.select_all(action="DESELECT")

@@ -218,6 +218,7 @@ def _write_export_mesh_info(root_dir, export_format, entries):
 
 
 def _export_texture_images(objects):
+    from .fab_preparation import _texture_suffix
     seen_trees = set()
     seen_images = set()
     for obj in objects:
@@ -234,7 +235,7 @@ def _export_texture_images(objects):
                     if node.type == "GROUP" and node.node_tree:
                         stack.append(node.node_tree)
                     elif (node.type == "TEX_IMAGE" and node.image
-                          and not re.search(r"_AlphaMap(?:_\d+)?$", node.image.name, re.IGNORECASE)
+                          and _texture_suffix(node.image, node) not in {"AlphaMap", "MergeMask", "ArtifactMask"}
                           and node.image not in seen_images):
                         seen_images.add(node.image)
                         yield node.image
@@ -268,9 +269,23 @@ def _copy_export_textures(objects, root_dir):
     return originals
 
 
+class _DetachedBakeMasks(dict):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+
+
+def _restore_export_alpha_maps(detached):
+    for node, image in detached.items():
+        node.image = image
+    for tree, source, target in getattr(detached, 'links', ()):
+        tree.links.new(source, target)
+
+
 def _detach_export_alpha_maps(objects):
-    """Keep temporary AlphaMap nodes out of exported material data."""
-    detached = {}
+    """Temporarily disconnect bake masks, retaining images and links for restoration."""
+    from .fab_preparation import _texture_suffix
+    detached = _DetachedBakeMasks()
     seen_trees = set()
     try:
         for obj in objects:
@@ -287,12 +302,15 @@ def _detach_export_alpha_maps(objects):
                         if node.type == "GROUP" and node.node_tree:
                             stack.append(node.node_tree)
                         elif (node.type == "TEX_IMAGE" and node.image and
-                              re.search(r"_AlphaMap(?:_\d+)?$", node.image.name, re.IGNORECASE)):
+                              _texture_suffix(node.image, node) in {"AlphaMap", "MergeMask", "ArtifactMask"}):
                             detached[node] = node.image
+                            for output in node.outputs:
+                                for link in list(output.links):
+                                    detached.links.append((tree, link.from_socket, link.to_socket))
+                                    tree.links.remove(link)
                             node.image = None
     except Exception:
-        for node, image in detached.items():
-            node.image = image
+        _restore_export_alpha_maps(detached)
         raise
     return detached
 
@@ -308,10 +326,11 @@ def _export_selected_object(filepath, export_format):
             bake_anim=False,
         )
 
-    gltf_format = "GLB" if export_format == "GLB" else "GLTF_EMBEDDED"
+    if export_format != "GLB":
+        return _export_gltf_asset(filepath, embedded=True)
     return bpy.ops.export_scene.gltf(
         filepath=filepath,
-        export_format=gltf_format,
+        export_format="GLB",
         use_selection=True,
     )
 
@@ -524,8 +543,7 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
         finally:
-            for node, image in detached_alpha_maps.items():
-                node.image = image
+            _restore_export_alpha_maps(detached_alpha_maps)
             for image, (filepath, filepath_raw) in original_image_paths.items():
                 image.filepath = filepath
                 image.filepath_raw = filepath_raw

@@ -16,7 +16,7 @@ from .fab_preparation import (
 
 COLLECTION_PATTERN = re.compile(r'^(.+?)_(\d+)_Collection$')
 TEXTURE_CHANNEL = re.compile(
-    r'_(AlphaMap|BaseColor|Normal|Roughness|Metallic|AO|Emissive|Opacity|Height|Map)(?:_\d+)?$')
+    r'_(AlphaMap|MergeMask|ArtifactMask|BaseColor|Normal|Roughness|Metallic|AO|Emissive|Opacity|Height|Map)(?:_\d+)?$')
 
 
 def fab_triplet(collection):

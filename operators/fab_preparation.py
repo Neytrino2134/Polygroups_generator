@@ -131,6 +131,17 @@ def _increment_index(settings):
 
 
 def _texture_suffix(image, node):
+    role = image.get('polygroups_bake_mask') if image else None
+    if role in {'MergeMask', 'ArtifactMask'}:
+        return role
+    if (getattr(node, 'name', '') == 'PolyGroups Bake Artifact Mask'
+            or 'artifact mask' in getattr(node, 'label', '').lower()):
+        return 'ArtifactMask'
+    # Match mask identities before opacity sockets or generic material labels.
+    identity = ' '.join((getattr(image, 'name', ''), getattr(image, 'filepath', '')))
+    for role in ('MergeMask', 'ArtifactMask'):
+        if re.search(r'(^|[_. /\\])' + role + r'([_. /\\]|$)', identity, re.IGNORECASE):
+            return role
     text = " ".join(
         item
         for item in (

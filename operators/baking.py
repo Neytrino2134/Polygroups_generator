@@ -399,6 +399,8 @@ def _ensure_target_image(
     if source_prop_name is not None:
         target[source_prop_name] = image.name
 
+    if suffix in {"MergeMask", "ArtifactMask"}:
+        image["polygroups_bake_mask"] = suffix
     if generated_color is not None:
         image.generated_color = generated_color
 
@@ -476,7 +478,7 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
         target,
         settings,
         BAKE_ALPHA_IMAGE_PROP,
-        "AlphaMap",
+        "MergeMask",
         "Non-Color",
         generated_color=(0.0, 0.0, 0.0, 1.0),
         source_prop_name=BAKE_SOURCE_ALPHA_IMAGE_PROP if update_source_images else None,
@@ -502,7 +504,7 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
     if alpha_node is None:
         alpha_node = nodes.new("ShaderNodeTexImage")
         alpha_node.name = BAKE_ALPHA_NODE
-        alpha_node.label = "Bake AlphaMap (Merge Mask)"
+        alpha_node.label = "Bake MergeMask"
         alpha_node.location = (-560, -340)
     alpha_node.image = alpha_image
 
@@ -632,7 +634,9 @@ def _find_object_source_bake_image(target, settings, node_name, current_prop_nam
         return image
 
     image = bpy.data.images.get(_bake_data_name(settings, target, suffix))
-    if image is None and suffix == "AlphaMap":
+    if image is None and suffix == "MergeMask":
+        image = bpy.data.images.get(_bake_data_name(settings, target, "AlphaMap"))
+    if image is None and suffix == "MergeMask":
         image = bpy.data.images.get(_bake_data_name(settings, target, "Alpha"))
     if image is not None:
         target[source_prop_name] = image.name
@@ -848,7 +852,7 @@ def _finalize_bake_images(target, settings):
         target,
         settings,
         BAKE_ALPHA_IMAGE_PROP,
-        "AlphaMap",
+        "MergeMask",
         "Non-Color",
         generated_color=(0.0, 0.0, 0.0, 1.0),
         source_prop_name=BAKE_SOURCE_ALPHA_IMAGE_PROP,
@@ -1171,7 +1175,7 @@ def _collect_bake_texture_packs(objects, settings):
             BAKE_ALPHA_NODE,
             BAKE_ALPHA_IMAGE_PROP,
             BAKE_SOURCE_ALPHA_IMAGE_PROP,
-            "AlphaMap",
+            "MergeMask",
         )
         if alpha_image is None or (base_image is None and normal_image is None):
             continue
@@ -1382,7 +1386,7 @@ def _ensure_merged_material(pack_name, base_image, normal_image, alpha_image, ob
     if alpha_node is None:
         alpha_node = nodes.new("ShaderNodeTexImage")
         alpha_node.name = BAKE_ALPHA_NODE
-        alpha_node.label = "Merged AlphaMap (Merge Mask)"
+        alpha_node.label = "Merged MergeMask"
         alpha_node.location = (-560, -340)
     alpha_node.image = alpha_image
 
@@ -1750,7 +1754,7 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             saved_paths.append(filepath)
 
         if alpha_image is not None:
-            filepath = os.path.join(output_dir, f"{output_name}_Bake_AlphaMap.png")
+            filepath = os.path.join(output_dir, f"{output_name}_Bake_MergeMask.png")
             _save_image_as_png(alpha_image, filepath)
             saved_paths.append(filepath)
 
@@ -1904,7 +1908,7 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
             (0.5, 0.5, 1.0, 1.0),
         )
         alpha_image = _ensure_output_image(
-            _bake_pack_data_name(settings, pack_name, "Merged_AlphaMap"),
+            _bake_pack_data_name(settings, pack_name, "Merged_MergeMask"),
             resolution,
             "Non-Color",
             (0.0, 0.0, 0.0, 1.0),
