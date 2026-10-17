@@ -194,34 +194,9 @@ class OBJECT_OT_polygroups_load_unity_export_preset(bpy.types.Operator):
 
 
 def clear_prepare_asset_folder(context, folder, root):
-    """Load source pixels before clearing only the requested export asset."""
-    import shutil
-    from array import array
-    from .unity_preparation import texture_nodes
-    from .fab_preparation import _texture_suffix
-    resolved = os.path.realpath(folder)
-    if os.path.dirname(resolved) != os.path.realpath(root) or os.path.islink(folder):
-        raise ValueError(f'Unsafe asset folder: {folder}')
-    if bpy.data.filepath and os.path.commonpath((resolved, os.path.realpath(bpy.data.filepath))) == resolved:
-        raise ValueError('The asset folder contains the current blend file')
-    images = {node.image for obj in context.selected_objects if obj.type == 'MESH'
-              for mat in obj.data.materials if mat for node in texture_nodes(mat.node_tree)
-              if _texture_suffix(node.image, node) not in {'AlphaMap', 'MergeMask', 'ArtifactMask'}}
-    for image in images:
-        pixels = array('f', [0.0]) * len(image.pixels)
-        if not pixels:
-            raise ValueError(f'Source texture has no loaded pixels: {image.name}')
-        image.pixels.foreach_get(pixels)
-        # Keep file-backed source pixels resident even when their file is in
-        # the old export folder. Prepare copies this buffer, not stale files.
-        image.pixels.foreach_set(pixels)
-        image.update()
-    if os.path.isdir(folder):
-        for entry in os.scandir(folder):
-            if entry.is_dir(follow_symlinks=False):
-                shutil.rmtree(entry.path)
-            else:
-                os.unlink(entry.path)
+    """Stage all selected material textures before replacing this asset's folders."""
+    from .unity_reexport import refresh_asset_textures
+    refresh_asset_textures(context.selected_objects, os.path.basename(folder), root)
 
 
 class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
@@ -290,7 +265,14 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
         settings.unity_asset_name = self.asset_name.strip()
         settings.unity_name_index = self.name_index.zfill(2)
         settings.unity_asset_index = self.version_index.strip()
-        for index in range(0 if self.skip_lods else settings.smart_lods_count):
+        asset = unity_name(settings, '')
+        selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        reuse_prepared = bool(selected_meshes) and all(
+            obj.get('unity_prepared') and re.sub(r'\.LOD\d+$', '', obj.name, flags=re.IGNORECASE) == asset
+            and obj.active_material is not None and obj.active_material.get('unity_asset_name') == asset
+            for obj in selected_meshes)
+        use_existing_lods = self.skip_lods or reuse_prepared
+        for index in range(0 if use_existing_lods else settings.smart_lods_count):
             if bpy.data.objects.get(unity_name(settings, f'LOD{index}')):
                 self.report({'ERROR'}, 'Prepared mesh names already exist; choose another index')
                 return {'CANCELLED'}
@@ -303,7 +285,7 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
             return {'CANCELLED'}
         if settings.unity_export_clear_asset_folder:
             try:
-                if self.skip_lods:
+                if use_existing_lods:
                     meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
                     if not 1 <= len(meshes) <= 6:
                         raise ValueError('Select 1–6 meshes for LOD0–LOD5')
@@ -315,7 +297,9 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
             except (RuntimeError, ValueError, OSError) as error:
                 self.report({'ERROR'}, str(error))
                 return {'CANCELLED'}
-        if self.skip_lods:
+        if reuse_prepared:
+            pass  # Same-index reexport keeps material/image identities and existing LODs.
+        elif use_existing_lods:
             try:
                 prepared = bpy.ops.object.polygroups_prepare_unity(auto_lods=True)
             except RuntimeError as error:

@@ -86,7 +86,7 @@ def save_textures(obj, directory):
             seen.add(image)
             if image.source not in {"FILE", "GENERATED"}:
                 raise ValueError(f"Unsupported texture source: {image.name} ({image.source})")
-            if not image.has_data:
+            if not image.has_data and not len(image.pixels):
                 raise ValueError(f"Texture has no loaded pixels: {image.name}")
             path = os.path.join(directory, _safe_path_token(image.name) + ".png")
             image.file_format = "PNG"
@@ -807,14 +807,15 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                 if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath):
                     raise RuntimeError('Autosave failed; export was not started')
             if settings.unity_export_clear_asset_folder:
-                for asset_name in groups:
-                    folder = os.path.join(root, _safe_path_token(asset_name))
-                    if os.path.isdir(folder):
-                        for entry in os.scandir(folder):
-                            if entry.is_dir(follow_symlinks=False):
-                                shutil.rmtree(entry.path)
-                            else:
-                                os.unlink(entry.path)
+                from .unity_reexport import refresh_asset_textures
+                for asset_name, lods in groups.items():
+                    refresh_asset_textures(lods, asset_name, root)
+                # Restore the refreshed source paths after temporary FBX writes.
+                paths = {node.image: node.image.filepath_raw for obj in meshes
+                         for mat in obj.data.materials if mat for node in texture_nodes(mat.node_tree)}
+                if settings.unity_export_autosave:
+                    if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath):
+                        raise RuntimeError('Could not save refreshed texture paths')
             alpha_nodes = _detach_export_alpha_maps(meshes)
             for asset_name, lods in groups.items():
                 asset_folder = os.path.join(root, _safe_path_token(asset_name))

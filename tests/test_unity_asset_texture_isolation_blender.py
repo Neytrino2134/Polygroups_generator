@@ -86,6 +86,47 @@ with TemporaryDirectory() as temp:
     assert (sibling / 'keep.txt').read_text() == 'preserve'
     assert not marker.exists()
     assert list(folder.rglob('*.fbx')) and list(folder.rglob('*.gltf'))
+    # Same-index reexport stages even disconnected material images and keeps
+    # existing mesh/material/image datablocks, regardless of Auto Increment.
+    extra = bpy.data.images.new('UnconnectedDetail', width=4, height=4)
+    extra.pixels[:] = [.2, .4, .6, 1] * 16
+    node = prepared.node_tree.nodes.new('ShaderNodeTexImage')
+    node.image = extra
+    texture_folder = root / 'Textures' / 'Asset_19_02'
+    (texture_folder / 'obsolete.png').write_bytes(b'obsolete')
+    marker.write_text('old render')
+    image.filepath_raw = str(texture)  # Source can point inside the export being deleted.
+    before = tuple(set(ids) for ids in (bpy.data.objects, bpy.data.materials, bpy.data.images))
+    s.unity_auto_increment_index = True
+    assert bpy.ops.object.polygroups_prepare_and_export_unity(
+        asset_name='Asset', name_index='19', version_index='02', skip_lods=False,
+    ) == {'FINISHED'}
+    assert tuple(set(ids) for ids in (bpy.data.objects, bpy.data.materials, bpy.data.images)) == before
+    assert s.unity_asset_index == '02'
+    assert not (texture_folder / 'obsolete.png').exists() and not marker.exists()
+    assert Path(extra.filepath_raw).parent == texture_folder
+    assert Path(extra.filepath_raw).is_file()
+    assert extra.pixels[2] > .5
+    s.unity_auto_increment_index = False
+    # A restore failure must recover both old directories before returning.
+    from polygroups_generator.operators import unity_reexport
+    texture_marker = texture_folder / 'recovery.txt'
+    texture_marker.write_text('source survives')
+    marker.write_text('export survives')
+    original_copy = unity_reexport.shutil.copy2
+    def fail_restore(source, destination, *args, **kwargs):
+        if Path(destination).parent == texture_folder:
+            raise OSError('Injected texture restore failure')
+        return original_copy(source, destination, *args, **kwargs)
+    with patch.object(unity_reexport.shutil, 'copy2', side_effect=fail_restore):
+        try:
+            unity_reexport.refresh_asset_textures(meshes, 'Asset_19_02', root / 'Unity')
+        except OSError:
+            pass
+        else:
+            raise AssertionError('Expected restore failure')
+    assert texture_marker.read_text() == 'source survives'
+    assert marker.read_text() == 'export survives'
     # Reusing the same index must refresh the material even without directory cleanup.
     s.unity_export_clear_asset_folder = False
     s.unity_export_overwrite = True
