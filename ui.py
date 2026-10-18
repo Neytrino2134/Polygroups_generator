@@ -3769,6 +3769,23 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
 
     def draw_fab_rename(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
+        variants = draw_collapsible_box(layout, settings, "show_fab_variant_rename", "HIGH / MID / LOW", "OUTLINER_COLLECTION")
+        if variants is not None:
+            self.draw_fab_variant_rename(context, variants)
+        unreal = draw_collapsible_box(layout, settings, "show_unreal_lod_rename", "Unreal LOD Rename", "MOD_DECIM")
+        if unreal is not None:
+            unreal.prop(settings, "unreal_lod_asset_name")
+            unreal.prop(settings, "unreal_lod_name_index")
+            unreal.prop(settings, "unreal_lod_version_index")
+            unreal.prop(settings, "unreal_lod_collection_color")
+            unreal.prop(settings, "unreal_lod_prepare_materials")
+            row = unreal.row()
+            row.enabled = settings.unreal_lod_prepare_materials
+            row.prop(settings, "unreal_lod_copy_textures")
+            unreal.operator("object.polygroups_unreal_lod_rename", icon="GREASEPENCIL")
+
+    def draw_fab_variant_rename(self, context, layout):
+        settings = context.scene.polygroups_mesh_finalization_settings
         column = layout.column(align=True)
         column.enabled = not settings.fab_prepare_is_running
         column.prop(settings, "fab_asset_name", text=t(context, "fab_asset_name"))

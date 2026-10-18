@@ -81,6 +81,7 @@ from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_fab_selection
 from .fab_preparation import OBJECT_OT_polygroups_auto_prepare_all_generated, OBJECT_OT_polygroups_stop_fab_prepare
 from .fab_preparation import OBJECT_OT_polygroups_prepare_fab_variant
 from .fab_rename_existing import OBJECT_OT_polygroups_rename_existing_fab, OBJECT_OT_polygroups_fab_variant_visibility
+from .unreal_lod_rename import OBJECT_OT_polygroups_unreal_lod_rename
 from .unity_preparation import OBJECT_OT_polygroups_prepare_unity, OBJECT_OT_polygroups_export_unity
 from .generate_polygroups import OBJECT_OT_generate_polygroups
 from .generate_polygroups import OBJECT_OT_polygroups_apply_checker_material
@@ -356,6 +357,7 @@ CLASSES = (
     OBJECT_OT_clear_polygroups_materials,
     OBJECT_OT_polygroups_prepare_fab_variant,
     OBJECT_OT_polygroups_rename_existing_fab,
+    OBJECT_OT_polygroups_unreal_lod_rename,
     OBJECT_OT_polygroups_fab_variant_visibility,
     OBJECT_OT_polygroups_prepare_unity,
     OBJECT_OT_polygroups_rename_unity_meshes,

@@ -1939,6 +1939,15 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
+    show_fab_variant_rename: bpy.props.BoolProperty(name="HIGH / MID / LOW", default=True)
+    show_unreal_lod_rename: bpy.props.BoolProperty(name="Unreal LOD Rename", default=True)
+    unreal_lod_asset_name: bpy.props.StringProperty(name="Asset Name", default="Asset")
+    unreal_lod_name_index: bpy.props.StringProperty(name="Name Index", default="00")
+    unreal_lod_version_index: bpy.props.StringProperty(name="Version Index", default="01")
+    unreal_lod_prepare_materials: bpy.props.BoolProperty(name="Prepare Materials and Textures", default=True)
+    unreal_lod_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
+    unreal_lod_collection_color: bpy.props.EnumProperty(name="Collection Color Tag",
+        items=[('NONE', 'None', '')] + [(f'COLOR_{i:02d}', f'Color {i}', '') for i in range(1, 9)], default='NONE')
     show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=False)
     show_unity_asset_render_settings: bpy.props.BoolProperty(name="Render Unity Assets", default=False)
     show_unity_turnaround_settings: bpy.props.BoolProperty(name="Turnaround", default=False)
