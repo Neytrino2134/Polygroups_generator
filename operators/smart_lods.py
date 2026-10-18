@@ -301,8 +301,11 @@ class OBJECT_OT_polygroups_render_smart_lods(bpy.types.Operator):
 class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
     bl_idname = "object.polygroups_generate_smart_lods"
     bl_label = "Generate Smart LODs"
-    bl_description = "Generate sequential LOD meshes within triangle limits using gentle seam decimation"
+    bl_description = "Generate a separate sequential LOD set for each selected mesh using the configured triangle limits"
     bl_options = {"REGISTER", "UNDO"}
+
+    active_only: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'},
+        description='Generate only from the active mesh for the combined preparation workflow')
 
     @classmethod
     def poll(cls, context):
@@ -310,6 +313,46 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
         return obj is not None and obj.type == "MESH"
 
     def execute(self, context):
+        active = context.active_object
+        selected = tuple(context.selected_objects)
+        mode = active.mode
+        sources = [active] if self.active_only else sorted(
+            (obj for obj in selected if obj.type == 'MESH'), key=lambda obj: obj.name.casefold())
+        if not sources:
+            sources = [active]
+        settings = context.scene.polygroups_mesh_finalization_settings
+        # Validate every source before creating anything: one colliding pack
+        # must not leave an accidental partial batch on an ordinary rerun.
+        collisions = [f'{source.name}.LOD.{index}' for source in sources
+                      for index in range(1, settings.smart_lods_count + 1)
+                      if bpy.data.objects.get(f'{source.name}.LOD.{index}')]
+        if collisions:
+            self.report({'WARNING'}, 'Smart LODs already exist: ' + ', '.join(collisions))
+            return {'CANCELLED'}
+        completed = 0
+        try:
+            if mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            for source in sources:
+                bpy.ops.object.select_all(action='DESELECT')
+                source.select_set(True)
+                context.view_layer.objects.active = source
+                if self._generate_for_source(context) != {'FINISHED'}:
+                    break
+                completed += 1
+        finally:
+            bpy.ops.object.select_all(action='DESELECT')
+            for obj in selected:
+                if obj.name in context.view_layer.objects:
+                    obj.select_set(True)
+            context.view_layer.objects.active = active
+            if mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode=mode)
+        if completed:
+            self.report({'INFO'}, f'Generated Smart LOD packs: {completed}/{len(sources)}')
+        return {'FINISHED'} if completed else {'CANCELLED'}
+
+    def _generate_for_source(self, context):
         source = context.active_object
         original_mode = source.mode
         selected = tuple(context.selected_objects)
@@ -417,7 +460,7 @@ class OBJECT_OT_polygroups_smart_lods_prepare(bpy.types.Operator):
         try:
             if settings.smart_lods_prepare_mode == 'UNREAL':
                 settings.smart_lods_count = 3
-            result = bpy.ops.object.polygroups_generate_smart_lods()
+            result = bpy.ops.object.polygroups_generate_smart_lods(active_only=True)
         finally:
             settings.smart_lods_count = original_count
         if 'FINISHED' not in result:

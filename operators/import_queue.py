@@ -1348,7 +1348,7 @@ class ImportQueue:
                 for name in names:
                     setattr(lod_settings, name, getattr(settings, "batch_" + name))
                 lod_settings.smart_lods_auto_arrange = False
-                result = self.tracked(lambda: bpy.ops.object.polygroups_generate_smart_lods())
+                result = self.tracked(lambda: bpy.ops.object.polygroups_generate_smart_lods(active_only=True))
                 if "FINISHED" not in result:
                     raise RuntimeError(f"Smart LODs failed for {obj.name}")
             finally:
