@@ -49,4 +49,27 @@ for source, count in zip(sources, counts):
 before = set(bpy.data.objects)
 assert bpy.ops.object.polygroups_generate_smart_lods() == {'CANCELLED'}
 assert set(bpy.data.objects) == before
+# Origin alignment uses the origin distance even with strongly offset geometry.
+for source in sources:
+    for vertex in source.data.vertices:
+        vertex.co.x += 7
+    for index in (1, 2):
+        lod = bpy.data.objects[f'{source.name}.LOD.{index}']
+        for child in list(lod.children):
+            bpy.data.objects.remove(child, do_unlink=True)
+        bpy.data.objects.remove(lod, do_unlink=True)
+settings.smart_lods_alignment = 'ORIGIN'
+settings.smart_lods_spacing = 3.25
+assert bpy.ops.object.polygroups_generate_smart_lods() == {'FINISHED'}
+for source in sources:
+    for index in (1, 2):
+        lod = bpy.data.objects[f'{source.name}.LOD.{index}']
+        expected = source.matrix_world.translation.copy()
+        expected.x += index * 3.25
+        assert (lod.matrix_world.translation - expected).length < 1e-5
+from polygroups_generator.custom_ui.schema import capture
+from polygroups_generator import ui
+model = capture(bpy.context, ui.SECTION_PANEL_CLASSES.index(ui.VIEW3D_PT_polygroups_mesh_finalization))
+assert not model.errors, model.errors
+assert any(b[0] == 'property' and b[2] == 'smart_lods_alignment' for b in model.bindings.values())
 print('SMART_LODS_MULTIPLE_PASSED')

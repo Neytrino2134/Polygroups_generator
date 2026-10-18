@@ -3659,6 +3659,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         spacing_row = column.row()
         spacing_row.enabled = settings.smart_lods_auto_arrange
         spacing_row.prop(settings, "smart_lods_spacing")
+        spacing_row.prop(settings, "smart_lods_alignment")
         column.prop(settings, "smart_lods_create_text")
         column.prop(settings, "smart_lods_text_size")
         column.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")

@@ -2048,13 +2048,17 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     smart_lods_render_freestyle: bpy.props.BoolProperty(name="Enable Freestyle", default=True)
     smart_lods_spacing: bpy.props.FloatProperty(
         name="Arrange Objects Spacing",
-        description="Minimum gap between the world-space bounds of successive LOD meshes",
+        description="Gap between mesh bounds, or distance between origins when Align By is Origin",
         default=0.1,
         min=0.0,
         soft_max=10.0,
         subtype="DISTANCE",
         unit="LENGTH",
     )
+    smart_lods_alignment: bpy.props.EnumProperty(name="Align By",
+        items=(("BOUNDS", "Bounds", "Place successive LODs with a gap between mesh bounds"),
+               ("ORIGIN", "Origin", "Align object origins along X using Spacing as the origin-to-origin distance")),
+        default="BOUNDS")
     show_mesh_check_settings: bpy.props.BoolProperty(
         name="Check Mesh",
         default=False,
