@@ -6,6 +6,11 @@ LANGUAGE_ITEMS = (
 
 TEXT = {
     "EN": {
+        "render_material_settings": "Material Settings",
+        "render_select_material_mesh": "Select a mesh to edit its active material",
+        "render_no_active_material": "The selected mesh has no active material",
+        "render_material_slot": "Material Slot",
+        "render_hide_backfaces": "Hide Backfaces (Camera)",
         "relocate_blend_filename": "Blend Filename",
         "relocate_name": "Name",
         "relocate_name_index": "Name Index",
@@ -886,6 +891,11 @@ TEXT = {
         "open_prompt_folder": "Open Folder",
     },
     "RU": {
+        "render_material_settings": "Настройки материала",
+        "render_select_material_mesh": "Выделите меш для настройки его активного материала",
+        "render_no_active_material": "У выбранного меша нет активного материала",
+        "render_material_slot": "Слот материала",
+        "render_hide_backfaces": "Скрывать задние стороны (камера)",
         "relocate_blend_filename": "Имя файла .blend",
         "relocate_name": "Имя",
         "relocate_name_index": "Индекс имени",

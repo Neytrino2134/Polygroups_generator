@@ -4150,6 +4150,24 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             if settings.studio_backdrop is not None:
                 column.prop(settings.studio_backdrop, "location", text=t(context, "studio_position"))
 
+        content = draw_topic(layout, context, "render_10", t(context, "render_material_settings"), "MATERIAL")
+        if content is not None:
+            column = content.column(align=True)
+            obj = context.active_object
+            if obj is None or obj.type != 'MESH' or not obj.select_get():
+                column.label(text=t(context, "render_select_material_mesh"), icon="INFO")
+            elif obj.active_material is None:
+                column.label(text=t(context, "render_no_active_material"), icon="INFO")
+            else:
+                column.label(text=obj.name, icon="MESH_DATA")
+                if len(obj.material_slots) > 1:
+                    column.prop(obj, "active_material_index", text=t(context, "render_material_slot"))
+                material = obj.active_material
+                column.label(text=material.name, icon="MATERIAL")
+                controls = column.column(align=True)
+                controls.enabled = not settings.is_running and (material.library is None or material.override_library is not None)
+                controls.prop(material, "use_backface_culling", text=t(context, "render_hide_backfaces"))
+
         content = draw_topic(layout, context, "render_7", t(context, "arrange_objects"), "SNAP_EDGE")
         if content is not None:
             arrange_box = content.column(align=True)
