@@ -185,13 +185,14 @@ def _render_suffix_from_name(name):
 
 def _find_asset_objects(collection, asset_name, settings):
     include_suffixes = set()
-    if settings.render_low:
+    if settings.render_low and not settings.render_lod_enabled:
         include_suffixes.add("LOW")
     if settings.render_mid:
         include_suffixes.add("MID")
     if settings.render_high:
         include_suffixes.add("HIGH")
-    include_suffixes.update(settings.render_lods)
+    if settings.render_lod_enabled:
+        include_suffixes.add(settings.render_lod_level)
 
     objects_by_suffix = {}
     for obj in _collection_objects_recursive(collection):
@@ -237,19 +238,21 @@ def _scan_render_queue(settings):
         asset_directory = os.path.join(base_directory, f"Collection_{collection_index:02d}")
         for obj in objects:
             suffix = _render_object_suffix(obj)
+            output_suffix = 'LOW' if suffix.startswith('LOD') else suffix
             use_multiview = settings.multiview_render or bool(_prepared_multiview_views(obj))
             modes = ["Multiview"] if use_multiview else [""]
             if use_multiview and settings.multiview_render_hero:
                 modes.append("Hero")
             for mode in modes:
                 prefix = f"Image_{mode}" if mode else "Image"
-                output_path = os.path.join(asset_directory, f"{prefix}_{collection_index:02d}_{suffix}{image_extension(settings.image_format)}")
+                output_path = os.path.join(asset_directory, f"{prefix}_{collection_index:02d}_{output_suffix}{image_extension(settings.image_format)}")
                 queue.append(
                     {
                         "asset_name": asset_name,
                         "collection": collection.name,
                         "object": obj.name,
                         "variant": suffix,
+                        "output_variant": output_suffix,
                         "view_mode": mode,
                         "output_path": output_path,
                         "transparent_output_path": _transparent_output_path(output_path),
@@ -1357,6 +1360,28 @@ class OBJECT_OT_polygroups_render_rename_suffix(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def _lod_low_conflicts(queue):
+    """Warn when a LOD uses the LOW output slot beside a separate LOW mesh."""
+    conflicts = []
+    checked = set()
+    for job in queue:
+        if not job.get('variant', '').startswith('LOD'):
+            continue
+        name = job.get('collection')
+        if name in checked:
+            continue
+        checked.add(name)
+        collection = bpy.data.collections.get(name)
+        if collection is None:
+            continue
+        low = [obj.name for obj in _collection_objects_recursive(collection)
+               if obj.type == 'MESH' and not obj.get(MULTIVIEW_PROP) and not obj.get(PLANE_TAG)
+               and _render_object_suffix(obj) == 'LOW']
+        if low:
+            conflicts.append(f"{name}: {job['variant']} renders as LOW; separate LOW mesh(es) excluded: {', '.join(low)}. LOW image filenames are shared.")
+    return conflicts
+
+
 class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
     bl_idname = "object.polygroups_scan_render_queue"
     bl_label = "Scan Render Queue"
@@ -1375,6 +1400,8 @@ class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
         _store_queue(settings, queue, collection_count)
         settings.queue_scanned = True
         settings.status = f"Queued {settings.total_count} render job(s) from {collection_count} collection(s)"
+        for warning in _lod_low_conflicts(queue):
+            self.report({'WARNING'}, warning)
         return {"FINISHED"}
 
 
@@ -1463,6 +1490,13 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
                 queue, collection_count = _scan_render_queue(settings)
                 settings.queue_index = 0
                 _store_queue(settings, queue, collection_count)
+
+        destinations = [job.get('output_path') for job in queue]
+        if len(destinations) != len(set(destinations)):
+            self.report({'ERROR'}, 'Conflicting render output filenames. Scan Queue again before rendering.')
+            return {'CANCELLED'}
+        for warning in _lod_low_conflicts(queue):
+            self.report({'WARNING'}, warning)
 
         if settings.total_count == 0:
             settings.status = "Render queue is empty: no selected LOW/MID/HIGH/LOD meshes in *_Collection assets"

@@ -2327,6 +2327,18 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     mesh_check_double_walls: bpy.props.IntProperty(default=0, min=0)
 
 
+def _render_low_update(self, context):
+    if self.render_low and self.render_lod_enabled:
+        self.render_lod_enabled = False
+    self.queue_scanned = False
+
+
+def _render_lod_update(self, context):
+    if self.render_lod_enabled and self.render_low:
+        self.render_low = False
+    self.queue_scanned = False
+
+
 def _update_studio_backdrop(self, context):
     from .operators.render_studio import update_backdrop
     update_backdrop(self, context)
@@ -2536,13 +2548,16 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         name="Render LOW",
         description="Include *_LOW objects in the render queue",
         default=True,
+        update=_render_low_update,
     )
     render_high: bpy.props.BoolProperty(name="HIGH", description="Render SM_*_HIGH meshes", default=False)
     render_rename_suffix: bpy.props.EnumProperty(name="Suffix", items=[
         ('HIGH', '_HIGH', ''), ('MID', '_MID', ''), ('LOW', '_LOW', '')], default='HIGH')
-    render_lods: bpy.props.EnumProperty(name="LODs", description="Choose LOD suffixes to include in the render queue",
-        items=[(f'LOD{i}', f'LOD{i}', f'Render SM_*_LOD{i} meshes', 1 << i) for i in range(6)],
-        options={'ENUM_FLAG'}, default=set())
+    render_lod_enabled: bpy.props.BoolProperty(name="LOD", default=False,
+        description="Render one LOD instead of LOW, using LOW image filenames", update=_render_lod_update)
+    render_lod_level: bpy.props.EnumProperty(name="LOD Level",
+        items=[(f'LOD{i}', f'LOD{i}', f'Render LOD{i} as LOW') for i in range(6)],
+        default='LOD0', update=_render_lod_update)
     render_mid: bpy.props.BoolProperty(
         name="Render MID",
         description="Include *_MID objects in the render queue",

@@ -38,7 +38,8 @@ for suffix in ('LOW', 'MID', 'High', *(f'LOD{i}' for i in range(6))):
     obj.location = (len(objects) * 7, 4, 2)
 s.render_low = s.render_mid = False
 s.render_high = True
-s.render_lods = {'LOD0'}
+s.render_lod_enabled = True
+s.render_lod_level = 'LOD0'
 s.multiview_render = True
 s.multiview_render_hero = True
 s.render_engine = 'EEVEE'
@@ -52,7 +53,7 @@ scene.camera.location = (0, -5, 2)
 scene.camera.rotation_euler = (-scene.camera.location).to_track_quat('-Z', 'Y').to_euler()
 model = capture(bpy.context, ui.SECTION_PANEL_CLASSES.index(ui.VIEW3D_PT_polygroups_render))
 assert not model.errors, model.errors
-for prop in ('render_high', 'render_lods'):
+for prop in ('render_high', 'render_lod_enabled', 'render_lod_level'):
     assert any(b[0] == 'property' and b[2] == prop for b in model.bindings.values()), prop
 original_render = rq._render_current_job
 def checked_render(context, settings, job):
@@ -69,10 +70,20 @@ rq._render_current_job = checked_render
 with TemporaryDirectory() as directory:
     bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory) / 'Render.blend'))
     s.output_directory = str(Path(directory) / 'Filters')
-    s.render_lods = {f'LOD{i}' for i in range(6)}
-    queue, count = rq._scan_render_queue(s)
-    assert count == 1 and len(queue) == 14
-    assert {job['variant'] for job in queue} == {'HIGH', *(f'LOD{i}' for i in range(6))}
+    for i in range(6):
+        s.render_lod_level = f'LOD{i}'
+        queue, count = rq._scan_render_queue(s)
+        assert count == 1 and len(queue) == 4
+        assert {job['variant'] for job in queue} == {'HIGH', f'LOD{i}'}
+        lod_jobs = [job for job in queue if job['variant'].startswith('LOD')]
+        assert all(Path(job['output_path']).stem.endswith('_LOW') for job in lod_jobs)
+        assert len({job['output_path'] for job in queue}) == len(queue)
+        assert rq._lod_low_conflicts(queue)
+    s.render_low = True
+    assert not s.render_lod_enabled
+    assert {j['variant'] for j in rq._scan_render_queue(s)[0]} == {'HIGH', 'LOW'}
+    s.render_lod_enabled = True
+    assert not s.render_low
     # Custom editable High suffix remains recognized from rename metadata.
     high = objects['HIGH']
     high.name = 'SM_RenderLOD_19_01_Original'
@@ -80,7 +91,7 @@ with TemporaryDirectory() as directory:
     high['unreal_lod_index'] = -1
     assert rq._render_object_suffix(high) == 'HIGH'
     high.name = 'SM_RenderLOD_19_01_HIGH'
-    s.render_lods = {'LOD0'}
+    s.render_lod_level = 'LOD0'
     for freestyle in (False, True):
         s.freestyle_edges = freestyle
         s.output_directory = str(Path(directory) / str(freestyle))

@@ -4044,7 +4044,9 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             options_row.prop(settings, "render_low", text="LOW")
             options_row.prop(settings, "render_mid", text="MID")
             options_row.prop(settings, "render_high", text="HIGH")
-            column.prop(settings, "render_lods", text="LODs")
+            column.prop(settings, "render_lod_enabled", text="LOD")
+            if settings.render_lod_enabled:
+                column.prop(settings, "render_lod_level", text="LOD Level")
             column.prop(settings, "render_rename_suffix", text="Suffix")
             column.operator("object.polygroups_render_rename_suffix", text="Rename Suffix")
         content = draw_topic(layout, context, "render_1", 'Quality and Output', "PREFERENCES")

@@ -29,9 +29,12 @@ editable High Suffix (default `_HIGH`), and the remaining meshes start at
 `LOD0`. For example: `SM_Tree_Tropic_19_01_HIGH`,
 `SM_Tree_Tropic_19_01_LOD0`, `SM_Tree_Tropic_19_01_LOD1`.
 
-Render > Quality and Output includes independent LOW, MID, HIGH filters and
-a multiple-choice LODs menu (LOD0 through LOD5). Scan Queue and Start Render
-use these filters for every asset collection. HIGH also accepts `_High` and
+Render > Mesh Selection includes LOW, MID, HIGH filters and a LOD toggle
+with one selected level (LOD0 through LOD5). LOW and LOD are mutually exclusive.
+LOD mesh renders use `_LOW` image filenames; object names remain unchanged.
+Scan Queue and Start Render warn when a selected LOD and a separate LOW mesh
+share an asset collection, excluding the separate LOW mesh. Start Render also
+rejects duplicate output paths. HIGH also accepts `_High` and
 custom High suffixes tagged by Unreal LOD Rename. Selected variants use the
 same Multiview, Hero, Freestyle and transparent-output settings as LOW/MID.
 Existing selected-only Unreal collections are migrated to `_Collection` on rename.
