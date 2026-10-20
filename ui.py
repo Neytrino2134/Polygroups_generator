@@ -1634,133 +1634,131 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
         if content is not None:
-            content.label(text=t(context, "batch_start_file_group"), icon="FILE_BLEND")
-            content.separator(type="LINE")
-            save_row = content.row(align=True)
-            save_row.enabled = not settings.batch_is_running
-            save_row.operator(
-                "object.polygroups_save_blend_file",
-                text=t(context, "save_file"),
-                icon="FILE_TICK",
-            )
-            if not bpy.data.filepath:
-                save_hint = content.row()
-                save_hint.alert = True
-                save_hint.label(
-                    text=t(context, "batch_save_before_start"),
-                    icon="ERROR",
+            group = draw_collapsible_box(content, settings, "show_batch_start_file", t(context, "batch_start_file_group"), "FILE_BLEND")
+            if group is not None:
+                save_row = group.row(align=True)
+                save_row.enabled = not settings.batch_is_running
+                save_row.operator(
+                    "object.polygroups_save_blend_file",
+                    text=t(context, "save_file"),
+                    icon="FILE_TICK",
+                )
+                if not bpy.data.filepath:
+                    save_hint = group.row()
+                    save_hint.alert = True
+                    save_hint.label(
+                        text=t(context, "batch_save_before_start"),
+                        icon="ERROR",
+                    )
+
+            group = draw_collapsible_box(content, settings, "show_batch_start_autosave", t(context, "batch_start_autosave_group"), "RECOVER_LAST")
+            if group is not None:
+                auto_save_row = group.row(align=True)
+                auto_save_row.enabled = (
+                    not settings.batch_is_running
+                    and not (
+                        settings.batch_save_generated_separately
+                        and settings.batch_separate_collections
+                    )
+                )
+                auto_save_row.prop(
+                    settings,
+                    "batch_auto_save",
+                    text=t(context, "batch_auto_save"),
+                    toggle=True,
+                )
+                interval = auto_save_row.row(align=True)
+                interval.enabled = settings.batch_auto_save
+                interval.prop(
+                    settings,
+                    "batch_auto_save_interval",
+                    text=t(context, "batch_auto_save_every"),
                 )
 
-            content.separator()
-            content.label(text=t(context, "batch_start_autosave_group"), icon="RECOVER_LAST")
-            content.separator(type="LINE")
-            auto_save_row = content.row(align=True)
-            auto_save_row.enabled = (
-                not settings.batch_is_running
-                and not (
+                separate_save = group.column(align=True)
+                separate_save.enabled = not settings.batch_is_running
+                separate_save.prop(
+                    settings,
+                    "batch_save_generated_separately",
+                    text=t(context, "batch_save_generated_separately"),
+                    toggle=True,
+                )
+                separate_hint = separate_save.row()
+                separate_hint.alert = bool(
+                    settings.batch_save_generated_separately
+                    and (not settings.batch_separate_collections or not bpy.data.filepath)
+                )
+                separate_hint.label(
+                    text=t(context, "batch_save_generated_separately_hint"),
+                    icon="ERROR" if separate_hint.alert else "FILE_BLEND",
+                )
+                restore_row = separate_save.row(align=True)
+                restore_row.enabled = bool(bpy.data.filepath)
+                restore_row.operator(
+                    "object.polygroups_restore_separate_retopo",
+                    text=t(context, "batch_restore_separate_retopo"),
+                    icon="IMPORT",
+                )
+                auto_restore_row = separate_save.row(align=True)
+                auto_restore_row.enabled = bool(
                     settings.batch_save_generated_separately
                     and settings.batch_separate_collections
                 )
-            )
-            auto_save_row.prop(
-                settings,
-                "batch_auto_save",
-                text=t(context, "batch_auto_save"),
-                toggle=True,
-            )
-            interval = auto_save_row.row(align=True)
-            interval.enabled = settings.batch_auto_save
-            interval.prop(
-                settings,
-                "batch_auto_save_interval",
-                text=t(context, "batch_auto_save_every"),
-            )
+                auto_restore_row.prop(
+                    settings,
+                    "batch_auto_restore_separate_retopo",
+                    text=t(context, "batch_auto_restore_separate_retopo"),
+                    toggle=True,
+                )
+                restore_hint = separate_save.row()
+                restore_hint.label(
+                    text=t(context, "batch_restore_separate_retopo_hint"),
+                    icon="OUTLINER_OB_MESH",
+                )
 
-            separate_save = content.column(align=True)
-            separate_save.enabled = not settings.batch_is_running
-            separate_save.prop(
-                settings,
-                "batch_save_generated_separately",
-                text=t(context, "batch_save_generated_separately"),
-                toggle=True,
-            )
-            separate_hint = separate_save.row()
-            separate_hint.alert = bool(
-                settings.batch_save_generated_separately
-                and (not settings.batch_separate_collections or not bpy.data.filepath)
-            )
-            separate_hint.label(
-                text=t(context, "batch_save_generated_separately_hint"),
-                icon="ERROR" if separate_hint.alert else "FILE_BLEND",
-            )
-            restore_row = separate_save.row(align=True)
-            restore_row.enabled = bool(bpy.data.filepath)
-            restore_row.operator(
-                "object.polygroups_restore_separate_retopo",
-                text=t(context, "batch_restore_separate_retopo"),
-                icon="IMPORT",
-            )
-            auto_restore_row = separate_save.row(align=True)
-            auto_restore_row.enabled = bool(
-                settings.batch_save_generated_separately
-                and settings.batch_separate_collections
-            )
-            auto_restore_row.prop(
-                settings,
-                "batch_auto_restore_separate_retopo",
-                text=t(context, "batch_auto_restore_separate_retopo"),
-                toggle=True,
-            )
-            restore_hint = separate_save.row()
-            restore_hint.label(
-                text=t(context, "batch_restore_separate_retopo_hint"),
-                icon="OUTLINER_OB_MESH",
-            )
+            group = draw_collapsible_box(content, settings, "show_batch_start_mode", t(context, "batch_start_mode_group"), "PLAY")
+            if group is not None:
+                import_mode_row = group.row(align=True)
+                import_mode_row.enabled = not settings.batch_is_running
+                import_mode_row.prop(
+                    settings,
+                    "batch_import_mode",
+                    text=t(context, "batch_import_mode"),
+                    expand=True,
+                )
 
-            content.separator()
-            content.label(text=t(context, "batch_start_mode_group"), icon="PLAY")
-            content.separator(type="LINE")
-            import_mode_row = content.row(align=True)
-            import_mode_row.enabled = not settings.batch_is_running
-            import_mode_row.prop(
-                settings,
-                "batch_import_mode",
-                text=t(context, "batch_import_mode"),
-                expand=True,
-            )
+                from .operators.import_queue import active_highpoly_collection
 
-            from .operators.import_queue import active_highpoly_collection
+                selected_row = group.row(align=True)
+                selected_row.enabled = (
+                    not settings.batch_is_running
+                    and active_highpoly_collection(context) is not None
+                )
+                selected_row.operator_context = "EXEC_DEFAULT"
+                do_selected = selected_row.operator(
+                    "object.polygroups_batch_import",
+                    text=t(context, "batch_do_selected"),
+                    icon="PLAY",
+                )
+                do_selected.use_file_selection = False
+                do_selected.do_selected = True
+                selected_hint = group.row()
+                selected_hint.label(text=t(context, "batch_do_selected_hint"), icon="OUTLINER_OB_MESH")
 
-            selected_row = content.row(align=True)
-            selected_row.enabled = (
-                not settings.batch_is_running
-                and active_highpoly_collection(context) is not None
-            )
-            selected_row.operator_context = "EXEC_DEFAULT"
-            do_selected = selected_row.operator(
-                "object.polygroups_batch_import",
-                text=t(context, "batch_do_selected"),
-                icon="PLAY",
-            )
-            do_selected.use_file_selection = False
-            do_selected.do_selected = True
-            selected_hint = content.row()
-            selected_hint.label(text=t(context, "batch_do_selected_hint"), icon="OUTLINER_OB_MESH")
-
-            operator_row = content.row(align=True)
-            operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
-            operator_row.operator_context = "EXEC_DEFAULT"
-            start_import = operator_row.operator(
-                "object.polygroups_batch_import",
-                text=t(context, "import_folder"),
-                icon="PLAY",
-            )
-            start_import.use_file_selection = False
-            content.operator(
-                "object.polygroups_reset_import_state",
-                text=t(context, "batch_reset_state"),
-                icon="FILE_REFRESH",
-            )
+                operator_row = group.row(align=True)
+                operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
+                operator_row.operator_context = "EXEC_DEFAULT"
+                start_import = operator_row.operator(
+                    "object.polygroups_batch_import",
+                    text=t(context, "import_folder"),
+                    icon="PLAY",
+                )
+                start_import.use_file_selection = False
+                group.operator(
+                    "object.polygroups_reset_import_state",
+                    text=t(context, "batch_reset_state"),
+                    icon="FILE_REFRESH",
+                )
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:

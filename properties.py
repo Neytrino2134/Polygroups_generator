@@ -443,6 +443,9 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Scan and import supported mesh files from nested folders",
         default=True,
     )
+    show_batch_start_file: bpy.props.BoolProperty(name="File", default=True)
+    show_batch_start_autosave: bpy.props.BoolProperty(name="Auto Save", default=True)
+    show_batch_start_mode: bpy.props.BoolProperty(name="Import Mode", default=True)
     batch_auto_arrange_objects: bpy.props.BoolProperty(
         name="Auto Arrange Imports",
         description="Automatically arrange imported mesh objects after each batch import step",
