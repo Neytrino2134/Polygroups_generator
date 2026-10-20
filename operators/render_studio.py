@@ -291,6 +291,29 @@ def ensure_light_position(context):
     return root
 
 
+def position_studio_at_origin(context, origin):
+    """Move studio group origins for one queue job; return transforms to restore."""
+    settings = context.scene.polygroups_render_settings
+    if settings.studio_camera is not None:
+        ensure_position_control(context, 'camera', (settings.studio_camera, settings.studio_camera_aim))
+    if settings.studio_backdrop is not None:
+        ensure_position_control(context, 'scene', (settings.studio_backdrop,))
+    if settings.studio_light_position is not None or any(obj.type == 'LIGHT' for obj in context.scene.objects):
+        ensure_light_position(context)
+    snapshot = []
+    for role in ('camera', 'light', 'scene'):
+        root = getattr(settings, 'studio_' + role + '_position')
+        if root is None:
+            continue
+        original = root.matrix_world.copy()
+        snapshot.append((root, original))
+        matrix = original.copy()
+        matrix.translation = origin
+        root.matrix_world = matrix
+    context.view_layer.update()
+    return snapshot
+
+
 def position_lights(context, center):
     from mathutils import Vector
     settings = context.scene.polygroups_render_settings

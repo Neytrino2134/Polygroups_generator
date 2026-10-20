@@ -1073,6 +1073,7 @@ def _prepare_scene_for_job(job):
     if current_collection is None or current_object is None:
         return False
 
+    ensure_render_support_visible(bpy.context)
     for collection in queue_collections:
         is_current = collection == current_collection
         _set_asset_collection_enabled(collection, is_current)
@@ -1082,6 +1083,20 @@ def _prepare_scene_for_job(job):
         obj.hide_render = not is_current
         obj.hide_viewport = not is_current
 
+    # Also isolate unrelated meshes outside the scanned asset collections.
+    support = set()
+    def collect_support(collection, inside=False):
+        inside = inside or is_render_support_collection(bpy.context.scene, collection)
+        if inside:
+            support.update(collection.objects)
+        for child in collection.children:
+            collect_support(child, inside)
+    collect_support(bpy.context.scene.collection)
+    visible = {current_object.name, *job.get('texture_objects', [])}
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH' and obj not in support:
+            obj.hide_render = obj.hide_viewport = obj.name not in visible
+    bpy.context.view_layer.update()
     return True
 
 
@@ -1481,7 +1496,14 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         use_multiview = not job.get("texture_kind") and (settings.multiview_render or (source is not None and
                                                      bool(_prepared_multiview_views(source))))
         multiview_objects = _create_multiview_setup(job) if use_multiview else []
+        studio_snapshot = []
         try:
+            if not job.get('texture_kind') and source is not None:
+                from .render_studio import position_studio_at_origin
+                views = multiview_objects or _prepared_multiview_views(source)
+                central = next((obj for obj in views if _base_name(obj.name).endswith('_MV_Front')), source)
+                context.view_layer.update()
+                studio_snapshot = position_studio_at_origin(context, central.matrix_world.translation.copy())
             if job.get("view_mode") == "Hero":
                 _isolate_hero_view(source, multiview_objects)
             # The actual render is synchronous; paint the queue status before
@@ -1495,6 +1517,9 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
             self.report({"ERROR"}, f"Render failed: {error}")
             return {"CANCELLED"}
         finally:
+            for root, matrix in studio_snapshot:
+                root.matrix_world = matrix
+            context.view_layer.update()
             if settings.is_running:
                 _finish_render_job(job, multiview_objects)
 
