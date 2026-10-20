@@ -26,7 +26,7 @@ settings = bpy.context.scene.polygroups_mesh_finalization_settings
 assert settings.smart_lods_final_decimate
 assert settings.smart_lods_triangulate_all
 assert settings.smart_lods_auto_arrange
-assert abs(settings.smart_lods_spacing - 0.1) < 1e-6
+assert abs(settings.smart_lods_spacing - 1.0) < 1e-6
 settings.smart_lods_final_decimate = False
 settings.smart_lods_triangulate_all = False
 settings.smart_lods_auto_arrange = False
@@ -102,7 +102,7 @@ for i in range(1, 5):
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
 
-# Auto Arrange uses object bounds, so rotated and scaled meshes have a real gap.
+# Auto Arrange fixes a floor grid aligned by origins.
 source.location = (2.0, 3.0, 0.0)
 source.rotation_euler.z = 0.4
 source.scale = (1.5, 0.8, 1.0)
@@ -115,10 +115,11 @@ def x_bounds(obj):
     return min(coords), max(coords)
 
 previous = source
+pack = [source] + [bpy.data.objects[f"Mesh.002.LOD.{i}"] for i in range(1, 5)]
+x_step = max(x_bounds(obj)[1] - x_bounds(obj)[0] for obj in pack) + .1
 for i in range(1, 5):
     lod = bpy.data.objects[f"Mesh.002.LOD.{i}"]
-    gap = x_bounds(lod)[0] - x_bounds(previous)[1]
-    assert abs(gap - 1.0) < 1e-4, (i, gap)
+    assert abs(lod.matrix_world.translation.x - previous.matrix_world.translation.x - x_step) < 1e-4
     assert abs(lod.matrix_world.translation.y - source.matrix_world.translation.y) < 1e-6
     previous = lod
 for i in range(1, 5):
@@ -132,7 +133,7 @@ settings.smart_lods_count = 1
 settings.smart_lods_spacing = 2.5
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
 lod = bpy.data.objects["Mesh.002.LOD.1"]
-assert abs(x_bounds(lod)[0] - x_bounds(source)[1] - 2.5) < 1e-4
+assert abs(lod.matrix_world.translation.x - source.matrix_world.translation.x - (max(x_bounds(obj)[1] - x_bounds(obj)[0] for obj in (source, lod)) + .1)) < 1e-4
 mesh = lod.data
 bpy.data.objects.remove(lod, do_unlink=True)
 bpy.data.meshes.remove(mesh)

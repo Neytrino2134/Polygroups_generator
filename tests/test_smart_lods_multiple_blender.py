@@ -11,6 +11,15 @@ addon_utils.enable(ROOT.name, default_set=False)
 from polygroups_generator.operators.smart_lods import LOD_SOURCE, LOD_INDEX
 
 settings = bpy.context.scene.polygroups_mesh_finalization_settings
+assert settings.smart_lods_auto_arrange and settings.smart_lods_spacing == 1.0
+assert settings.smart_lods_alignment == 'ORIGIN'
+for owner, prefix in ((bpy.context.scene.polygroups_model_preparation_settings, 'batch'),
+                      (bpy.context.scene.polygroups_render_settings, 'render')):
+    enum = owner.bl_rna.properties[prefix + '_arrange_plane'].enum_items
+    assert enum['XY'].name == 'XY - Floor' and enum['ZX'].name == 'ZX - Camera'
+    setattr(owner, prefix + '_arrange_rows', 50)
+    assert getattr(owner, prefix + '_arrange_rows') == 50
+    assert owner.bl_rna.properties[prefix + '_arrange_rows'].hard_max == 50
 settings.smart_lods_count = 2
 settings.smart_lods_target_1 = 80
 settings.smart_lods_target_2 = 40
@@ -61,15 +70,24 @@ for source in sources:
 settings.smart_lods_alignment = 'ORIGIN'
 settings.smart_lods_spacing = 3.25
 assert bpy.ops.object.polygroups_generate_smart_lods() == {'FINISHED'}
-for source in sources:
-    for index in (1, 2):
-        lod = bpy.data.objects[f'{source.name}.LOD.{index}']
-        expected = source.matrix_world.translation.copy()
-        expected.x += index * 3.25
-        assert (lod.matrix_world.translation - expected).length < 1e-5
+packs = [[source] + [bpy.data.objects[f'{source.name}.LOD.{index}'] for index in (1, 2)] for source in sources]
+from mathutils import Vector
+all_objects = [obj for pack in packs for obj in pack]
+def size(obj, axis):
+    values = [(obj.matrix_world @ Vector(corner))[axis] for corner in obj.bound_box]
+    return max(values) - min(values)
+x_step = max(size(obj, 0) for obj in all_objects) + .1
+y_step = max(size(obj, 1) for obj in all_objects) + 3.25
+for row, pack in enumerate(packs):
+    for column, obj in enumerate(pack):
+        expected = sources[0].matrix_world.translation.copy()
+        expected.x += column * x_step
+        expected.y += row * y_step
+        assert (obj.matrix_world.translation - expected).length < 1e-5
 from polygroups_generator.custom_ui.schema import capture
 from polygroups_generator import ui
 model = capture(bpy.context, ui.SECTION_PANEL_CLASSES.index(ui.VIEW3D_PT_polygroups_mesh_finalization))
 assert not model.errors, model.errors
-assert any(b[0] == 'property' and b[2] == 'smart_lods_alignment' for b in model.bindings.values())
+assert not any(b[0] == 'property' and b[2] == 'smart_lods_alignment' for b in model.bindings.values())
+assert any(b[0] == 'property' and b[2] == 'smart_lods_spacing' for b in model.bindings.values())
 print('SMART_LODS_MULTIPLE_PASSED')

@@ -346,6 +346,15 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
                 if self._generate_for_source(context) != {'FINISHED'}:
                     break
                 completed += 1
+            if completed and settings.smart_lods_auto_arrange:
+                from .batch_import import arrange_objects_zx
+                objects = [obj for source in sources[:completed]
+                           for obj in [source] + [bpy.data.objects[f'{source.name}.LOD.{i}']
+                                                 for i in range(1, settings.smart_lods_count + 1)]]
+                arrange_objects_zx(objects, spacing=0.1, mode='GRID', rows=completed,
+                                   plane='XY', alignment='ORIGIN',
+                                   secondary_spacing=settings.smart_lods_spacing, preserve_order=True)
+                context.view_layer.update()
         finally:
             bpy.ops.object.select_all(action='DESELECT')
             for obj in selected:
@@ -403,9 +412,6 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
                 if settings.smart_lods_triangulate_all:
                     triangulate = lod.modifiers.new("LOD Triangulate", "TRIANGULATE")
                     bpy.ops.object.modifier_apply(modifier=triangulate.name)
-                if settings.smart_lods_auto_arrange:
-                    _arrange_after_previous(context, lod, previous, settings.smart_lods_spacing,
-                                            settings.smart_lods_alignment)
                 actual = _triangle_count(lod, context.evaluated_depsgraph_get())
                 if actual > target:
                     over_budget.append(f"LOD.{index}: {actual}/{target} tris")

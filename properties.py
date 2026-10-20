@@ -479,12 +479,13 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Number of rows used when Arrange Mode is Rows",
         default=2,
         min=1,
-        soft_max=10,
+        max=50,
+        soft_max=50,
     )
     batch_arrange_plane: bpy.props.EnumProperty(
         name="Plane",
         description="Plane for arranging imported objects",
-        items=(("ZX", "ZX", "Arrange along X and Z"), ("XY", "XY", "Arrange along X and Y")),
+        items=(("ZX", "ZX - Camera", "Arrange along X and Z"), ("XY", "XY - Floor", "Arrange along X and Y")),
         default="ZX",
     )
     batch_arrange_alignment: bpy.props.EnumProperty(
@@ -2043,8 +2044,8 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         default=True,
     )
     smart_lods_auto_arrange: bpy.props.BoolProperty(
-        name="Auto Arrange LODs",
-        description="Place generated LODs side by side along the world X axis",
+        name="Auto Arrange",
+        description="Arrange one LOD pack per row on the XY floor plane, aligned by object origins",
         default=True,
     )
     smart_lods_create_text: bpy.props.BoolProperty(name="Create LOD Labels", default=False)
@@ -2060,9 +2061,9 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     smart_lods_render_text: bpy.props.BoolProperty(name="Include LOD Labels", default=True)
     smart_lods_render_freestyle: bpy.props.BoolProperty(name="Enable Freestyle", default=True)
     smart_lods_spacing: bpy.props.FloatProperty(
-        name="Arrange Objects Spacing",
-        description="Gap between mesh bounds, or distance between origins when Align By is Origin",
-        default=0.1,
+        name="Spacing Y",
+        description="Spacing between LOD pack rows on the XY floor plane",
+        default=1.0,
         min=0.0,
         soft_max=10.0,
         subtype="DISTANCE",
@@ -2071,7 +2072,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     smart_lods_alignment: bpy.props.EnumProperty(name="Align By",
         items=(("BOUNDS", "Bounds", "Place successive LODs with a gap between mesh bounds"),
                ("ORIGIN", "Origin", "Align object origins along X using Spacing as the origin-to-origin distance")),
-        default="BOUNDS")
+        default="ORIGIN", options={"HIDDEN"})
     show_mesh_check_settings: bpy.props.BoolProperty(
         name="Check Mesh",
         default=False,
@@ -2431,12 +2432,12 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     )
     render_arrange_rows: bpy.props.IntProperty(
         name="Rows", description="Number of rows used in Rows mode",
-        default=2, min=1, soft_max=10,
+        default=2, min=1, max=50, soft_max=50,
     )
     render_arrange_plane: bpy.props.EnumProperty(
         name="Plane", description="Plane for arranging objects",
-        items=(("ZX", "ZX", "Arrange along X and Z"),
-               ("XY", "XY", "Arrange along X and Y")),
+        items=(("ZX", "ZX - Camera", "Arrange along X and Z"),
+               ("XY", "XY - Floor", "Arrange along X and Y")),
         default="ZX",
     )
     render_arrange_alignment: bpy.props.EnumProperty(
