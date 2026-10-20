@@ -1949,6 +1949,10 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unreal_lod_asset_name: bpy.props.StringProperty(name="Asset Name", default="Asset")
     unreal_lod_name_index: bpy.props.StringProperty(name="Name Index", default="00")
     unreal_lod_version_index: bpy.props.StringProperty(name="Version Index", default="01")
+    unreal_lod_keep_high: bpy.props.BoolProperty(name="Keep Highest as High", default=False,
+        description="Keep the highest polygon mesh separately; start LOD0 from the next mesh in every collection")
+    unreal_lod_high_suffix: bpy.props.StringProperty(name="High Suffix", default="_High",
+        description="Suffix appended to the highest polygon mesh instead of _LOD0")
     unreal_lod_prepare_materials: bpy.props.BoolProperty(name="Prepare Materials and Textures", default=True)
     unreal_lod_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
     unreal_lod_collection_color: bpy.props.EnumProperty(name="Collection Color Tag",

@@ -1,6 +1,7 @@
 """Independent Unreal LOD naming and material preparation (no Unity settings)."""
 from array import array
 from pathlib import Path
+import re
 import bpy
 from .mesh_export import _safe_path_token
 from .fab_preparation import _texture_suffix
@@ -89,10 +90,39 @@ def prepare_materials(meshes, base, copy_textures):
                 image.source = 'FILE'
 
 
+def collection_packs(context):
+    """Keep selected meshes in their own Generated.N/asset collection packs."""
+    selected = {obj for obj in context.selected_objects if obj.type == 'MESH'}
+    generated = [(collection, set(collection.all_objects) & selected)
+                 for collection in bpy.data.collections
+                 if re.fullmatch(r'Generated\.\d+', collection.name)]
+    generated = [(collection, objects) for collection, objects in generated if objects]
+    groups = {}
+    if generated:
+        assigned = set()
+        for collection, objects in generated:
+            if assigned & objects:
+                raise ValueError('A selected mesh belongs to multiple Generated collections')
+            groups[collection] = objects
+            assigned.update(objects)
+        if assigned != selected:
+            raise ValueError('Select meshes from Generated collections only, without unrelated meshes')
+    else:
+        for obj in selected:
+            owners = list(obj.users_collection)
+            if len(owners) != 1:
+                raise ValueError(f'Select an unambiguous asset collection for {obj.name}')
+            groups.setdefault(owners[0], set()).add(obj)
+    def natural(collection):
+        return tuple((0, int(part)) if part.isdigit() else (1, part.casefold())
+                     for part in re.split(r'(\d+)', collection.name))
+    return [(collection, groups[collection]) for collection in sorted(groups, key=natural)]
+
+
 class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
     bl_idname = 'object.polygroups_unreal_lod_rename'
     bl_label = 'Prepare / Rename LOD Meshes'
-    bl_description = 'Sort selected meshes by polygon count, assign LOD0 onward, and move them into one Unreal asset collection'
+    bl_description = 'Prepare one Unreal LOD asset per selected collection, increasing Version Index for each pack'
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -105,51 +135,71 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
         if not name or _safe_path_token(name) != name or not s.unreal_lod_name_index.isdigit() or not s.unreal_lod_version_index.isdigit():
             self.report({'ERROR'}, 'Enter a valid asset name and numeric Name Index / Version Index')
             return {'CANCELLED'}
-        base = f'{name}_{s.unreal_lod_name_index.zfill(2)}_{s.unreal_lod_version_index.zfill(2)}'
-        meshes = sorted((obj for obj in context.selected_objects if obj.type == 'MESH'),
-                        key=lambda obj: (-polygon_count(obj, context.evaluated_depsgraph_get()), obj.name))
-        names = [f'SM_{base}_LOD{index}' for index in range(len(meshes))]
-        for target in names:
-            existing = bpy.data.objects.get(target)
-            if existing is not None and existing not in meshes:
-                self.report({'ERROR'}, f'Object exists outside selection: {target}')
-                return {'CANCELLED'}
-        if s.unreal_lod_prepare_materials:
-            if s.unreal_lod_copy_textures and not bpy.data.filepath:
-                self.report({'ERROR'}, 'Save the blend file before copying textures')
-                return {'CANCELLED'}
-            for obj in meshes:
-                for mat in obj.data.materials:
-                    if mat:
-                        for node in image_nodes(mat.node_tree):
-                            if _texture_suffix(node.image, node) not in {'AlphaMap', 'MergeMask', 'ArtifactMask'} and (
-                                    node.image.source not in {'FILE', 'GENERATED'} or not len(node.image.pixels)):
-                                self.report({'ERROR'}, f'Texture has no supported pixels: {node.image.name}')
-                                return {'CANCELLED'}
-        collection = bpy.data.collections.get(base)
-        if collection is None:
-            collection = bpy.data.collections.new(base)
-        if base not in context.scene.collection.children:
-            context.scene.collection.children.link(collection)
-        collection.color_tag = s.unreal_lod_collection_color
-        for obj in meshes:
+        suffix = s.unreal_lod_high_suffix.strip()
+        if s.unreal_lod_keep_high and (not suffix or _safe_path_token('Mesh' + suffix) != 'Mesh' + suffix
+                                      or re.fullmatch(r'_LOD[0-9]+', suffix, re.IGNORECASE)):
+            self.report({'ERROR'}, 'Enter a valid High suffix distinct from _LODN')
+            return {'CANCELLED'}
+        try:
+            groups = collection_packs(context)
+            plans = []
+            depsgraph = context.evaluated_depsgraph_get()
+            width = max(2, len(s.unreal_lod_version_index))
+            all_selected = {obj for _, meshes in groups for obj in meshes}
+            for offset, (source_collection, objects) in enumerate(groups):
+                version = str(int(s.unreal_lod_version_index) + offset).zfill(width)
+                base = f'{name}_{s.unreal_lod_name_index.zfill(2)}_{version}'
+                meshes = sorted(objects, key=lambda obj: (-polygon_count(obj, depsgraph),
+                    obj.get('unreal_lod_index', 0), obj.name))
+                names = [f'SM_{base}' + (suffix if s.unreal_lod_keep_high and index == 0
+                         else f'_LOD{index - int(s.unreal_lod_keep_high)}') for index in range(len(meshes))]
+                for target in names:
+                    existing = bpy.data.objects.get(target)
+                    if existing is not None and existing not in all_selected:
+                        raise ValueError(f'Object exists outside selection: {target}')
+                collection = bpy.data.collections.get(base)
+                if collection and set(collection.all_objects) - all_selected:
+                    raise ValueError(f'Collection contains unselected objects: {base}')
+                plans.append((base, meshes, names))
+            if s.unreal_lod_prepare_materials:
+                if s.unreal_lod_copy_textures and not bpy.data.filepath:
+                    raise ValueError('Save the blend file before copying textures')
+                for obj in all_selected:
+                    for mat in obj.data.materials:
+                        if mat:
+                            for node in image_nodes(mat.node_tree):
+                                if _texture_suffix(node.image, node) not in {'AlphaMap', 'MergeMask', 'ArtifactMask'} and (
+                                        node.image.source not in {'FILE', 'GENERATED'} or not len(node.image.pixels)):
+                                    raise ValueError(f'Texture has no supported pixels: {node.image.name}')
+        except (ValueError, RuntimeError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        # Resolve all name swaps only after every pack has passed preflight.
+        for obj in all_selected:
             if obj.data.users > 1:
                 obj.data = obj.data.copy()
             obj.name = '__Unreal_LOD_Rename__'
-        for index, (obj, name) in enumerate(zip(meshes, names)):
-            obj.name = obj.data.name = name
-            obj['unreal_lod_asset'] = base
-            obj['unreal_lod_index'] = index
-            if obj.name not in collection.objects:
-                collection.objects.link(obj)
-            for old in list(obj.users_collection):
-                if old != collection:
-                    old.objects.unlink(obj)
-        try:
-            if s.unreal_lod_prepare_materials:
-                prepare_materials(meshes, base, s.unreal_lod_copy_textures)
-        except (RuntimeError, ValueError, OSError) as error:
-            self.report({'ERROR'}, f'Unreal material preparation failed: {error}')
-            return {'FINISHED'}  # Keep an undo entry for already applied naming.
-        self.report({'INFO'}, f'Prepared {len(meshes)} Unreal LOD meshes in {base}')
+        for base, meshes, names in plans:
+            collection = bpy.data.collections.get(base)
+            if collection is None:
+                collection = bpy.data.collections.new(base)
+            if base not in context.scene.collection.children:
+                context.scene.collection.children.link(collection)
+            collection.color_tag = s.unreal_lod_collection_color
+            for index, (obj, target) in enumerate(zip(meshes, names)):
+                obj.name = obj.data.name = target
+                obj['unreal_lod_asset'] = base
+                obj['unreal_lod_index'] = index - int(s.unreal_lod_keep_high)
+                if obj.name not in collection.objects:
+                    collection.objects.link(obj)
+                for old in list(obj.users_collection):
+                    if old != collection:
+                        old.objects.unlink(obj)
+            try:
+                if s.unreal_lod_prepare_materials:
+                    prepare_materials(meshes, base, s.unreal_lod_copy_textures)
+            except (RuntimeError, ValueError, OSError) as error:
+                self.report({'ERROR'}, f'Unreal material preparation failed for {base}: {error}')
+                return {'FINISHED'}  # Keep an undo entry for already applied naming.
+        self.report({'INFO'}, f'Prepared {len(plans)} Unreal asset pack(s), {len(all_selected)} meshes')
         return {'FINISHED'}

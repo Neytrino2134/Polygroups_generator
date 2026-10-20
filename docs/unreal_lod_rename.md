@@ -7,6 +7,15 @@ FAB Rename now contains two independently collapsible groups:
   material/texture preparation, texture copying and collection color settings.
 
 Select the original and its LOD meshes and run Prepare / Rename LOD Meshes.
+Multiple selected `Generated.N` collections are processed independently in
+numeric collection order. Only selected meshes are included. For example,
+starting with Name Index 19 and Version Index 01 yields `Asset_19_01`,
+`Asset_19_02`, etc. Name Index remains fixed; the starting Version Index field
+is retained so the same selection can be processed again without new indices.
+Already renamed packs are grouped by their own asset collections on reruns.
+Ambiguous collection membership and mixtures of Generated packs with unrelated
+selected meshes are rejected. Every pack is preflighted before any renaming.
+
 Evaluated polygon counts determine descending order; ties use object names.
 The most detailed mesh becomes LOD0. Geometry and transforms are preserved.
 
@@ -14,6 +23,11 @@ For Tree_Tropic / 19 / 01, the collection is `Tree_Tropic_19_01` and contains
 `SM_Tree_Tropic_19_01_LOD0`, `SM_Tree_Tropic_19_01_LOD1`, etc. Mesh datablocks
 receive the same names. Selected meshes are moved out of their old collections;
 unselected objects and old collection datablocks are retained.
+
+With Keep Highest as High enabled, the most detailed mesh receives the
+editable High Suffix (default `_High`), and the remaining meshes start at
+`LOD0`. For example: `SM_Tree_Tropic_19_01_High`,
+`SM_Tree_Tropic_19_01_LOD0`, `SM_Tree_Tropic_19_01_LOD1`.
 
 Optional material preparation preserves material slots and shared-material
 relationships while isolating unselected assets. Names use `M_<asset>` and
@@ -25,4 +39,5 @@ The implementation lives in unreal_lod_rename.py and does not import Unity
 preparation or use Unity settings. Unity and legacy FAB names are unchanged.
 
 Blender 5.2 validation: test_unreal_lod_rename_blender.py,
-test_fab_all_generated.py, and test_unity_export_workflow_blender.py passed.
+test_unreal_lod_batch_blender.py, test_fab_all_generated.py, and
+test_unity_export_workflow_blender.py passed.

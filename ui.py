@@ -3774,6 +3774,10 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             unreal.prop(settings, "unreal_lod_asset_name")
             unreal.prop(settings, "unreal_lod_name_index")
             unreal.prop(settings, "unreal_lod_version_index")
+            unreal.prop(settings, "unreal_lod_keep_high")
+            high_suffix = unreal.row()
+            high_suffix.enabled = settings.unreal_lod_keep_high
+            high_suffix.prop(settings, "unreal_lod_high_suffix")
             unreal.prop(settings, "unreal_lod_collection_color")
             unreal.prop(settings, "unreal_lod_prepare_materials")
             row = unreal.row()
