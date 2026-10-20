@@ -57,10 +57,12 @@ def export_lods(context, settings, report):
             objects.sort(key=lambda obj: -1 if records[obj]['role'] == 'HIGH' else records[obj]['lod_index'])
             for format in formats:
                 folder = root / _safe_path_token(base) / format
-                if format == 'GLTF' and settings.unreal_gltf_mode == 'COMBINED':
+                combine = ((format == 'GLTF' and settings.unreal_gltf_mode == 'COMBINED')
+                           or (format == 'GLB' and settings.unreal_glb_mode == 'COMBINED'))
+                if combine:
                     lods = [obj for obj in objects if records[obj]['role'] == 'LOD']
                     if lods:
-                        tasks.append((base, lods, folder / (_safe_path_token(base) + '.gltf'), format, True))
+                        tasks.append((base, lods, folder / (_safe_path_token(base) + '.' + format.lower()), format, True))
                     objects_to_write = [obj for obj in objects if records[obj]['role'] == 'HIGH']
                 else:
                     objects_to_write = objects

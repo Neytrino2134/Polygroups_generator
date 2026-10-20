@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import json
+import struct
 import sys
 import bpy
 import addon_utils
@@ -18,6 +19,7 @@ s = bpy.context.scene.polygroups_mesh_finalization_settings
 s.mesh_export_sort = 'LODS'
 s.mesh_export_fbx = s.mesh_export_glb = s.mesh_export_gltf = True
 s.mesh_export_info_format = 'JSON'
+assert s.unreal_glb_mode == 'COMBINED'
 meshes = []
 with TemporaryDirectory() as temp:
     root = Path(temp)
@@ -65,6 +67,16 @@ with TemporaryDirectory() as temp:
         assert len(combined['nodes']) == 2
         assert all('LOD' in entry['name'] for entry in combined['nodes'])
         assert all('ArtifactMask' not in entry.get('name', '') for entry in combined.get('images', []))
+        glb = (output / base / 'GLB' / (base + '.glb')).read_bytes()
+        assert glb[:4] == b'glTF'
+        length, kind = struct.unpack_from('<II', glb, 12)
+        assert kind == 0x4e4f534a
+        packed = json.loads(glb[20:20 + length])
+        assert len(packed['nodes']) == 2
+        assert all('LOD' in item['name'] for item in packed['nodes'])
+        assert all('uri' not in item for item in packed.get('images', []))
+        assert all('uri' not in item for item in packed.get('buffers', []))
+        assert (output / base / 'GLB' / f'SM_{base}_Original.glb').is_file()
         assert (output / base / 'GLTF' / (f'SM_{base}_Original.gltf')).is_file()
         entries = [item for item in report['meshes'] if item['asset'] == base]
         assert {item['lod'] for item in entries} == {'HIGH', 'LOD0', 'LOD1'}
@@ -72,6 +84,7 @@ with TemporaryDirectory() as temp:
         assert all((output / path).is_file() for item in entries for path in item['files'].values())
         lods = [item for item in entries if item['role'] == 'LOD']
         assert lods[0]['files']['GLTF'] == lods[1]['files']['GLTF']
+        assert lods[0]['files']['GLB'] == lods[1]['files']['GLB']
         local = json.loads((output / base / 'MeshInfo.json').read_text())
         assert all((output / base / path).is_file() for item in local['meshes'] for path in item['files'].values())
     assert all(obj.matrix_world == matrices[obj] for obj in meshes)
@@ -80,23 +93,28 @@ with TemporaryDirectory() as temp:
     assert shader.inputs['Alpha'].is_linked
     output.rename(root / 'CombinedOutputs')
     s.unreal_gltf_mode = 'SHARED'
-    s.mesh_export_fbx = s.mesh_export_glb = False
+    s.unreal_glb_mode = 'SEPARATE'
+    s.mesh_export_fbx = False
     assert bpy.ops.object.polygroups_export_selected_meshes() == {'FINISHED'}
     uris = []
     for index in (0, 1):
         path = output / 'Tree_19_01' / 'GLTF' / f'SM_Tree_19_01_LOD{index}.gltf'
         document = json.loads(path.read_text())
         assert len(document['nodes']) == 1
+        glb_path = output / 'Tree_19_01' / 'GLB' / f'SM_Tree_19_01_LOD{index}.glb'
+        raw = glb_path.read_bytes()
+        length = struct.unpack_from('<I', raw, 12)[0]
+        assert len(json.loads(raw[20:20 + length])['nodes']) == 1
         uri = document['images'][0]['uri']
         assert uri.startswith('Textures/') and (path.parent / uri).is_file()
         uris.append(uri)
     assert uris[0] == uris[1]
     report = json.loads((output / 'MeshInfo.json').read_text())
     assert report['totals']['meshes'] == 6
-    assert all(set(item['files']) == {'GLTF'} for item in report['meshes'])
+    assert all(set(item['files']) == {'GLTF', 'GLB'} for item in report['meshes'])
     model = capture(bpy.context, ui.SECTION_PANEL_CLASSES.index(ui.VIEW3D_PT_polygroups_mesh_finalization))
     assert not model.errors, model.errors
-    for name in ('mesh_export_fbx', 'mesh_export_glb', 'mesh_export_gltf', 'unreal_gltf_mode'):
+    for name in ('mesh_export_fbx', 'mesh_export_glb', 'mesh_export_gltf', 'unreal_gltf_mode', 'unreal_glb_mode'):
         assert any(b[0] == 'property' and b[2] == name for b in model.bindings.values())
     from polygroups_generator.operators import unreal_lod_export
     with patch.object(unreal_lod_export, '_export_gltf_asset', side_effect=RuntimeError('Injected GLTF failure')):
@@ -118,6 +136,7 @@ with TemporaryDirectory() as temp:
         obj.select_set(True)
     s.mesh_export_sort = 'VARIANT'
     s.mesh_export_fbx = True
+    s.mesh_export_glb = False
     assert bpy.ops.object.polygroups_export_selected_meshes() == {'FINISHED'}
     legacy_info = json.loads((output / 'MeshInfo.json').read_text())
     assert legacy_info['totals']['meshes'] == 3

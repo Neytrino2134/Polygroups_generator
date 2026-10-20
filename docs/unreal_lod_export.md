@@ -27,6 +27,16 @@ GLTF modes:
 - Separate LODs / Shared Textures: one GLTF/BIN pair per mesh, referencing
   the common GLTF/Textures directory.
 
+GLB Mode is available when GLB and Sort By = LODs are enabled:
+
+- All LODs in One GLB (default): `<asset>/GLB/<asset>.glb` includes all
+  selected LODs and embeds their materials/textures. Retained High is separate.
+- Separate LODs: one self-contained GLB per selected mesh, as before.
+
+JSON maps each LOD's GLB entry to the shared path in combined mode. Mesh totals
+are unchanged. The regression test parses the GLB JSON chunk to verify that
+multiple LOD nodes and embedded buffers/images are present in the same file.
+
 JSON for LOD export has schema_version 2, preserves meshes and totals, and adds
 asset groups. Each mesh includes asset, role, lod_index, lod, collections,
 vertices, triangles and files mapped by format. Combined GLTF records share
