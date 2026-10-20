@@ -191,7 +191,7 @@ def _export_at_world_origin(obj, view_layer, companion=None):
         view_layer.update()
 
 
-def _write_export_mesh_info(root_dir, export_format, entries):
+def _write_export_mesh_info(root_dir, export_format, entries, engine=None):
     if export_format == "NONE":
         return
     totals = {
@@ -203,6 +203,8 @@ def _write_export_mesh_info(root_dir, export_format, entries):
         filepath = os.path.join(root_dir, "MeshInfo.json")
         with open(filepath, "w", encoding="utf-8") as output:
             document = {"meshes": entries, "totals": totals}
+            if engine is not None:
+                document['Engine'] = engine
             if any('asset' in item for item in entries):
                 assets = {}
                 for item in entries:
@@ -567,7 +569,7 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
                         entry['files'][format] = os.path.relpath(filepath, root_dir).replace(os.sep, '/')
                 else:
                     raise RuntimeError(f"FAB export failed: {obj.name}")
-            _write_export_mesh_info(root_dir, settings.mesh_export_info_format, mesh_info)
+            _write_export_mesh_info(root_dir, settings.mesh_export_info_format, mesh_info, engine='Unreal')
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}

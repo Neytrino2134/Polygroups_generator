@@ -122,9 +122,9 @@ def export_lods(context, settings, report):
                                    for format, path in record['files'].items()}
                 record['file'] = Path(record['file']).relative_to(_safe_path_token(base)).as_posix()
                 local_entries.append(record)
-            _write_export_mesh_info(str(asset_folder), settings.mesh_export_info_format, local_entries)
+            _write_export_mesh_info(str(asset_folder), settings.mesh_export_info_format, local_entries, engine='Unreal')
         _write_export_mesh_info(str(root), settings.mesh_export_info_format,
-                                [records[obj] for base in sorted(groups, key=str.casefold) for obj in groups[base]])
+                                [records[obj] for base in sorted(groups, key=str.casefold) for obj in groups[base]], engine='Unreal')
     except (ValueError, RuntimeError, OSError) as error:
         report({'ERROR'}, str(error))
         return {'CANCELLED'}

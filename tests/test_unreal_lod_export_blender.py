@@ -60,6 +60,7 @@ with TemporaryDirectory() as temp:
     output = root / '!Unreal'
     report = json.loads((output / 'MeshInfo.json').read_text())
     assert report['schema_version'] == 2 and len(report['assets']) == 2
+    assert report['Engine'] == 'Unreal'
     assert report['totals'] == dict(meshes=6, vertices=48, triangles=72)
     for number in (1, 2):
         base = f'Tree_19_{number:02d}'
@@ -86,6 +87,7 @@ with TemporaryDirectory() as temp:
         assert lods[0]['files']['GLTF'] == lods[1]['files']['GLTF']
         assert lods[0]['files']['GLB'] == lods[1]['files']['GLB']
         local = json.loads((output / base / 'MeshInfo.json').read_text())
+        assert local['Engine'] == 'Unreal'
         assert all((output / base / path).is_file() for item in local['meshes'] for path in item['files'].values())
     assert all(obj.matrix_world == matrices[obj] for obj in meshes)
     assert set(bpy.context.selected_objects) == set(meshes)
@@ -139,6 +141,7 @@ with TemporaryDirectory() as temp:
     s.mesh_export_glb = False
     assert bpy.ops.object.polygroups_export_selected_meshes() == {'FINISHED'}
     legacy_info = json.loads((output / 'MeshInfo.json').read_text())
+    assert legacy_info['Engine'] == 'Unreal'
     assert legacy_info['totals']['meshes'] == 3
     assert all(set(item['files']) == {'FBX', 'GLTF'} for item in legacy_info['meshes'])
     s.mesh_export_fbx = s.mesh_export_gltf = False

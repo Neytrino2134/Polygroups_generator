@@ -76,6 +76,7 @@ with TemporaryDirectory() as directory:
             assert len(set(references))==1
             assert len(list((folder/'Textures').iterdir()))==1
         info=json.loads((folder/'MeshInfo.json').read_text())
+        assert info['Engine'] == 'Unity'
         assert info['totals']['meshes']==3
         assert {entry['lod'] for entry in info['meshes']}=={'LOD0','LOD1','LOD2'}
         assert all((folder/entry['file']).is_file() for entry in info['meshes'])

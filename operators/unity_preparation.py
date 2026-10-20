@@ -873,7 +873,7 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                                 "triangles": triangles,
                             })
                     mesh_info.sort(key=lambda entry: int(entry["lod"][3:]))
-                    _write_export_mesh_info(folder, settings.unity_export_info_format, mesh_info)
+                    _write_export_mesh_info(folder, settings.unity_export_info_format, mesh_info, engine='Unity')
                 if settings.unity_export_all_renders:
                     rs = context.scene.polygroups_render_settings
                     render_lods = [obj for obj in context.scene.objects if obj.type == 'MESH' and obj.get('unity_prepared') and
@@ -1115,7 +1115,7 @@ class OBJECT_OT_polygroups_render_unity_assets(bpy.types.Operator):
                             'triangles': triangles,
                         })
             if settings.unity_render_mesh_info:
-                _write_export_mesh_info(directory, 'JSON', mesh_info)
+                _write_export_mesh_info(directory, 'JSON', mesh_info, engine='Unity')
             return {'FINISHED'}
         except (RuntimeError, ValueError, OSError) as error:
             self.report({'ERROR'}, f'Unity render failed: {error}')
