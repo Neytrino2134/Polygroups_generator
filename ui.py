@@ -4059,6 +4059,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             options_row = column.row(align=True)
             options_row.prop(settings, "render_low", text=t(context, "render_low"))
             options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
+            options_row.prop(settings, "render_high", text="HIGH")
+            column.prop(settings, "render_lods", text="LODs")
             column.prop(settings, "transparent_background", text=t(context, "render_transparent_background"))
             scene_row = column.row(align=True)
             scene_row.enabled = settings.transparent_background

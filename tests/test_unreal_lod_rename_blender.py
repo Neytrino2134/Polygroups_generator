@@ -45,7 +45,7 @@ with TemporaryDirectory() as temp:
     bpy.ops.wm.save_as_mainfile(filepath=str(Path(temp) / 'Test.blend'))
     assert bpy.ops.object.polygroups_unreal_lod_rename() == {'FINISHED'}
     base = 'Tree_Tropic_19_01'
-    collection = bpy.data.collections[base]
+    collection = bpy.data.collections[base + '_Collection']
     assert set(collection.objects) == set(meshes)
     for index, obj in enumerate(meshes):
         assert obj.name == obj.data.name == f'SM_{base}_LOD{index}'
@@ -59,7 +59,10 @@ with TemporaryDirectory() as temp:
     assert prepared.name == 'T_' + base + '_BaseColor'
     assert prepared.pixels[1] > .7 and Path(prepared.filepath_raw).is_file()
     before = tuple(set(ids) for ids in (bpy.data.objects, bpy.data.materials, bpy.data.images, bpy.data.collections))
+    # Migrate an asset prepared before render-compatible collection suffixes.
+    collection.name = base
     assert bpy.ops.object.polygroups_unreal_lod_rename() == {'FINISHED'}
+    assert collection.name == base + '_Collection'
     assert tuple(set(ids) for ids in (bpy.data.objects, bpy.data.materials, bpy.data.images, bpy.data.collections)) == before
     assert unity_before == (s.unity_asset_name, s.unity_name_index, s.unity_asset_index)
     assert fab_before == (s.fab_asset_name, s.fab_asset_index)

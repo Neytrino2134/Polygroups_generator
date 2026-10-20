@@ -17,7 +17,7 @@ s = bpy.context.scene.polygroups_mesh_finalization_settings
 s.unreal_lod_asset_name = 'Rock'
 s.unreal_lod_name_index = '19'
 s.unreal_lod_version_index = '09'
-assert s.unreal_lod_high_suffix == '_High' and not s.unreal_lod_keep_high
+assert s.unreal_lod_high_suffix == '_HIGH' and not s.unreal_lod_keep_high
 mat = bpy.data.materials.new('SharedInput')
 mat.use_nodes = True
 image = bpy.data.images.new('Input_BaseColor', width=4, height=4)
@@ -51,7 +51,7 @@ with TemporaryDirectory() as temp:
     assert bpy.ops.object.polygroups_unreal_lod_rename() == {'FINISHED'}
     for number, version in ((1, '09'), (2, '10'), (10, '11')):
         base = 'Rock_19_' + version
-        assert set(bpy.data.collections[base].objects) == set(packs[number])
+        assert set(bpy.data.collections[base + '_Collection'].objects) == set(packs[number])
         assert [obj.name for obj in packs[number]] == [f'SM_{base}_LOD{i}' for i in range(3)]
         assert not bpy.data.collections[f'Generated.{number:03d}'].objects
     s.unreal_lod_keep_high = True

@@ -19,15 +19,22 @@ selected meshes are rejected. Every pack is preflighted before any renaming.
 Evaluated polygon counts determine descending order; ties use object names.
 The most detailed mesh becomes LOD0. Geometry and transforms are preserved.
 
-For Tree_Tropic / 19 / 01, the collection is `Tree_Tropic_19_01` and contains
+For Tree_Tropic / 19 / 01, the collection is `Tree_Tropic_19_01_Collection` and contains
 `SM_Tree_Tropic_19_01_LOD0`, `SM_Tree_Tropic_19_01_LOD1`, etc. Mesh datablocks
 receive the same names. Selected meshes are moved out of their old collections;
 unselected objects and old collection datablocks are retained.
 
 With Keep Highest as High enabled, the most detailed mesh receives the
-editable High Suffix (default `_High`), and the remaining meshes start at
-`LOD0`. For example: `SM_Tree_Tropic_19_01_High`,
+editable High Suffix (default `_HIGH`), and the remaining meshes start at
+`LOD0`. For example: `SM_Tree_Tropic_19_01_HIGH`,
 `SM_Tree_Tropic_19_01_LOD0`, `SM_Tree_Tropic_19_01_LOD1`.
+
+Render > Quality and Output includes independent LOW, MID, HIGH filters and
+a multiple-choice LODs menu (LOD0 through LOD5). Scan Queue and Start Render
+use these filters for every asset collection. HIGH also accepts `_High` and
+custom High suffixes tagged by Unreal LOD Rename. Selected variants use the
+same Multiview, Hero, Freestyle and transparent-output settings as LOW/MID.
+Existing selected-only Unreal collections are migrated to `_Collection` on rename.
 
 Optional material preparation preserves material slots and shared-material
 relationships while isolating unselected assets. Names use `M_<asset>` and

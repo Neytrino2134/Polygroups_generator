@@ -80,7 +80,7 @@ class RenderQueueCursor(RemeshCursor):
 
 
 ASSET_COLLECTION_SUFFIX = "_Collection"
-ASSET_RENDER_SUFFIXES = ("LOW", "MID")
+ASSET_RENDER_SUFFIXES = ("LOW", "MID", "HIGH", "LOD0", "LOD1", "LOD2", "LOD3", "LOD4", "LOD5")
 BLENDER_NUMERIC_SUFFIX_RE = re.compile(r"\.\d{3}$")
 MULTIVIEW_PROP = "polygroups_render_multiview"
 MULTIVIEW_SOURCE_PROP = "polygroups_multiview_source"
@@ -189,17 +189,29 @@ def _find_asset_objects(collection, asset_name, settings):
         include_suffixes.add("LOW")
     if settings.render_mid:
         include_suffixes.add("MID")
+    if settings.render_high:
+        include_suffixes.add("HIGH")
+    include_suffixes.update(settings.render_lods)
 
     objects_by_suffix = {}
     for obj in _collection_objects_recursive(collection):
         if obj.type != "MESH" or obj.get(PLANE_TAG):
             continue
-        suffix = _render_suffix_from_name(obj.name)
+        if obj.get(MULTIVIEW_PROP):
+            continue
+        suffix = _render_object_suffix(obj)
         if suffix not in include_suffixes:
             continue
         objects_by_suffix.setdefault(suffix, obj)
 
     return [objects_by_suffix[suffix] for suffix in ASSET_RENDER_SUFFIXES if suffix in objects_by_suffix]
+
+
+def _render_object_suffix(obj):
+    suffix = _render_suffix_from_name(obj.name)
+    if not suffix and obj.get('unreal_lod_asset') and obj.get('unreal_lod_index') == -1:
+        return 'HIGH'  # User-editable High suffix from Unreal LOD Rename.
+    return suffix
 
 
 def _scan_render_queue(settings):
@@ -224,7 +236,7 @@ def _scan_render_queue(settings):
         collection_index += 1
         asset_directory = os.path.join(base_directory, f"Collection_{collection_index:02d}")
         for obj in objects:
-            suffix = _render_suffix_from_name(obj.name)
+            suffix = _render_object_suffix(obj)
             use_multiview = settings.multiview_render or bool(_prepared_multiview_views(obj))
             modes = ["Multiview"] if use_multiview else [""]
             if use_multiview and settings.multiview_render_hero:
@@ -316,7 +328,7 @@ def _queue_objects(queue):
 def _add_freestyle_candidate(objects, seen, obj):
     if obj is None or obj.type != "MESH" or obj.name in seen:
         return
-    if not _render_suffix_from_name(obj.name):
+    if not _render_object_suffix(obj):
         return
     seen.add(obj.name)
     objects.append(obj)
@@ -1291,7 +1303,7 @@ def _render_current_job_steps(context, settings, job):
 class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
     bl_idname = "object.polygroups_scan_render_queue"
     bl_label = "Scan Render Queue"
-    bl_description = "Scan *_Collection asset collections and prepare LOW/MID render jobs"
+    bl_description = "Scan *_Collection asset collections and prepare selected LOW/MID/HIGH/LOD render jobs"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -1361,7 +1373,7 @@ class OBJECT_OT_polygroups_reset_render_state(bpy.types.Operator):
 class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
     bl_idname = "object.polygroups_start_render_queue"
     bl_label = "Start Render Queue"
-    bl_description = "Render queued LOW/MID asset previews one job at a time"
+    bl_description = "Render queued LOW/MID/HIGH/LOD asset previews one job at a time"
     bl_options = {"REGISTER", "UNDO"}
 
     continue_from_current: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
@@ -1396,7 +1408,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
                 _store_queue(settings, queue, collection_count)
 
         if settings.total_count == 0:
-            settings.status = "Render queue is empty: no LOW/MID meshes in *_Collection assets"
+            settings.status = "Render queue is empty: no selected LOW/MID/HIGH/LOD meshes in *_Collection assets"
             self.report({"WARNING"}, settings.status)
             return {"CANCELLED"}
 
@@ -1587,7 +1599,7 @@ class OBJECT_OT_polygroups_clear_multiview_render(bpy.types.Operator):
 class OBJECT_OT_polygroups_mark_freestyle_edges(bpy.types.Operator):
     bl_idname = "object.polygroups_mark_freestyle_edges"
     bl_label = "Mark Freestyle Edges"
-    bl_description = "Mark all LOW/MID asset mesh edges for Freestyle rendering"
+    bl_description = "Mark all LOW/MID/HIGH/LOD asset mesh edges for Freestyle rendering"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -1603,7 +1615,7 @@ class OBJECT_OT_polygroups_mark_freestyle_edges(bpy.types.Operator):
 class OBJECT_OT_polygroups_clear_freestyle_edges(bpy.types.Operator):
     bl_idname = "object.polygroups_clear_freestyle_edges"
     bl_label = "Clear Freestyle"
-    bl_description = "Clear Freestyle edge marks from LOW/MID asset meshes"
+    bl_description = "Clear Freestyle edge marks from LOW/MID/HIGH/LOD asset meshes"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):

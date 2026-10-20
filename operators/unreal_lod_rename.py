@@ -157,7 +157,7 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
                     existing = bpy.data.objects.get(target)
                     if existing is not None and existing not in all_selected:
                         raise ValueError(f'Object exists outside selection: {target}')
-                collection = bpy.data.collections.get(base)
+                collection = bpy.data.collections.get(base + "_Collection")
                 if collection and set(collection.all_objects) - all_selected:
                     raise ValueError(f'Collection contains unselected objects: {base}')
                 plans.append((base, meshes, names))
@@ -180,12 +180,18 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
                 obj.data = obj.data.copy()
             obj.name = '__Unreal_LOD_Rename__'
         for base, meshes, names in plans:
-            collection = bpy.data.collections.get(base)
+            collection = bpy.data.collections.get(base + "_Collection")
             if collection is None:
-                collection = bpy.data.collections.new(base)
-            if base not in context.scene.collection.children:
+                legacy = bpy.data.collections.get(base)
+                if legacy is not None and set(legacy.all_objects).issubset(set(meshes)):
+                    collection = legacy
+                    collection.name = base + '_Collection'
+                else:
+                    collection = bpy.data.collections.new(base + '_Collection')
+            if collection.name not in context.scene.collection.children:
                 context.scene.collection.children.link(collection)
             collection.color_tag = s.unreal_lod_collection_color
+            collection['unreal_lod_asset'] = base
             for index, (obj, target) in enumerate(zip(meshes, names)):
                 obj.name = obj.data.name = target
                 obj['unreal_lod_asset'] = base

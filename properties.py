@@ -1951,7 +1951,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unreal_lod_version_index: bpy.props.StringProperty(name="Version Index", default="01")
     unreal_lod_keep_high: bpy.props.BoolProperty(name="Keep Highest as High", default=False,
         description="Keep the highest polygon mesh separately; start LOD0 from the next mesh in every collection")
-    unreal_lod_high_suffix: bpy.props.StringProperty(name="High Suffix", default="_High",
+    unreal_lod_high_suffix: bpy.props.StringProperty(name="High Suffix", default="_HIGH",
         description="Suffix appended to the highest polygon mesh instead of _LOD0")
     unreal_lod_prepare_materials: bpy.props.BoolProperty(name="Prepare Materials and Textures", default=True)
     unreal_lod_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
@@ -2534,6 +2534,10 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         description="Include *_LOW objects in the render queue",
         default=True,
     )
+    render_high: bpy.props.BoolProperty(name="HIGH", description="Render SM_*_HIGH meshes", default=False)
+    render_lods: bpy.props.EnumProperty(name="LODs", description="Choose LOD suffixes to include in the render queue",
+        items=[(f'LOD{i}', f'LOD{i}', f'Render SM_*_LOD{i} meshes', 1 << i) for i in range(6)],
+        options={'ENUM_FLAG'}, default=set())
     render_mid: bpy.props.BoolProperty(
         name="Render MID",
         description="Include *_MID objects in the render queue",
