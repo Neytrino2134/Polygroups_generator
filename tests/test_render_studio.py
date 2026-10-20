@@ -50,8 +50,27 @@ assert tuple(scene.camera.location) == (0, -3.5, 0.5)
 assert settings.studio_width == 20
 assert abs(settings.studio_backdrop.dimensions.x - 20) < 1e-5
 assert tuple(settings.studio_camera_aim.location) == (0, 0, 0.5)
-assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 10
+assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 12
 assert settings.studio_light_position is not None
+for role, children in (
+        ('camera', (settings.studio_camera, settings.studio_camera_aim)),
+        ('scene', (settings.studio_backdrop,))):
+    root = getattr(settings, 'studio_' + role + '_position')
+    assert root.type == 'EMPTY' and root.empty_display_type == 'PLAIN_AXES'
+    assert all(obj.parent == root for obj in children)
+    before = [obj.matrix_world.copy() for obj in children]
+    root.location = (2, 3, 4)
+    bpy.context.view_layer.update()
+    assert all((obj.matrix_world.translation - matrix.translation - Vector((2, 3, 4))).length < 1e-5
+               for obj, matrix in zip(children, before))
+    counts_before = len(bpy.data.objects)
+    assert bpy.ops.render.polygroups_prepare_studio() == {'FINISHED'}
+    assert len(bpy.data.objects) == counts_before and tuple(root.location) == (2, 3, 4)
+    assert bpy.ops.render.polygroups_reset_studio(scope=role.upper()) == {'FINISHED'}
+    assert tuple(root.location) == (0, 0, 0)
+    assert all(obj.parent == root for obj in children)
+    assert all((obj.matrix_world.translation - matrix.translation).length < 1e-5
+               for obj, matrix in zip(children, before))
 assert all(obj.parent == settings.studio_light_position for obj in bpy.context.scene.objects if obj.type == "LIGHT")
 assert {collection.name for collection in scene.collection.children} >= {
     'Scene_Studio', 'Camera_Studio', 'Light_Studio'}
@@ -256,5 +275,5 @@ assert all(getattr(settings, 'studio_' + role) is None for role in (
     'backdrop', 'camera', 'camera_aim', 'key', 'key_aim', 'fill', 'fill_aim', 'rim', 'rim_aim'))
 assert bpy.ops.render.polygroups_delete_studio_scenes() == {'FINISHED'}
 assert bpy.ops.render.polygroups_prepare_studio() == {'FINISHED'}
-assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 10
+assert len([obj for obj in bpy.data.objects if obj.get(TAG)]) == 12
 print('studio rig test passed')

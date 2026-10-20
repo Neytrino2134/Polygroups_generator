@@ -2357,6 +2357,8 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
     studio_camera: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_camera_aim: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_light_position: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_camera_position: bpy.props.PointerProperty(type=bpy.types.Object)
+    studio_scene_position: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_key: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_key_aim: bpy.props.PointerProperty(type=bpy.types.Object)
     studio_fill: bpy.props.PointerProperty(type=bpy.types.Object)

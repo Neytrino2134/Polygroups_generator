@@ -4107,6 +4107,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
             column.separator()
             column.label(text=t(context, "studio_camera"), icon="CAMERA_DATA")
+            if settings.studio_camera_position is not None:
+                column.prop(settings.studio_camera_position, "location", text="Camera Position")
             column.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_camera"), icon="LOOP_BACK").scope = "CAMERA"
             camera = settings.studio_camera
             if camera is not None and camera.type == "CAMERA":
@@ -4150,6 +4152,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
             column.separator()
             column.label(text=t(context, "studio_scene"), icon="MESH_PLANE")
+            if settings.studio_scene_position is not None:
+                column.prop(settings.studio_scene_position, "location", text="Scene Position")
             column.operator("render.polygroups_reset_studio", text=t(context, "studio_reset_scene"), icon="LOOP_BACK").scope = "SCENE"
             for prop in ("color", "width", "depth", "height", "distance", "radius"):
                 column.prop(settings, "studio_" + prop, text=t(context, "studio_" + prop))

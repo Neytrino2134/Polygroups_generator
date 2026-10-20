@@ -243,12 +243,33 @@ def prepare_studio(context, scope='ALL'):
                                'Studio ' + label + ' Aim', 'EMPTY', collection, AIM_POSITION)
         aim_constraint(light, target)
     context.view_layer.update()
+    if scope in ('ALL', 'SCENE'):
+        ensure_position_control(context, 'scene', (settings.studio_backdrop,))
+    if scope in ('ALL', 'CAMERA'):
+        ensure_position_control(context, 'camera', (settings.studio_camera, settings.studio_camera_aim))
     if scope in ('ALL', 'LIGHTS', 'KEY', 'FILL', 'RIM'):
         ensure_light_position(context)
     studio_collections_first(context)
     if any(collection not in previous_roots for collection in scene.collection.children):
         arrange_studio_outliners(context)
 
+
+
+def ensure_position_control(context, role, objects):
+    settings = context.scene.polygroups_render_settings
+    collection = studio_collection(context.scene, role)
+    root = ensure_object(settings, context.scene, 'studio_' + role + '_position', role + '_position',
+                         role.title() + ' Position', 'EMPTY', collection, (0, 0, 0))
+    root.empty_display_type = 'PLAIN_AXES'
+    context.view_layer.update()
+    for obj in objects:
+        if obj is None or obj.parent == root:
+            continue
+        matrix = obj.matrix_world.copy()
+        obj.parent = root
+        obj.matrix_world = matrix
+    context.view_layer.update()
+    return root
 
 
 def ensure_light_position(context):
@@ -331,6 +352,10 @@ def reset_transform(obj, position):
 def reset_studio(context, scope):
     prepare_studio(context, scope)
     settings = context.scene.polygroups_render_settings
+    for role in ('camera', 'scene'):
+        if scope in ('ALL', role.upper()):
+            reset_transform(getattr(settings, 'studio_' + role + '_position'), (0, 0, 0))
+    context.view_layer.update()
     if scope == 'ALL':
         settings.property_unset('studio_move_step')
         settings.property_unset('studio_collection_color_tag')
@@ -362,6 +387,10 @@ def reset_studio(context, scope):
         update_backdrop(settings, context)
     context.view_layer.update()
 
+    if scope in ('ALL', 'CAMERA'):
+        ensure_position_control(context, 'camera', (settings.studio_camera, settings.studio_camera_aim))
+    if scope in ('ALL', 'SCENE'):
+        ensure_position_control(context, 'scene', (settings.studio_backdrop,))
     if scope in ('ALL', 'LIGHTS', 'KEY', 'FILL', 'RIM'):
         ensure_light_position(context)
 
