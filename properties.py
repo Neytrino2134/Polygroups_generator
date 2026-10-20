@@ -2202,6 +2202,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
             ("SET", "Sets", "Put LOW, MID and HIGH of each asset in one folder"),
             ("VARIANT", "LOW / MID / HIGH", "Put all meshes of each quality in one folder"),
             ("LODS", "LODs", "Group Unreal LOD meshes by asset, with separate format folders"),
+            ("LODS_FORMAT", "LODs / Format", "Group all assets by format, with one shared Textures folder per format"),
         ),
         default="VARIANT",
     )

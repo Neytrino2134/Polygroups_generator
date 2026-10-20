@@ -3881,9 +3881,9 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             formats.prop(settings, "mesh_export_glb")
             formats.prop(settings, "mesh_export_gltf")
             column.prop(settings, "mesh_export_sort", text=t(context, "mesh_export_sort"))
-            if settings.mesh_export_glb and settings.mesh_export_sort == 'LODS':
+            if settings.mesh_export_glb and settings.mesh_export_sort in {'LODS', 'LODS_FORMAT'}:
                 column.prop(settings, "unreal_glb_mode")
-            if settings.mesh_export_gltf and settings.mesh_export_sort == 'LODS':
+            if settings.mesh_export_gltf and settings.mesh_export_sort in {'LODS', 'LODS_FORMAT'}:
                 column.prop(settings, "unreal_gltf_mode")
             column.prop(settings, "mesh_export_info_format", text=t(context, "mesh_export_info_format"))
             column.operator(

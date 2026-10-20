@@ -151,4 +151,46 @@ with TemporaryDirectory() as temp:
         assert 'Enable at least one' in str(error)
     else:
         assert result == {'CANCELLED'}
+    # Format-first layout puts all assets beside one shared texture folder.
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj in meshes:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    s.mesh_export_sort = 'LODS_FORMAT'
+    s.mesh_export_fbx = s.mesh_export_glb = s.mesh_export_gltf = True
+    s.unreal_glb_mode = 'COMBINED'
+    for mode in ('COMBINED', 'SHARED'):
+        output.rename(root / ('PreviousFormat_' + mode))
+        s.unreal_gltf_mode = mode
+        assert bpy.ops.object.polygroups_export_selected_meshes() == {'FINISHED'}
+        assert not (output / 'Tree_19_01').exists()
+        summary = json.loads((output / 'MeshInfo.json').read_text())
+        assert summary['Engine'] == 'Unreal' and summary['totals']['meshes'] == 6
+        for format in ('FBX', 'GLTF', 'GLB'):
+            directory = output / format
+            assert directory.is_dir() and (directory / 'Textures').is_dir()
+            assert list(directory.rglob('Textures')) == [directory / 'Textures']
+            assert len(list((directory / 'Textures').glob('*.png'))) == 1
+            local = json.loads((directory / 'MeshInfo.json').read_text())
+            assert local['Engine'] == 'Unreal' and len(local['assets']) == 2
+            assert local['totals']['meshes'] == 6
+            assert all(set(item['files']) == {format} for item in local['meshes'])
+            assert all((directory / item['files'][format]).is_file() for item in local['meshes'])
+        for number in (1, 2):
+            base = f'Tree_19_{number:02d}'
+            assert (output / 'GLB' / (base + '.glb')).is_file()
+            path = output / 'GLTF' / ((base + '.gltf') if mode == 'COMBINED' else f'SM_{base}_LOD0.gltf')
+            data = json.loads(path.read_text())
+            assert len(data['nodes']) == (2 if mode == 'COMBINED' else 1)
+            if mode == 'SHARED':
+                uri = data['images'][0]['uri']
+                assert uri.startswith('Textures/') and (path.parent / uri).is_file()
+        assert image.filepath_raw == original_path and mask_node.image == mask
+        assert shader.inputs['Alpha'].is_linked
+        assert all(obj.matrix_world == matrices[obj] for obj in meshes)
+    output.rename(root / 'PreviousFormat_All')
+    s.mesh_export_fbx = s.mesh_export_glb = False
+    assert bpy.ops.object.polygroups_export_selected_meshes() == {'FINISHED'}
+    assert (output / 'GLTF' / 'Textures').is_dir()
+    assert not (output / 'FBX').exists() and not (output / 'GLB').exists()
 print('UNREAL_LOD_EXPORT_PASSED')

@@ -37,6 +37,25 @@ JSON maps each LOD's GLB entry to the shared path in combined mode. Mesh totals
 are unchanged. The regression test parses the GLB JSON chunk to verify that
 multiple LOD nodes and embedded buffers/images are present in the same file.
 
+Sort By = LODs / Format uses a format-first layout instead:
+
+```text
+!Unreal/FBX/SM_<asset>_LOD0.fbx
+!Unreal/FBX/Textures/...
+!Unreal/GLTF/<asset>.gltf
+!Unreal/GLTF/Textures/...
+!Unreal/GLB/<asset>.glb
+!Unreal/GLB/Textures/...
+```
+
+All selected assets of a format are placed directly in that format folder.
+Only enabled formats create folders, and each has one common Textures folder.
+Combined GLTF/GLB files still embed textures; separate GLTF files use the
+format's shared Textures directory. Each format gets MeshInfo.json for its
+own files; the root report maps every selected format. Paths in each report
+are relative to that report's directory. The original asset-first LODs layout
+remains unchanged.
+
 JSON for LOD export has schema_version 2, preserves meshes and totals, and adds
 asset groups. Each mesh includes asset, role, lod_index, lod, collections,
 vertices, triangles and files mapped by format. Combined GLTF records share

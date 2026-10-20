@@ -504,7 +504,7 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
 
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
-        if settings.mesh_export_sort == 'LODS':
+        if settings.mesh_export_sort in {'LODS', 'LODS_FORMAT'}:
             from .unreal_lod_export import export_lods
             return export_lods(context, settings, self.report)
         formats = enabled_mesh_export_formats(settings)

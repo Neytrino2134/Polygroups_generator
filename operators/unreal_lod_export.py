@@ -31,6 +31,7 @@ def export_lods(context, settings, report):
         report({'ERROR'}, 'Enable an export format and save the blend file before exporting')
         return {'CANCELLED'}
     root = Path(root)
+    format_first = settings.mesh_export_sort == 'LODS_FORMAT'
     meshes = _selected_mesh_objects(context)
     groups = {}
     records = {}
@@ -56,7 +57,7 @@ def export_lods(context, settings, report):
             objects = groups[base]
             objects.sort(key=lambda obj: -1 if records[obj]['role'] == 'HIGH' else records[obj]['lod_index'])
             for format in formats:
-                folder = root / _safe_path_token(base) / format
+                folder = root / format if format_first else root / _safe_path_token(base) / format
                 combine = ((format == 'GLTF' and settings.unreal_gltf_mode == 'COMBINED')
                            or (format == 'GLB' and settings.unreal_glb_mode == 'COMBINED'))
                 if combine:
@@ -85,12 +86,14 @@ def export_lods(context, settings, report):
             bpy.ops.object.mode_set(mode='OBJECT')
         root.mkdir(parents=True, exist_ok=True)
         detached = _detach_export_alpha_maps(meshes)
-        for base in sorted(groups, key=str.casefold):
-            asset_folder = root / _safe_path_token(base)
-            original_paths = _copy_export_textures(groups[base], str(asset_folder))
+        scopes = ([(root / format, meshes, format) for format in formats] if format_first else
+                  [(root / _safe_path_token(base), groups[base], base) for base in sorted(groups, key=str.casefold)])
+        for scope_folder, scope_objects, scope_key in scopes:
+            scope_folder.mkdir(parents=True, exist_ok=True)
+            original_paths = _copy_export_textures(scope_objects, str(scope_folder))
             try:
                 for task_base, objects, path, format, combined in tasks:
-                    if task_base != base:
+                    if (format if format_first else task_base) != scope_key:
                         continue
                     path.parent.mkdir(parents=True, exist_ok=True)
                     bpy.ops.object.select_all(action='DESELECT')
@@ -116,13 +119,15 @@ def export_lods(context, settings, report):
                     image.filepath = filepath
                     image.filepath_raw = raw
             local_entries = []
-            for obj in groups[base]:
+            scope_prefix = scope_folder.relative_to(root)
+            for obj in scope_objects:
                 record = dict(records[obj])
-                record['files'] = {format: Path(path).relative_to(_safe_path_token(base)).as_posix()
-                                   for format, path in record['files'].items()}
-                record['file'] = Path(record['file']).relative_to(_safe_path_token(base)).as_posix()
+                record['files'] = {format: Path(path).relative_to(scope_prefix).as_posix()
+                                   for format, path in record['files'].items()
+                                   if not format_first or format == scope_key}
+                record['file'] = next(iter(record['files'].values()))
                 local_entries.append(record)
-            _write_export_mesh_info(str(asset_folder), settings.mesh_export_info_format, local_entries, engine='Unreal')
+            _write_export_mesh_info(str(scope_folder), settings.mesh_export_info_format, local_entries, engine='Unreal')
         _write_export_mesh_info(str(root), settings.mesh_export_info_format,
                                 [records[obj] for base in sorted(groups, key=str.casefold) for obj in groups[base]], engine='Unreal')
     except (ValueError, RuntimeError, OSError) as error:
