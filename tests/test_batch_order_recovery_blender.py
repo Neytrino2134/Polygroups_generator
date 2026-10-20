@@ -2,6 +2,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import sys
+from unittest.mock import patch
 import addon_utils
 import bpy
 
@@ -88,15 +89,28 @@ with TemporaryDirectory() as temp:
     settings.batch_cancel_requested = True
     queue.step(bpy.context)
     assert queue.finished
-    assert bpy.data.collections[completed_name].all_objects
-    assert retopo in set(bpy.data.collections[partial_name].all_objects)
+    assert not bpy.data.collections[completed_name].all_objects
+    assert not bpy.data.collections[partial_name].all_objects
+    assert bpy.data.objects.get('Retopo_Interrupted') is None
     output = root / ('Working_' + partial_name.replace('.', '_') + '.blend')
     with bpy.data.libraries.load(str(output)) as (data, _):
         assert 'Retopo_Interrupted' in data.objects
+    # If a partial copy cannot be saved, keep its meshes in the working scene.
+    failed_queue = ImportQueue(bpy.context, paths, False, lambda *args: None)
+    failed_queue.begin()
+    until(failed_queue, lambda: failed_queue.stage == 'RENAME')
+    unsaved_collection = failed_queue.collection
+    unsaved_objects = set(unsaved_collection.all_objects)
+    assert unsaved_objects
+    settings.batch_cancel_requested = True
+    with patch('polygroups_generator.operators.import_queue.write_collection_blend',
+               side_effect=RuntimeError('Injected output write failure')):
+        failed_queue.step(bpy.context)
+    assert failed_queue.finished and set(unsaved_collection.all_objects) == unsaved_objects
     # Reopen the working file to verify cancellation recovery was persisted.
     bpy.ops.wm.open_mainfile(filepath=str(root / 'Working.blend'))
-    assert bpy.data.collections[completed_name].all_objects
-    assert bpy.data.collections[partial_name].all_objects
-    assert bpy.data.objects.get('Retopo_Interrupted')
+    assert not bpy.data.collections[completed_name].all_objects
+    assert not bpy.data.collections[partial_name].all_objects
+    assert bpy.data.objects.get('Retopo_Interrupted') is None
     assert not bpy.context.scene.polygroups_model_preparation_settings.batch_is_running
 print('BATCH_ORDER_RECOVERY_PASSED')

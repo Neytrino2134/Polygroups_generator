@@ -1429,7 +1429,7 @@ class ImportQueue:
                 self.report({"WARNING"}, f"Cannot update batch reports: {error}")
 
     def preserve_partial_file(self):
-        """Keep imported and completed meshes, and persist partial separate output."""
+        """Preserve partial work in scene, or save and clear it in separate-file mode."""
         if self.redo_mode:
             return
         existing = set(bpy.data.objects)
@@ -1451,11 +1451,7 @@ class ImportQueue:
             obj.hide_set(False)
         if self.save_generated_separately and self.collection is not None:
             try:
-                path = generated_collection_output_path(bpy.data.filepath, self.collection.name)
-                write_collection_blend(path, self.collection)
-                if self.file_record is not None:
-                    self.file_record['output_file'] = path
-                save_current_blend_file()
+                self.save_and_clear_completed_collection(completed=False)
             except Exception as error:
                 self.report({'WARNING'}, f'Partial batch results remain in scene; save failed: {error}')
 
@@ -1528,7 +1524,7 @@ class ImportQueue:
         self.auto_save_unsaved_warned = False
         self.report({"INFO"}, "Batch Import progress saved")
 
-    def save_and_clear_completed_collection(self):
+    def save_and_clear_completed_collection(self, completed=True):
         """Export the successful Generated.N collection, then commit an empty placeholder."""
         collection = self.collection
         if collection is None:
@@ -1587,8 +1583,9 @@ class ImportQueue:
         self.pass_sources = []
         self.pass_outputs = []
         self.result_meshes = []
-        self.separately_saved_count += 1
-        self.separately_saved_object_count += saved_object_count
+        if completed:
+            self.separately_saved_count += 1
+            self.separately_saved_object_count += saved_object_count
         try:
             result = save_current_blend_file()
         except Exception as error:
@@ -1681,13 +1678,6 @@ class ImportQueue:
             self.cursor = None
         if not rollback and not self.redo_mode and status != 'DONE':
             self.preserve_partial_file()
-            for filepath, name in self.separately_saved_files:
-                collection = bpy.data.collections.get(name)
-                if collection is not None and not collection.all_objects:
-                    try:
-                        restore_retopo_collection(filepath, name, self.scene, keep_all=True)
-                    except Exception as error:
-                        self.report({'WARNING'}, f'Could not restore {name}: {error}')
         if rollback:
             for obj in self.owned_objects & set(bpy.data.objects):
                 bpy.data.objects.remove(obj, do_unlink=True)

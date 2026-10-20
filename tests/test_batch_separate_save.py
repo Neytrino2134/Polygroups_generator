@@ -58,6 +58,16 @@ with tempfile.TemporaryDirectory() as directory:
         separately_saved_object_count=0,
         report=lambda kind, message: reports.append((kind, message)),
     )
+    # A failed output write must never clear the only live copy.
+    with patch.object(import_queue, 'write_collection_blend', side_effect=RuntimeError('Disk write failed')):
+        try:
+            import_queue.ImportQueue.save_and_clear_completed_collection(queue)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('Expected save failure')
+    assert set(collection.objects) == {obj, retopo}
+    assert queue.separately_saved_count == 0
     import_queue.ImportQueue.save_and_clear_completed_collection(queue)
 
     assert expected.is_file()
@@ -167,7 +177,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert records[0]["failed_stage"] == "REMESH_WAIT"
     assert records[0]["failed_pass"] == 2
     assert "Injected Quad Remesher failure" in records[0]["traceback"]
-    assert bpy.data.objects.get("FailedArtifact") is not None
+    assert bpy.data.objects.get("FailedArtifact") is None
     assert records[0]['output_file']
     with bpy.data.libraries.load(records[0]['output_file']) as (source, _target):
         assert 'FailedArtifact' in source.objects
