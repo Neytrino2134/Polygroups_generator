@@ -91,7 +91,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(4)),
-    "show_render_section": tuple(f"topic_render_{index}" for index in range(11)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(12)),
 }
 
 SUBSECTION_VISIBILITY_PROPERTIES = tuple(
@@ -1079,6 +1079,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_render_8: bpy.props.BoolProperty(default=False)
     topic_render_9: bpy.props.BoolProperty(default=False)
     topic_render_10: bpy.props.BoolProperty(default=False)
+    topic_render_11: bpy.props.BoolProperty(default=False)
     topic_remesh_0: bpy.props.BoolProperty(default=False)
     topic_remesh_1: bpy.props.BoolProperty(default=False)
     topic_export_0: bpy.props.BoolProperty(default=False)
@@ -2537,6 +2538,8 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         default=True,
     )
     render_high: bpy.props.BoolProperty(name="HIGH", description="Render SM_*_HIGH meshes", default=False)
+    render_rename_suffix: bpy.props.EnumProperty(name="Suffix", items=[
+        ('HIGH', '_HIGH', ''), ('MID', '_MID', ''), ('LOW', '_LOW', '')], default='HIGH')
     render_lods: bpy.props.EnumProperty(name="LODs", description="Choose LOD suffixes to include in the render queue",
         items=[(f'LOD{i}', f'LOD{i}', f'Render SM_*_LOD{i} meshes', 1 << i) for i in range(6)],
         options={'ENUM_FLAG'}, default=set())

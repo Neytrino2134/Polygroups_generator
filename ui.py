@@ -4036,6 +4036,17 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_render_settings
+        content = draw_topic(layout, context, "render_11", t(context, "render_mesh_selection"), "MESH_DATA")
+        if content is not None:
+            column = content.column(align=True)
+            column.enabled = not settings.is_running
+            options_row = column.row(align=True)
+            options_row.prop(settings, "render_low", text="LOW")
+            options_row.prop(settings, "render_mid", text="MID")
+            options_row.prop(settings, "render_high", text="HIGH")
+            column.prop(settings, "render_lods", text="LODs")
+            column.prop(settings, "render_rename_suffix", text="Suffix")
+            column.operator("object.polygroups_render_rename_suffix", text="Rename Suffix")
         content = draw_topic(layout, context, "render_1", 'Quality and Output', "PREFERENCES")
         if content is not None:
             column = content.column(align=True)
@@ -4056,11 +4067,6 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             column.prop(settings, "output_directory", text=t(context, "render_output_directory"))
             column.prop(settings, "image_format")
 
-            options_row = column.row(align=True)
-            options_row.prop(settings, "render_low", text=t(context, "render_low"))
-            options_row.prop(settings, "render_mid", text=t(context, "render_mid"))
-            options_row.prop(settings, "render_high", text="HIGH")
-            column.prop(settings, "render_lods", text="LODs")
             column.prop(settings, "transparent_background", text=t(context, "render_transparent_background"))
             scene_row = column.row(align=True)
             scene_row.enabled = settings.transparent_background

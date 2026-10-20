@@ -1315,6 +1315,48 @@ def _render_current_job_steps(context, settings, job):
         _restore_visibility(snapshot)
 
 
+class OBJECT_OT_polygroups_render_rename_suffix(bpy.types.Operator):
+    bl_idname = 'object.polygroups_render_rename_suffix'
+    bl_label = 'Rename Suffix'
+    bl_description = 'Replace HIGH, MID or LOW suffix on selected meshes'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (not context.scene.polygroups_render_settings.is_running
+                and any(obj.type == 'MESH' for obj in context.selected_objects))
+
+    def execute(self, context):
+        settings = context.scene.polygroups_render_settings
+        plans = {}
+        for obj in context.selected_objects:
+            if obj.type != 'MESH':
+                continue
+            target = re.sub(r'_(HIGH|MID|LOW)(\.\d{3})?$',
+                            lambda m: '_' + settings.render_rename_suffix + (m.group(2) or ''),
+                            obj.name, flags=re.IGNORECASE)
+            if target != obj.name:
+                plans[obj] = (obj.name, target)
+        targets = [target for _, target in plans.values()]
+        if len(targets) != len(set(targets)) or any(
+                bpy.data.objects.get(target) not in (None, obj) and bpy.data.objects.get(target) not in plans
+                for obj, (_, target) in plans.items()):
+            self.report({'WARNING'}, 'Conflicting target mesh names; no objects renamed')
+            return {'CANCELLED'}
+        for obj in plans:
+            obj.name = '__RenderSuffix__'
+        source_names = {old: target for old, target in plans.values()}
+        for obj, (_, target) in plans.items():
+            obj.name = target
+        for obj in bpy.data.objects:
+            source = obj.get(MULTIVIEW_SOURCE_PROP)
+            if source in source_names:
+                obj[MULTIVIEW_SOURCE_PROP] = source_names[source]
+        settings.queue_scanned = False
+        self.report({'INFO'}, f'Renamed {len(plans)} mesh suffix(es)')
+        return {'FINISHED'}
+
+
 class OBJECT_OT_polygroups_scan_render_queue(bpy.types.Operator):
     bl_idname = "object.polygroups_scan_render_queue"
     bl_label = "Scan Render Queue"

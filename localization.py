@@ -7,6 +7,7 @@ LANGUAGE_ITEMS = (
 TEXT = {
     "EN": {
         "render_material_settings": "Material Settings",
+        "render_mesh_selection": "Mesh Selection",
         "render_select_material_mesh": "Select a mesh to edit its active material",
         "render_no_active_material": "The selected mesh has no active material",
         "render_material_slot": "Material Slot",
@@ -892,6 +893,7 @@ TEXT = {
     },
     "RU": {
         "render_material_settings": "Настройки материала",
+        "render_mesh_selection": "Выбор мешей",
         "render_select_material_mesh": "Выделите меш для настройки его активного материала",
         "render_no_active_material": "У выбранного меша нет активного материала",
         "render_material_slot": "Слот материала",
