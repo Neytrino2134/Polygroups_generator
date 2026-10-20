@@ -2184,12 +2184,20 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         ),
         default="FBX",
     )
+    mesh_export_fbx: bpy.props.BoolProperty(name="FBX", default=True)
+    mesh_export_glb: bpy.props.BoolProperty(name="GLB", default=False)
+    mesh_export_gltf: bpy.props.BoolProperty(name="GLTF", default=False)
+    unreal_gltf_mode: bpy.props.EnumProperty(name="GLTF Mode", items=(
+        ("COMBINED", "All LODs in One GLTF", "One embedded GLTF per asset containing its selected LOD meshes"),
+        ("SHARED", "Separate LODs / Shared Textures", "Separate GLTF files for LODs with a shared texture directory")),
+        default="COMBINED")
     mesh_export_sort: bpy.props.EnumProperty(
         name="Sort By",
         description="Arrange exported FAB meshes by asset set or by mesh quality",
         items=(
             ("SET", "Sets", "Put LOW, MID and HIGH of each asset in one folder"),
             ("VARIANT", "LOW / MID / HIGH", "Put all meshes of each quality in one folder"),
+            ("LODS", "LODs", "Group Unreal LOD meshes by asset, with separate format folders"),
         ),
         default="VARIANT",
     )

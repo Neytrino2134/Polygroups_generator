@@ -12,7 +12,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT.parent))
 addon_utils.enable(ROOT.name,default_set=False)
 settings=bpy.context.scene.polygroups_mesh_finalization_settings
-settings.unity_export_autosave=False  # Disposable unsaved scene; this test validates GLTF, not autosave.
+settings.unity_export_autosave=False  # This test validates GLTF, not autosave.
 settings.unity_export_all_renders=False  # Rendering has separate dedicated regression tests.
 settings.unity_export_fbx=False
 settings.unity_export_gltf=True
@@ -44,6 +44,7 @@ bpy.context.view_layer.objects.active=source
 bpy.context.view_layer.update()
 matrices=[obj.matrix_world.copy() for obj in lods]
 with TemporaryDirectory() as directory:
+    bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory) / 'ModeTest.blend'))
     for mode in ('COMBINED','SHARED'):
         settings.unity_gltf_mode=mode
         settings.unity_export_directory=str(Path(directory)/mode)

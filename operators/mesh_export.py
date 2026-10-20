@@ -202,7 +202,17 @@ def _write_export_mesh_info(root_dir, export_format, entries):
     if export_format == "JSON":
         filepath = os.path.join(root_dir, "MeshInfo.json")
         with open(filepath, "w", encoding="utf-8") as output:
-            json.dump({"meshes": entries, "totals": totals}, output,
+            document = {"meshes": entries, "totals": totals}
+            if any('asset' in item for item in entries):
+                assets = {}
+                for item in entries:
+                    assets.setdefault(item['asset'], []).append(item)
+                document['assets'] = [dict(name=name, meshes=items,
+                    lods=[item['name'] for item in items if item.get('role') == 'LOD'],
+                    high=[item['name'] for item in items if item.get('role') == 'HIGH'])
+                    for name, items in assets.items()]
+                document['schema_version'] = 2
+            json.dump(document, output,
                       ensure_ascii=False, indent=2)
             output.write("\n")
     else:
@@ -473,6 +483,13 @@ def _blend_export_scan(settings):
     return collections, low_objects, mid_objects
 
 
+def enabled_mesh_export_formats(settings):
+    fields = (('FBX', 'mesh_export_fbx'), ('GLB', 'mesh_export_glb'), ('GLTF', 'mesh_export_gltf'))
+    if not any(settings.is_property_set(field) for _, field in fields) and settings.is_property_set('mesh_export_format'):
+        return [settings.mesh_export_format]  # Existing blend/script compatibility.
+    return [format for format, field in fields if getattr(settings, field)]
+
+
 class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
     bl_idname = "object.polygroups_export_selected_meshes"
     bl_label = "Export Selected Meshes"
@@ -485,6 +502,13 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
 
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
+        if settings.mesh_export_sort == 'LODS':
+            from .unreal_lod_export import export_lods
+            return export_lods(context, settings, self.report)
+        formats = enabled_mesh_export_formats(settings)
+        if not formats:
+            self.report({'ERROR'}, 'Enable at least one export format')
+            return {'CANCELLED'}
         mesh_objects = sorted(
             _selected_mesh_objects(context),
             key=lambda obj: (_asset_folder_token(obj).lower(), obj.name.lower()),
@@ -495,9 +519,9 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
             return {"CANCELLED"}
 
         try:
-            filepaths = [(obj, _export_filepath(root_dir, obj, settings.mesh_export_format,
-                                                 settings.mesh_export_sort))
-                         for obj in mesh_objects]
+            filepaths = [(obj, _export_filepath(root_dir, obj, format,
+                                                 settings.mesh_export_sort), format)
+                         for obj in mesh_objects for format in formats]
         except ValueError as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
@@ -516,7 +540,7 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
         try:
             original_image_paths = _copy_export_textures(mesh_objects, root_dir)
             detached_alpha_maps = _detach_export_alpha_maps(mesh_objects)
-            for obj, filepath in filepaths:
+            for obj, filepath, format in filepaths:
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
                 bpy.ops.object.select_all(action="DESELECT")
@@ -524,18 +548,23 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
                 context.view_layer.objects.active = obj
 
                 with _export_at_world_origin(obj, context.view_layer):
-                    result = _export_selected_object(filepath, settings.mesh_export_format)
+                    result = _export_selected_object(filepath, format)
                 if "FINISHED" in result:
                     exported_count += 1
                     if settings.mesh_export_info_format != "NONE":
                         vertices, triangles = _evaluated_mesh_counts(
                             obj, context.evaluated_depsgraph_get())
-                        mesh_info.append({
-                            "name": obj.name,
-                            "file": os.path.relpath(filepath, root_dir).replace(os.sep, "/"),
-                            "vertices": vertices,
-                            "triangles": triangles,
-                        })
+                        entry = next((item for item in mesh_info if item['name'] == obj.name), None)
+                        if entry is None:
+                            entry = {
+                                "name": obj.name,
+                                "file": os.path.relpath(filepath, root_dir).replace(os.sep, "/"),
+                                "vertices": vertices,
+                                "triangles": triangles,
+                                "files": {},
+                            }
+                            mesh_info.append(entry)
+                        entry['files'][format] = os.path.relpath(filepath, root_dir).replace(os.sep, '/')
                 else:
                     raise RuntimeError(f"FAB export failed: {obj.name}")
             _write_export_mesh_info(root_dir, settings.mesh_export_info_format, mesh_info)
@@ -561,7 +590,7 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
 
         self.report(
             {"INFO"},
-            f"Exported {exported_count} mesh object(s) to {root_dir}",
+            f"Exported {len(mesh_objects)} mesh object(s), {exported_count} file(s) to {root_dir}",
         )
         return {"FINISHED"} if exported_count else {"CANCELLED"}
 

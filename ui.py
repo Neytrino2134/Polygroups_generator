@@ -3876,12 +3876,13 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         content = draw_topic(layout, context, "export_0", 'Fab Export', "EXPORT")
         if content is not None:
             column = content.column(align=True)
-            column.prop(
-                settings,
-                "mesh_export_format",
-                text=t(context, "mesh_export_format"),
-            )
+            formats = column.row(align=True)
+            formats.prop(settings, "mesh_export_fbx")
+            formats.prop(settings, "mesh_export_glb")
+            formats.prop(settings, "mesh_export_gltf")
             column.prop(settings, "mesh_export_sort", text=t(context, "mesh_export_sort"))
+            if settings.mesh_export_gltf and settings.mesh_export_sort == 'LODS':
+                column.prop(settings, "unreal_gltf_mode")
             column.prop(settings, "mesh_export_info_format", text=t(context, "mesh_export_info_format"))
             column.operator(
                 "object.polygroups_export_selected_meshes",
