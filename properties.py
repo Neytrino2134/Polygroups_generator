@@ -91,7 +91,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(3)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(4)),
-    "show_render_section": tuple(f"topic_render_{index}" for index in range(12)),
+    "show_render_section": tuple(f"topic_render_{index}" for index in range(13)),
 }
 
 SUBSECTION_VISIBILITY_PROPERTIES = tuple(
@@ -1080,6 +1080,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_render_9: bpy.props.BoolProperty(default=False)
     topic_render_10: bpy.props.BoolProperty(default=False)
     topic_render_11: bpy.props.BoolProperty(default=False)
+    topic_render_12: bpy.props.BoolProperty(default=False)
     topic_remesh_0: bpy.props.BoolProperty(default=False)
     topic_remesh_1: bpy.props.BoolProperty(default=False)
     topic_export_0: bpy.props.BoolProperty(default=False)

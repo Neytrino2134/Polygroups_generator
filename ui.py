@@ -4079,8 +4079,9 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
             column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
 
-            freestyle_box = content.box().column(align=True)
-            freestyle_box.label(text="Freestyle Edges", icon="EDGE_SEAM")
+        content = draw_topic(layout, context, "render_12", "FreeStyle", "EDGE_SEAM")
+        if content is not None:
+            freestyle_box = content.column(align=True)
             freestyle_box.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
             freestyle_column = freestyle_box.column(align=True)
             freestyle_column.enabled = settings.freestyle_edges
