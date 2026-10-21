@@ -664,6 +664,14 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             if session:
                 self.layout.operator('wm.airetopo_custom_placement',
                     text='Detach' if session.docked else 'Dock on Right', icon='WINDOW').placement = 'FLOATING' if session.docked else 'DOCKED'
+                if session.docked:
+                    # Reserve native UI content beneath Detach. Without a real
+                    # block here Blender treats the GPU-only area as viewport,
+                    # so the sidebar resize action-zone ends at the buttons.
+                    ui_scale = context.preferences.system.ui_scale
+                    reserve = self.layout.row()
+                    reserve.scale_y = max(1, (context.region.height-160)/(20*ui_scale))
+                    reserve.label(text=' ')
             return
         layout = self.layout
         visible_layout = layout

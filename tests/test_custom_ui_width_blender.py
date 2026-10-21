@@ -35,8 +35,9 @@ for scale in (1, 1.5, 2):
         assert actual == width-36 and x == sidebar.x+8
         assert x+actual == 972
         assert top == region.height-160
-        rx, ry, rw, rh = Session.sidebar_resize_rect(session, region)
-        assert rx+rw/2 == sidebar.x and rh == h
+        assert Session.sidebar_resize_rect(session, region) is None
+        embedded = NS(type='UI', width=width, height=800)
+        assert Session.geometry(session, embedded) == (8, 640, width-36, 632)
 session.docked = False
 assert Session.sidebar_resize_rect(session, region) is None
 before = Session.geometry(session, region)

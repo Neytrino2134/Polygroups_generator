@@ -9,9 +9,11 @@ from .events import edit_key, parsed_value
 
 SESSIONS = {}
 _handle = None
+_sidebar_handle = None
 _registered = False
 _pending_open = set()
 _HANDLE_KEY = 'airetopo.custom_ui.draw_handle'
+_SIDEBAR_HANDLE_KEY = 'airetopo.custom_ui.sidebar_draw_handle'
 _CLEANUP_KEY = 'airetopo.custom_ui.cleanup'
 
 
@@ -33,7 +35,8 @@ def resolve(session):
                 continue
             key = str(window.as_pointer()) + ':' + str(area.spaces.active.as_pointer())
             if key == session.key:
-                region = next((r for r in area.regions if r.type == 'WINDOW'), None)
+                region_type = 'UI' if session.prefs.ui_mode == 'UI_PANEL' and session.docked else 'WINDOW'
+                region = next((r for r in area.regions if r.type == region_type), None)
                 if region:
                     session.window, session.area, session.region = window, area, region
                     return True
@@ -84,6 +87,12 @@ class Session:
     def geometry(self, region):
         s = self.scale
         if self.prefs.ui_mode == 'UI_PANEL' and self.docked:
+            if getattr(region, 'type', None) == 'UI':
+                width = max(1, region.width-36)
+                viewport = next((r for r in self.area.regions if r.type == 'WINDOW'), None)
+                viewport_top = viewport.y+viewport.height-region.y if viewport else region.height
+                top = max(1, min(region.height-1, viewport_top-160))
+                return 8, top, width, min(44*s if self.collapsed else max(1, top-8), max(1, top-8))
             width = min(self.prefs.ui_panel_width*s, max(1, region.width-36))
             x = max(8, region.width-width-28)
             # Region dimensions are physical pixels and change live when the
@@ -105,13 +114,7 @@ class Session:
 
     def sidebar_resize_rect(self, region):
         """Expose Blender's native N-panel boundary instead of intercepting it."""
-        if self.prefs.ui_mode != 'UI_PANEL' or not self.docked or not self.area.spaces.active.show_region_ui:
-            return None
-        sidebar = next((r for r in self.area.regions if r.type == 'UI' and r.width > 1), None)
-        if sidebar is None:
-            return None
-        _, top, _, height = self.geometry(region)
-        return sidebar.x-getattr(region, 'x', 0)-2, top-height, 4, height
+        return None  # Native UI region owns its resize border.
 
     def hit(self, rect, action, tooltip='', identity=''):
         self.hits.append((rect, action, tooltip, identity))
@@ -328,6 +331,8 @@ class AIRETOPO_OT_custom_placement(bpy.types.Operator):
         prefs.ui_mode = 'UI_PANEL'
         _pending_open.discard(session.key)
         session.docked = self.placement == 'DOCKED'
+        if session.docked:
+            context.space_data.show_region_ui = True
         session.refresh(context)
         redraw(session)
         request_update()
@@ -382,6 +387,10 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             return {'CANCELLED'}
         if not resolve(s):
             return {'PASS_THROUGH'}
+        if s.docked and (not s.area.spaces.active.show_region_ui or s.region.width <= 1):
+            return {'PASS_THROUGH'}
+        if s.docked and s.region.active_panel_category != 'AI Retopo':
+            return {'PASS_THROUGH'}
         if s.prefs.ui_mode != 'UI_PANEL':
             return {'PASS_THROUGH'}
         # After screen restoration Blender may deliver modal events without an
@@ -392,6 +401,9 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
     def _modal_view(self, context, event):
         s = self.session
         mx, my = event.mouse_x-s.region.x, event.mouse_y-s.region.y
+        if s.docked and s.region.type == 'UI' and -3 <= mx <= 6:
+            # Leave Blender's native border action-zone and cursor untouched.
+            return {'PASS_THROUGH'}
         if s.edit:
             action = edit_key(s.edit, event, context.window_manager)
             if action == 'cancel':
@@ -552,10 +564,15 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
 
 def _draw():
     context = bpy.context
-    if not context.window or not context.area or not context.region or context.region.type != 'WINDOW':
+    if not context.window or not context.area or not context.region or context.region.type not in {'WINDOW', 'UI'}:
         return
     session = SESSIONS.get(key_for(context))
     if session and not session.closed and session.prefs.ui_mode == 'UI_PANEL':
+        expected = 'UI' if session.docked else 'WINDOW'
+        if context.region.type != expected:
+            return
+        if session.docked and context.region.active_panel_category != 'AI Retopo':
+            return
         try:
             started = time.perf_counter()
             renderer.draw(session, context.region)
@@ -584,6 +601,7 @@ def _load_pre(_):
 def _load_post(_):
     if _handle:
         bpy.app.driver_namespace[_HANDLE_KEY] = _handle
+        bpy.app.driver_namespace[_SIDEBAR_HANDLE_KEY] = _sidebar_handle
         bpy.app.driver_namespace[_CLEANUP_KEY] = unregister
     request_update()
 
@@ -617,7 +635,8 @@ def _tick():
                 session = SESSIONS.get(key)
                 if session:
                     _pending_open.discard(key)
-                    session.window, session.area, session.region = window, area, region
+                    session.window, session.area = window, area
+                    resolve(session)
                     try:
                         if session.refresh(bpy.context) or (session.tooltip and .6 < session.tooltip_age < 1.2):
                             area.tag_redraw()
@@ -646,7 +665,7 @@ CLASSES = (AIRETOPO_OT_custom_property, AIRETOPO_OT_custom_search, AIRETOPO_OT_c
 
 
 def register():
-    global _handle, _registered
+    global _handle, _sidebar_handle, _registered
     if _registered:
         return
     old_cleanup = bpy.app.driver_namespace.get(_CLEANUP_KEY)
@@ -655,12 +674,17 @@ def register():
     old = bpy.app.driver_namespace.pop(_HANDLE_KEY, None)
     if old:
         bpy.types.SpaceView3D.draw_handler_remove(old, 'WINDOW')
+    old_sidebar = bpy.app.driver_namespace.pop(_SIDEBAR_HANDLE_KEY, None)
+    if old_sidebar:
+        bpy.types.SpaceView3D.draw_handler_remove(old_sidebar, 'UI')
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     _registered = True
     if not bpy.app.background:
         _handle = bpy.types.SpaceView3D.draw_handler_add(_draw, (), 'WINDOW', 'POST_PIXEL')
+        _sidebar_handle = bpy.types.SpaceView3D.draw_handler_add(_draw, (), 'UI', 'POST_PIXEL')
         bpy.app.driver_namespace[_HANDLE_KEY] = _handle
+        bpy.app.driver_namespace[_SIDEBAR_HANDLE_KEY] = _sidebar_handle
         bpy.app.driver_namespace[_CLEANUP_KEY] = unregister
         bpy.app.handlers.load_pre.append(_load_pre)
         bpy.app.handlers.load_post.append(_load_post)
@@ -668,7 +692,7 @@ def register():
 
 
 def unregister():
-    global _handle, _registered
+    global _handle, _sidebar_handle, _registered
     if not _registered:
         return
     _registered = False
@@ -678,6 +702,10 @@ def unregister():
     if _handle:
         bpy.types.SpaceView3D.draw_handler_remove(_handle, 'WINDOW')
         _handle = None
+    if _sidebar_handle:
+        bpy.types.SpaceView3D.draw_handler_remove(_sidebar_handle, 'UI')
+        _sidebar_handle = None
+    bpy.app.driver_namespace.pop(_SIDEBAR_HANDLE_KEY, None)
     bpy.app.driver_namespace.pop(_HANDLE_KEY, None)
     bpy.app.driver_namespace.pop(_CLEANUP_KEY, None)
     for collection, handler in ((bpy.app.handlers.load_pre, _load_pre), (bpy.app.handlers.load_post, _load_post)):
