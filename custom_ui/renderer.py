@@ -321,13 +321,16 @@ def draw(session, region):
                 if not compact:
                     text(title, x+44*scale, yt-19*scale, 12*scale, T.TEXT, nav-54*scale)
                 session.hit((x+8*scale, yt-step+3*scale, nav-16*scale, step-2*scale), ('section', index), title)
-            if compact:
-                icons.draw('PREFERENCES',x+13*scale,top-78*scale,19*scale,T.accent(prefs))
-            else:
-                text('Session / Settings', x+18*scale, top-78*scale, 12*scale, T.accent(prefs))
-            session.hit((x+8*scale, top-90*scale, nav-16*scale, 32*scale), ('header',), 'Autosave, restart and settings')
+            if session.show_header:
+                rect(x+8*scale, top-90*scale, nav-16*scale, 32*scale, T.SELECTED)
+                rect(x+8*scale, top-90*scale, 3*scale, 32*scale, T.accent(prefs), 1)
+            icons.draw('PREFERENCES',x+(13 if compact else 17)*scale,top-81*scale,19*scale,
+                       T.accent(prefs) if session.show_header else T.MUTED)
+            if not compact:
+                text('Autosave and Restart', x+44*scale, top-78*scale, 12*scale, T.TEXT, nav-54*scale)
+            session.hit((x+8*scale, top-90*scale, nav-16*scale, 32*scale), ('header',), 'Autosave and Restart')
         title = ('Search Results' if session.query and not session.show_header else
-                 'Session / Settings' if session.show_header else session.titles[session.section])
+                 'Autosave and Restart' if session.show_header else session.titles[session.section])
         icons.draw(session.icons[session.section] if not session.show_header else 'PREFERENCES',content_x,top-74*scale,29*scale,T.accent(prefs))
         text(title, content_x+42*scale, top-66*scale, 17*scale, T.TEXT, content_w-197*scale)
         if not nav:
