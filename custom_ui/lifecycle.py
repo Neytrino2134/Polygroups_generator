@@ -84,14 +84,14 @@ class Session:
     def geometry(self, region):
         s = self.scale
         if self.prefs.ui_mode == 'UI_PANEL' and self.docked:
-            width = min(self.prefs.ui_panel_width*s, max(1, region.width-48))
-            x = max(8, region.width-width-40)
+            width = min(self.prefs.ui_panel_width*s, max(1, region.width-36))
+            x = max(8, region.width-width-28)
             # Region dimensions are physical pixels and change live when the
             # N-panel edge is dragged. Keep the overlay within its content lane.
             sidebar = next((r for r in self.area.regions if r.type == 'UI' and r.width > 1), None)
             if self.area.spaces.active.show_region_ui and sidebar is not None:
-                width = min(max(1, sidebar.width-48), max(1, region.width-48))
-                x = min(max(8, sidebar.x-getattr(region, 'x', 0)+8), max(8, region.width-width-40))
+                width = min(max(1, sidebar.width-36), max(1, region.width-36))
+                x = min(max(8, sidebar.x-getattr(region, 'x', 0)+8), max(8, region.width-width-28))
             # Reserve physical viewport pixels for its top toolbars/overlays.
             top = max(1, min(region.height-1, max(9, region.height-160)))
             available = max(1, top-8)
@@ -102,6 +102,16 @@ class Session:
         x = min(max(8, self.x*s), max(8, region.width-width-8))
         top = min(region.height-8, max(h+8, region.height-self.y*s))
         return x, top, width, h
+
+    def sidebar_resize_rect(self, region):
+        """Expose Blender's native N-panel boundary instead of intercepting it."""
+        if self.prefs.ui_mode != 'UI_PANEL' or not self.docked or not self.area.spaces.active.show_region_ui:
+            return None
+        sidebar = next((r for r in self.area.regions if r.type == 'UI' and r.width > 1), None)
+        if sidebar is None:
+            return None
+        _, top, _, height = self.geometry(region)
+        return sidebar.x-getattr(region, 'x', 0)-2, top-height, 4, height
 
     def hit(self, rect, action, tooltip='', identity=''):
         self.hits.append((rect, action, tooltip, identity))
@@ -455,6 +465,9 @@ class AIRETOPO_OT_custom_ui(bpy.types.Operator):
             redraw(s)
             return {'RUNNING_MODAL'}
         hit = s.find(mx, my)
+        if hit and hit[1][0] == 'sidebar_resize':
+            # Native action-zone events must reach Blender's screen handlers.
+            return {'PASS_THROUGH'}
         x, top, width, h = s.geometry(s.region)
         inside = x <= mx <= x+width and top-h <= my <= top
         if event.type == 'MOUSEMOVE':

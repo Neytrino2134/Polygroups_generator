@@ -293,6 +293,12 @@ def draw(session, region):
         if width>=570*scale:
             text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.text_color(prefs, muted=True))
         docked = prefs.ui_mode == 'UI_PANEL' and session.docked
+        resize_zone = session.sidebar_resize_rect(region) if docked else None
+        if resize_zone:
+            rx, ry, rw, rh = resize_zone
+            rect(rx+1, ry, 2, rh, T.surface(T.BORDER, prefs), 1)
+            rect(rx, ry+max(0, (rh-48)/2), rw, min(48, rh), T.heading(prefs), 2)
+            session.hit(resize_zone, ('sidebar_resize',), 'Drag the N-panel border to resize both panels')
         for offset, label, action in ((186, 'Autosave', 'header'), (116, 'Detach' if docked else 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
             text(label, x+width-offset*scale, top-28*scale, 12*scale, T.text_color(prefs, muted=True))
             session.hit((x+width-offset*scale-4*scale, top-40*scale, (65 if action=='header' else 40)*scale, 34*scale), (action,), 'Autosave and Restart' if action=='header' else label)

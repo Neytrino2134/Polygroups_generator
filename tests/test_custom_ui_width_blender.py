@@ -25,16 +25,20 @@ session = NS(scale=1, prefs=NS(ui_mode='UI_PANEL', ui_panel_width=400), docked=T
              area=NS(regions=[sidebar], spaces=NS(active=space)), collapsed=False,
              width=500, height=500, x=20, y=40)
 region = NS(width=1000, height=800, x=0)
+session.geometry = lambda region: Session.geometry(session, region)
 for scale in (1, 1.5, 2):
     session.scale = scale
     for width in (320, 430, 600):
         sidebar.width = width
         sidebar.x = 1000-width
         x, top, actual, h = Session.geometry(session, region)
-        assert actual == width-48 and x == sidebar.x+8
-        assert x+actual == 960
+        assert actual == width-36 and x == sidebar.x+8
+        assert x+actual == 972
         assert top == region.height-160
+        rx, ry, rw, rh = Session.sidebar_resize_rect(session, region)
+        assert rx+rw/2 == sidebar.x and rh == h
 session.docked = False
+assert Session.sidebar_resize_rect(session, region) is None
 before = Session.geometry(session, region)
 sidebar.width = 200
 assert Session.geometry(session, region) == before
