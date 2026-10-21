@@ -20,6 +20,14 @@ def accent(prefs):
                  for c in prefs.custom_ui_accent) + (1,)
 
 
+def heading(prefs):
+    return tuple(prefs.custom_ui_heading_color) + (1,)
+
+
+def text_color(prefs, muted=False):
+    return tuple(c * (.7 if muted else 1) for c in prefs.custom_ui_text_color) + (1,)
+
+
 def surface(color, prefs):
     if color == BACKGROUND:
         color = tuple(prefs.custom_ui_bg) + (color[3],)

@@ -445,6 +445,10 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
                                              update=_update_custom_interface)
     custom_ui_accent: bpy.props.FloatVectorProperty(name='Accent', subtype='COLOR', size=3,
         default=(0.0, .835, .961), min=0, max=1, update=_update_custom_interface)
+    custom_ui_heading_color: bpy.props.FloatVectorProperty(name='Heading and Icon Color', subtype='COLOR_GAMMA', size=3,
+        default=(234/255, 243/255, 1), min=0, max=1, update=_update_custom_interface)
+    custom_ui_text_color: bpy.props.FloatVectorProperty(name='Text Color', subtype='COLOR_GAMMA', size=3,
+        default=(234/255, 243/255, 1), min=0, max=1, update=_update_custom_interface)
     custom_ui_bg: bpy.props.FloatVectorProperty(name='BG Color', subtype='COLOR_GAMMA', size=3,
         default=(16/255, 25/255, 31/255), min=0, max=1, update=_update_custom_interface)
     custom_ui_secondary_bg: bpy.props.FloatVectorProperty(name='Secondary BG Color', subtype='COLOR_GAMMA', size=3,
@@ -842,6 +846,8 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
             box.prop(self, 'ui_panel_width')
             box.prop(self, 'custom_ui_scale')
             box.prop(self, 'custom_ui_accent')
+            box.prop(self, 'custom_ui_heading_color')
+            box.prop(self, 'custom_ui_text_color')
             box.prop(self, 'custom_ui_bg')
             box.prop(self, 'custom_ui_secondary_bg')
             box.prop(self, 'custom_ui_accent_bg')

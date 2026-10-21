@@ -10,6 +10,11 @@ _shader = None
 _geometry = {}
 
 
+def tooltip_text_width(lines, scale, limit):
+    blf.size(0, 11*scale)
+    return min(limit, max((blf.dimensions(0, line)[0] for line in lines), default=0) + 20*scale)
+
+
 def tooltip_bounds(anchor, size, viewport, mouse, scale=1):
     """Anchor above a control; fall back below/alongside at viewport edges."""
     ax, ay, aw, ah = anchor
@@ -169,18 +174,18 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
     prefs = session.prefs
     accent = T.accent(prefs)
     enabled = node.get('enabled', True)
-    color = T.TEXT if enabled else T.MUTED
+    color = T.text_color(prefs, muted=not enabled)
     if kind in {'box', 'group','section'}:
         rect(x, bottom, width, h, T.surface(T.BORDER, prefs), prefs.custom_ui_rounding*scale)
         rect(x+scale, bottom+scale, width-2*scale, h-2*scale, T.surface(T.SURFACE, prefs), prefs.custom_ui_rounding*scale)
     if 'children' in node:
         if kind == 'section':
-            text(node['text'],x+12*scale,top-25*scale,14*scale,T.accent(prefs),width-24*scale)
+            text(node['text'],x+12*scale,top-25*scale,14*scale,T.heading(prefs),width-24*scale)
             top -= 38*scale
         if kind == 'group':
-            text('▾' if node['opened'] or query else '▸',x+10*scale,top-25*scale,12*scale,T.MUTED)
-            icons.draw(node.get('icon',''),x+26*scale,top-29*scale,18*scale,accent)
-            text(node['text'], x+52*scale, top-25*scale, 14*scale, T.TEXT, width-64*scale)
+            text('▾' if node['opened'] or query else '▸',x+10*scale,top-25*scale,12*scale,T.heading(prefs))
+            icons.draw(node.get('icon',''),x+26*scale,top-29*scale,18*scale,T.heading(prefs))
+            text(node['text'], x+52*scale, top-25*scale, 14*scale, T.heading(prefs), width-64*scale)
             session.hit((x, top-38*scale, width, 38*scale), ('binding', node['id']), node['text'])
             if not node['opened'] and not query:
                 return h
@@ -214,7 +219,7 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
     if kind == 'separator':
         return h
     if kind == 'label':
-        text(label, x+3*scale, top-18*scale, 12*scale, color, width-6*scale)
+        text(label, x+3*scale, top-18*scale, 12*scale, T.heading(prefs) if enabled else color, width-6*scale)
         return h
     hot = session.hover == node['id']
     if kind == 'progress':
@@ -247,7 +252,7 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
                 rect(x,bottom+2*scale,width,h-4*scale,T.SELECTED,prefs.custom_ui_rounding*scale)
             if session.slider and session.slider['id']==node['id']:
                 rendered = format(session.slider['value'],'.5g')
-            text(label, x+10*scale, top-14*scale, 10*scale, T.MUTED, width-20*scale)
+            text(label, x+10*scale, top-14*scale, 10*scale, T.text_color(prefs, muted=True), width-20*scale)
             text(rendered or '—', x+10*scale, top-29*scale, 12*scale, color, width-20*scale)
             if slider_node(node):
                 lo,hi = node['soft_min'],node['soft_max']
@@ -289,13 +294,13 @@ def draw(session, region):
     try:
         gpu.state.blend_set('ALPHA')
         rect(x, bottom, width, h, T.surface(T.BACKGROUND, prefs), prefs.custom_ui_rounding*scale)
-        icons.draw('LOGO',x+14*scale,top-33*scale,25*scale,T.accent(prefs))
-        text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, width=width-260*scale)
+        icons.draw('LOGO',x+14*scale,top-33*scale,25*scale,T.heading(prefs))
+        text('AI Retopo' if width<500*scale else 'AI Retopo Toolkit', x+48*scale, top-29*scale, 17*scale, T.heading(prefs), width=width-260*scale)
         if width>=570*scale:
-            text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.MUTED)
+            text('v'+session.version,x+235*scale,top-27*scale,11*scale,T.text_color(prefs, muted=True))
         docked = prefs.ui_mode == 'UI_PANEL' and session.docked
         for offset, label, action in ((186, 'Autosave', 'header'), (116, 'Detach' if docked else 'Dock', 'dock'), (50, '−' if not session.collapsed else '+', 'collapse'), (18, '×', 'close')):
-            text(label, x+width-offset*scale, top-28*scale, 12*scale, T.MUTED)
+            text(label, x+width-offset*scale, top-28*scale, 12*scale, T.text_color(prefs, muted=True))
             session.hit((x+width-offset*scale-4*scale, top-40*scale, (65 if action=='header' else 40)*scale, 34*scale), (action,), 'Autosave and Restart' if action=='header' else label)
         if not docked:
             session.hit((x, top-42*scale, width-195*scale, 42*scale), ('move',), 'Drag to move')
@@ -317,22 +322,22 @@ def draw(session, region):
                     rect(x+8*scale, yt-step+3*scale, nav-16*scale, step-2*scale, T.SELECTED)
                     rect(x+8*scale, yt-step+3*scale, 3*scale, step-2*scale, T.accent(prefs), 1)
                 size = min(19*scale, step-5*scale)
-                icons.draw(session.icons[index],x+(13 if compact else 17)*scale,yt-step+6*scale,size,T.accent(prefs) if index==session.section else T.MUTED)
+                icons.draw(session.icons[index],x+(13 if compact else 17)*scale,yt-step+6*scale,size,T.heading(prefs))
                 if not compact:
-                    text(title, x+44*scale, yt-19*scale, 12*scale, T.TEXT, nav-54*scale)
+                    text(title, x+44*scale, yt-19*scale, 12*scale, T.heading(prefs), nav-54*scale)
                 session.hit((x+8*scale, yt-step+3*scale, nav-16*scale, step-2*scale), ('section', index), title)
             if session.show_header:
                 rect(x+8*scale, top-90*scale, nav-16*scale, 32*scale, T.SELECTED)
                 rect(x+8*scale, top-90*scale, 3*scale, 32*scale, T.accent(prefs), 1)
             icons.draw('PREFERENCES',x+(13 if compact else 17)*scale,top-81*scale,19*scale,
-                       T.accent(prefs) if session.show_header else T.MUTED)
+                       T.heading(prefs))
             if not compact:
-                text('Autosave and Restart', x+44*scale, top-78*scale, 12*scale, T.TEXT, nav-54*scale)
+                text('Autosave and Restart', x+44*scale, top-78*scale, 12*scale, T.heading(prefs), nav-54*scale)
             session.hit((x+8*scale, top-90*scale, nav-16*scale, 32*scale), ('header',), 'Autosave and Restart')
         title = ('Search Results' if session.query and not session.show_header else
                  'Autosave and Restart' if session.show_header else session.titles[session.section])
-        icons.draw(session.icons[session.section] if not session.show_header else 'PREFERENCES',content_x,top-74*scale,29*scale,T.accent(prefs))
-        text(title, content_x+42*scale, top-66*scale, 17*scale, T.TEXT, content_w-197*scale)
+        icons.draw(session.icons[session.section] if not session.show_header else 'PREFERENCES',content_x,top-74*scale,29*scale,T.heading(prefs))
+        text(title, content_x+42*scale, top-66*scale, 17*scale, T.heading(prefs), content_w-197*scale)
         if not nav:
             session.hit((content_x, top-78*scale, content_w-150*scale, 32*scale), ('sections',), 'Choose workflow section')
         for offset, label, action in ((145, 'Search', 'search'), (82, '+', 'expand'), (40, '−', 'fold')):
@@ -340,7 +345,7 @@ def draw(session, region):
             tooltip = {'expand': 'Expand next level', 'fold': 'Collapse deepest open level'}.get(action, label)
             session.hit((content_x+content_w-offset*scale, top-78*scale, 48*scale, 30*scale), (action,), tooltip)
         if session.query:
-            text('Search: '+session.query+'  (click Search to clear/edit)', content_x, top-90*scale, 11*scale, T.MUTED, content_w)
+            text('Search: '+session.query+'  (click Search to clear/edit)', content_x, top-90*scale, 11*scale, T.text_color(prefs, muted=True), content_w)
         view_bottom = bottom+26*scale
         view_h = content_top-view_bottom
         gpu.state.scissor_test_set(True)
@@ -357,7 +362,7 @@ def draw(session, region):
             thumb = max(24*scale, view_h*view_h/max(view_h, total))
             ty = content_top-thumb-(track-thumb)*session.scroll/session.max_scroll
             rect(x+width-9*scale, ty, 3*scale, thumb, T.accent(prefs), scale)
-        text(session.note or ('Docked right · Detach to move · wheel to scroll' if docked else 'Drag title to move · corner to resize · wheel to scroll'), content_x, bottom+9*scale, 10*scale, T.ERROR if session.note else T.MUTED, content_w)
+        text(session.note or ('Docked right · Detach to move · wheel to scroll' if docked else 'Drag title to move · corner to resize · wheel to scroll'), content_x, bottom+9*scale, 10*scale, T.ERROR if session.note else T.text_color(prefs, muted=True), content_w)
         if not docked:
             session.hit((x+width-22*scale, bottom, 22*scale, 22*scale), ('resize',), 'Drag to resize')
             text('◢', x+width-18*scale, bottom+6*scale, 12*scale, T.MUTED)
@@ -377,7 +382,7 @@ def draw(session, region):
                 value=session.dropdown['node']['value']
                 if code==value or (isinstance(value,list) and code in value):
                     rect(dx+4*scale,cy,dw-8*scale,30*scale,T.SELECTED)
-                text(label,dx+12*scale,cy+10*scale,12*scale,T.TEXT,dw-24*scale)
+                text(label,dx+12*scale,cy+10*scale,12*scale,T.text_color(prefs),dw-24*scale)
                 session.hit((dx,cy,dw,32*scale),('choice',code),description)
         hovered = session.find(*session.mouse)
         if (session.tooltip and session.tooltip_age > .6 and hovered
@@ -395,6 +400,7 @@ def draw(session, region):
                 if line:
                     lines.append(line)
             lines=lines[:max(0, min(8, int((region.height-30*scale)/(15*scale))))]
+            tw = tooltip_text_width(lines, scale, tw)
             tip_h=(len(lines)*15+14)*scale
             bounds = tooltip_bounds(hovered[0], (tw, tip_h),
                                     (region.width, region.height), session.mouse, scale)
@@ -402,7 +408,7 @@ def draw(session, region):
                 tx, ty, tw, tip_h = bounds
                 rect(tx,ty,tw,tip_h,T.surface(T.RAISED,prefs))
                 for index,line in enumerate(lines):
-                    text(line,tx+10*scale,ty+tip_h-(index*15+20)*scale,11*scale,T.TEXT)
+                    text(line,tx+10*scale,ty+tip_h-(index*15+20)*scale,11*scale,T.text_color(prefs))
     finally:
         gpu.state.scissor_set(*scissor)
         gpu.state.scissor_test_set(scissor_test)
