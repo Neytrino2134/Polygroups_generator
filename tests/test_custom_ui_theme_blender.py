@@ -24,6 +24,8 @@ p.custom_ui_secondary_bg = (.3, .4, .5)
 p.custom_ui_accent_bg = (.6, .7, .8)
 p.custom_ui_heading_color = (.8, .2, .3)
 p.custom_ui_text_color = (.4, .6, .9)
+p.custom_ui_button_color = (.2, .3, .4)
+assert all(abs(a-b) < 1e-6 for a,b in zip(theme.button(p)[:3], p.custom_ui_button_color))
 assert all(abs(a-b) < 1e-6 for a,b in zip(theme.heading(p)[:3], p.custom_ui_heading_color))
 assert all(abs(a-b) < 1e-6 for a,b in zip(theme.text_color(p)[:3], p.custom_ui_text_color))
 for scale in (1, 1.5, 2):
@@ -37,9 +39,9 @@ for source, prop in ((theme.BACKGROUND, 'custom_ui_bg'), (theme.SURFACE, 'custom
 layout = Layout(key='appearance')
 p.draw_interface(layout)
 assert not layout.errors, layout.errors
-for prop in ('custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_heading_color', 'custom_ui_text_color'):
+for prop in ('custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_heading_color', 'custom_ui_text_color', 'custom_ui_button_color'):
     assert any(b[0] == 'property' and b[2] == prop for b in layout.bindings.values())
 assert bpy.ops.wm.airetopo_reset_custom_appearance() == {'FINISHED'}
-for prop in ('custom_ui_accent', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_heading_color', 'custom_ui_text_color'):
+for prop in ('custom_ui_accent', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_heading_color', 'custom_ui_text_color', 'custom_ui_button_color'):
     assert not p.is_property_set(prop)
 print('CUSTOM_UI_THEME_PASSED')

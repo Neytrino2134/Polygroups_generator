@@ -234,13 +234,7 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
         rect(x+(21 if node['value'] else 6)*scale, bottom+12*scale, 14*scale, 14*scale, T.TEXT, 7*scale)
         text(label or node.get('property', ''), x+46*scale, top-23*scale, 12*scale, color, width-50*scale)
     else:
-        operator = node['id'].rsplit('/',1)[-1].split(':')[0]
-        intent = label.casefold()+' '+operator.casefold()
-        primary = (kind=='button' and enabled
-                   and any(word in intent for word in ('save', 'start', 'bake', 'calculate', 'generate', 'import', 'remesh', 'unwrap'))
-                   and not any(word in intent for word in ('cancel','undo','delete','save as'))
-                   and not operator.endswith('_as'))
-        rect(x, bottom+2*scale, width, h-4*scale, T.BLUE if primary else accent if picked else T.surface(T.RAISED if hot else T.SURFACE, prefs), prefs.custom_ui_rounding*scale)
+        rect(x, bottom+2*scale, width, h-4*scale, accent if picked else T.button(prefs) if kind == 'button' else T.surface(T.RAISED if hot else T.SURFACE, prefs), prefs.custom_ui_rounding*scale)
         rect(x, bottom+2*scale, 2*scale, h-4*scale, accent if hot or picked else T.surface(T.BORDER, prefs), 0)
         if kind == 'property':
             rendered = ('••••••' if node.get('secret') else value_text(node))
@@ -267,7 +261,7 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
             glyph = {'ADD':'+','REMOVE':'−','FILE_FOLDER':'▱','FILE_REFRESH':'↻',
                      'TRIA_UP':'▴','TRIA_DOWN':'▾','X':'×','PREFERENCES':'⚙','CHECKMARK':'✓',
                      'PLAY':'▶','PAUSE':'Ⅱ','HIDE_ON':'◉','HIDE_OFF':'○','XRAY':'▣'}.get(node.get('icon'),'⋯')
-            text(label or glyph, x+10*scale, top-23*scale, 12*scale, T.surface(T.BACKGROUND,prefs) if picked or primary else color, width-20*scale)
+            text(label or glyph, x+10*scale, top-23*scale, 12*scale, T.surface(T.BACKGROUND,prefs) if picked else color, width-20*scale)
     if enabled:
         tip=node.get('description') or label
         if kind=='property' and not node.get('secret') and node.get('type')=='STRING':

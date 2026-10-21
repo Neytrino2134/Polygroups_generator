@@ -84,16 +84,16 @@ class Session:
     def geometry(self, region):
         s = self.scale
         if self.prefs.ui_mode == 'UI_PANEL' and self.docked:
-            width = min(self.prefs.ui_panel_width*s, max(1, region.width-30))
-            x = max(8, region.width-width-22)
+            width = min(self.prefs.ui_panel_width*s, max(1, region.width-48))
+            x = max(8, region.width-width-40)
             # Region dimensions are physical pixels and change live when the
             # N-panel edge is dragged. Keep the overlay within its content lane.
             sidebar = next((r for r in self.area.regions if r.type == 'UI' and r.width > 1), None)
             if self.area.spaces.active.show_region_ui and sidebar is not None:
-                width = min(max(1, sidebar.width-30), max(1, region.width-30))
-                x = min(max(8, sidebar.x-getattr(region, 'x', 0)+8), max(8, region.width-width-22))
+                width = min(max(1, sidebar.width-48), max(1, region.width-48))
+                x = min(max(8, sidebar.x-getattr(region, 'x', 0)+8), max(8, region.width-width-40))
             # Reserve physical viewport pixels for its top toolbars/overlays.
-            top = max(1, min(region.height-1, max(9, region.height-200)))
+            top = max(1, min(region.height-1, max(9, region.height-160)))
             available = max(1, top-8)
             h = min(44*s if self.collapsed else available, available)
             return x, top, width, h
@@ -131,7 +131,7 @@ class Session:
                 ui.VIEW3D_PT_polygroups_generator.draw(SimpleNamespace(layout=model), context)
                 appearance = model.box()
                 appearance.label(text='Custom Interface')
-                for name in ('ui_mode', 'custom_ui_scale', 'custom_ui_accent', 'custom_ui_heading_color', 'custom_ui_text_color', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_brightness', 'custom_ui_rounding'):
+                for name in ('ui_mode', 'custom_ui_scale', 'custom_ui_accent', 'custom_ui_heading_color', 'custom_ui_text_color', 'custom_ui_button_color', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_brightness', 'custom_ui_rounding'):
                     appearance.prop(self.prefs, name)
                 appearance.operator('wm.airetopo_reset_custom_appearance')
             finally:
@@ -330,7 +330,7 @@ class AIRETOPO_OT_reset_custom_appearance(bpy.types.Operator):
 
     def execute(self, context):
         prefs = preferences(context)
-        for name in ('custom_ui_scale', 'custom_ui_accent', 'custom_ui_heading_color', 'custom_ui_text_color', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_brightness', 'custom_ui_rounding'):
+        for name in ('custom_ui_scale', 'custom_ui_accent', 'custom_ui_heading_color', 'custom_ui_text_color', 'custom_ui_button_color', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_brightness', 'custom_ui_rounding'):
             prefs.property_unset(name)
         request_update()
         return {'FINISHED'}

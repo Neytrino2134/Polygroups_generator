@@ -24,6 +24,10 @@ def heading(prefs):
     return tuple(prefs.custom_ui_heading_color) + (1,)
 
 
+def button(prefs):
+    return tuple(prefs.custom_ui_button_color) + (1,)
+
+
 def text_color(prefs, muted=False):
     return tuple(c * (.7 if muted else 1) for c in prefs.custom_ui_text_color) + (1,)
 

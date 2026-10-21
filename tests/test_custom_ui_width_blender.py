@@ -31,8 +31,9 @@ for scale in (1, 1.5, 2):
         sidebar.width = width
         sidebar.x = 1000-width
         x, top, actual, h = Session.geometry(session, region)
-        assert actual == width-30 and x == sidebar.x+8
-        assert x+actual == 978
+        assert actual == width-48 and x == sidebar.x+8
+        assert x+actual == 960
+        assert top == region.height-160
 session.docked = False
 before = Session.geometry(session, region)
 sidebar.width = 200
