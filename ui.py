@@ -635,13 +635,14 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
             self.layout.prop(preferences, 'ui_mode', expand=True) if preferences else None
             if preferences and preferences.ui_mode == 'CUSTOM':
                 self.layout.operator('wm.airetopo_custom_ui', text='Open UI Panel', icon='WINDOW')
-                self.layout.operator('wm.airetopo_custom_section', text=t(context, 'panel_session_status'), icon='FILE_REFRESH').section = 13
                 split = self.layout.split(factor=.12)
                 rail = split.column(align=True)
                 body = split.column()
+                rail.operator('wm.airetopo_custom_section', text='', icon='FILE_REFRESH',
+                    depress=preferences.custom_ui_show_session).section = 13
                 for index, panel in enumerate(SECTION_PANEL_CLASSES):
                     item = rail.operator('wm.airetopo_custom_section', text='', icon=panel.bl_icon,
-                        depress=index == preferences.custom_ui_section)
+                        depress=not preferences.custom_ui_show_session and index == preferences.custom_ui_section)
                     item.section = index
                 if preferences.custom_ui_show_session:
                     old_flags = _CUSTOM_CAPTURING, _CUSTOM_HEADER_ONLY
