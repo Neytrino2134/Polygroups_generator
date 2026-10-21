@@ -85,11 +85,18 @@ class Session:
         s = self.scale
         if self.prefs.ui_mode == 'UI_PANEL' and self.docked:
             width = min(self.prefs.ui_panel_width*s, max(1, region.width-30))
+            x = max(8, region.width-width-22)
+            # Region dimensions are physical pixels and change live when the
+            # N-panel edge is dragged. Keep the overlay within its content lane.
+            sidebar = next((r for r in self.area.regions if r.type == 'UI' and r.width > 1), None)
+            if self.area.spaces.active.show_region_ui and sidebar is not None:
+                width = min(max(1, sidebar.width-30), max(1, region.width-30))
+                x = min(max(8, sidebar.x-getattr(region, 'x', 0)+8), max(8, region.width-width-22))
             # Reserve physical viewport pixels for its top toolbars/overlays.
             top = max(1, min(region.height-1, max(9, region.height-200)))
             available = max(1, top-8)
             h = min(44*s if self.collapsed else available, available)
-            return max(8, region.width-width-22), top, width, h
+            return x, top, width, h
         width = min(self.width*s, max(1, region.width-16))
         h = min((44 if self.collapsed else self.height)*s, max(1, region.height-16))
         x = min(max(8, self.x*s), max(8, region.width-width-8))

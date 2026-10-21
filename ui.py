@@ -634,7 +634,6 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
         if not _CUSTOM_CAPTURING:
             self.layout.prop(preferences, 'ui_mode', expand=True) if preferences else None
             if preferences and preferences.ui_mode == 'CUSTOM':
-                self.layout.operator('wm.airetopo_custom_ui', text='Open UI Panel', icon='WINDOW')
                 split = self.layout.split(factor=.12)
                 rail = split.column(align=True)
                 body = split.column()
