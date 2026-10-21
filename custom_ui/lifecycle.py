@@ -131,7 +131,7 @@ class Session:
                 ui.VIEW3D_PT_polygroups_generator.draw(SimpleNamespace(layout=model), context)
                 appearance = model.box()
                 appearance.label(text='Custom Interface')
-                for name in ('ui_mode', 'custom_ui_scale', 'custom_ui_accent', 'custom_ui_brightness', 'custom_ui_rounding'):
+                for name in ('ui_mode', 'custom_ui_scale', 'custom_ui_accent', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_brightness', 'custom_ui_rounding'):
                     appearance.prop(self.prefs, name)
                 appearance.operator('wm.airetopo_reset_custom_appearance')
             finally:
@@ -330,7 +330,7 @@ class AIRETOPO_OT_reset_custom_appearance(bpy.types.Operator):
 
     def execute(self, context):
         prefs = preferences(context)
-        for name in ('custom_ui_scale', 'custom_ui_accent', 'custom_ui_brightness', 'custom_ui_rounding'):
+        for name in ('custom_ui_scale', 'custom_ui_accent', 'custom_ui_bg', 'custom_ui_secondary_bg', 'custom_ui_accent_bg', 'custom_ui_brightness', 'custom_ui_rounding'):
             prefs.property_unset(name)
         request_update()
         return {'FINISHED'}

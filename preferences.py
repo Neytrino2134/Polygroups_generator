@@ -435,6 +435,7 @@ def draw_global_notices(layout, context, preferences):
 
 
 class AIRETOPO_Preferences(bpy.types.AddonPreferences):
+    show_preferences_interface: bpy.props.BoolProperty(default=True)
     ui_mode: bpy.props.EnumProperty(
         name='Interface', items=(('CLASSIC', 'Classic', 'Blender sidebar'),
                                  ('CUSTOM', 'Custom', 'Compact native sidebar'),
@@ -444,6 +445,13 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
                                              update=_update_custom_interface)
     custom_ui_accent: bpy.props.FloatVectorProperty(name='Accent', subtype='COLOR', size=3,
         default=(0.0, .835, .961), min=0, max=1, update=_update_custom_interface)
+    custom_ui_bg: bpy.props.FloatVectorProperty(name='BG Color', subtype='COLOR_GAMMA', size=3,
+        default=(16/255, 25/255, 31/255), min=0, max=1, update=_update_custom_interface)
+    custom_ui_secondary_bg: bpy.props.FloatVectorProperty(name='Secondary BG Color', subtype='COLOR_GAMMA', size=3,
+        default=(21/255, 33/255, 39/255), min=0, max=1, update=_update_custom_interface)
+    custom_ui_accent_bg: bpy.props.FloatVectorProperty(name='Accent BG Color', subtype='COLOR_GAMMA', size=3,
+        description='Panel and subsection outlines',
+        default=(49/255, 67/255, 79/255), min=0, max=1, update=_update_custom_interface)
     custom_ui_brightness: bpy.props.FloatProperty(name='Surface Brightness', default=1, min=.6, max=1.5,
                                                   update=_update_custom_interface)
     custom_ui_rounding: bpy.props.FloatProperty(name='Corner Rounding', default=8, min=0, max=16,
@@ -821,16 +829,27 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
         box = layout.box()
-        box.label(text='Interface', icon='WINDOW')
+        box.prop(self, 'show_preferences_interface', text='Interface', emboss=False,
+                 icon='TRIA_DOWN' if self.show_preferences_interface else 'TRIA_RIGHT')
+        if self.show_preferences_interface:
+            self.draw_interface(box)
+        draw_global_notices(layout, context, self)
+        self.draw_preferences_sections(layout, context)
+
+    def draw_interface(self, box):
         box.prop(self, 'ui_mode', expand=True)
         if self.ui_mode == 'UI_PANEL':
             box.prop(self, 'ui_panel_width')
             box.prop(self, 'custom_ui_scale')
             box.prop(self, 'custom_ui_accent')
+            box.prop(self, 'custom_ui_bg')
+            box.prop(self, 'custom_ui_secondary_bg')
+            box.prop(self, 'custom_ui_accent_bg')
             box.prop(self, 'custom_ui_brightness')
             box.prop(self, 'custom_ui_rounding')
             box.operator('wm.airetopo_reset_custom_appearance', text='Reset Appearance')
-        draw_global_notices(layout, context, self)
+
+    def draw_preferences_sections(self, layout, context):
         sections = [
             ("show_preferences_language", t(context, "preferences_language"), self.draw_language),
             ("show_preferences_autosave", t(context, "preferences_autosave"), self.draw_autosave),

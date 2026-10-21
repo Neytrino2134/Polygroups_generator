@@ -218,14 +218,14 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
         return h
     hot = session.hover == node['id']
     if kind == 'progress':
-        rect(x, bottom+4*scale, width, h-8*scale, T.RAISED)
+        rect(x, bottom+4*scale, width, h-8*scale, T.surface(T.RAISED, prefs))
         rect(x, bottom+4*scale, width*min(1, max(0, node['value'])), h-8*scale, accent)
         text(label, x+10*scale, top-23*scale, 12*scale, color, width-20*scale)
         return h
     boolean = kind == 'property' and node.get('type') == 'BOOLEAN' and not node.get('array')
     picked = node.get('depress', False)
     if boolean:
-        rect(x+4*scale, bottom+10*scale, 34*scale, 18*scale, accent if node['value'] else T.BORDER, 9*scale)
+        rect(x+4*scale, bottom+10*scale, 34*scale, 18*scale, accent if node['value'] else T.surface(T.BORDER, prefs), 9*scale)
         rect(x+(21 if node['value'] else 6)*scale, bottom+12*scale, 14*scale, 14*scale, T.TEXT, 7*scale)
         text(label or node.get('property', ''), x+46*scale, top-23*scale, 12*scale, color, width-50*scale)
     else:
@@ -236,7 +236,7 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
                    and not any(word in intent for word in ('cancel','undo','delete','save as'))
                    and not operator.endswith('_as'))
         rect(x, bottom+2*scale, width, h-4*scale, T.BLUE if primary else accent if picked else T.surface(T.RAISED if hot else T.SURFACE, prefs), prefs.custom_ui_rounding*scale)
-        rect(x, bottom+2*scale, 2*scale, h-4*scale, accent if hot or picked else T.BORDER, 0)
+        rect(x, bottom+2*scale, 2*scale, h-4*scale, accent if hot or picked else T.surface(T.BORDER, prefs), 0)
         if kind == 'property':
             rendered = ('••••••' if node.get('secret') else value_text(node))
             if node.get('type') == 'ENUM':
@@ -253,7 +253,7 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
                 lo,hi = node['soft_min'],node['soft_max']
                 val = session.slider['value'] if session.slider and session.slider['id']==node['id'] else node['value']
                 frac = max(0,min(1,(val-lo)/(hi-lo)))
-                rect(x+10*scale,bottom+8*scale,width-20*scale,4*scale,T.BORDER,2*scale)
+                rect(x+10*scale,bottom+8*scale,width-20*scale,4*scale,T.surface(T.BORDER,prefs),2*scale)
                 rect(x+10*scale,bottom+8*scale,(width-20*scale)*frac,4*scale,accent,2*scale)
                 rect(x+6*scale+(width-20*scale)*frac,bottom+5*scale,10*scale,10*scale,accent,5*scale)
         else:
@@ -262,7 +262,7 @@ def draw_node(session, node, x, top, width, scale, query='', clip=None):
             glyph = {'ADD':'+','REMOVE':'−','FILE_FOLDER':'▱','FILE_REFRESH':'↻',
                      'TRIA_UP':'▴','TRIA_DOWN':'▾','X':'×','PREFERENCES':'⚙','CHECKMARK':'✓',
                      'PLAY':'▶','PAUSE':'Ⅱ','HIDE_ON':'◉','HIDE_OFF':'○','XRAY':'▣'}.get(node.get('icon'),'⋯')
-            text(label or glyph, x+10*scale, top-23*scale, 12*scale, T.BACKGROUND if picked or primary else color, width-20*scale)
+            text(label or glyph, x+10*scale, top-23*scale, 12*scale, T.surface(T.BACKGROUND,prefs) if picked or primary else color, width-20*scale)
     if enabled:
         tip=node.get('description') or label
         if kind=='property' and not node.get('secret') and node.get('type')=='STRING':
@@ -307,7 +307,7 @@ def draw(session, region):
         content_w = width-nav-28*scale
         content_top = top-102*scale
         if nav:
-            rect(x+nav, bottom+12*scale, scale, h-62*scale, T.BORDER, 0)
+            rect(x+nav, bottom+12*scale, scale, h-62*scale, T.surface(T.BORDER,prefs), 0)
             for index, title in enumerate(session.titles):
                 step = min(36*scale, max(8, (h-155*scale)/13)) if compact else 36*scale
                 yt = top-108*scale-index*step
@@ -371,7 +371,7 @@ def draw(session, region):
             count = min(8,len(options)-offset)
             dh = (count*32+12)*scale
             dt = max(bottom+dh+25*scale,min(top-45*scale,dy))
-            rect(dx,dt-dh,dw,dh,T.RAISED,prefs.custom_ui_rounding*scale)
+            rect(dx,dt-dh,dw,dh,T.surface(T.RAISED,prefs),prefs.custom_ui_rounding*scale)
             for index,(code,label,description) in enumerate(options[offset:offset+8]):
                 cy = dt-(index+1)*32*scale
                 value=session.dropdown['node']['value']
@@ -400,7 +400,7 @@ def draw(session, region):
                                     (region.width, region.height), session.mouse, scale)
             if bounds and lines:
                 tx, ty, tw, tip_h = bounds
-                rect(tx,ty,tw,tip_h,T.RAISED)
+                rect(tx,ty,tw,tip_h,T.surface(T.RAISED,prefs))
                 for index,line in enumerate(lines):
                     text(line,tx+10*scale,ty+tip_h-(index*15+20)*scale,11*scale,T.TEXT)
     finally:
