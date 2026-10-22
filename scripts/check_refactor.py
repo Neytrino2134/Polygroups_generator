@@ -55,6 +55,7 @@ for original, targets in [
     ('properties.py', [ROOT / 'properties.py', *sorted((ROOT / 'settings').glob('*.py'))]),
     ('operators/object_seam_cutter.py', [ROOT / 'operators/object_seam_cutter.py', ROOT / 'operators/cutter_screen.py', ROOT / 'operators/cutter_overlay.py']),
     ('ui.py', [ROOT / 'ui.py', *sorted((ROOT / 'ui_panels').glob('*.py'))]),
+    ('operators/baking.py', [ROOT / 'operators/baking.py', *sorted((ROOT / 'operators').glob('bake_*.py'))]),
 ]:
     baseline = subprocess.check_output(['git', 'show', f'{BASE}:{original}'], cwd=ROOT).decode('utf-8-sig')
     old_tree = ast.parse(baseline)
@@ -71,7 +72,7 @@ for original, targets in [
             assert normalized(node) == normalized(definitions[node.name]), f'Changed: {node.name}'
             checked += 1
     # Preserve ordered registration and literal constants as well as definitions.
-    if original in {'properties.py', 'ui.py'}:
+    if original in {'properties.py', 'ui.py', 'operators/baking.py'}:
         new_assignments = {}
         for path in targets:
             if path.exists():
@@ -93,4 +94,4 @@ report = {'baseline': BASE, 'python_files': len(files),
           'unchanged_definitions': checked,
           'inventory': sorted(inventory, key=lambda row: (-row['lines'], row['file']))}
 (ROOT / 'docs/refactor_inventory.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
-print(f'Syntax OK: {len(files)} files; unchanged definitions: {checked}; constants/registration OK')
+print(f'Syntax OK: {len(files)} files; equivalent definitions: {checked}; constants/registration OK')

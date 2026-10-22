@@ -1,18 +1,13 @@
 {
   "baseline": "140a104",
-  "python_files": 341,
-  "total_lines": 74551,
-  "unchanged_definitions": 248,
+  "python_files": 346,
+  "total_lines": 74715,
+  "unchanged_definitions": 340,
   "inventory": [
     {
       "file": "operators/object_seam_cutter.py",
       "lines": 3793,
       "definitions": 126
-    },
-    {
-      "file": "operators/baking.py",
-      "lines": 2350,
-      "definitions": 92
     },
     {
       "file": "operators/import_queue.py",
@@ -43,6 +38,11 @@
       "file": "preferences.py",
       "lines": 1233,
       "definitions": 39
+    },
+    {
+      "file": "operators/baking.py",
+      "lines": 1106,
+      "definitions": 28
     },
     {
       "file": "operators/mesh_checks.py",
@@ -133,6 +133,11 @@
       "file": "settings/seams.py",
       "lines": 663,
       "definitions": 5
+    },
+    {
+      "file": "operators/bake_images.py",
+      "lines": 660,
+      "definitions": 34
     },
     {
       "file": "core/materials.py",
@@ -280,6 +285,11 @@
       "definitions": 13
     },
     {
+      "file": "operators/bake_merge.py",
+      "lines": 323,
+      "definitions": 15
+    },
+    {
       "file": "operators/cutter_grid.py",
       "lines": 319,
       "definitions": 7
@@ -378,6 +388,11 @@
       "file": "operators/check_material_textures.py",
       "lines": 242,
       "definitions": 13
+    },
+    {
+      "file": "operators/bake_geometry.py",
+      "lines": 232,
+      "definitions": 7
     },
     {
       "file": "tests/test_batch_separate_save.py",
@@ -538,6 +553,11 @@
       "file": "tests/test_turnaround_animation.py",
       "lines": 174,
       "definitions": 0
+    },
+    {
+      "file": "operators/bake_cage.py",
+      "lines": 168,
+      "definitions": 8
     },
     {
       "file": "operators/quick_knife_seam_tool.py",
@@ -950,13 +970,13 @@
       "definitions": 1
     },
     {
-      "file": "tests/test_view_assists_toggle.py",
+      "file": "scripts/check_refactor.py",
       "lines": 97,
       "definitions": 2
     },
     {
-      "file": "scripts/check_refactor.py",
-      "lines": 96,
+      "file": "tests/test_view_assists_toggle.py",
+      "lines": 97,
       "definitions": 2
     },
     {
@@ -1647,6 +1667,11 @@
     {
       "file": "scripts/check_import_queue_baseline.py",
       "lines": 25,
+      "definitions": 0
+    },
+    {
+      "file": "operators/bake_constants.py",
+      "lines": 24,
       "definitions": 0
     },
     {
