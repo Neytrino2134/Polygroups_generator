@@ -2681,6 +2681,11 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         description="Save Freestyle edges as a separate pass image instead of compositing them into the asset render",
         default=True,
     )
+    animation_freestyle_dual_video: bpy.props.BoolProperty(
+        name="Videos With and Without Freestyle",
+        description="Render two videos in two passes: clean and with Freestyle edges",
+        default=False,
+    )
     freestyle_line_thickness: bpy.props.FloatProperty(
         name="Line Thickness",
         description="Absolute Freestyle line thickness in pixels",

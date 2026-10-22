@@ -4127,22 +4127,6 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
 
         layout = self.layout.box()
         settings = context.scene.polygroups_render_settings
-        content = draw_topic(layout, context, "render_11", t(context, "render_mesh_selection"), "MESH_DATA")
-        if content is not None:
-            column = content.column(align=True)
-            column.enabled = not settings.is_running
-            column.label(text="Selection")
-            options_row = column.row(align=True)
-            options_row.prop(settings, "render_low", text="LOW")
-            options_row.prop(settings, "render_mid", text="MID")
-            options_row.prop(settings, "render_high", text="HIGH")
-            column.prop(settings, "render_lod_enabled", text="LOD")
-            if settings.render_lod_enabled:
-                column.prop(settings, "render_lod_level", text="LOD Level")
-            column.separator()
-            column.label(text="Rename")
-            column.prop(settings, "render_rename_suffix", text="Suffix")
-            column.operator("object.polygroups_render_rename_suffix", text="Rename Suffix")
         content = draw_topic(layout, context, "render_1", 'Quality and Output', "PREFERENCES")
         if content is not None:
             column = content.column(align=True)
@@ -4169,32 +4153,6 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             scene_row.prop(settings, "scene_collection_prefix", text=t(context, "render_scene_collection_prefix"))
             column.prop(settings, "skip_existing", text=t(context, "render_skip_existing"))
             column.prop(settings, "overwrite_existing", text=t(context, "render_overwrite_existing"))
-
-        content = draw_topic(layout, context, "render_12", "FreeStyle", "EDGE_SEAM")
-        if content is not None:
-            freestyle_box = content.column(align=True)
-            freestyle_box.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
-            freestyle_column = freestyle_box.column(align=True)
-            freestyle_column.enabled = settings.freestyle_edges
-            freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
-            freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
-            color_row = freestyle_column.row(align=True)
-            color_row.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
-            palette_button = color_row.row(align=True)
-            palette_button.enabled = not settings.is_running
-            palette_button.operator("render.polygroups_palette_popup", text="", icon="COLOR")
-            freestyle_row = freestyle_box.row(align=True)
-            freestyle_row.enabled = not settings.is_running
-            freestyle_row.operator(
-                "object.polygroups_mark_freestyle_edges",
-                text=t(context, "render_mark_freestyle"),
-                icon="EDGESEL",
-            )
-            freestyle_row.operator(
-                "object.polygroups_clear_freestyle_edges",
-                text=t(context, "render_clear_freestyle"),
-                icon="TRASH",
-            )
 
         content = draw_topic(layout, context, "render_6", "Scene Setup", "SCENE_DATA")
         if content is not None:
@@ -4262,6 +4220,49 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 column.prop(settings, "studio_" + prop, text=t(context, "studio_" + prop))
             if settings.studio_backdrop is not None:
                 column.prop(settings.studio_backdrop, "location", text=t(context, "studio_position"))
+
+        content = draw_topic(layout, context, "render_11", t(context, "render_mesh_selection"), "MESH_DATA")
+        if content is not None:
+            column = content.column(align=True)
+            column.enabled = not settings.is_running
+            column.label(text="Selection")
+            options_row = column.row(align=True)
+            options_row.prop(settings, "render_low", text="LOW")
+            options_row.prop(settings, "render_mid", text="MID")
+            options_row.prop(settings, "render_high", text="HIGH")
+            column.prop(settings, "render_lod_enabled", text="LOD")
+            if settings.render_lod_enabled:
+                column.prop(settings, "render_lod_level", text="LOD Level")
+            column.separator()
+            column.label(text="Rename")
+            column.prop(settings, "render_rename_suffix", text="Suffix")
+            column.operator("object.polygroups_render_rename_suffix", text="Rename Suffix")
+
+        content = draw_topic(layout, context, "render_12", "FreeStyle", "EDGE_SEAM")
+        if content is not None:
+            freestyle_box = content.column(align=True)
+            freestyle_box.prop(settings, "freestyle_edges", text=t(context, "render_freestyle_edges"))
+            freestyle_column = freestyle_box.column(align=True)
+            freestyle_column.enabled = settings.freestyle_edges
+            freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
+            freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
+            color_row = freestyle_column.row(align=True)
+            color_row.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))
+            palette_button = color_row.row(align=True)
+            palette_button.enabled = not settings.is_running
+            palette_button.operator("render.polygroups_palette_popup", text="", icon="COLOR")
+            freestyle_row = freestyle_box.row(align=True)
+            freestyle_row.enabled = not settings.is_running
+            freestyle_row.operator(
+                "object.polygroups_mark_freestyle_edges",
+                text=t(context, "render_mark_freestyle"),
+                icon="EDGESEL",
+            )
+            freestyle_row.operator(
+                "object.polygroups_clear_freestyle_edges",
+                text=t(context, "render_clear_freestyle"),
+                icon="TRASH",
+            )
 
         content = draw_topic(layout, context, "render_10", t(context, "render_material_settings"), "MATERIAL")
         if content is not None:
@@ -4434,6 +4435,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             if settings.animation_media_type == "VIDEO":
                 column.prop(settings, "animation_container", text=t(context, "animation_container"))
                 column.prop(settings, "animation_quality", text=t(context, "animation_quality"))
+                if settings.freestyle_edges and settings.freestyle_as_render_pass:
+                    column.prop(settings, "animation_freestyle_dual_video")
             column.prop(
                 settings,
                 "animation_keep_scene_collections",

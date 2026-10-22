@@ -1700,12 +1700,12 @@ class OBJECT_OT_polygroups_clear_multiview_render(bpy.types.Operator):
 class OBJECT_OT_polygroups_mark_freestyle_edges(bpy.types.Operator):
     bl_idname = "object.polygroups_mark_freestyle_edges"
     bl_label = "Mark Freestyle Edges"
-    bl_description = "Mark all LOW/MID/HIGH/LOD asset mesh edges for Freestyle rendering"
+    bl_description = "Mark all selected mesh edges for Freestyle rendering"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         settings = context.scene.polygroups_render_settings
-        marked_edges, marked_objects = _mark_freestyle_edges(_asset_mesh_objects(settings), True)
+        marked_edges, marked_objects = _mark_freestyle_edges([obj for obj in context.selected_objects if obj.type == "MESH"], True)
         self.report(
             {"INFO"},
             f"Marked {marked_edges} Freestyle edge(s) on {marked_objects} object(s)",

@@ -6,7 +6,9 @@ import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
-from .render_queue import image_extension, ensure_render_support_visible, is_render_support_collection
+from .render_queue import (image_extension, ensure_render_support_visible, is_render_support_collection,
+    _configure_freestyle, _snapshot_freestyle_settings, _restore_freestyle_settings,
+    _mark_freestyle_edges)
 
 
 TURNAROUND_COLLECTION_PROP = "polygroups_turnaround_collection"
@@ -40,6 +42,8 @@ def remove_turnaround_collection(context, collection_name):
                 bpy.data.meshes.remove(data)
             elif isinstance(data, bpy.types.Curve):
                 bpy.data.curves.remove(data)
+            elif isinstance(data, bpy.types.Armature):
+                bpy.data.armatures.remove(data)
         for material in label_materials:
             if material.users == 0:
                 bpy.data.materials.remove(material)
@@ -416,6 +420,30 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
         duplicate.name = f"{source.name}_Turnaround"
         collection.objects.link(duplicate)
 
+        if source.type == 'ARMATURE':
+            # Copy the entire descendant hierarchy so bone parenting and intermediate
+            # empties keep their transforms; meshes use the copied armature.
+            copies = {source: duplicate}
+            for child in source.children_recursive:
+                clone = child.copy()
+                if child.data is not None:
+                    clone.data = child.data.copy()
+                clone.name = f"{child.name}_Turnaround"
+                collection.objects.link(clone)
+                copies[child] = clone
+            for original, clone in copies.items():
+                if original == source:
+                    continue
+                clone.parent = copies.get(original.parent, duplicate)
+                clone.matrix_parent_inverse = original.matrix_parent_inverse.copy()
+                clone.matrix_basis = original.matrix_basis.copy()
+                for modifier in clone.modifiers:
+                    if modifier.type == 'ARMATURE' and modifier.object in copies:
+                        modifier.object = copies[modifier.object]
+                for constraint in clone.constraints:
+                    if hasattr(constraint, 'target') and constraint.target in copies:
+                        constraint.target = copies[constraint.target]
+
         empty = bpy.data.objects.new(f"{source.name}_Turnaround_Root", None)
         empty.empty_display_type = "PLAIN_AXES"
         empty.empty_display_size = max(max(source.dimensions) * 0.6, 0.1)
@@ -592,6 +620,16 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
         _isolate_turnaround(
             scene, collection, settings.animation_keep_scene_collections,
         )
+        self._view_layer = context.view_layer
+        self._freestyle_state = _snapshot_freestyle_settings(context.view_layer)
+        self._freestyle_render_state = (scene.render.use_freestyle,
+            scene.render.line_thickness_mode, scene.render.line_thickness)
+        self._dual_video = (settings.animation_media_type == 'VIDEO'
+            and settings.freestyle_edges and settings.freestyle_as_render_pass
+            and settings.animation_freestyle_dual_video)
+        self._pass_index = 0
+        self._outputs = []
+        self._output_base = output_base
         self._output_file = ""
         self._timer = None
         self._draw_handle = None
@@ -623,7 +661,14 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             scene.render.use_file_extension = True
             scene.render.use_overwrite = settings.overwrite_existing
             scene.render.save_output = True
-            self._output_file = _configure_animation_output(scene, settings, output_base)
+            _configure_freestyle(context, settings, False)
+            if settings.freestyle_edges:
+                _mark_freestyle_edges([obj for obj in collection.objects if obj.type == 'MESH'], True)
+            if self._dual_video:
+                scene.render.use_freestyle = False
+            self._output_file = _configure_animation_output(scene, settings,
+                output_base + '_Clean' if self._dual_video else output_base)
+            self._outputs.append(self._output_file)
         except Exception as error:
             self._finish(error=error)
             return False
@@ -657,6 +702,9 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             del self._render_display_type
         try:
             _restore_render(self._scene, self._render_state)
+            _restore_freestyle_settings(self._view_layer, self._freestyle_state)
+            (self._scene.render.use_freestyle, self._scene.render.line_thickness_mode,
+             self._scene.render.line_thickness) = self._freestyle_render_state
         finally:
             _restore_visibility(self._visibility)
             self._settings.is_running = False
@@ -669,14 +717,41 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
         elif completed:
             remove_turnaround_collection(bpy.context, self._collection_name)
             self._settings.animation_progress = 100.0
-            self._settings.animation_last_output = self._output_file
-            self._settings.animation_status = f"Saved: {self._output_file}"
+            self._settings.animation_last_output = "; ".join(self._outputs)
+            self._settings.animation_status = f"Saved: {self._settings.animation_last_output}"
             self.report({"INFO"}, self._settings.animation_status)
         else:
             self._settings.animation_status = "Animation render cancelled"
             self.report({"WARNING"}, self._settings.animation_status)
         _redraw_animation_ui(self._window_manager)
         return {"FINISHED"} if completed else {"CANCELLED"}
+
+    def _next_video_pass(self):
+        if not self._dual_video or self._pass_index:
+            return False
+        self._pass_index = 1
+        self._frames_done = 0
+        self._render_completed = False
+        self._scene.frame_set(self._scene.frame_start)
+        self._scene.render.use_freestyle = True
+        self._output_file = _configure_animation_output(self._scene, self._settings,
+            self._output_base + '_Freestyle')
+        self._outputs.append(self._output_file)
+        self._settings.animation_status = 'Rendering video with Freestyle (2/2)...'
+        return True
+
+    def _complete_or_continue(self):
+        if self._render_cancelled:
+            return self._finish()
+        try:
+            if self._next_video_pass():
+                result = bpy.ops.render.render('INVOKE_DEFAULT', animation=True)
+                if 'RUNNING_MODAL' in result:
+                    return {'RUNNING_MODAL'}
+                return self._finish(completed='FINISHED' in result)
+        except Exception as error:
+            return self._finish(error=error)
+        return self._finish(completed=True)
 
     def _on_render_post(self, scene, *args):
         if scene == self._scene:
@@ -692,7 +767,7 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             self._render_cancelled = True
 
     def _refresh_progress(self):
-        progress = 100.0 * self._frames_done / self._total_frames
+        progress = 100.0 * (self._pass_index + self._frames_done / self._total_frames) / (2 if self._dual_video else 1)
         if progress != self._settings.animation_progress:
             self._settings.animation_progress = progress
             if not self._render_completed:
@@ -709,8 +784,8 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             return None
         self._refresh_progress()
         if self._render_completed or self._render_cancelled:
-            self._finish(completed=self._render_completed)
-            return None
+            self._complete_or_continue()
+            return None if self._finished else 0.1
         return 0.1
 
     def execute(self, context):
@@ -719,6 +794,8 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             return {"CANCELLED"}
         try:
             result = bpy.ops.render.render(animation=True)
+            if 'FINISHED' in result and self._next_video_pass():
+                result = bpy.ops.render.render(animation=True)
         except Exception as error:
             return self._finish(error=error)
         return self._finish(completed="FINISHED" in result)
@@ -774,5 +851,5 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
         if event.type == "TIMER":
             self._refresh_progress()
             if self._render_completed or self._render_cancelled:
-                return self._finish(completed=self._render_completed)
+                return self._complete_or_continue()
         return {"PASS_THROUGH"}
