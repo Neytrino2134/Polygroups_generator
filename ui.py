@@ -1588,7 +1588,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             subfolders_row.enabled = not settings.batch_is_running
             subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
             content.separator(type="LINE")
-            content.label(text=t(context, "batch_heading_scan"), icon="TRIA_DOWN")
+            heading = content.row(align=True)
+            heading.label(text=t(context, "batch_heading_scan"))
+            heading.label(text="", icon="TRIA_DOWN")
             scan_row = content.row(align=True)
             scan_row.enabled = not settings.batch_is_running
             scan_row.operator(
@@ -1597,7 +1599,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 icon="VIEWZOOM",
             )
             content.separator(type="LINE")
-            content.label(text=t(context, "batch_heading_status"), icon="TRIA_DOWN")
+            heading = content.row(align=True)
+            heading.label(text=t(context, "batch_heading_status"))
+            heading.label(text="", icon="TRIA_DOWN")
             content.progress(
                 factor=1.0 if settings.batch_stage == "QUEUED" else 0.0,
                 type="BAR",
@@ -1647,7 +1651,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
         if content is not None:
             content.separator(type="LINE")
-            content.label(text=t(context, "batch_heading_save"), icon="TRIA_DOWN")
+            heading = content.row(align=True)
+            heading.label(text=t(context, "batch_heading_save"))
+            heading.label(text="", icon="TRIA_DOWN")
             save_row = content.row(align=True)
             save_row.enabled = not settings.batch_is_running
             save_row.operator(
@@ -1736,7 +1742,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             group = draw_collapsible_box(content, settings, "show_batch_start_mode", t(context, "batch_start_mode_group"), "PLAY")
             if group is not None:
                 group.separator(type="LINE")
-                group.label(text=t(context, "batch_heading_process"), icon="TRIA_DOWN")
+                heading = group.row(align=True)
+                heading.label(text=t(context, "batch_heading_process"))
+                heading.label(text="", icon="TRIA_DOWN")
                 operator_row = group.row(align=True)
                 operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
                 operator_row.operator_context = "EXEC_DEFAULT"
@@ -1747,7 +1755,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 )
                 start_import.use_file_selection = False
                 group.separator(type="LINE")
-                group.label(text=t(context, "batch_heading_settings"), icon="TRIA_DOWN")
+                heading = group.row(align=True)
+                heading.label(text=t(context, "batch_heading_settings"))
+                heading.label(text="", icon="TRIA_DOWN")
                 import_mode_row = group.row(align=True)
                 import_mode_row.enabled = not settings.batch_is_running
                 import_mode_row.prop(
@@ -1777,7 +1787,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
 
                 group.separator(type="LINE")
-                group.label(text=t(context, "batch_heading_reset"), icon="TRIA_DOWN")
+                heading = group.row(align=True)
+                heading.label(text=t(context, "batch_heading_reset"))
+                heading.label(text="", icon="TRIA_DOWN")
                 group.operator(
                     "object.polygroups_reset_import_state",
                     text=t(context, "batch_reset_state"),
