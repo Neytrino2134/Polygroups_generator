@@ -22,11 +22,24 @@ TESTS = [
     'test_local_contour_cutter_apply.py',
     'test_import_queue.py',
 ]
+UI_BAKE_TESTS = [
+    'test_panel_defaults.py', 'test_panel_search.py', 'test_narrow_panel.py',
+    'test_experimental_windows.py', 'test_custom_ui_blender.py',
+    'test_refactor_settings_lifecycle_blender.py', 'test_panel_search_scope_blender.py',
+    'test_session_group_visibility_blender.py', 'test_edge_menu.py',
+    'test_outliner_header.py', 'test_view_assists_toggle.py', 'test_panel_visibility_stages.py',
+    'test_bake_auto_source.py', 'test_bake_alpha_merge.py', 'test_bake_artifact_mask.py',
+    'test_bake_mask_export_blender.py', 'test_bake_artifact_fill_blender.py',
+    'test_smart_cage_blender.py',
+]
 
 parser = argparse.ArgumentParser()
 parser.add_argument('blender', type=Path)
-parser.add_argument('--tests', nargs='+', default=TESTS)
+parser.add_argument('--tests', nargs='+')
+parser.add_argument('--suite', choices=['initial', 'ui-bake'], default='initial')
 args = parser.parse_args()
+if args.tests is None:
+    args.tests = UI_BAKE_TESTS if args.suite == 'ui-bake' else TESTS
 failed = []
 for name in args.tests:
     started = time.monotonic()

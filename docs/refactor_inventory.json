@@ -1,7 +1,7 @@
 {
   "baseline": "140a104",
   "python_files": 346,
-  "total_lines": 74715,
+  "total_lines": 74728,
   "unchanged_definitions": 340,
   "inventory": [
     {
@@ -1255,6 +1255,11 @@
       "definitions": 1
     },
     {
+      "file": "scripts/validate_refactor_blender.py",
+      "lines": 66,
+      "definitions": 0
+    },
+    {
       "file": "tests/test_preparation.py",
       "lines": 66,
       "definitions": 0
@@ -1388,11 +1393,6 @@
       "file": "tests/test_render_material_settings_blender.py",
       "lines": 54,
       "definitions": 1
-    },
-    {
-      "file": "scripts/validate_refactor_blender.py",
-      "lines": 53,
-      "definitions": 0
     },
     {
       "file": "tests/check_custom_icons_blender.py",
