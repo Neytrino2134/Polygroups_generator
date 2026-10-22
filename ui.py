@@ -1588,6 +1588,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             subfolders_row.enabled = not settings.batch_is_running
             subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
             content.separator(type="LINE")
+            content.label(text=t(context, "batch_heading_scan"), icon="TRIA_DOWN")
             scan_row = content.row(align=True)
             scan_row.enabled = not settings.batch_is_running
             scan_row.operator(
@@ -1596,6 +1597,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 icon="VIEWZOOM",
             )
             content.separator(type="LINE")
+            content.label(text=t(context, "batch_heading_status"), icon="TRIA_DOWN")
             content.progress(
                 factor=1.0 if settings.batch_stage == "QUEUED" else 0.0,
                 type="BAR",
@@ -1645,6 +1647,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
         content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
         if content is not None:
             content.separator(type="LINE")
+            content.label(text=t(context, "batch_heading_save"), icon="TRIA_DOWN")
             save_row = content.row(align=True)
             save_row.enabled = not settings.batch_is_running
             save_row.operator(
@@ -1653,12 +1656,13 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 icon="FILE_TICK",
             )
             if not bpy.data.filepath:
-                save_hint = content.row()
+                save_hint = content.column(align=True)
                 save_hint.alert = True
                 save_hint.label(
-                    text=t(context, "batch_save_before_start"),
+                    text=t(context, "batch_save_before_start_line1"),
                     icon="ERROR",
                 )
+                save_hint.label(text=t(context, "batch_save_before_start_line2"), icon="BLANK1")
             content.separator(type="LINE")
 
             group = draw_collapsible_box(content, settings, "show_batch_start_autosave", t(context, "batch_start_autosave_group"), "RECOVER_LAST")
@@ -1693,15 +1697,16 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     text=t(context, "batch_save_generated_separately"),
                     toggle=True,
                 )
-                separate_hint = separate_save.row()
+                separate_hint = separate_save.column(align=True)
                 separate_hint.alert = bool(
                     settings.batch_save_generated_separately
                     and (not settings.batch_separate_collections or not bpy.data.filepath)
                 )
                 separate_hint.label(
-                    text=t(context, "batch_save_generated_separately_hint"),
+                    text=t(context, "batch_separate_hint_line1"),
                     icon="ERROR" if separate_hint.alert else "FILE_BLEND",
                 )
+                separate_hint.label(text=t(context, "batch_separate_hint_line2"), icon="BLANK1")
                 auto_restore_row = separate_save.row(align=True)
                 auto_restore_row.enabled = bool(
                     settings.batch_save_generated_separately
@@ -1731,6 +1736,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             group = draw_collapsible_box(content, settings, "show_batch_start_mode", t(context, "batch_start_mode_group"), "PLAY")
             if group is not None:
                 group.separator(type="LINE")
+                group.label(text=t(context, "batch_heading_process"), icon="TRIA_DOWN")
                 operator_row = group.row(align=True)
                 operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
                 operator_row.operator_context = "EXEC_DEFAULT"
@@ -1741,6 +1747,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 )
                 start_import.use_file_selection = False
                 group.separator(type="LINE")
+                group.label(text=t(context, "batch_heading_settings"), icon="TRIA_DOWN")
                 import_mode_row = group.row(align=True)
                 import_mode_row.enabled = not settings.batch_is_running
                 import_mode_row.prop(
@@ -1765,10 +1772,12 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 )
                 do_selected.use_file_selection = False
                 do_selected.do_selected = True
-                selected_hint = group.row()
-                selected_hint.label(text=t(context, "batch_do_selected_hint"), icon="OUTLINER_OB_MESH")
+                selected_hint = group.column(align=True)
+                selected_hint.label(text=t(context, "batch_selected_hint_line1"), icon="OUTLINER_OB_MESH")
+                selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
 
                 group.separator(type="LINE")
+                group.label(text=t(context, "batch_heading_reset"), icon="TRIA_DOWN")
                 group.operator(
                     "object.polygroups_reset_import_state",
                     text=t(context, "batch_reset_state"),
