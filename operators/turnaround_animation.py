@@ -396,7 +396,7 @@ def unity_turnaround_render_steps(context):
 class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
     bl_idname = "object.polygroups_prepare_turnaround_animation"
     bl_label = "Prepare Turnaround"
-    bl_description = "Duplicate the active object and create a linear 360-degree Z rotation"
+    bl_description = "Duplicate the active object and selected meshes under one linear 360-degree Z rotation"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -407,6 +407,7 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
         scene = context.scene
         settings = scene.polygroups_render_settings
         source = context.active_object
+        selected_sources = list(context.selected_objects)
         frame_start = 1
         frame_end = max(frame_start + 1, int(settings.animation_frame_count))
 
@@ -419,11 +420,11 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
         duplicate.animation_data_clear()
         duplicate.name = f"{source.name}_Turnaround"
         collection.objects.link(duplicate)
+        copies = {source: duplicate}
 
         if source.type == 'ARMATURE':
             # Copy the entire descendant hierarchy so bone parenting and intermediate
             # empties keep their transforms; meshes use the copied armature.
-            copies = {source: duplicate}
             for child in source.children_recursive:
                 clone = child.copy()
                 if child.data is not None:
@@ -455,6 +456,26 @@ class OBJECT_OT_polygroups_prepare_turnaround_animation(bpy.types.Operator):
         world_matrix.translation = Vector((0.0, 0.0, 0.0))
         duplicate.parent = empty
         duplicate.matrix_world = world_matrix
+        # Keep the selected set together when moving its active object to origin.
+        # Rig descendants already copied above must not be duplicated again.
+        offset = source.matrix_world.translation.copy()
+        for obj in selected_sources:
+            if obj.type != 'MESH' or obj in copies:
+                continue
+            clone = obj.copy()
+            clone.data = obj.data.copy()
+            clone.animation_data_clear()
+            clone.name = f"{obj.name}_Turnaround"
+            collection.objects.link(clone)
+            matrix = obj.matrix_world.copy()
+            matrix.translation -= offset
+            clone.parent = empty
+            clone.matrix_world = matrix
+            copies[obj] = clone
+        for clone in copies.values():
+            for modifier in clone.modifiers:
+                if modifier.type == 'ARMATURE' and modifier.object in copies:
+                    modifier.object = copies[modifier.object]
         duplicate[TURNAROUND_SOURCE_PROP] = source.name
         empty[TURNAROUND_EMPTY_PROP] = True
         collection[TURNAROUND_COLLECTION_PROP] = True
