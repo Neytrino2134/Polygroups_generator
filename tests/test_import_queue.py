@@ -56,7 +56,7 @@ assert settings.batch_stage_3_autofix_enabled
 assert settings.batch_stage_3_autofix_fin_loose
 assert settings.batch_stage_3_autofix_close_nonmanifold
 assert settings.batch_stage_3_autofix_triangulate_ngons
-assert settings.batch_stage_4_remesh_preset == "LOW"
+assert settings.batch_stage_4_remesh_preset == "MID"
 assert settings.batch_second_narrow_island_enabled
 assert settings.batch_second_small_islands_enabled
 assert settings.batch_second_narrow_island_width == 3
@@ -65,8 +65,12 @@ assert settings.batch_second_small_island_threshold == 5.0
 assert settings.batch_stage_3_smart_relax_edges
 assert settings.batch_stage_4_smart_relax_edges
 assert settings.batch_stage_5_enabled
-assert not settings.batch_autobake_enabled
+assert settings.batch_autobake_enabled
 assert settings.batch_autobake_cage_mode == "AUTO"
+
+# The scenarios below exercise a distinct LOW fourth pass explicitly.
+settings.batch_stage_4_remesh_preset = "LOW"
+settings.batch_autobake_enabled = False
 
 # A stale/lost modal queue must be recoverable from the Start Import panel.
 settings.batch_is_running = True
@@ -196,7 +200,7 @@ with tempfile.TemporaryDirectory() as directory:
     settings.batch_import_directory = directory
     settings.batch_import_format = "OBJ"
     operator = SimpleNamespace(
-        use_file_selection=False, directory="invalid remembered directory",
+        use_file_selection=False, do_selected=False, directory="invalid remembered directory",
         files=[SimpleNamespace(name="old_selection.obj")], report=report,
     )
     wm = Mock(windows=[])
