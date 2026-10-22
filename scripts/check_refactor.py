@@ -1,9 +1,11 @@
 """Compare moved definitions with a Git baseline and inventory all Python code."""
 import ast
+import builtins
 import copy
 import json
 from pathlib import Path
 import subprocess
+import symtable
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,10 +52,35 @@ for path in files:
                       'lines': len(text.splitlines()),
                       'definitions': sum(isinstance(n, (ast.FunctionDef, ast.ClassDef)) for n in tree.body)})
 
+# A matching body alone cannot catch a dependency omitted from the new module.
+dependency_files = [*sorted((ROOT / 'settings').glob('*.py')),
+                    *sorted((ROOT / 'ui_panels').glob('*.py')),
+                    *sorted((ROOT / 'operators').glob('queue_*.py')),
+                    *sorted((ROOT / 'operators').glob('bake_*.py')),
+                    *sorted((ROOT / 'operators').glob('cutter_*.py'))]
+for path in dependency_files:
+    table = symtable.symtable(path.read_text(encoding='utf-8-sig'), str(path), 'exec')
+    declared = {symbol.get_name() for symbol in table.get_symbols()
+                if symbol.is_assigned() or symbol.is_imported() or symbol.is_namespace()}
+    allowed = declared | set(dir(builtins)) | {'__file__', '__name__', '__package__', '__class__'}
+
+    def check_globals(scope):
+        missing = {symbol.get_name() for symbol in scope.get_symbols()
+                   if symbol.is_global() and symbol.is_referenced()} - allowed
+        assert not missing, f'Unbound globals in {path.name}/{scope.get_name()}: {sorted(missing)}'
+        for child in scope.get_children():
+            check_globals(child)
+
+    check_globals(table)
+
 checked = 0
 for original, targets in [
     ('properties.py', [ROOT / 'properties.py', *sorted((ROOT / 'settings').glob('*.py'))]),
-    ('operators/object_seam_cutter.py', [ROOT / 'operators/object_seam_cutter.py', ROOT / 'operators/cutter_screen.py', ROOT / 'operators/cutter_overlay.py']),
+    ('operators/object_seam_cutter.py', [ROOT / 'operators' / name for name in [
+        'object_seam_cutter.py', 'cutter_screen.py', 'cutter_overlay.py',
+        'cutter_constants.py', 'cutter_paths.py', 'cutter_objects.py',
+        'cutter_mesh.py', 'cutter_draw.py',
+    ]]),
     ('ui.py', [ROOT / 'ui.py', *sorted((ROOT / 'ui_panels').glob('*.py'))]),
     ('operators/baking.py', [ROOT / 'operators/baking.py', *sorted((ROOT / 'operators').glob('bake_*.py'))]),
     ('operators/import_queue.py', [ROOT / 'operators/import_queue.py', *sorted((ROOT / 'operators').glob('queue_*.py'))]),
@@ -89,7 +116,7 @@ for original, targets in [
             assert normalized(node) == normalized(current), f'Changed: {node.name}'
             checked += 1
     # Preserve ordered registration and literal constants as well as definitions.
-    if original in {'properties.py', 'ui.py', 'operators/baking.py', 'operators/import_queue.py'}:
+    if original in {'properties.py', 'ui.py', 'operators/baking.py', 'operators/import_queue.py', 'operators/object_seam_cutter.py'}:
         new_assignments = {}
         for path in targets:
             if path.exists():

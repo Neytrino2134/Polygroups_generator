@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT.parent))
 addon_utils.enable(ROOT.name, default_set=True)
 
 from polygroups_generator.operators import object_seam_cutter as cutter
+from polygroups_generator.operators import cutter_mesh, mesh_checks
 
 settings = bpy.context.scene.polygroups_object_seam_cutter_settings
 settings.cutter_auto_fix_fin_faces = False
@@ -20,7 +21,7 @@ bpy.ops.mesh.primitive_cube_add()
 target = bpy.context.active_object
 target.name = "Cutter Autofix Target"
 
-with patch.object(cutter, "relax_seams", return_value=(2, 1)) as relax:
+with patch.object(cutter_mesh, "relax_seams", return_value=(2, 1)) as relax:
     assert cutter._smart_relax_seams_for_autofix(bpy.context, target) == 2
 assert relax.call_args.args[1:] == ("SMART", 1, cutter.radians(90.0), 1)
 assert relax.call_args.kwargs == {
@@ -45,7 +46,7 @@ before_edges = len(target.data.edges)
 before_faces = len(target.data.polygons)
 
 # Autofix must not run mesh analysis or any of the old cleanup stages.
-with patch.object(cutter, "analyze_mesh", side_effect=AssertionError("full mesh check ran")):
+with patch.object(mesh_checks, "analyze_mesh", side_effect=AssertionError("full mesh check ran")):
     result = bpy.ops.object.polygroups_auto_fix_after_cutter(target_name=target.name)
 assert result == {"FINISHED"}
 
@@ -61,7 +62,7 @@ bm.free()
 # Enabling the Fin option also removes wire edges and their loose endpoints.
 settings = bpy.context.scene.polygroups_object_seam_cutter_settings
 settings.cutter_auto_fix_fin_faces = True
-with patch.object(cutter, "analyze_mesh", side_effect=AssertionError("full mesh check ran")):
+with patch.object(mesh_checks, "analyze_mesh", side_effect=AssertionError("full mesh check ran")):
     result = bpy.ops.object.polygroups_auto_fix_after_cutter(target_name=target.name)
 assert result == {"FINISHED"}
 bm = bmesh.new()
@@ -82,7 +83,7 @@ assert not any(len(face.vertices) > 4 for face in ngon_target.data.polygons)
 bpy.ops.mesh.primitive_plane_add()
 fin_target = bpy.context.active_object
 assert len(fin_target.data.polygons) == 1
-with patch.object(cutter, "analyze_mesh", side_effect=AssertionError("full mesh check ran")):
+with patch.object(mesh_checks, "analyze_mesh", side_effect=AssertionError("full mesh check ran")):
     assert cutter._remove_fin_faces_for_autofix(bpy.context, fin_target) == 1
 assert len(fin_target.data.polygons) == 0
 

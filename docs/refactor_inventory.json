@@ -1,14 +1,9 @@
 {
   "baseline": "140a104",
-  "python_files": 349,
-  "total_lines": 74805,
+  "python_files": 356,
+  "total_lines": 75199,
   "unchanged_definitions": 360,
   "inventory": [
-    {
-      "file": "operators/object_seam_cutter.py",
-      "lines": 3793,
-      "definitions": 126
-    },
     {
       "file": "localization.py",
       "lines": 1924,
@@ -40,6 +35,11 @@
       "definitions": 39
     },
     {
+      "file": "operators/object_seam_cutter.py",
+      "lines": 1117,
+      "definitions": 25
+    },
+    {
       "file": "operators/baking.py",
       "lines": 1106,
       "definitions": 28
@@ -50,9 +50,19 @@
       "definitions": 48
     },
     {
+      "file": "operators/cutter_draw.py",
+      "lines": 1061,
+      "definitions": 8
+    },
+    {
       "file": "ui_panels/common.py",
       "lines": 1024,
       "definitions": 33
+    },
+    {
+      "file": "operators/cutter_mesh.py",
+      "lines": 937,
+      "definitions": 40
     },
     {
       "file": "operators/fab_preparation.py",
@@ -153,6 +163,11 @@
       "file": "hotkeys.py",
       "lines": 616,
       "definitions": 18
+    },
+    {
+      "file": "operators/cutter_objects.py",
+      "lines": 608,
+      "definitions": 33
     },
     {
       "file": "operators/local_contour_sketch.py",
@@ -310,6 +325,11 @@
       "definitions": 8
     },
     {
+      "file": "operators/cutter_paths.py",
+      "lines": 308,
+      "definitions": 20
+    },
+    {
       "file": "core/mesh_fold_repair.py",
       "lines": 306,
       "definitions": 7
@@ -435,14 +455,14 @@
       "definitions": 3
     },
     {
+      "file": "tests/test_cutter_autofix.py",
+      "lines": 217,
+      "definitions": 0
+    },
+    {
       "file": "tests/test_bake_artifact_fill_blender.py",
       "lines": 216,
       "definitions": 2
-    },
-    {
-      "file": "tests/test_cutter_autofix.py",
-      "lines": 216,
-      "definitions": 0
     },
     {
       "file": "tests/test_local_contour_sketch.py",
@@ -685,6 +705,11 @@
       "definitions": 6
     },
     {
+      "file": "scripts/check_refactor.py",
+      "lines": 141,
+      "definitions": 2
+    },
+    {
       "file": "operators/rename_objects.py",
       "lines": 140,
       "definitions": 7
@@ -868,11 +893,6 @@
       "file": "tests/test_unity_export_workflow_blender.py",
       "lines": 115,
       "definitions": 0
-    },
-    {
-      "file": "scripts/check_refactor.py",
-      "lines": 114,
-      "definitions": 2
     },
     {
       "file": "core/bake_autofill.py",
@@ -1320,6 +1340,11 @@
       "definitions": 6
     },
     {
+      "file": "tests/test_queue_processing_boundary_blender.py",
+      "lines": 63,
+      "definitions": 1
+    },
+    {
       "file": "tests/probe_bake_projection_artifacts_blender.py",
       "lines": 62,
       "definitions": 0
@@ -1580,6 +1605,11 @@
       "definitions": 0
     },
     {
+      "file": "operators/cutter_constants.py",
+      "lines": 38,
+      "definitions": 0
+    },
+    {
       "file": "tests/test_unity_collection_navigation_blender.py",
       "lines": 38,
       "definitions": 1
@@ -1663,6 +1693,11 @@
       "file": "core/double_walls.py",
       "lines": 28,
       "definitions": 1
+    },
+    {
+      "file": "scripts/validate_cutter_ui.py",
+      "lines": 27,
+      "definitions": 0
     },
     {
       "file": "core/material_seams.py",
