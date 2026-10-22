@@ -60,7 +60,14 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_turnaround_') as folder:
  assert task._finish() == {'CANCELLED'}
  assert not s.is_running and s.animation_collection_name
  assert before==(scene.render.use_freestyle,bpy.context.view_layer.freestyle_settings.as_render_pass)
+ assert s.animation_delete_collection_after_render is True
+ s.animation_delete_collection_after_render = False
+ collection_name = s.animation_collection_name
+ object_name = s.animation_object_name
  assert bpy.ops.object.polygroups_render_turnaround_animation() == {'FINISHED'}
+ assert collection_name in bpy.data.collections
+ assert s.animation_collection_name == collection_name
+ assert s.animation_object_name == object_name
  outputs=list(Path(folder).rglob('*.mp4'))
  assert len(outputs)==2, outputs
  assert all(p.stat().st_size>100 for p in outputs)
@@ -73,6 +80,11 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_turnaround_') as folder:
   bpy.data.images.remove(image)
  assert frames[0] and frames[1], 'Video frames must decode'
  assert frames[0] != frames[1], 'Clean and Freestyle frames must differ'
+ s.animation_delete_collection_after_render = True
+ assert bpy.ops.object.polygroups_render_turnaround_animation() == {'FINISHED'}
+ assert collection_name not in bpy.data.collections
+ assert object_name not in bpy.data.objects
+ assert not s.animation_collection_name and not s.animation_object_name
  assert not s.is_running
  assert before==(scene.render.use_freestyle,bpy.context.view_layer.freestyle_settings.as_render_pass)
 print('TURNAROUND_RIG_DUAL_VIDEO_PASSED')

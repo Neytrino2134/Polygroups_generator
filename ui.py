@@ -4442,6 +4442,7 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
                 "animation_keep_scene_collections",
                 text=t(context, "animation_keep_scene_collections"),
             )
+            column.prop(settings, "animation_delete_collection_after_render")
             row = column.row(align=True)
             row.enabled = not settings.is_running and context.active_object is not None
             row.operator("object.polygroups_prepare_turnaround_animation",

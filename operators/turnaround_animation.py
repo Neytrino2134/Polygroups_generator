@@ -736,7 +736,8 @@ class OBJECT_OT_polygroups_render_turnaround_animation(bpy.types.Operator):
             self._settings.animation_status = f"Render failed: {error}"
             self.report({"ERROR"}, self._settings.animation_status)
         elif completed:
-            remove_turnaround_collection(bpy.context, self._collection_name)
+            if self._settings.animation_delete_collection_after_render:
+                remove_turnaround_collection(bpy.context, self._collection_name)
             self._settings.animation_progress = 100.0
             self._settings.animation_last_output = "; ".join(self._outputs)
             self._settings.animation_status = f"Saved: {self._settings.animation_last_output}"

@@ -2499,6 +2499,11 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
                ("QUICKTIME", "QuickTime", "QuickTime video (.mov)")),
         default="MPEG4",
     )
+    animation_delete_collection_after_render: bpy.props.BoolProperty(
+        name="Delete Turnaround Collection After Render",
+        description="Delete the prepared Turnaround Animation collection after a successful animation render",
+        default=True,
+    )
     animation_collection_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
     animation_object_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
     animation_status: bpy.props.StringProperty(name="Animation Status", default="Not prepared")
