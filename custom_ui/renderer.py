@@ -1,13 +1,11 @@
 """Pure drawing/layout. All scene access is captured before this callback."""
-import math
 import blf
 import gpu
-from gpu_extras.batch import batch_for_shader
 from . import theme as T
 from . import icons
+from . import primitives
 
 _shader = None
-_geometry = {}
 
 
 def tooltip_text_width(lines, scale, limit):
@@ -40,7 +38,6 @@ def tooltip_bounds(anchor, size, viewport, mouse, scale=1):
 def clear():
     global _shader
     _shader = None
-    _geometry.clear()
     icons.clear()
 
 
@@ -49,25 +46,10 @@ def rect(x, y, w, h, color, radius=6):
     if w <= 0 or h <= 0:
         return
     if _shader is None:
-        _shader = gpu.shader.from_builtin('UNIFORM_COLOR')
-    r = min(radius, w / 2, h / 2)
-    key = (round(w, 2), round(h, 2), round(r, 2))
-    points = _geometry.get(key)
-    if points is None:
-        points = [(w/2, h/2)]
-        for cx, cy, start in ((w-r, h-r, 0), (r, h-r, 90), (r, r, 180), (w-r, r, 270)):
-            for i in range(7):
-                a = math.radians(start + i * 15)
-                points.append((cx + math.cos(a)*r, cy + math.sin(a)*r))
-        points.append(points[1])
-        if len(_geometry) > 512:
-            _geometry.clear()
-        _geometry[key] = points
-    vertices = [(x+px, y+py) for px, py in points]
-    batch = batch_for_shader(_shader, 'TRI_FAN', {'pos': vertices})
-    _shader.bind()
-    _shader.uniform_float('color', color)
-    batch.draw(_shader)
+        _shader = primitives.create_shader(
+            primitives.ROUNDED_RECT, (('VEC2', 'halfSize'), ('FLOAT', 'radius')))
+    primitives.draw(_shader, (x-1, y-1, w+2, h+2), color,
+                    halfSize=(w/2, h/2), radius=max(0, min(radius, w/2, h/2)))
 
 
 def text(value, x, y, size=13, color=T.TEXT, width=None):
