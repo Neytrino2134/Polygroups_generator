@@ -519,6 +519,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Restore Retopo objects from separate files after Batch Import completes",
         default=False,
     )
+    batch_restore_include_highpoly: bpy.props.BoolProperty(
+        name="Include Highpoly Generated",
+        description="Include Highpoly_Generated objects in automatic and manual restore from separate files",
+        default=False,
+    )
     batch_append_include_highpoly: bpy.props.BoolProperty(
         name="Include HighPoly",
         description="Include Highpoly_* objects when appending Generated collections from blend files",

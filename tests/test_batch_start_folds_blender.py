@@ -13,7 +13,7 @@ from polygroups_generator.custom_ui.schema import capture, walk
 
 context = bpy.context
 settings = context.scene.polygroups_model_preparation_settings
-names = {'show_batch_start_file', 'show_batch_start_autosave', 'show_batch_start_mode'}
+names = {'show_batch_start_autosave', 'show_batch_start_mode'}
 for language in ('EN', 'RU'):
     context.preferences.addons[ROOT.name].preferences.interface_language = language
     model = capture(context, 1)

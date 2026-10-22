@@ -100,6 +100,17 @@ with tempfile.TemporaryDirectory() as directory:
     assert bpy.ops.object.polygroups_restore_separate_retopo() == {"FINISHED"}
     assert len([item for item in collection.objects if item.name.startswith("Retopo_")]) == 1
 
+    settings = bpy.context.scene.polygroups_model_preparation_settings
+    settings.batch_restore_include_highpoly = True
+    for _repeat in range(2):
+        assert bpy.ops.object.polygroups_restore_separate_retopo() == {"FINISHED"}
+        assert len(collection.objects) == 2
+        assert sum(item.name.startswith("Highpoly_Generated") for item in collection.objects) == 1
+    settings.batch_restore_include_highpoly = False
+    for item in list(collection.objects):
+        if item.name.startswith("Highpoly_Generated"):
+            bpy.data.objects.remove(item, do_unlink=True)
+
     # Exercise the complete queue handoff: successful processing writes one file,
     # empties the numbered placeholder, and advances normally.
     obj_path = Path(directory) / "queued.obj"

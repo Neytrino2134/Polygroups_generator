@@ -200,8 +200,8 @@ def generated_collection_files(blend_filepath):
     return sorted(files, key=lambda item: item[0])
 
 
-def restore_retopo_collection(filepath, collection_name, scene, keep_all=False):
-    """Append only Retopo_* objects from one separately saved Generated.N."""
+def restore_retopo_collection(filepath, collection_name, scene, keep_all=False, include_highpoly=False):
+    """Append Retopo objects and optionally Highpoly_Generated from a saved collection."""
     with bpy.data.libraries.load(filepath, link=False) as (source, target):
         if collection_name not in source.collections:
             return 0
@@ -219,7 +219,7 @@ def restore_retopo_collection(filepath, collection_name, scene, keep_all=False):
 
     # Re-running restore should reproduce the file, not create .001 duplicates.
     for obj in list(destination.objects):
-        if obj.name.startswith("Retopo_"):
+        if obj.name.startswith("Retopo_") or (include_highpoly and obj.name.startswith("Highpoly_Generated")):
             bpy.data.objects.remove(obj, do_unlink=True)
 
     imported_collections = []
@@ -233,12 +233,12 @@ def restore_retopo_collection(filepath, collection_name, scene, keep_all=False):
     imported_objects = set(imported_collection.all_objects)
     restored = []
     for obj in imported_objects:
-        if keep_all or obj.name.startswith("Retopo_"):
+        if keep_all or obj.name.startswith("Retopo_") or (include_highpoly and obj.name.startswith("Highpoly_Generated")):
             destination.objects.link(obj)
             restored.append(obj)
 
-    # Discard the appended HighPoly and temporary collection hierarchy. Retopo
-    # objects survive because they are now linked directly to the destination.
+    # Discard excluded objects and the temporary collection hierarchy.
+    # Restored objects survive through their links to the destination.
     for obj in imported_objects:
         if obj not in restored:
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -1922,7 +1922,7 @@ class OBJECT_OT_polygroups_reset_import_state(bpy.types.Operator):
 class OBJECT_OT_polygroups_restore_separate_retopo(bpy.types.Operator):
     bl_idname = "object.polygroups_restore_separate_retopo"
     bl_label = "Restore Retopo from Separate Files"
-    bl_description = "Restore Retopo objects from separate Generated.N blend files without HighPoly objects"
+    bl_description = "Restore Retopo objects from separate Generated.N blend files using the Include Highpoly Generated setting"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -1946,7 +1946,10 @@ class OBJECT_OT_polygroups_restore_separate_retopo(bpy.types.Operator):
         for _number, digits, filepath in files:
             collection_name = f"Generated.{digits}"
             try:
-                count = restore_retopo_collection(filepath, collection_name, context.scene)
+                count = restore_retopo_collection(
+                    filepath, collection_name, context.scene,
+                    include_highpoly=context.scene.polygroups_model_preparation_settings.batch_restore_include_highpoly,
+                )
             except Exception as error:
                 skipped.append(f"{os.path.basename(filepath)}: {error}")
                 continue
@@ -1963,7 +1966,7 @@ class OBJECT_OT_polygroups_restore_separate_retopo(bpy.types.Operator):
                 message += f" ({len(skipped)} file(s) skipped)"
             self.report({"WARNING"}, message)
             return {"CANCELLED"}
-        message = f"Restored {restored_objects} Retopo object(s) from {restored_files} file(s)"
+        message = f"Restored {restored_objects} object(s) from {restored_files} file(s)"
         if skipped:
             message += f"; skipped {len(skipped)} file(s)"
         self.report({"WARNING"} if skipped else {"INFO"}, message)
