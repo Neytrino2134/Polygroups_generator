@@ -97,3 +97,81 @@ Artifact Mask, экспорт масок и восстановление пос�
 Оставшиеся крупные кандидаты: object_seam_cutter.py (3793 строки),
 import_queue.py (2008 строк). Визуальная GPU-отрисовка в окне не проверялась;
 runtime capture проверяет структуру и привязки, но не итоговые пиксели.
+
+## Серия 3: очередь и оставшийся код резаков
+
+Коммиты: fixtures `9bffec0`, ImportQueue `c07ad39`, Cutters `df14666`.
+
+`operators/import_queue.py`: 2008 → 1255 строк. В `queue_storage.py`
+перенесены 11 функций сохранения/восстановления коллекций и idle snapshot.
+`QueueProcessingMixin` содержит 21 связный метод подготовки и обработки;
+`QueueRedoMixin` — три метода backup/recovery. Singleton ACTIVE_QUEUE, timer,
+step/advance/finish и классы операторов остаются в исходном модуле.
+Все прежние методы доступны через ImportQueue.
+
+`operators/object_seam_cutter.py`: 3793 → 1117 строк. Добавлены:
+
+| Модуль | Назначение | Строк |
+| --- | --- | ---: |
+| cutter_constants.py | метаданные и ограничения | 38 |
+| cutter_paths.py | данные кривых, координаты, tilt | 308 |
+| cutter_objects.py | создание, выбор и объединение объектов | 608 |
+| cutter_mesh.py | применение резаков и исправление геометрии | 937 |
+| cutter_draw.py | интерактивные инструменты рисования | 1061 |
+
+Зависимости: constants → paths → objects → mesh; draw использует constants,
+paths, objects и ранее выделенные screen/overlay. Обратных импортов в фасад
+object_seam_cutter нет. Публичные имена сохранены через явные импорты.
+
+### Проверки серии 3
+
+- Синтаксис всех 356 Python-файлов; 360 эквивалентных исходных определений.
+  Для ImportQueue аудитор объединяет методы класса и двух mixin-классов,
+  проверяет отсутствие потерь/дублирования и сравнивает каждое тело, сигнатуру
+  и декораторы. Константы и регистрационные списки сохранены.
+- Дополнительно symtable проверяет отсутствие необъявленных глобальных
+  зависимостей в выделенных settings/UI/bake/queue/cutter модулях.
+- Сводный `--suite queue-cutter`: **20 PASS / 1 FAIL**. Успешны redo,
+  recovery, отдельные blend-файлы, idle-state после успешной/неудачной записи,
+  autobake, geometry repair, smart finalization, режимы импорта, cutters,
+  mirror, backup, grid, local ring/contour/sketch и регистрация.
+- Новый boundary test проверяет сохранение ownership вновь созданных IDs
+  после исключения и восстановление Object Mode после ошибки Smart Relax,
+  включая изоляцию shared mesh data.
+- `scripts/validate_cutter_ui.py`: **2/2 PASS** в отдельных оконных процессах
+  Blender 5.2.2 с event simulation. Проверены все этапы Apply Cutter Seams,
+  прогресс/backup/cursor draw и интерактивный Grid preview с очисткой callback
+  после отмены. Скрипт проверяет свежий success marker, а не только exit code.
+  Визуальное сравнение пикселей вручную не выполнялось.
+- `git diff --check`: без ошибок.
+
+### Оставшееся расхождение большого теста очереди
+
+Fixtures приведены к уже существовавшим defaults MID/Auto Bake=True;
+LOW и отключённый autobake заданы явно для старых сценариев. В искусственные
+launcher objects добавлен действующий флаг do_selected. Настройки аддона
+не менялись. Fault injection обновлён на модули, владеющие реализациями.
+
+После этого `test_import_queue.py` доходит до строки 345 и падает на
+`assert set(bpy.data.objects) == existing | {unrelated}` после rollback.
+Та же ошибка воспроизведена в отдельном checkout `9bffec0`, где production
+код ещё не подвергался серии 3. Это прежнее расхождение теста с поведением;
+оно не исправлялось в рамках структурных переносов. Часть этого большого
+теста после строки 345 не выполнена. Воспроизведение baseline:
+
+`python scripts/check_import_queue_baseline.py <blender.exe> --baseline 9bffec0 --expected "assert set(bpy.data.objects)"`
+
+### Общий результат трёх серий
+
+| Исходный файл | До | Сейчас |
+| --- | ---: | ---: |
+| ui.py | 4894 | 869 |
+| operators/object_seam_cutter.py | 4310 | 1117 |
+| properties.py | 3314 | 178 |
+| operators/baking.py | 2350 | 1106 |
+| operators/import_queue.py | 2008 | 1255 |
+
+Python-файлов от 2000 строк больше нет. Самый большой — localization.py
+(1924 строки, преимущественно словарь), далее render_queue.py (1739).
+Размер сам по себе не требует дальнейшего дробления. Полный тестовый набор
+аддона не запускался; проверенные границы перечислены выше.

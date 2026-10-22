@@ -1,7 +1,7 @@
 {
   "baseline": "140a104",
   "python_files": 356,
-  "total_lines": 75199,
+  "total_lines": 75210,
   "unchanged_definitions": 360,
   "inventory": [
     {
@@ -1185,6 +1185,11 @@
       "definitions": 1
     },
     {
+      "file": "scripts/validate_refactor_blender.py",
+      "lines": 77,
+      "definitions": 0
+    },
+    {
       "file": "tests/test_local_contour_retries.py",
       "lines": 77,
       "definitions": 0
@@ -1288,11 +1293,6 @@
       "file": "tests/test_show_seams_object_mode.py",
       "lines": 67,
       "definitions": 1
-    },
-    {
-      "file": "scripts/validate_refactor_blender.py",
-      "lines": 66,
-      "definitions": 0
     },
     {
       "file": "tests/test_preparation.py",
