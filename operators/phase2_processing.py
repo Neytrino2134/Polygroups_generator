@@ -178,6 +178,19 @@ class Phase2Queue:
             obj.hide_set(False)
             obj.select_set(True)
         self.view_layer.objects.active = low
+        if self.settings.phase2_mesh_auto_repair:
+            # Repair only the final Retopo. Imported objects can share mesh
+            # datablocks, so isolate this target before changing its geometry.
+            high.select_set(False)
+            if low.data.users > 1:
+                low.data = low.data.copy()
+            result = bpy.ops.mesh.polygroups_repair_mesh_folds(
+                'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
+                fix_degenerate=True, fix_zero_area=False, selected_only=False,
+            )
+            if 'FINISHED' not in result:
+                raise RuntimeError(f'Auto Repair failed for {low.name}; bake skipped')
+            high.select_set(True)
         bake = self.scene.polygroups_baking_settings
         overrides = dict(use_selected_to_active=True, auto_save_textures_after_bake=True,
                          bake_artifact_mask=self.repair, bake_artifact_autofill=self.repair)

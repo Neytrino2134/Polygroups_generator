@@ -38,6 +38,12 @@ item; the queue proceeds to the next collection. Current Bake Settings control
 passes, resolution, cage and UV packing. Textures are saved beside the working
 file using the normal Bake output folders.
 
+Auto Repair Mesh Before Bake defaults on. Before invoking Bake, the existing
+Mesh Editing repair operator repairs folded pockets and merges coincident
+vertices on that highest Retopo only. It ignores selection-area restrictions;
+shared mesh data is copied first to keep Highpoly and earlier Retopo stages
+unchanged. Repair failure skips the bake and marks that collection failed.
+
 Repair Projection Artifacts defaults on. During each bake it enables the full
 projection mask, matching normal resolution and Autofill. These overrides and
 selected-to-active/output saving settings are restored after each item.

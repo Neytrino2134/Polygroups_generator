@@ -455,6 +455,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Remove existing Generated.N collections before restoring the scanned files",
     )
     phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
+    phase2_mesh_auto_repair: bpy.props.BoolProperty(
+        name="Auto Repair Mesh Before Bake", default=True,
+        description="Repair folded pockets and merge coincident vertices only on the highest Retopo stage before baking",
+    )
     phase2_repair_artifacts: bpy.props.BoolProperty(
         name="Repair Projection Artifacts", default=True,
         description="Enable full projection artifact masks and Autofill for Phase 2 baking",

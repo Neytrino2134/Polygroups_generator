@@ -1820,6 +1820,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 warning.label(text=t(context, "phase2_clear_hint2"), icon="BLANK1")
             controls.prop(settings, "phase2_auto_bake", text=t(context, "phase2_autobake"))
             if settings.phase2_auto_bake:
+                controls.prop(settings, "phase2_mesh_auto_repair", text=t(context, "phase2_mesh_auto_repair"))
                 controls.prop(settings, "phase2_repair_artifacts", text=t(context, "phase2_repair"))
                 controls.label(text=t(context, "phase2_bake_hint1"), icon="INFO")
                 controls.label(text=t(context, "phase2_bake_hint2"), icon="BLANK1")
