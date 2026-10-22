@@ -16,7 +16,7 @@ addon_utils.enable(ROOT.name, default_set=True)
 addon_utils.enable("quad_remesher", default_set=True)
 
 from polygroups_generator.operators import import_queue as queue_module
-from polygroups_generator.operators import batch_import
+from polygroups_generator.operators import batch_import, queue_processing
 from polygroups_generator.core.remesh_job import remesh_backend, RemeshJob
 from polygroups_generator.localization import t
 
@@ -638,13 +638,13 @@ with tempfile.TemporaryDirectory() as directory:
     settings.batch_stage_3_autofix_close_nonmanifold = True
     settings.batch_stage_3_autofix_triangulate_ngons = True
     fixes = []
-    with (patch.object(queue_module, "_remove_fin_faces_for_autofix",
+    with (patch.object(queue_processing, "_remove_fin_faces_for_autofix",
                        side_effect=lambda *_: fixes.append("fins")),
-          patch.object(queue_module, "_delete_loose_geometry_for_autofix",
+          patch.object(queue_processing, "_delete_loose_geometry_for_autofix",
                        side_effect=lambda *_: fixes.append("loose")),
-          patch.object(queue_module, "_fill_open_nonmanifold_boundaries",
+          patch.object(queue_processing, "_fill_open_nonmanifold_boundaries",
                        side_effect=lambda *_: fixes.append("fill")),
-          patch.object(queue_module, "_triangulate_ngons_for_autofix",
+          patch.object(queue_processing, "_triangulate_ngons_for_autofix",
                        side_effect=lambda *_: fixes.append("ngons"))):
         merge_queue.autofix_second_pass(context, island_obj)
         assert fixes == ["fins", "loose", "fill", "ngons"]
@@ -659,7 +659,7 @@ with tempfile.TemporaryDirectory() as directory:
         observed_relax.append((scene_context.mode, scene_context.active_object, mode, options))
         return 0, 0
 
-    with patch.object(queue_module, "relax_seams", record_relax):
+    with patch.object(queue_processing, "relax_seams", record_relax):
         merge_queue.smart_relax_edges(context, island_obj)
     assert observed_relax == [(
         "EDIT_MESH", island_obj, "SMART",

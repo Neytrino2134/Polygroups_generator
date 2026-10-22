@@ -66,7 +66,7 @@ with TemporaryDirectory() as directory:
 
     failed_bpy = SimpleNamespace(data=bpy.data, context=bpy.context,
         ops=SimpleNamespace(wm=SimpleNamespace(save_as_mainfile=failed_save)))
-    with patch.object(iq, 'bpy', failed_bpy):
+    with patch.object(sys.modules[iq.write_collection_blend.__module__], 'bpy', failed_bpy):
         try:
             iq.write_collection_blend(str(Path(directory) / 'Failed.blend'), col)
         except RuntimeError as error:

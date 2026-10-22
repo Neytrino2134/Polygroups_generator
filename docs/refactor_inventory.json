@@ -1,18 +1,13 @@
 {
   "baseline": "140a104",
-  "python_files": 346,
-  "total_lines": 74728,
-  "unchanged_definitions": 340,
+  "python_files": 349,
+  "total_lines": 74805,
+  "unchanged_definitions": 360,
   "inventory": [
     {
       "file": "operators/object_seam_cutter.py",
       "lines": 3793,
       "definitions": 126
-    },
-    {
-      "file": "operators/import_queue.py",
-      "lines": 2008,
-      "definitions": 20
     },
     {
       "file": "localization.py",
@@ -33,6 +28,11 @@
       "file": "operators/unity_preparation.py",
       "lines": 1256,
       "definitions": 20
+    },
+    {
+      "file": "operators/import_queue.py",
+      "lines": 1255,
+      "definitions": 9
     },
     {
       "file": "preferences.py",
@@ -96,7 +96,7 @@
     },
     {
       "file": "tests/test_import_queue.py",
-      "lines": 734,
+      "lines": 738,
       "definitions": 3
     },
     {
@@ -193,6 +193,11 @@
       "file": "ui_panels/baking.py",
       "lines": 485,
       "definitions": 2
+    },
+    {
+      "file": "operators/queue_processing.py",
+      "lines": 458,
+      "definitions": 1
     },
     {
       "file": "operators/split_narrow_islands.py",
@@ -403,6 +408,11 @@
       "file": "operators/fab_rename_existing.py",
       "lines": 227,
       "definitions": 6
+    },
+    {
+      "file": "operators/queue_storage.py",
+      "lines": 227,
+      "definitions": 11
     },
     {
       "file": "tests/test_narrow_islands.py",
@@ -805,6 +815,11 @@
       "definitions": 2
     },
     {
+      "file": "operators/queue_redo.py",
+      "lines": 118,
+      "definitions": 1
+    },
+    {
       "file": "tests/test_drag_drop_import.py",
       "lines": 118,
       "definitions": 2
@@ -853,6 +868,11 @@
       "file": "tests/test_unity_export_workflow_blender.py",
       "lines": 115,
       "definitions": 0
+    },
+    {
+      "file": "scripts/check_refactor.py",
+      "lines": 114,
+      "definitions": 2
     },
     {
       "file": "core/bake_autofill.py",
@@ -968,11 +988,6 @@
       "file": "tests/test_phase2_modal_blender.py",
       "lines": 98,
       "definitions": 1
-    },
-    {
-      "file": "scripts/check_refactor.py",
-      "lines": 97,
-      "definitions": 2
     },
     {
       "file": "tests/test_view_assists_toggle.py",
@@ -1625,6 +1640,11 @@
       "definitions": 1
     },
     {
+      "file": "scripts/check_import_queue_baseline.py",
+      "lines": 31,
+      "definitions": 0
+    },
+    {
       "file": "tests/test_dev_restart.py",
       "lines": 30,
       "definitions": 0
@@ -1663,11 +1683,6 @@
       "file": "operators/clear_materials.py",
       "lines": 25,
       "definitions": 1
-    },
-    {
-      "file": "scripts/check_import_queue_baseline.py",
-      "lines": 25,
-      "definitions": 0
     },
     {
       "file": "operators/bake_constants.py",

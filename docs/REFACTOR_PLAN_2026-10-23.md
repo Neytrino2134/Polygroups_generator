@@ -69,3 +69,18 @@ Background проверки не подтверждают визуальную �
    modal task и orchestration со scene cleanup в baking.py. Проверить AST
    относительно исходного коммита и реальные bake/image regression tests.
    Отдельный коммит, затем обновить общий отчёт.
+
+## Продолжение: серия 3
+
+6. ImportQueue: вынести collection storage в queue_storage.py, связные
+   методы обработки в QueueProcessingMixin, redo backup/recovery — в
+   QueueRedoMixin. Сохранить очередь, timer, singleton и dispatch в прежнем
+   модуле. При проверке AST собрать класс из собственных и унаследованных
+   методов, запретить потерю/дублирование методов и изменение их тел.
+   Актуализировать только устаревшие test fixtures и места fault injection.
+   Отдельно воспроизвести оставшиеся baseline failures до переноса.
+7. Cutters: выделить constants, path data, object creation/selection,
+   mesh operations и draw modal operators с однонаправленными импортами.
+   Сохранить публичные имена, регистрацию и apply session в исходном модуле.
+   Проверить AST, cutter/grid/mirror/backup/contour и связанные queue tests.
+   Коммит каждого блока после проверок; финальный отчёт отдельным коммитом.

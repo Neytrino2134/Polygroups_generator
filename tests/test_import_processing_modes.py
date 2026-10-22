@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory() as directory:
 
     settings.file_import_automatic_processing = True
     launcher = SimpleNamespace(
-        use_file_selection=True, redo_collection_name="", directory=directory,
+        use_file_selection=True, do_selected=False, redo_collection_name="", directory=directory,
         files=[SimpleNamespace(name=path.name)], report=lambda *_: None,
     )
     launch_context = SimpleNamespace(scene=context.scene, window=context.window,

@@ -56,6 +56,7 @@ for original, targets in [
     ('operators/object_seam_cutter.py', [ROOT / 'operators/object_seam_cutter.py', ROOT / 'operators/cutter_screen.py', ROOT / 'operators/cutter_overlay.py']),
     ('ui.py', [ROOT / 'ui.py', *sorted((ROOT / 'ui_panels').glob('*.py'))]),
     ('operators/baking.py', [ROOT / 'operators/baking.py', *sorted((ROOT / 'operators').glob('bake_*.py'))]),
+    ('operators/import_queue.py', [ROOT / 'operators/import_queue.py', *sorted((ROOT / 'operators').glob('queue_*.py'))]),
 ]:
     baseline = subprocess.check_output(['git', 'show', f'{BASE}:{original}'], cwd=ROOT).decode('utf-8-sig')
     old_tree = ast.parse(baseline)
@@ -69,10 +70,26 @@ for original, targets in [
     for node in old_tree.body:
         if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
             assert node.name in definitions, f'Missing: {node.name}'
-            assert normalized(node) == normalized(definitions[node.name]), f'Changed: {node.name}'
+            current = definitions[node.name]
+            if original == 'operators/import_queue.py' and node.name == 'ImportQueue':
+                current = copy.deepcopy(current)
+                mixins = ['QueueProcessingMixin', 'QueueRedoMixin']
+                assert [base.id for base in current.bases] == mixins
+                methods = {}
+                for part in [current, *(definitions[name] for name in mixins)]:
+                    for method in part.body:
+                        if isinstance(method, ast.FunctionDef):
+                            assert method.name not in methods, f'Duplicate method: {method.name}'
+                            methods[method.name] = method
+                        else:
+                            assert isinstance(method, ast.Expr) and isinstance(method.value, ast.Constant) and isinstance(method.value.value, str)
+                assert set(methods) == {method.name for method in node.body if isinstance(method, ast.FunctionDef)}
+                current.bases = node.bases
+                current.body = [methods[method.name] if isinstance(method, ast.FunctionDef) else method for method in node.body]
+            assert normalized(node) == normalized(current), f'Changed: {node.name}'
             checked += 1
     # Preserve ordered registration and literal constants as well as definitions.
-    if original in {'properties.py', 'ui.py', 'operators/baking.py'}:
+    if original in {'properties.py', 'ui.py', 'operators/baking.py', 'operators/import_queue.py'}:
         new_assignments = {}
         for path in targets:
             if path.exists():
