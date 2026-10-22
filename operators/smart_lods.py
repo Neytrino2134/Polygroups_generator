@@ -1,7 +1,9 @@
 """Generate sequential triangle-budget LODs with two weighted Decimate passes."""
 
 import bpy
+import bmesh
 from mathutils import Vector
+from ..core.mesh_fold_repair import repair_local_folds
 
 from .smart_decimate import (
     SEAMS_DECIMATE_MODIFIER_NAME,
@@ -17,6 +19,40 @@ def _triangle_count(obj, depsgraph):
         return len(mesh.loop_triangles)
     finally:
         evaluated.to_mesh_clear()
+
+
+def _clean_zero_area_lod(obj):
+    """Clean the generated datablock only, after all topology modifiers."""
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+
+        def zero_triangles():
+            return [tri for tri in bm.calc_loop_triangles() if
+                    (tri[1].vert.co - tri[0].vert.co).cross(
+                        tri[2].vert.co - tri[0].vert.co).length == 0.0]
+
+        detected = len(zero_triangles())
+        if not detected:
+            return 0
+        # Preserve seam/pin flags and all surviving corner UVs where a safe
+        # exact-vertex contraction can remove the degenerate triangles.
+        repair_local_folds(bm, fix_folds=False, fix_degenerate=False, fix_zero_area=True)
+        # Collinear triangles with three distinct endpoints cannot be welded.
+        # Tessellate only affected n-gons, preserving the other polygons.
+        ngons = {tri[0].face for tri in zero_triangles() if len(tri[0].face.verts) > 3}
+        if ngons:
+            bmesh.ops.triangulate(bm, faces=list(ngons))
+        faces = {tri[0].face for tri in zero_triangles()}
+        if faces:
+            bmesh.ops.delete(bm, geom=list(faces), context='FACES')
+        if zero_triangles():
+            raise ValueError('Zero-area triangles remain after LOD cleanup')
+        bm.to_mesh(obj.data)
+        obj.data.update()
+        return detected
+    finally:
+        bm.free()
 
 
 def _configure_pass(obj):
@@ -412,6 +448,10 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
                 if settings.smart_lods_triangulate_all:
                     triangulate = lod.modifiers.new("LOD Triangulate", "TRIANGULATE")
                     bpy.ops.object.modifier_apply(modifier=triangulate.name)
+                if settings.smart_lods_remove_zero_area:
+                    removed = _clean_zero_area_lod(lod)
+                    if removed:
+                        self.report({'INFO'}, f'LOD.{index}: removed {removed} zero-area triangles')
                 actual = _triangle_count(lod, context.evaluated_depsgraph_get())
                 if actual > target:
                     over_budget.append(f"LOD.{index}: {actual}/{target} tris")

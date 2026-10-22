@@ -563,6 +563,13 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         precision=1,
         subtype="PERCENTAGE",
     )
+    fold_repair_folds: bpy.props.BoolProperty(name="Repair Folded Pockets", default=True)
+    fold_repair_degenerate: bpy.props.BoolProperty(name="Merge Coincident Vertices", default=True,
+        description="Collapse near-zero edges of degenerate triangles, preserving UV seams")
+    fold_repair_zero_area: bpy.props.BoolProperty(name="Repair Zero Area at UV Seams", default=False,
+        description="Repair zero-length edges even across UV seams; preserve corner UVs and seam/sharp flags")
+    fold_repair_selected_only: bpy.props.BoolProperty(name="Selected Area Only", default=False,
+        description="Repair defects seeded by selected faces, including their local boundary")
     small_loose_part_metric: bpy.props.EnumProperty(
         name="Size Metric",
         description="How disconnected part size is measured",
@@ -1065,10 +1072,14 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_batch_5: bpy.props.BoolProperty(default=False)
     topic_prepare_0: bpy.props.BoolProperty(default=False)
     topic_prepare_1: bpy.props.BoolProperty(default=False)
+    topic_prepare_1_manual: bpy.props.BoolProperty(default=True)
+    topic_prepare_1_auto: bpy.props.BoolProperty(default=True)
     topic_prepare_2: bpy.props.BoolProperty(default=False)
     topic_prepare_3: bpy.props.BoolProperty(default=False)
     topic_seam_prep_0: bpy.props.BoolProperty(default=False)
     topic_seam_prep_1: bpy.props.BoolProperty(default=False)
+    topic_seam_prep_1_manual: bpy.props.BoolProperty(default=True)
+    topic_seam_prep_1_auto: bpy.props.BoolProperty(default=True)
     topic_seam_prep_2: bpy.props.BoolProperty(default=False)
     topic_seam_prep_3: bpy.props.BoolProperty(default=False)
     topic_seam_prep_4: bpy.props.BoolProperty(default=False)
@@ -2077,6 +2088,11 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     smart_lods_triangulate_all: bpy.props.BoolProperty(
         name="Triangulate All LODs",
         description="Apply triangulation to every generated LOD mesh",
+        default=True,
+    )
+    smart_lods_remove_zero_area: bpy.props.BoolProperty(
+        name="Check and Remove Zero-Area Faces",
+        description="Check every generated LOD after decimation/triangulation and remove exactly zero-area triangles; keep nonzero thin faces",
         default=True,
     )
     smart_lods_auto_arrange: bpy.props.BoolProperty(

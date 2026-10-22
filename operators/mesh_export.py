@@ -191,6 +191,27 @@ def _export_at_world_origin(obj, view_layer, companion=None):
         view_layer.update()
 
 
+def _export_polygon_statistics(entries):
+    """Summarize exported triangle counts by mesh quality, once per mesh."""
+    groups = {"HIGH_MID": [], "LOW_LOD0": []}
+    for item in entries:
+        name = _base_name(item.get("name", "")).upper()
+        if (name.endswith(("_HIGH", "_MID"))
+                or item.get("role", "").upper() == "HIGH"
+                or item.get("lod", "").upper() in {"HIGH", "MID"}):
+            groups["HIGH_MID"].append(item["triangles"])
+        elif (name.endswith(("_LOW", "_LOD0", ".LOD0"))
+                or item.get("lod", "").upper() == "LOD0"):
+            groups["LOW_LOD0"].append(item["triangles"])
+    return {
+        key: {"meshes": len(values),
+              "average": sum(values) / len(values) if values else None,
+              "min": min(values) if values else None,
+              "max": max(values) if values else None}
+        for key, values in groups.items()
+    }
+
+
 def _write_export_mesh_info(root_dir, export_format, entries, engine=None):
     if export_format == "NONE":
         return
@@ -205,6 +226,11 @@ def _write_export_mesh_info(root_dir, export_format, entries, engine=None):
             document = {"meshes": entries, "totals": totals}
             if engine is not None:
                 document['Engine'] = engine
+            if engine in {'Unity', 'Unreal'}:
+                document['polygon_statistics'] = {
+                    'unit': 'triangles',
+                    **_export_polygon_statistics(entries),
+                }
             if any('asset' in item for item in entries):
                 assets = {}
                 for item in entries:

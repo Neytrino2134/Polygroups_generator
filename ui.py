@@ -288,6 +288,46 @@ def draw_topic(layout, context, key, label, icon):
                                  "topic_" + key, t(context, label), icon)
 
 
+def draw_mesh_editing(layout, context, prefix, loose_parts=False):
+    settings = context.scene.polygroups_model_preparation_settings
+    manual = draw_topic(layout, context, prefix + "_manual", "mesh_edit_manual", "EDITMODE_HLT")
+    if manual is not None:
+        column = manual.column(align=True)
+        column.operator("mesh.polygroups_delete_and_fill",
+                        text=t(context, "delete_and_fill"), icon="MESH_DATA")
+        if loose_parts:
+            column.separator()
+            column.prop(settings, "small_loose_part_metric", text=t(context, "small_loose_part_metric"))
+            column.prop(settings, "small_loose_part_threshold_percent",
+                        text=t(context, "small_loose_part_threshold"))
+            row = column.row(align=True)
+            row.operator("object.polygroups_small_loose_parts",
+                         text=t(context, "select_small_loose_parts"), icon="RESTRICT_SELECT_OFF").delete = False
+            row.operator("object.polygroups_small_loose_parts",
+                         text=t(context, "delete_small_loose_parts"), icon="TRASH").delete = True
+    auto = draw_topic(layout, context, prefix + "_auto", "mesh_edit_auto", "MODIFIER")
+    if auto is not None:
+        column = auto.column(align=True)
+        for prop in ("fold_repair_folds", "fold_repair_degenerate", "fold_repair_zero_area", "fold_repair_selected_only"):
+            column.prop(settings, prop, text=t(context, prop))
+        row = column.row(align=True)
+        row.enabled = settings.fold_repair_folds or settings.fold_repair_degenerate or settings.fold_repair_zero_area
+        for action, label, icon in (("SELECT", "fold_repair_find", "VIEWZOOM"),
+                                    ("REPAIR", "fold_repair_apply", "MOD_TRIANGULATE")):
+            op = row.operator("mesh.polygroups_repair_mesh_folds", text=t(context, label), icon=icon)
+            op.action = action
+            op.fix_folds = settings.fold_repair_folds
+            op.fix_degenerate = settings.fold_repair_degenerate
+            op.fix_zero_area = settings.fold_repair_zero_area
+            op.selected_only = settings.fold_repair_selected_only
+        quality = column.operator("mesh.polygroups_repair_mesh_folds",
+                                  text=t(context, "fold_repair_quality"), icon="UV")
+        quality.action = 'SELECT_QUALITY'
+        quality.selected_only = settings.fold_repair_selected_only
+        column.label(text=t(context, "fold_repair_hint"))
+        column.label(text=t(context, "fold_repair_uv_hint"))
+
+
 def draw_session_subgroup(layout, context, preferences, property_name, text_key, icon):
     label = t(context, text_key)
     if preferences and _CUSTOM_CAPTURING and hasattr(layout, 'grouped'):
@@ -1031,36 +1071,7 @@ class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
 
         content = draw_topic(layout, context, "prepare_1", t(context, "model_preparation_group_mesh_edit"), "EDITMODE_HLT")
         if content is not None:
-            column = content.column(align=True)
-            column.operator(
-                "mesh.polygroups_delete_and_fill",
-                text=t(context, "delete_and_fill"),
-                icon="MESH_DATA",
-            )
-            column.separator()
-            column.prop(
-                settings,
-                "small_loose_part_metric",
-                text=t(context, "small_loose_part_metric"),
-            )
-            column.prop(
-                settings,
-                "small_loose_part_threshold_percent",
-                text=t(context, "small_loose_part_threshold"),
-            )
-            row = column.row(align=True)
-            select_small = row.operator(
-                "object.polygroups_small_loose_parts",
-                text=t(context, "select_small_loose_parts"),
-                icon="RESTRICT_SELECT_OFF",
-            )
-            select_small.delete = False
-            delete_small = row.operator(
-                "object.polygroups_small_loose_parts",
-                text=t(context, "delete_small_loose_parts"),
-                icon="TRASH",
-            )
-            delete_small.delete = True
+            draw_mesh_editing(content, context, "prepare_1", loose_parts=True)
 
         content = draw_topic(layout, context, "prepare_2", t(context, "model_preparation_group_manage"), "OUTLINER_COLLECTION")
         if content is not None:
@@ -2003,11 +2014,7 @@ class VIEW3D_PT_polygroups_seam_preparation(bpy.types.Panel):
 
         content = draw_topic(layout, context, "seam_prep_1", "model_preparation_group_mesh_edit", "EDITMODE_HLT")
         if content is not None:
-            content.operator(
-                "mesh.polygroups_delete_and_fill",
-                text=t(context, "delete_and_fill"),
-                icon="MESH_DATA",
-            )
+            draw_mesh_editing(content, context, "seam_prep_1")
 
         content = draw_topic(layout, context, "seam_prep_2", "seam_group_mark_clear", "EDGE_SEAM")
         if content is not None:
@@ -3729,6 +3736,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column.prop(settings, f"smart_lods_target_{index}", text=f"LOD.{index} Tris")
         column.prop(settings, "smart_lods_final_decimate")
         column.prop(settings, "smart_lods_triangulate_all")
+        column.prop(settings, "smart_lods_remove_zero_area", text=t(context, "smart_lods_remove_zero_area"))
         column.prop(settings, "smart_lods_auto_arrange")
         spacing_row = column.row()
         spacing_row.enabled = settings.smart_lods_auto_arrange
