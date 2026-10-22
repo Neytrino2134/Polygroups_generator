@@ -2686,6 +2686,11 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         description="Save Freestyle edges as a separate pass image instead of compositing them into the asset render",
         default=True,
     )
+    animation_views_freestyle_dual: bpy.props.BoolProperty(
+        name="Views With and Without Freestyle",
+        description="Save clean and Freestyle versions of each of the four views",
+        default=False,
+    )
     animation_freestyle_dual_video: bpy.props.BoolProperty(
         name="Videos With and Without Freestyle",
         description="Render two videos in two passes: clean and with Freestyle edges",

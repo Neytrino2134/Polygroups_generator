@@ -542,6 +542,11 @@ class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
         saved_rotation = root.rotation_euler.copy()
         animation_data = root.animation_data
         saved_action = animation_data.action if animation_data is not None else None
+        freestyle_state = _snapshot_freestyle_settings(context.view_layer)
+        freestyle_render_state = (scene.render.use_freestyle,
+            scene.render.line_thickness_mode, scene.render.line_thickness)
+        dual = (settings.freestyle_edges and settings.freestyle_as_render_pass
+            and settings.animation_views_freestyle_dual)
         settings.is_running = True
         outputs = []
         error = None
@@ -568,22 +573,31 @@ class OBJECT_OT_polygroups_render_turnaround_views(bpy.types.Operator):
             scene.render.save_output = True
             scene.frame_set(scene.frame_start)
             base = bpy.path.clean_name(settings.animation_object_name)
-            for angle in (0, 90, 180, 270):
-                root.rotation_euler.z = radians(angle)
-                _show_turnaround_labels(scene, collection, angle)
-                context.view_layer.update()
-                path = os.path.join(output_directory, f"{base}_{angle:03d}{image_extension(settings.animation_views_image_format)}")
-                scene.render.filepath = path
-                result = bpy.ops.render.render(write_still=True)
-                if "FINISHED" not in result:
-                    raise RuntimeError(f"Render cancelled at {angle} degrees")
-                outputs.append(path)
+            if dual:
+                _configure_freestyle(context, settings, False)
+                _mark_freestyle_edges([obj for obj in collection.objects if obj.type == 'MESH'], True)
+            for suffix, freestyle_enabled in ([('_Clean', False), ('_Freestyle', True)]
+                    if dual else [('', scene.render.use_freestyle)]):
+                scene.render.use_freestyle = freestyle_enabled
+                for angle in (0, 90, 180, 270):
+                    root.rotation_euler.z = radians(angle)
+                    _show_turnaround_labels(scene, collection, angle)
+                    context.view_layer.update()
+                    path = os.path.join(output_directory, f"{base}_{angle:03d}{suffix}{image_extension(settings.animation_views_image_format)}")
+                    scene.render.filepath = path
+                    result = bpy.ops.render.render(write_still=True)
+                    if "FINISHED" not in result:
+                        raise RuntimeError(f"Render cancelled at {angle} degrees")
+                    outputs.append(path)
         except Exception as exc:
             error = exc
         finally:
             root.rotation_euler = saved_rotation
             try:
                 _restore_render(scene, render_state)
+                _restore_freestyle_settings(context.view_layer, freestyle_state)
+                (scene.render.use_freestyle, scene.render.line_thickness_mode,
+                 scene.render.line_thickness) = freestyle_render_state
             finally:
                 if animation_data is not None:
                     animation_data.action = saved_action

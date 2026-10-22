@@ -4452,6 +4452,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             render_row.operator("object.polygroups_render_turnaround_animation",
                                 text=t(context, "animation_render"), icon="RENDER_ANIMATION")
             column.prop(settings, "animation_views_image_format")
+            if settings.freestyle_edges and settings.freestyle_as_render_pass:
+                column.prop(settings, "animation_views_freestyle_dual")
             views_row = column.row(align=True)
             views_row.enabled = not settings.is_running and bool(settings.animation_collection_name)
             views_row.operator("object.polygroups_render_turnaround_views",
