@@ -594,6 +594,7 @@ class ImportQueue:
         if not ensure_collection_visible_in_view_layer(context, collection):
             raise RuntimeError("The selected Generated collection is not in this View Layer")
         self.collection = collection
+        collection.color_tag = "COLOR_05"
         self.meshes = [source]
         self.file_record["input_tris"] = self.count_tris(self.meshes)
         self.file_objects = [source]
@@ -991,6 +992,7 @@ class ImportQueue:
                 while bpy.data.collections.get(f"Generated.{number:03d}"):
                     number += 1
                 self.collection = bpy.data.collections.new(f"Generated.{number:03d}")
+                self.collection.color_tag = "COLOR_05"
                 self.owned_collections.add(self.collection)
                 self.scene.collection.children.link(self.collection)
                 move_to_collection(self.file_objects, self.collection)
@@ -1430,7 +1432,7 @@ class ImportQueue:
 
     def preserve_partial_file(self):
         """Preserve partial work in scene, or save and clear it in separate-file mode."""
-        if self.redo_mode:
+        if self.redo_mode or self.file_record is None:
             return
         existing = set(bpy.data.objects)
         before = getattr(self, 'file_owned_before', {}).get('objects', set())
@@ -1445,6 +1447,7 @@ class ImportQueue:
             self.scene.collection.children.link(self.collection)
             self.owned_collections.add(self.collection)
         if self.collection is not None:
+            self.collection.color_tag = "COLOR_05"
             move_to_collection(objects, self.collection)
         for obj in objects:
             obj.hide_viewport = False
@@ -1475,6 +1478,8 @@ class ImportQueue:
         self.result_meshes = []
 
     def complete_file(self, success, object_count=None):
+        if self.collection is not None:
+            self.collection.color_tag = "COLOR_02" if success else "COLOR_05"
         if self.file_record is not None:
             self.file_record.update(status="success" if success else "failed", finished=time.time())
             self.write_batch_report("file_complete", self.file_record)
@@ -1529,6 +1534,7 @@ class ImportQueue:
         collection = self.collection
         if collection is None:
             raise RuntimeError("Separate saving could not find the completed Generated.N collection")
+        collection.color_tag = "COLOR_02" if completed else "COLOR_05"
         output_path = generated_collection_output_path(bpy.data.filepath, collection.name)
         working_path = bpy.data.filepath
         write_collection_blend(output_path, collection)
@@ -1659,6 +1665,8 @@ class ImportQueue:
     def finish(self, context, status, rollback=False):
         if self.finished:
             return
+        if self.file_record is not None and self.collection is not None and status != "DONE":
+            self.collection.color_tag = "COLOR_05"
         if self.saved_unwrap_checker is not None:
             self.settings.remesh_auto_unwrap_checker = self.saved_unwrap_checker
             self.saved_unwrap_checker = None

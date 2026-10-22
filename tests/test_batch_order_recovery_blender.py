@@ -55,13 +55,17 @@ with TemporaryDirectory() as temp:
     queue.begin()
     until(queue, lambda: queue.index == 1 and queue.stage == 'NEXT')
     first = queue.collection
+    assert first.color_tag == 'COLOR_02'
     assert any(obj.name.startswith('Y') for obj in first.objects)
     until(queue, lambda: queue.index == 1 and queue.stage == 'RENAME')
     second = queue.collection
+    assert second.color_tag == 'COLOR_05'
     assert any(obj.name.startswith('Z') for obj in second.objects)
     settings.batch_cancel_requested = True
     queue.step(bpy.context)
     assert queue.finished and first.all_objects and second.all_objects
+    assert first.color_tag == 'COLOR_02'
+    assert second.color_tag == 'COLOR_05'
 
     # Layout must also follow the imported groups instead of mesh names.
     anchor_a = next(obj for obj in first.objects if obj.type == 'MESH')
@@ -91,6 +95,8 @@ with TemporaryDirectory() as temp:
     assert queue.finished
     assert not bpy.data.collections[completed_name].all_objects
     assert not bpy.data.collections[partial_name].all_objects
+    assert bpy.data.collections[completed_name].color_tag == 'COLOR_02'
+    assert bpy.data.collections[partial_name].color_tag == 'COLOR_05'
     assert bpy.data.objects.get('Retopo_Interrupted') is None
     output = root / ('Working_' + partial_name.replace('.', '_') + '.blend')
     with bpy.data.libraries.load(str(output)) as (data, _):
@@ -107,10 +113,24 @@ with TemporaryDirectory() as temp:
                side_effect=RuntimeError('Injected output write failure')):
         failed_queue.step(bpy.context)
     assert failed_queue.finished and set(unsaved_collection.all_objects) == unsaved_objects
+    assert unsaved_collection.color_tag == 'COLOR_05'
     # Reopen the working file to verify cancellation recovery was persisted.
     bpy.ops.wm.open_mainfile(filepath=str(root / 'Working.blend'))
     assert not bpy.data.collections[completed_name].all_objects
     assert not bpy.data.collections[partial_name].all_objects
+    assert bpy.data.collections[completed_name].color_tag == 'COLOR_02'
+    assert bpy.data.collections[partial_name].color_tag == 'COLOR_05'
     assert bpy.data.objects.get('Retopo_Interrupted') is None
     assert not bpy.context.scene.polygroups_model_preparation_settings.batch_is_running
+
+    # Stopping between files must keep the completed result marked successful.
+    settings = bpy.context.scene.polygroups_model_preparation_settings
+    settings.batch_save_generated_separately = False
+    queue = ImportQueue(bpy.context, paths, False, lambda *args: None)
+    queue.begin()
+    until(queue, lambda: queue.index == 1 and queue.stage == 'NEXT')
+    completed = queue.collection
+    settings.batch_cancel_requested = True
+    queue.step(bpy.context)
+    assert queue.finished and completed.color_tag == 'COLOR_02'
 print('BATCH_ORDER_RECOVERY_PASSED')

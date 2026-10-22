@@ -63,7 +63,7 @@ assert settings.batch_redo_collection_name == first.name
 
 # Redo launches without reading the original import folder or file list.
 launcher = SimpleNamespace(
-    use_file_selection=False, redo_collection_name=first.name,
+    use_file_selection=False, redo_collection_name=first.name, do_selected=False,
     directory="missing folder", files=[], report=lambda *_: None,
 )
 launch_context = SimpleNamespace(scene=context.scene, window=context.window,
@@ -118,6 +118,7 @@ with patch.object(import_queue, "RemeshJob", FakeJob), patch.object(
     settings.batch_cancel_requested = True
     queue.step(context)
     assert queue.finished and settings.batch_stage == "CANCELLED"
+    assert first.color_tag == "COLOR_05"
     assert source.hide_viewport
     assert in_collection(old, first) and old.name == "Retopo_Highpoly_Generated.001"
     assert in_collection(other_source, second) and in_collection(other_retopo, second)
@@ -131,6 +132,7 @@ with patch.object(import_queue, "RemeshJob", FakeJob), patch.object(
     assert in_collection(source, first) and in_collection(other_retopo, second)
     assert source.hide_viewport
     assert settings.batch_imported_count == 1 and settings.batch_failed_count == 0
+    assert first.color_tag == "COLOR_02"
     new_result = results[0]
 
 
@@ -147,6 +149,7 @@ with patch.object(import_queue, "RemeshJob", FailingJob), patch.object(
     run_until(queue, lambda: queue.finished)
     assert in_collection(new_result, first) and new_result.name == "Retopo_Highpoly_Generated.001"
     assert settings.batch_failed_count == 1 and settings.batch_imported_count == 0
+    assert first.color_tag == "COLOR_05"
     assert in_collection(other_retopo, second)
 
 settings.batch_stage_2_enabled = False

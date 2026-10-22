@@ -149,6 +149,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert queue.separately_saved_count == 1
     queued_collection = bpy.data.collections["Generated.001"]
     assert not queued_collection.objects
+    assert queued_collection.color_tag == "COLOR_02"
     queued_output = Path(directory) / "Original blend name_Generated_001.blend"
     assert queued_output.is_file()
     with bpy.data.libraries.load(str(queued_output)) as (source, _target):
@@ -181,6 +182,8 @@ with tempfile.TemporaryDirectory() as directory:
                 break
     assert queue.finished and settings.batch_failed_count == 1
     assert settings.batch_imported_count == 1
+    assert bpy.data.collections["Generated.002"].color_tag == "COLOR_05"
+    assert bpy.data.collections["Generated.003"].color_tag == "COLOR_02"
     summary = json.loads((queue.batch_report.directory / "summary.json").read_text())
     records = json.loads((queue.batch_report.directory / "files.json").read_text())
     assert summary["total_files"] == 2
@@ -200,6 +203,7 @@ with tempfile.TemporaryDirectory() as directory:
     # The separate result must open normally with its Generated.N linked into
     # the scene, while Save As Copy keeps the working path unchanged.
     assert bpy.ops.wm.open_mainfile(filepath=str(expected)) == {"FINISHED"}
+    assert bpy.data.collections["Generated.007"].color_tag == "COLOR_02"
     assert bpy.data.collections.get("Generated.007") is not None
     assert bpy.data.objects.get("Highpoly_Generated.007") is not None
     assert any(
@@ -210,11 +214,16 @@ with tempfile.TemporaryDirectory() as directory:
     # successful item following a failed import. No manual reset is required.
     for output in (queued_output, Path(records[1]["output_file"])):
         assert bpy.ops.wm.open_mainfile(filepath=str(output)) == {"FINISHED"}
+        generated = [col for col in bpy.context.scene.collection.children if col.name.startswith("Generated.")]
+        assert generated and all(col.color_tag == "COLOR_02" for col in generated)
         loaded = bpy.context.scene.polygroups_model_preparation_settings
         assert not loaded.batch_is_running and not loaded.batch_is_paused
         assert loaded.batch_stage == "" and loaded.batch_current_file == ""
         assert loaded.batch_import_progress == loaded.batch_current_progress == 0
         assert loaded.batch_remaining_count == loaded.batch_total_count == 0
         assert loaded.batch_last_error == "" and loaded.batch_failed_count == 0
+
+    assert bpy.ops.wm.open_mainfile(filepath=records[0]["output_file"]) == {"FINISHED"}
+    assert bpy.data.collections["Generated.002"].color_tag == "COLOR_05"
 
 print("batch separate save test passed")

@@ -1786,16 +1786,16 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 selected_hint.label(text=t(context, "batch_selected_hint_line1"), icon="OUTLINER_OB_MESH")
                 selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
 
-                group.separator(type="LINE")
-                heading = group.row(align=True)
-                heading.alignment = "CENTER"
-                heading.label(text="--  " + t(context, "batch_heading_reset") + "  --")
-                group.operator(
-                    "object.polygroups_reset_import_state",
-                    text=t(context, "batch_reset_state"),
-                    icon="FILE_REFRESH",
-                )
-                group.separator(type="LINE")
+        layout.separator(type="LINE")
+        heading = layout.row(align=True)
+        heading.alignment = "CENTER"
+        heading.label(text="--  " + t(context, "batch_heading_reset") + "  --")
+        layout.operator(
+            "object.polygroups_reset_import_state",
+            text=t(context, "batch_reset_state"),
+            icon="FILE_REFRESH",
+        )
+        layout.separator(type="LINE")
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:
