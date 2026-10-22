@@ -55,6 +55,7 @@ from .import_queue import OBJECT_OT_polygroups_reset_import_state
 from .import_queue import OBJECT_OT_polygroups_restore_separate_retopo
 from .import_queue import OBJECT_OT_polygroups_batch_redo_select
 from .import_queue import OBJECT_OT_polygroups_toggle_batch_stage
+from .phase2_processing import CLASSES as PHASE2_CLASSES, stop_phase2
 from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_append_generated_blends
@@ -228,6 +229,7 @@ from .relocate_project import WM_OT_airetopo_relocate_project, WM_OT_airetopo_re
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
+    *PHASE2_CLASSES,
     WM_OT_airetopo_relocate_project,
     OBJECT_OT_polygroups_unity_load_from_file,
     WM_OT_airetopo_relocate_index_step,
@@ -476,6 +478,9 @@ def register():
     from .fab_preparation import stop_fab_prepare
     bpy.app.handlers.load_pre.append(stop_fab_prepare)
     bpy.app.handlers.load_pre.append(stop_import_queue)
+    bpy.app.handlers.load_pre.append(stop_phase2)
+    bpy.app.handlers.undo_pre.append(stop_phase2)
+    bpy.app.handlers.redo_pre.append(stop_phase2)
     bpy.app.timers.register(ensure_libraries, first_interval=0.0)
     bpy.app.handlers.load_post.append(ensure_libraries)
     bpy.app.handlers.load_pre.append(flush_library)
@@ -517,6 +522,13 @@ def unregister():
     if stop_fab_prepare in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_fab_prepare)
     stop_import_queue()
+    stop_phase2()
+    if stop_phase2 in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(stop_phase2)
+    if stop_phase2 in bpy.app.handlers.undo_pre:
+        bpy.app.handlers.undo_pre.remove(stop_phase2)
+    if stop_phase2 in bpy.app.handlers.redo_pre:
+        bpy.app.handlers.redo_pre.remove(stop_phase2)
     stop_remesh()
     stop_knife_seams()
     stop_cutter_apply()

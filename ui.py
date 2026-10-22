@@ -1798,6 +1798,43 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
 
 
+        content = draw_topic(layout, context, "batch_5", t(context, "phase2_title"), "RECOVER_LAST")
+        if content is not None:
+            controls = content.column(align=True)
+            controls.enabled = not settings.phase2_is_running and not settings.batch_is_running
+            controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))
+            controls.separator(type="LINE")
+            controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
+            content.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
+            content.label(text=t(context, "phase2_scanned_collections", value=settings.phase2_scanned_collections))
+            controls = content.column(align=True)
+            controls.enabled = not settings.phase2_is_running and not settings.batch_is_running
+            controls.separator(type="LINE")
+            controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
+            controls.separator(type="LINE")
+            controls.prop(settings, "phase2_clear_generated", text=t(context, "phase2_clear"))
+            if settings.phase2_clear_generated:
+                warning = controls.column(align=True)
+                warning.alert = True
+                warning.label(text=t(context, "phase2_clear_hint1"), icon="ERROR")
+                warning.label(text=t(context, "phase2_clear_hint2"), icon="BLANK1")
+            controls.prop(settings, "phase2_auto_bake", text=t(context, "phase2_autobake"))
+            if settings.phase2_auto_bake:
+                controls.prop(settings, "phase2_repair_artifacts", text=t(context, "phase2_repair"))
+                controls.label(text=t(context, "phase2_bake_hint1"), icon="INFO")
+                controls.label(text=t(context, "phase2_bake_hint2"), icon="BLANK1")
+            if settings.phase2_status:
+                content.separator(type="LINE")
+                content.label(text=settings.phase2_status, icon="INFO")
+            if settings.phase2_total_count:
+                content.progress(
+                    factor=(settings.phase2_done_count + settings.phase2_failed_count) / settings.phase2_total_count,
+                    type="BAR", text=t(context, "phase2_progress", done=settings.phase2_done_count,
+                                       failed=settings.phase2_failed_count, total=settings.phase2_total_count),
+                )
+            if settings.phase2_is_running:
+                content.operator("object.polygroups_phase2_stop", text=t(context, "phase2_stop"), icon="PAUSE")
+
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:
             draw_import_progress(content, context, settings)

@@ -1872,6 +1872,12 @@ class OBJECT_OT_polygroups_reset_import_state(bpy.types.Operator):
     def execute(self, context):
         global ACTIVE_QUEUE
 
+        from .phase2_processing import ACTIVE_PHASE2
+        if ACTIVE_PHASE2 is not None:
+            ACTIVE_PHASE2.stop_requested = True
+            self.report({"INFO"}, "Phase 2 will stop after the current bake")
+            return {"FINISHED"}
+
         if bpy.app.is_job_running("OBJECT_BAKE"):
             self.report({"WARNING"}, "Cannot reset while Blender is actively baking")
             return {"CANCELLED"}
@@ -1936,7 +1942,8 @@ class OBJECT_OT_polygroups_restore_separate_retopo(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
-        return bool(bpy.data.filepath and settings and not settings.batch_is_running)
+        return bool(bpy.data.filepath and settings and not settings.batch_is_running
+                    and not settings.phase2_is_running)
 
     def execute(self, context):
         try:

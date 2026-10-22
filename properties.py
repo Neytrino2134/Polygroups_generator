@@ -80,7 +80,7 @@ SECTION_VISIBILITY_PROPERTIES = (
 
 SECTION_SUBSECTION_PROPERTIES = {
     "show_import_section": ("topic_import_0", "topic_import_1", "topic_import_2", "topic_import_3"),
-    "show_batch_import_section": tuple(f"topic_batch_{index}" for index in range(5)),
+    "show_batch_import_section": tuple(f"topic_batch_{index}" for index in range(6)),
     "show_model_preparation_section": tuple(f"topic_prepare_{index}" for index in range(4)),
     "show_seam_preparation_section": tuple(f"topic_seam_prep_{index}" for index in range(8)),
     "show_polygroups_section": tuple(f"topic_polygroups_{index}" for index in range(3)),
@@ -446,6 +446,26 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     show_batch_start_file: bpy.props.BoolProperty(name="Save and Reset", default=True)
     show_batch_start_autosave: bpy.props.BoolProperty(name="Auto Save", default=True)
     show_batch_start_mode: bpy.props.BoolProperty(name="Import Mode", default=True)
+    phase2_scan_subfolders: bpy.props.BoolProperty(
+        name="All Blends Including Subfolders", default=False,
+        description="Scan all blend files beside the working blend and in subfolders, excluding the working file",
+    )
+    phase2_clear_generated: bpy.props.BoolProperty(
+        name="Clear Current Generated.N Collections", default=False,
+        description="Remove existing Generated.N collections before restoring the scanned files",
+    )
+    phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
+    phase2_repair_artifacts: bpy.props.BoolProperty(
+        name="Repair Projection Artifacts", default=True,
+        description="Enable full projection artifact masks and Autofill for Phase 2 baking",
+    )
+    phase2_scanned_files: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
+    phase2_scanned_collections: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
+    phase2_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
+    phase2_done_count: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
+    phase2_failed_count: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
+    phase2_total_count: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
+    phase2_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     batch_auto_arrange_objects: bpy.props.BoolProperty(
         name="Auto Arrange Imports",
         description="Automatically arrange imported mesh objects after each batch import step",
@@ -1038,6 +1058,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_batch_2: bpy.props.BoolProperty(default=False)
     topic_batch_3: bpy.props.BoolProperty(default=False)
     topic_batch_4: bpy.props.BoolProperty(default=False)
+    topic_batch_5: bpy.props.BoolProperty(default=False)
     topic_prepare_0: bpy.props.BoolProperty(default=False)
     topic_prepare_1: bpy.props.BoolProperty(default=False)
     topic_prepare_2: bpy.props.BoolProperty(default=False)
