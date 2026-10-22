@@ -6,6 +6,7 @@ from pathlib import Path
 def collect(root):
     records = []
     paths = [root/'ui.py',root/'preferences.py',root/'hotkeys.py',root/'pie_presets.py',root/'core/render_palettes.py']
+    paths.extend(sorted((root / 'ui_panels').glob('*.py')))
     for path in paths:
         source = path.read_text(encoding='utf-8-sig')
         tree = ast.parse(source)

@@ -138,8 +138,8 @@ class Session:
         self.version = ui.addon_version_string()
         if self.show_header:
             model = Layout(key='global')
-            old = ui._CUSTOM_CAPTURING, ui._CUSTOM_HEADER_ONLY
-            ui._CUSTOM_CAPTURING, ui._CUSTOM_HEADER_ONLY = True, True
+            old = ui.state.custom_capturing, ui.state.custom_header_only
+            ui.state.custom_capturing, ui.state.custom_header_only = True, True
             try:
                 ui.VIEW3D_PT_polygroups_generator.draw(SimpleNamespace(layout=model), context)
                 appearance = model.box()
@@ -148,7 +148,7 @@ class Session:
                     appearance.prop(self.prefs, name)
                 appearance.operator('wm.airetopo_reset_custom_appearance')
             finally:
-                ui._CUSTOM_CAPTURING, ui._CUSTOM_HEADER_ONLY = old
+                ui.state.custom_capturing, ui.state.custom_header_only = old
         elif self.query:
             model = Layout(key='search')
             for index, title in enumerate(self.titles):

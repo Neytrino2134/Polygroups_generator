@@ -42,7 +42,7 @@ with bpy.context.temp_override(window=window, area=area, region=region):
                 assert ('wm.airetopo_open_recent_autosave' in ops) == opened
                 assert prefs.show_panel_session_status == opened
                 assert not visibility.show_seam_preparation_section
-                assert ui._SEARCH_FILTER_GROUPS is None and ui._SEARCH_FILTER_TERMS == ()
+                assert ui.state.search_filter_groups is None and ui.state.search_filter_terms == ()
 
     prefs.show_panel_session_status = True
     prefs.interface_language = 'EN'

@@ -1,0 +1,10 @@
+{
+  "baseline": "6c502bf",
+  "identical_runtime_captures": 39,
+  "identical_static_calls": 1094,
+  "modes": [
+    "EDIT",
+    "OBJECT",
+    "SCULPT"
+  ]
+}

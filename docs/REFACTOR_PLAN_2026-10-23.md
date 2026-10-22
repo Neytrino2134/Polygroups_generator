@@ -55,3 +55,17 @@
 AST перенесённых определений совпадает (кроме уровня относительных импортов),
 регистрация работает в Blender 5.2, выбранные regression tests проходят.
 Background проверки не подтверждают визуальную отрисовку GPU в интерактивном окне.
+
+## Продолжение: серия 2
+
+4. UI: перенести девять transient-флагов в ui_state.DrawState; явно обновить
+   Custom UI adapters и тесты доступа к состоянию. Выделить 13 панелей по
+   областям и общие draw/search helpers, сохранить ui.py как фасад и реестр.
+   Обновить сканеры исходников (fold discovery, static inventory).
+   Сравнить все 39 runtime captures и набор UI-вызовов с коммитом 6c502bf;
+   проверить поиск, отдельные группы, N-panel и lifecycle. Отдельный коммит.
+5. Baking: выделить константы, auto cage, материалы/изображения, merge и
+   geometric diagnostics по однонаправленным зависимостям. Оставить cursor,
+   modal task и orchestration со scene cleanup в baking.py. Проверить AST
+   относительно исходного коммита и реальные bake/image regression tests.
+   Отдельный коммит, затем обновить общий отчёт.

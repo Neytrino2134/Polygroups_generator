@@ -52,21 +52,21 @@ class Layout:
 
 visibility.show_seam_preparation_section = False
 key = visibility.path_from_id() + ".show_seam_preparation_section"
-ui._SEARCH_FILTER_GROUPS = {key}
+ui.state.search_filter_groups = {key}
 try:
     content = ui.draw_collapsible_box(
         Layout(), visibility, "show_seam_preparation_section", "Seam Preparation", "EDGE_SEAM"
     )
 finally:
-    ui._SEARCH_FILTER_GROUPS = None
+    ui.state.search_filter_groups = None
 assert content is not None
 assert not visibility.show_seam_preparation_section
 
 # Inside a matching branch, controls with unrelated visible names are omitted.
 mark_result = ui._probe_panel(ui.VIEW3D_PT_polygroups_seam_preparation, context, "mark")
 recording = Layout()
-ui._SEARCH_FILTER_GROUPS = mark_result.groups
-ui._SEARCH_FILTER_TERMS = mark_result.terms
+ui.state.search_filter_groups = mark_result.groups
+ui.state.search_filter_terms = mark_result.terms
 try:
     filtered = ui._FilteredLayout(recording, mark_result.terms)
     ui.draw_section_panel_content(
@@ -76,8 +76,8 @@ try:
         "show_seam_preparation_section",
     )
 finally:
-    ui._SEARCH_FILTER_GROUPS = None
-    ui._SEARCH_FILTER_TERMS = ()
+    ui.state.search_filter_groups = None
+    ui.state.search_filter_terms = ()
 named_operators = [label for label in recording.operator_labels if label]
 assert named_operators
 assert all("mark" in label.casefold() for label in named_operators), named_operators

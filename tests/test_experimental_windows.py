@@ -41,7 +41,7 @@ class Layout:
 
 preferences = bpy.context.preferences.addons[root.name].preferences
 settings = SimpleNamespace(show_test_group=True, path_from_id=lambda: "scene.test_settings")
-ui._DRAWING_SECTION = type("TestSection", (), {})
+ui.state.drawing_section = type("TestSection", (), {})
 try:
     preferences.enable_experimental_features = False
     disabled_layout = Layout()
@@ -55,7 +55,7 @@ try:
     assert len(detached) == 1
     assert detached[0][1]["icon"] == "XRAY"
 finally:
-    ui._DRAWING_SECTION = None
+    ui.state.drawing_section = None
     preferences.enable_experimental_features = False
 
 print("EXPERIMENTAL WINDOWS TEST PASSED")

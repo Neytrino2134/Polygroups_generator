@@ -11,14 +11,16 @@ from ..core.window_schema import plain
 
 
 def _fold_names():
-    source = Path(__file__).resolve().parents[1] / 'ui.py'
+    root = Path(__file__).resolve().parents[1]
+    sources = [root / 'ui.py', *sorted((root / 'ui_panels').glob('*.py'))]
     names = set()
-    for node in ast.walk(ast.parse(source.read_text(encoding='utf8'))):
-        if (isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)
-                and node.func.attr=='prop' and len(node.args)>1
-                and isinstance(node.args[1],ast.Constant) and isinstance(node.args[1].value,str)
-                and any(k.arg=='icon' and 'TRIA_' in ast.unparse(k.value) for k in node.keywords)):
-            names.add(node.args[1].value)
+    for source in sources:
+        for node in ast.walk(ast.parse(source.read_text(encoding='utf8'))):
+            if (isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)
+                    and node.func.attr=='prop' and len(node.args)>1
+                    and isinstance(node.args[1],ast.Constant) and isinstance(node.args[1].value,str)
+                    and any(k.arg=='icon' and 'TRIA_' in ast.unparse(k.value) for k in node.keywords)):
+                names.add(node.args[1].value)
     return names
 
 
@@ -209,10 +211,10 @@ def capture(context, section):
     from .. import ui
     panel = ui.SECTION_PANEL_CLASSES[section]
     layout = Layout(key=panel.__name__)
-    previous = ui._CUSTOM_CAPTURING
-    ui._CUSTOM_CAPTURING = True
+    previous = ui.state.custom_capturing
+    ui.state.custom_capturing = True
     try:
         ui.draw_section_panel_content(panel, ContextProxy(context), layout, panel.visibility_property)
     finally:
-        ui._CUSTOM_CAPTURING = previous
+        ui.state.custom_capturing = previous
     return layout

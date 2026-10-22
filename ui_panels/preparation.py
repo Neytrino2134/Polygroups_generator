@@ -1,0 +1,574 @@
+"""Preparation section panels."""
+import bpy
+from ..localization import t
+from ..core.remesh_defaults import get_remesh_preset_counts
+from ..core.import_timing import format_duration
+from .common import (
+    draw_batch_processing,
+    draw_collapsible_box,
+    draw_import_progress,
+    draw_import_remesh_options,
+    draw_mesh_editing,
+    draw_section_header_icon,
+    draw_topic,
+    quad_remesher_status,
+    section_content_visible,
+)
+
+
+class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
+    bl_label = "03 |"
+    bl_text_key = "section_model_preparation"
+    bl_icon = "AUTOMERGE_ON"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 3
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
+        layout = self.layout.box()
+        settings = context.scene.polygroups_model_preparation_settings
+
+        content = draw_topic(layout, context, "prepare_0", t(context, "model_preparation_group_prepare"), "AUTOMERGE_ON")
+        if content is not None:
+            column = content.column(align=True)
+            column.operator(
+                "object.polygroups_rename_and_apply_weld",
+                text=t(context, "rename_apply_weld"),
+                icon="AUTOMERGE_ON",
+            )
+            column.separator()
+            column.operator(
+                "object.polygroups_rename_objects",
+                text=t(context, "rename_objects"),
+                icon="OUTLINER_COLLECTION",
+            )
+            column.prop(settings, "weld_distance", text=t(context, "weld_distance"))
+            column.operator(
+                "object.polygroups_apply_weld",
+                text=t(context, "apply_weld"),
+                icon="AUTOMERGE_ON",
+            )
+
+        content = draw_topic(layout, context, "prepare_1", t(context, "model_preparation_group_mesh_edit"), "EDITMODE_HLT")
+        if content is not None:
+            draw_mesh_editing(content, context, "prepare_1", loose_parts=True)
+
+        content = draw_topic(layout, context, "prepare_2", t(context, "model_preparation_group_manage"), "OUTLINER_COLLECTION")
+        if content is not None:
+            column = content.column(align=True)
+            for prefix, label in (("Highpoly_", "Highpoly"), ("Retopo_", "Retopo")):
+                row = column.row(align=True)
+                for hidden, key, icon in ((True, "hide_all_named", "RESTRICT_VIEW_ON"),
+                                          (False, "show_all_named", "RESTRICT_VIEW_OFF")):
+                    operator = row.operator("object.polygroups_object_visibility",
+                                            text=t(context, key, value=label), icon=icon)
+                    operator.prefix = prefix
+                    operator.hidden = hidden
+            column.operator("object.polygroups_generated_collection",
+                            text=t(context, "isolate_generated_collections"),
+                            icon="OUTLINER_COLLECTION").action = "ISOLATE"
+            row = column.row(align=True)
+            row.operator("object.polygroups_generated_collection",
+                         text=t(context, "previous_generated_collection"), icon="TRIA_LEFT").action = "PREVIOUS"
+            row.operator("object.polygroups_generated_collection",
+                         text=t(context, "next_generated_collection"), icon="TRIA_RIGHT").action = "NEXT"
+            column.separator()
+            column.operator(
+                "object.polygroups_fix_all_generated_indices",
+                text=t(context, "fix_all_generated_indices"),
+                icon="FILE_REFRESH",
+            )
+
+        content = draw_topic(layout, context, "prepare_3", t(context, "model_preparation_group_seams"), "EDGE_SEAM")
+        if content is not None:
+            column = content.column(align=True)
+            column.operator(
+                "mesh.polygroups_mark_material_boundaries_seam",
+                text=t(context, "generate_seams_materials"),
+                icon="EDGE_SEAM",
+            )
+            column.prop(context.scene.polygroups_generator_settings, "checker_scale",
+                        text=t(context, "checker_scale"))
+            column.operator(
+                "object.polygroups_apply_checker_material",
+                text=t(context, "apply_checker_material"),
+                icon="TEXTURE",
+            )
+            column.operator(
+                "object.polygroups_unwrap_angle_based",
+                text=t(context, "unwrap_angle_based"),
+                icon="UV",
+            )
+
+
+class VIEW3D_PT_polygroups_import(bpy.types.Panel):
+    bl_label = "01 |"
+    bl_text_key = "section_import"
+    bl_icon = "FILE_FOLDER"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 1
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
+        layout = self.layout
+        settings = context.scene.polygroups_model_preparation_settings
+
+        content = draw_topic(layout, context, "import_0", t(context, "import_group_source"), "FILE_FOLDER")
+        if content is not None:
+            files_box = content.column(align=True)
+            files_box.prop(settings, "batch_import_format", text=t(context, "format"))
+            files_row = files_box.row(align=True)
+            files_row.enabled = not settings.batch_is_running
+            file_operator = files_row.operator(
+                "object.polygroups_batch_import",
+                text=t(context, "import_files"),
+                icon="FILE_FOLDER",
+            )
+            file_operator.use_file_selection = True
+            files_box.label(text=t(context, "import_automatic_processing" if
+                                   settings.file_import_automatic_processing else "import_simple_processing"),
+                            icon="MODIFIER")
+
+        content = draw_topic(layout, context, "import_1", t(context, "import_simple_processing"), "MODIFIER")
+        if content is not None:
+            files_box = content.column(align=True)
+            files_box.enabled = (not settings.file_import_automatic_processing
+                                 and (not settings.batch_is_running or settings.batch_stage == "PAUSED"))
+            files_box.prop(
+                settings,
+                "file_import_auto_rename_objects",
+                text=t(context, "auto_rename_objects"),
+            )
+            files_box.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
+            files_box.prop(settings, "file_import_disable_view_assist",
+                           text=t(context, "disable_view_assist"))
+            draw_import_remesh_options(files_box, context, settings, "file_import")
+
+        content = draw_topic(layout, context, "import_3", t(context, "import_automatic_processing"), "MODIFIER")
+        if content is not None:
+            mode_row = content.row(align=True)
+            mode_row.enabled = not settings.batch_is_running
+            mode_row.prop(settings, "file_import_automatic_processing",
+                          text=t(context, "import_use_automatic_processing"), toggle=True)
+            automatic = content.column(align=True)
+            automatic.enabled = (settings.file_import_automatic_processing
+                                 and (not settings.batch_is_running or settings.batch_stage == "PAUSED"))
+            draw_batch_processing(automatic, context, settings)
+            automatic.separator(type="LINE")
+            automatic.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
+            arrange = automatic.column(align=True)
+            arrange.enabled = settings.batch_auto_arrange_objects
+            arrange.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing_x"))
+            arrange.prop(settings, "batch_arrange_secondary_spacing", text=t(context, "arrange_spacing_y" if settings.batch_arrange_plane == "XY" else "arrange_spacing_z"))
+            arrange.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
+            arrange.prop(settings, "batch_arrange_plane", text=t(context, "arrange_plane"))
+            arrange.prop(settings, "batch_arrange_alignment", text=t(context, "arrange_alignment"))
+            arrange.prop(settings, "batch_arrange_rows", text=t(context, "arrange_rows"))
+            automatic.prop(settings, "batch_import_mode", text=t(context, "batch_import_mode"), expand=True)
+            save_row = automatic.row(align=True)
+            save_row.enabled = not settings.batch_is_running
+            save_row.operator("object.polygroups_save_blend_file",
+                              text=t(context, "save_file"), icon="FILE_TICK")
+            hint = automatic.row()
+            hint.alert = not bool(bpy.data.filepath)
+            hint.label(text=t(context, "batch_save_before_start"),
+                       icon="INFO" if bpy.data.filepath else "ERROR")
+
+        content = draw_topic(layout, context, "import_2", t(context, "import_group_progress"), "INFO")
+        if content is not None:
+            draw_import_progress(content, context, settings)
+
+
+class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
+    bl_label = "02 |"
+    bl_text_key = "section_batch_import"
+    bl_icon = "FILE_REFRESH"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 2
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
+        layout = self.layout
+        settings = context.scene.polygroups_model_preparation_settings
+
+        content = draw_topic(layout, context, "batch_0", t(context, "import_group_source"), "FILE_FOLDER")
+        if content is not None:
+            folder_row = content.row(align=True)
+            folder_row.label(text=t(context, "folder"))
+            folder_row.operator("object.polygroups_select_import_folder", text="", icon="FILE_FOLDER")
+
+            folder_path = settings.batch_import_directory or t(context, "no_folder_selected")
+            content.label(text=folder_path, icon="FILE_FOLDER")
+            content.prop(settings, "batch_import_format", text=t(context, "format"))
+            subfolders_row = content.row()
+            subfolders_row.enabled = not settings.batch_is_running
+            subfolders_row.prop(settings, "batch_include_subfolders", text=t(context, "include_subfolders"))
+            content.separator(type="LINE")
+            heading = content.row(align=True)
+            heading.alignment = "CENTER"
+            heading.label(text="--  " + t(context, "batch_heading_scan") + "  --")
+            scan_row = content.row(align=True)
+            scan_row.enabled = not settings.batch_is_running
+            scan_row.operator(
+                "object.polygroups_scan_import_folder",
+                text=t(context, "scan_folder"),
+                icon="VIEWZOOM",
+            )
+            content.separator(type="LINE")
+            heading = content.row(align=True)
+            heading.alignment = "CENTER"
+            heading.label(text="--  " + t(context, "batch_heading_status") + "  --")
+            content.progress(
+                factor=1.0 if settings.batch_stage == "QUEUED" else 0.0,
+                type="BAR",
+                text=t(context, "scanned_files_found", value=settings.batch_total_count),
+            )
+            if settings.batch_import_format == "BLEND":
+                append_options = content.column(align=True)
+                append_options.enabled = not settings.batch_is_running
+                append_options.prop(
+                    settings,
+                    "batch_append_include_highpoly",
+                    text=t(context, "batch_append_include_highpoly"),
+                )
+                append_options.operator(
+                    "object.polygroups_append_generated_blends",
+                    text=t(context, "batch_append_generated_blends"),
+                    icon="APPEND_BLEND",
+                )
+
+        content = draw_topic(layout, context, "batch_1", t(context, "import_group_processing"), "MODIFIER")
+        if content is not None:
+            if settings.batch_import_format == "BLEND":
+                content.label(text=t(context, "batch_blend_processing_disabled"), icon="INFO")
+            else:
+                draw_batch_processing(content, context, settings)
+
+        content = draw_topic(layout, context, "batch_2", t(context, "arrange_objects"), "SNAP_EDGE")
+        if content is not None:
+            arrange_box = content.column(align=True)
+            arrange_box.prop(settings, "batch_auto_arrange_objects", text=t(context, "auto_arrange_imports"))
+            arrange_box.prop(settings, "batch_arrange_spacing", text=t(context, "arrange_spacing_x"))
+            arrange_box.prop(settings, "batch_arrange_secondary_spacing", text=t(context, "arrange_spacing_y" if settings.batch_arrange_plane == "XY" else "arrange_spacing_z"))
+            arrange_box.prop(settings, "batch_arrange_mode", text=t(context, "arrange_mode"))
+            arrange_box.prop(settings, "batch_arrange_plane", text=t(context, "arrange_plane"))
+            arrange_box.prop(settings, "batch_arrange_alignment", text=t(context, "arrange_alignment"))
+            rows_row = arrange_box.row(align=True)
+            rows_row.enabled = settings.batch_arrange_mode == "GRID"
+            rows_row.prop(settings, "batch_arrange_rows", text=t(context, "arrange_rows"))
+            arrange_row = arrange_box.row(align=True)
+            arrange_row.enabled = not settings.batch_is_running
+            arrange_row.operator(
+                "object.polygroups_arrange_batch_objects",
+                text=t(context, "arrange_selected"),
+                icon="ALIGN_CENTER",
+            )
+
+        content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
+        if content is not None:
+            group = draw_collapsible_box(content, settings, "show_batch_start_file", t(context, "batch_start_save_reset_group"), "FILE_BLEND")
+            if group is not None:
+                group.separator(type="LINE")
+                heading = group.row(align=True)
+                heading.alignment = "CENTER"
+                heading.label(text="--  " + t(context, "batch_heading_save") + "  --")
+                save_row = group.row(align=True)
+                save_row.enabled = not settings.batch_is_running
+                save_row.operator(
+                    "object.polygroups_save_blend_file",
+                    text=t(context, "save_file"),
+                    icon="FILE_TICK",
+                )
+                if not bpy.data.filepath:
+                    save_hint = group.column(align=True)
+                    save_hint.alert = True
+                    save_hint.label(
+                        text=t(context, "batch_save_before_start_line1"),
+                        icon="ERROR",
+                    )
+                    save_hint.label(text=t(context, "batch_save_before_start_line2"), icon="BLANK1")
+                group.separator(type="LINE")
+                heading = group.row(align=True)
+                heading.alignment = "CENTER"
+                heading.label(text="--  " + t(context, "batch_heading_reset") + "  --")
+                group.operator(
+                    "object.polygroups_reset_import_state",
+                    text=t(context, "batch_reset_state"),
+                    icon="FILE_REFRESH",
+                )
+                group.separator(type="LINE")
+
+            group = draw_collapsible_box(content, settings, "show_batch_start_autosave", t(context, "batch_start_autosave_group"), "RECOVER_LAST")
+            if group is not None:
+                auto_save_row = group.row(align=True)
+                auto_save_row.enabled = (
+                    not settings.batch_is_running
+                    and not (
+                        settings.batch_save_generated_separately
+                        and settings.batch_separate_collections
+                    )
+                )
+                auto_save_row.prop(
+                    settings,
+                    "batch_auto_save",
+                    text=t(context, "batch_auto_save"),
+                    toggle=True,
+                )
+                interval = auto_save_row.row(align=True)
+                interval.enabled = settings.batch_auto_save
+                interval.prop(
+                    settings,
+                    "batch_auto_save_interval",
+                    text=t(context, "batch_auto_save_every"),
+                )
+
+                separate_save = group.column(align=True)
+                separate_save.enabled = not settings.batch_is_running
+                separate_save.prop(
+                    settings,
+                    "batch_save_generated_separately",
+                    text=t(context, "batch_save_generated_separately"),
+                    toggle=True,
+                )
+                separate_hint = separate_save.column(align=True)
+                separate_hint.alert = bool(
+                    settings.batch_save_generated_separately
+                    and (not settings.batch_separate_collections or not bpy.data.filepath)
+                )
+                separate_hint.label(
+                    text=t(context, "batch_separate_hint_line1"),
+                    icon="ERROR" if separate_hint.alert else "FILE_BLEND",
+                )
+                separate_hint.label(text=t(context, "batch_separate_hint_line2"), icon="BLANK1")
+                auto_restore_row = separate_save.row(align=True)
+                auto_restore_row.enabled = bool(
+                    settings.batch_save_generated_separately
+                    and settings.batch_separate_collections
+                )
+                auto_restore_row.prop(
+                    settings,
+                    "batch_auto_restore_separate_retopo",
+                    text=t(context, "batch_auto_restore_separate_retopo"),
+                )
+                if settings.batch_auto_restore_separate_retopo:
+                    separate_save.prop(
+                        settings,
+                        "batch_restore_include_highpoly",
+                        text=t(context, "batch_restore_include_highpoly"),
+                    )
+                group.separator(type="LINE")
+                restore_row = group.row(align=True)
+                restore_row.enabled = bool(bpy.data.filepath) and not settings.batch_is_running
+                restore_row.operator(
+                    "object.polygroups_restore_separate_retopo",
+                    text=t(context, "batch_restore_separate_retopo"),
+                    icon="IMPORT",
+                )
+                group.separator(type="LINE")
+
+            group = draw_collapsible_box(content, settings, "show_batch_start_mode", t(context, "batch_start_mode_group"), "PLAY")
+            if group is not None:
+                group.separator(type="LINE")
+                heading = group.row(align=True)
+                heading.alignment = "CENTER"
+                heading.label(text="--  " + t(context, "batch_heading_process") + "  --")
+                operator_row = group.row(align=True)
+                operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
+                operator_row.operator_context = "EXEC_DEFAULT"
+                start_import = operator_row.operator(
+                    "object.polygroups_batch_import",
+                    text=t(context, "import_folder"),
+                    icon="PLAY",
+                )
+                start_import.use_file_selection = False
+                group.separator(type="LINE")
+                heading = group.row(align=True)
+                heading.alignment = "CENTER"
+                heading.label(text="--  " + t(context, "batch_heading_settings") + "  --")
+                import_mode_row = group.row(align=True)
+                import_mode_row.enabled = not settings.batch_is_running
+                import_mode_row.prop(
+                    settings,
+                    "batch_import_mode",
+                    text=t(context, "batch_import_mode"),
+                    expand=True,
+                )
+
+                from ..operators.import_queue import active_highpoly_collection
+
+                selected_row = group.row(align=True)
+                selected_row.enabled = (
+                    not settings.batch_is_running
+                    and active_highpoly_collection(context) is not None
+                )
+                selected_row.operator_context = "EXEC_DEFAULT"
+                do_selected = selected_row.operator(
+                    "object.polygroups_batch_import",
+                    text=t(context, "batch_do_selected"),
+                    icon="PLAY",
+                )
+                do_selected.use_file_selection = False
+                do_selected.do_selected = True
+                selected_hint = group.column(align=True)
+                selected_hint.label(text=t(context, "batch_selected_hint_line1"), icon="OUTLINER_OB_MESH")
+                selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
+
+
+        content = draw_topic(layout, context, "batch_5", t(context, "phase2_title"), "RECOVER_LAST")
+        if content is not None:
+            controls = content.column(align=True)
+            controls.enabled = not settings.phase2_is_running and not settings.batch_is_running
+            controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))
+            controls.separator(type="LINE")
+            controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
+            content.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
+            content.label(text=t(context, "phase2_scanned_collections", value=settings.phase2_scanned_collections))
+            controls = content.column(align=True)
+            controls.enabled = not settings.phase2_is_running and not settings.batch_is_running
+            controls.separator(type="LINE")
+            controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
+            controls.separator(type="LINE")
+            controls.prop(settings, "phase2_clear_generated", text=t(context, "phase2_clear"))
+            if settings.phase2_clear_generated:
+                warning = controls.column(align=True)
+                warning.alert = True
+                warning.label(text=t(context, "phase2_clear_hint1"), icon="ERROR")
+                warning.label(text=t(context, "phase2_clear_hint2"), icon="BLANK1")
+            controls.prop(settings, "phase2_auto_bake", text=t(context, "phase2_autobake"))
+            if settings.phase2_auto_bake:
+                controls.prop(settings, "phase2_mesh_auto_repair", text=t(context, "phase2_mesh_auto_repair"))
+                controls.prop(settings, "phase2_repair_artifacts", text=t(context, "phase2_repair"))
+                controls.label(text=t(context, "phase2_bake_hint1"), icon="INFO")
+                controls.label(text=t(context, "phase2_bake_hint2"), icon="BLANK1")
+            if settings.phase2_status:
+                content.separator(type="LINE")
+                content.label(text=settings.phase2_status, icon="INFO")
+            if settings.phase2_total_count:
+                content.progress(
+                    factor=(settings.phase2_done_count + settings.phase2_failed_count) / settings.phase2_total_count,
+                    type="BAR", text=t(context, "phase2_progress", done=settings.phase2_done_count,
+                                       failed=settings.phase2_failed_count, total=settings.phase2_total_count),
+                )
+            if settings.phase2_is_running:
+                content.operator("object.polygroups_phase2_stop", text=t(context, "phase2_stop"), icon="PAUSE")
+
+        content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
+        if content is not None:
+            draw_import_progress(content, context, settings)
+
+
+class VIEW3D_PT_polygroups_remesh(bpy.types.Panel):
+    bl_label = "06 |"
+    bl_text_key = "section_remesh"
+    bl_icon = "MOD_REMESH"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "AI Retopo"
+    bl_parent_id = "VIEW3D_PT_polygroups_generator"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 6
+    draw_header = draw_section_header_icon
+
+    def draw(self, context):
+        if not section_content_visible(self, context):
+            return
+
+        layout = self.layout.box()
+        content = draw_topic(layout, context, "remesh_0", 'Remesh Controls', "MOD_REMESH")
+        if content is not None:
+            self.draw_remesh_controls(context, content)
+        content = draw_topic(layout, context, "remesh_1", 'Remesh Progress', "INFO")
+        if content is not None:
+            self.draw_remesh_progress(context, content)
+
+    def draw_remesh_controls(self, context, layout):
+        installed, enabled, available = quad_remesher_status(context)
+
+        if not installed:
+            layout.label(text=t(context, "quad_not_installed"), icon="ERROR")
+            layout.label(text=t(context, "quad_install_hint"))
+            return
+
+        if not enabled or not available:
+            layout.label(text=t(context, "quad_not_enabled"), icon="ERROR")
+            layout.label(text=t(context, "quad_enable_hint"))
+            return
+
+        qremesher = context.scene.qremesher
+
+        status = context.scene.polygroups_remesh_status
+        content = layout
+        if content is not None:
+            content = content.column()
+            content.enabled = not status.is_running and not context.scene.polygroups_model_preparation_settings.batch_is_running
+            content.operator(
+                "object.polygroups_checked_quad_remesh",
+                text=t(context, "remesh_it"),
+                icon="MOD_REMESH",
+            )
+
+            preset_row = content.row(align=True)
+            remesh_row = content.row(align=True)
+            for label, quad_count in get_remesh_preset_counts(context):
+                preset = preset_row.operator(
+                    "object.polygroups_set_quad_count_preset", text=label,
+                )
+                preset.quad_count = quad_count
+                remesh = remesh_row.operator(
+                    "object.polygroups_checked_quad_remesh", text=f"Remesh {label}",
+                )
+                remesh.quad_count = quad_count
+
+            content.prop(qremesher, "target_count", text=t(context, "quad_count"))
+            content.prop(qremesher, "use_materials", text=t(context, "use_materials"))
+            content.prop(context.scene.polygroups_model_preparation_settings,
+                         "remesh_pregenerate_polygroups", text="Pregenerate Poly Groups")
+            content.prop(context.scene.polygroups_model_preparation_settings,
+                         "remesh_auto_generate_seams", text="Auto Generate Seams")
+            content.prop(context.scene.polygroups_model_preparation_settings,
+                         "remesh_auto_unwrap_checker", text="Auto Unwrap and Apply Checker")
+
+            symmetry_row = content.row(align=True)
+            symmetry_row.label(text=t(context, "symmetry"))
+            symmetry_row.prop(qremesher, "symmetry_x")
+
+            if status.is_running:
+                content.operator("object.polygroups_cancel_remesh", text=t(context, "import_cancel"), icon="CANCEL")
+
+    def draw_remesh_progress(self, context, content):
+        status = context.scene.polygroups_remesh_status
+        if content is not None:
+            progress_box = content.column(align=True)
+            if status.stage:
+                progress_box.label(text=t(context, "remesh_stage_" + status.stage))
+                progress_box.label(text=t(context, "remesh_source", value=status.source_name))
+                progress_box.progress(factor=status.progress / 100, type="BAR", text=f"{status.progress:.1f}%")
+                progress_box.label(text=t(context, "remesh_elapsed", value=format_duration(status.elapsed_seconds)))
+                if status.stage == "DONE":
+                    progress_box.label(text=t(context, "remesh_completed_polygons", value=f"{status.polygon_count:,}"), icon="CHECKMARK")
+                    progress_box.label(text=status.result_name)
+                elif status.message:
+                    progress_box.label(text=status.message, icon="ERROR" if status.stage == "FAILED" else "INFO")
+            else:
+                progress_box.label(text=t(context, "import_group_progress"), icon="INFO")

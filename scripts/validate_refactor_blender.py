@@ -1,8 +1,10 @@
 """Run the refactor regression selection in isolated Blender processes."""
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import time
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = [
@@ -29,12 +31,14 @@ failed = []
 for name in args.tests:
     started = time.monotonic()
     try:
-        result = subprocess.run(
-            [str(args.blender), '--background', '--factory-startup',
-             '--python-exit-code', '1', '--python', str(ROOT / 'tests' / name)],
-            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding='utf-8', errors='replace', timeout=180,
-        )
+        with tempfile.TemporaryDirectory(prefix='polygroups_validation_') as directory:
+            env = dict(os.environ, AIRETOPO_UI_VALIDATION_OUTPUT=directory)
+            result = subprocess.run(
+                [str(args.blender), '--background', '--factory-startup',
+                 '--python-exit-code', '1', '--python', str(ROOT / 'tests' / name)],
+                cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace', timeout=180, env=env,
+            )
         output = result.stdout
         success = result.returncode == 0 and 'Traceback (most recent call last)' not in output
     except subprocess.TimeoutExpired as exc:
