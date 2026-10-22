@@ -664,6 +664,18 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Smart UV Repair", default=True,
         description="Run Smart UV Repair after the first remesh and before Auto Unwrap",
     )
+    batch_first_geometry_repair: bpy.props.BoolProperty(
+        name="Geometry Repair", default=True,
+        description="Repair folded pockets, degenerate edges and zero-area seam triangles at the end of the first remesh pass",
+    )
+    batch_stage_3_geometry_repair: bpy.props.BoolProperty(
+        name="Geometry Repair", default=True,
+        description="Run all three geometry repairs at the end of the second remesh pass",
+    )
+    batch_stage_4_geometry_repair: bpy.props.BoolProperty(
+        name="Geometry Repair", default=True,
+        description="Run all three geometry repairs after the third pass and before UV packing and baking",
+    )
     batch_first_uv_repair_threshold: bpy.props.FloatProperty(
         name="Critical Stretch Ratio", default=4.0, min=1.1, max=1000.0,
     )

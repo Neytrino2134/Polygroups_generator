@@ -825,6 +825,25 @@ class ImportQueue:
         if getattr(settings, f"batch_stage_{self.pass_number}_autofix_triangulate_ngons"):
             _triangulate_ngons_for_autofix(obj)
 
+    def repair_completed_pass_geometry(self, context, targets):
+        if not self.batch_stages or not self.pass_method or self.pass_number not in (2, 3, 4):
+            return
+        property_name = ("batch_first_geometry_repair" if self.pass_number == 2 else
+                         f"batch_stage_{self.pass_number}_geometry_repair")
+        if not getattr(self.settings, property_name):
+            return
+        for obj in targets:
+            self.select_source(context, obj)
+            if obj.data.users > 1:
+                obj.data = obj.data.copy()
+                self.owned_meshes.add(obj.data)
+            result = bpy.ops.mesh.polygroups_repair_mesh_folds(
+                'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
+                fix_degenerate=True, fix_zero_area=True, selected_only=False,
+            )
+            if 'FINISHED' not in result:
+                raise RuntimeError(f'Geometry Repair failed after remesh pass {self.pass_number - 1}: {obj.name}')
+
     def first_cleanup_stage(self):
         if not self.batch_stages:
             return "PASS_SETUP"
@@ -1223,6 +1242,7 @@ class ImportQueue:
             )
         elif self.stage == "COMPLETE_UNWRAP_PASS":
             targets = self.pass_outputs or self.pass_sources
+            self.repair_completed_pass_geometry(context, targets)
             self.pass_sources = targets
             self.result_meshes = list(targets)
             self.pass_index += 1

@@ -1423,6 +1423,7 @@ def draw_batch_processing(content, context, settings):
             angle.prop(settings, "batch_first_surface_angle", text=t(context, "smart_seam_angle_limit"))
         first.separator()
         first.prop(settings, "batch_first_uv_repair_enabled", text=t(context, "uv_repair"))
+        first.prop(settings, "batch_first_geometry_repair", text=t(context, "batch_geometry_repair"))
         repair = first.column(align=True)
         repair.enabled = settings.batch_first_uv_repair_enabled
         repair.prop(settings, "batch_first_uv_repair_threshold", text=t(context, "uv_repair_threshold"))
@@ -1500,6 +1501,7 @@ def draw_batch_processing(content, context, settings):
             )
 
             stage.prop(settings, f"batch_stage_{number}_uv_repair_enabled", text=t(context, "uv_repair"))
+            stage.prop(settings, f"batch_stage_{number}_geometry_repair", text=t(context, "batch_geometry_repair"))
             repair = stage.column(align=True)
             repair.enabled = getattr(settings, f"batch_stage_{number}_uv_repair_enabled")
             for suffix in ("threshold", "min_faces", "surface_angle"):
