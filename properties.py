@@ -2497,7 +2497,7 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
                ("MPEG4", "MPEG-4", "MPEG-4 video (.mp4)"),
                ("WEBM", "WebM", "WebM video (.webm)"),
                ("QUICKTIME", "QuickTime", "QuickTime video (.mov)")),
-        default="WEBM",
+        default="MPEG4",
     )
     animation_collection_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
     animation_object_name: bpy.props.StringProperty(default="", options={"HIDDEN"})
