@@ -1,0 +1,1638 @@
+{
+  "baseline": "140a104",
+  "python_files": 326,
+  "total_lines": 74160,
+  "unchanged_definitions": 188,
+  "inventory": [
+    {
+      "file": "ui.py",
+      "lines": 4894,
+      "definitions": 60
+    },
+    {
+      "file": "operators/object_seam_cutter.py",
+      "lines": 4310,
+      "definitions": 143
+    },
+    {
+      "file": "operators/baking.py",
+      "lines": 2350,
+      "definitions": 92
+    },
+    {
+      "file": "operators/import_queue.py",
+      "lines": 2008,
+      "definitions": 20
+    },
+    {
+      "file": "localization.py",
+      "lines": 1924,
+      "definitions": 3
+    },
+    {
+      "file": "operators/render_queue.py",
+      "lines": 1739,
+      "definitions": 83
+    },
+    {
+      "file": "tools.py",
+      "lines": 1452,
+      "definitions": 39
+    },
+    {
+      "file": "operators/unity_preparation.py",
+      "lines": 1256,
+      "definitions": 20
+    },
+    {
+      "file": "preferences.py",
+      "lines": 1233,
+      "definitions": 39
+    },
+    {
+      "file": "operators/mesh_checks.py",
+      "lines": 1064,
+      "definitions": 48
+    },
+    {
+      "file": "operators/fab_preparation.py",
+      "lines": 907,
+      "definitions": 43
+    },
+    {
+      "file": "operators/turnaround_animation.py",
+      "lines": 891,
+      "definitions": 20
+    },
+    {
+      "file": "settings/preparation.py",
+      "lines": 880,
+      "definitions": 3
+    },
+    {
+      "file": "operators/mesh_export.py",
+      "lines": 855,
+      "definitions": 39
+    },
+    {
+      "file": "operators/mark_longitudinal_seam.py",
+      "lines": 848,
+      "definitions": 34
+    },
+    {
+      "file": "operators/ai_generation.py",
+      "lines": 755,
+      "definitions": 29
+    },
+    {
+      "file": "custom_autosave.py",
+      "lines": 753,
+      "definitions": 42
+    },
+    {
+      "file": "tests/test_import_queue.py",
+      "lines": 734,
+      "definitions": 3
+    },
+    {
+      "file": "operators/safety_checks.py",
+      "lines": 722,
+      "definitions": 25
+    },
+    {
+      "file": "custom_ui/lifecycle.py",
+      "lines": 715,
+      "definitions": 20
+    },
+    {
+      "file": "standalone_ui/client.py",
+      "lines": 713,
+      "definitions": 4
+    },
+    {
+      "file": "operators/batch_import.py",
+      "lines": 675,
+      "definitions": 18
+    },
+    {
+      "file": "settings/seams.py",
+      "lines": 663,
+      "definitions": 5
+    },
+    {
+      "file": "core/materials.py",
+      "lines": 629,
+      "definitions": 31
+    },
+    {
+      "file": "operators/knife_seam_tool.py",
+      "lines": 629,
+      "definitions": 9
+    },
+    {
+      "file": "hotkeys.py",
+      "lines": 616,
+      "definitions": 18
+    },
+    {
+      "file": "operators/local_contour_sketch.py",
+      "lines": 604,
+      "definitions": 11
+    },
+    {
+      "file": "settings/finalization.py",
+      "lines": 571,
+      "definitions": 2
+    },
+    {
+      "file": "operators/smart_lods.py",
+      "lines": 566,
+      "definitions": 12
+    },
+    {
+      "file": "operators/__init__.py",
+      "lines": 554,
+      "definitions": 2
+    },
+    {
+      "file": "operators/render_studio.py",
+      "lines": 547,
+      "definitions": 21
+    },
+    {
+      "file": "core/bake_projection.py",
+      "lines": 493,
+      "definitions": 10
+    },
+    {
+      "file": "operators/split_narrow_islands.py",
+      "lines": 455,
+      "definitions": 10
+    },
+    {
+      "file": "operators/smart_cage.py",
+      "lines": 426,
+      "definitions": 18
+    },
+    {
+      "file": "core/render_palettes.py",
+      "lines": 425,
+      "definitions": 22
+    },
+    {
+      "file": "operators/phase2_processing.py",
+      "lines": 399,
+      "definitions": 11
+    },
+    {
+      "file": "custom_ui/renderer.py",
+      "lines": 397,
+      "definitions": 14
+    },
+    {
+      "file": "pie_presets.py",
+      "lines": 391,
+      "definitions": 28
+    },
+    {
+      "file": "operators/seam_gap_detection.py",
+      "lines": 387,
+      "definitions": 11
+    },
+    {
+      "file": "operators/smart_decimate.py",
+      "lines": 384,
+      "definitions": 10
+    },
+    {
+      "file": "tests/test_section_hotkeys_ui.py",
+      "lines": 373,
+      "definitions": 3
+    },
+    {
+      "file": "operators/small_islands_tool.py",
+      "lines": 370,
+      "definitions": 8
+    },
+    {
+      "file": "operators/repair_uv_stretch.py",
+      "lines": 369,
+      "definitions": 4
+    },
+    {
+      "file": "operators/edge_seam_path.py",
+      "lines": 359,
+      "definitions": 20
+    },
+    {
+      "file": "tests/test_projection_artifact_mask_blender.py",
+      "lines": 349,
+      "definitions": 2
+    },
+    {
+      "file": "core/local_contour.py",
+      "lines": 343,
+      "definitions": 14
+    },
+    {
+      "file": "settings/callbacks.py",
+      "lines": 343,
+      "definitions": 28
+    },
+    {
+      "file": "settings/render.py",
+      "lines": 340,
+      "definitions": 1
+    },
+    {
+      "file": "operators/unwrap_angle_based.py",
+      "lines": 330,
+      "definitions": 13
+    },
+    {
+      "file": "operators/cutter_grid.py",
+      "lines": 319,
+      "definitions": 7
+    },
+    {
+      "file": "operators/unity_export_workflow.py",
+      "lines": 319,
+      "definitions": 14
+    },
+    {
+      "file": "operators/relocate_project.py",
+      "lines": 315,
+      "definitions": 8
+    },
+    {
+      "file": "core/mesh_fold_repair.py",
+      "lines": 306,
+      "definitions": 7
+    },
+    {
+      "file": "uv_checker_overlay.py",
+      "lines": 306,
+      "definitions": 15
+    },
+    {
+      "file": "operators/detached_groups.py",
+      "lines": 300,
+      "definitions": 8
+    },
+    {
+      "file": "tests/test_smart_cage_blender.py",
+      "lines": 287,
+      "definitions": 2
+    },
+    {
+      "file": "settings/baking.py",
+      "lines": 284,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_render_studio.py",
+      "lines": 279,
+      "definitions": 0
+    },
+    {
+      "file": "core/smart_seam_routing.py",
+      "lines": 277,
+      "definitions": 3
+    },
+    {
+      "file": "operators/connect_vertex_seam.py",
+      "lines": 276,
+      "definitions": 13
+    },
+    {
+      "file": "operators/small_loose_parts.py",
+      "lines": 275,
+      "definitions": 7
+    },
+    {
+      "file": "operators/uv_seam_path.py",
+      "lines": 274,
+      "definitions": 18
+    },
+    {
+      "file": "core/remesh_job.py",
+      "lines": 267,
+      "definitions": 5
+    },
+    {
+      "file": "operators/seam_eraser.py",
+      "lines": 262,
+      "definitions": 7
+    },
+    {
+      "file": "tests/test_uv_repair_blender.py",
+      "lines": 249,
+      "definitions": 4
+    },
+    {
+      "file": "operators/check_material_textures.py",
+      "lines": 242,
+      "definitions": 13
+    },
+    {
+      "file": "tests/test_batch_separate_save.py",
+      "lines": 229,
+      "definitions": 0
+    },
+    {
+      "file": "operators/fab_rename_existing.py",
+      "lines": 227,
+      "definitions": 6
+    },
+    {
+      "file": "tests/test_narrow_islands.py",
+      "lines": 224,
+      "definitions": 2
+    },
+    {
+      "file": "operators/unreal_lod_rename.py",
+      "lines": 221,
+      "definitions": 6
+    },
+    {
+      "file": "tests/test_phase2_processing_blender.py",
+      "lines": 220,
+      "definitions": 3
+    },
+    {
+      "file": "custom_ui/schema.py",
+      "lines": 218,
+      "definitions": 7
+    },
+    {
+      "file": "tests/test_bake_artifact_fill_blender.py",
+      "lines": 216,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_cutter_autofix.py",
+      "lines": 216,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_local_contour_sketch.py",
+      "lines": 215,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_mesh_fold_repair.py",
+      "lines": 214,
+      "definitions": 2
+    },
+    {
+      "file": "operators/small_islands.py",
+      "lines": 212,
+      "definitions": 5
+    },
+    {
+      "file": "operators/uv_artifacts.py",
+      "lines": 212,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_narrow_routing.py",
+      "lines": 212,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_panel_defaults.py",
+      "lines": 212,
+      "definitions": 0
+    },
+    {
+      "file": "operators/render_selected.py",
+      "lines": 206,
+      "definitions": 4
+    },
+    {
+      "file": "operators/section_hotkeys.py",
+      "lines": 206,
+      "definitions": 8
+    },
+    {
+      "file": "operators/resculpting.py",
+      "lines": 201,
+      "definitions": 9
+    },
+    {
+      "file": "tests/test_vertex_seam_ui.py",
+      "lines": 201,
+      "definitions": 2
+    },
+    {
+      "file": "operators/remesh_progress.py",
+      "lines": 200,
+      "definitions": 6
+    },
+    {
+      "file": "tests/test_smart_seam_cuts.py",
+      "lines": 199,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_batch_smart_finalization.py",
+      "lines": 197,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_unreal_lod_export_blender.py",
+      "lines": 196,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_unity_preparation.py",
+      "lines": 194,
+      "definitions": 1
+    },
+    {
+      "file": "core/narrow_regions.py",
+      "lines": 191,
+      "definitions": 6
+    },
+    {
+      "file": "settings/ai.py",
+      "lines": 183,
+      "definitions": 2
+    },
+    {
+      "file": "operators/delete_and_fill.py",
+      "lines": 181,
+      "definitions": 6
+    },
+    {
+      "file": "tests/test_custom_ui_input.py",
+      "lines": 181,
+      "definitions": 5
+    },
+    {
+      "file": "properties.py",
+      "lines": 178,
+      "definitions": 2
+    },
+    {
+      "file": "operators/dev_restart.py",
+      "lines": 176,
+      "definitions": 8
+    },
+    {
+      "file": "services/openai_images.py",
+      "lines": 175,
+      "definitions": 5
+    },
+    {
+      "file": "uv_seam_overlay.py",
+      "lines": 175,
+      "definitions": 8
+    },
+    {
+      "file": "tests/test_turnaround_animation.py",
+      "lines": 174,
+      "definitions": 0
+    },
+    {
+      "file": "operators/quick_knife_seam_tool.py",
+      "lines": 167,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_pie_presets.py",
+      "lines": 167,
+      "definitions": 1
+    },
+    {
+      "file": "operators/render_textures.py",
+      "lines": 165,
+      "definitions": 9
+    },
+    {
+      "file": "tests/test_batch_redo.py",
+      "lines": 165,
+      "definitions": 5
+    },
+    {
+      "file": "operators/smart_angle_seams.py",
+      "lines": 163,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_fab_all_generated.py",
+      "lines": 160,
+      "definitions": 1
+    },
+    {
+      "file": "operators/relax_seams.py",
+      "lines": 157,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_custom_ui_docking.py",
+      "lines": 157,
+      "definitions": 2
+    },
+    {
+      "file": "operators/generated_visibility.py",
+      "lines": 154,
+      "definitions": 6
+    },
+    {
+      "file": "tests/test_seam_eraser_ui.py",
+      "lines": 153,
+      "definitions": 2
+    },
+    {
+      "file": "core/bake_artifact_mask.py",
+      "lines": 152,
+      "definitions": 7
+    },
+    {
+      "file": "tests/test_window_client.py",
+      "lines": 151,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_import_processing_modes.py",
+      "lines": 150,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_smart_lods_blender.py",
+      "lines": 150,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_unity_asset_texture_isolation_blender.py",
+      "lines": 150,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_face_selector_ui.py",
+      "lines": 147,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_render_lod_queue_blender.py",
+      "lines": 147,
+      "definitions": 1
+    },
+    {
+      "file": "operators/unreal_lod_export.py",
+      "lines": 145,
+      "definitions": 2
+    },
+    {
+      "file": "seam_object_overlay.py",
+      "lines": 145,
+      "definitions": 10
+    },
+    {
+      "file": "tests/test_custom_ui_gpu.py",
+      "lines": 145,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_local_ring_fit.py",
+      "lines": 145,
+      "definitions": 1
+    },
+    {
+      "file": "core/smart_seams.py",
+      "lines": 141,
+      "definitions": 1
+    },
+    {
+      "file": "custom_icons.py",
+      "lines": 141,
+      "definitions": 6
+    },
+    {
+      "file": "operators/rename_objects.py",
+      "lines": 140,
+      "definitions": 7
+    },
+    {
+      "file": "tests/test_batch_order_recovery_blender.py",
+      "lines": 136,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_local_contour.py",
+      "lines": 136,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_bake_auto_source.py",
+      "lines": 135,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_bake_alpha_merge.py",
+      "lines": 133,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_knife_seam_ui.py",
+      "lines": 133,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_unity_labels_render_blender.py",
+      "lines": 133,
+      "definitions": 2
+    },
+    {
+      "file": "operators/generate_polygroups.py",
+      "lines": 132,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_custom_autosave.py",
+      "lines": 131,
+      "definitions": 0
+    },
+    {
+      "file": "services/prompt_library.py",
+      "lines": 130,
+      "definitions": 8
+    },
+    {
+      "file": "tests/test_relax_seams.py",
+      "lines": 130,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_lod_engine_naming_blender.py",
+      "lines": 129,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_small_islands.py",
+      "lines": 129,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_cutter_grid_ui.py",
+      "lines": 126,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_edge_seam_path.py",
+      "lines": 125,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_unity_export_renders_async_blender.py",
+      "lines": 125,
+      "definitions": 3
+    },
+    {
+      "file": "core/bake_artifact_fill.py",
+      "lines": 124,
+      "definitions": 5
+    },
+    {
+      "file": "operators/edge_merger.py",
+      "lines": 124,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_object_seam_cutter.py",
+      "lines": 124,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_uv_tweak_events.py",
+      "lines": 124,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_knife_polyline_ui.py",
+      "lines": 123,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_relocate_project_blender.py",
+      "lines": 123,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_smart_angle_seams.py",
+      "lines": 123,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_cutter_tweak_pie.py",
+      "lines": 121,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_render_support_visibility_blender.py",
+      "lines": 120,
+      "definitions": 5
+    },
+    {
+      "file": "tests/test_standalone_windows_ui.py",
+      "lines": 119,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_drag_drop_import.py",
+      "lines": 118,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_hierarchical_folds_blender.py",
+      "lines": 118,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_mesh_check_workflow.py",
+      "lines": 118,
+      "definitions": 1
+    },
+    {
+      "file": "core/window_schema.py",
+      "lines": 117,
+      "definitions": 3
+    },
+    {
+      "file": "operators/generated_index.py",
+      "lines": 117,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_custom_ui_blender.py",
+      "lines": 117,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_cutter_progress_ui.py",
+      "lines": 116,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_delete_and_fill.py",
+      "lines": 115,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_small_islands_tool_ui.py",
+      "lines": 115,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_unity_export_workflow_blender.py",
+      "lines": 115,
+      "definitions": 0
+    },
+    {
+      "file": "core/bake_autofill.py",
+      "lines": 112,
+      "definitions": 1
+    },
+    {
+      "file": "core/edge_seam_path.py",
+      "lines": 111,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_batch_geometry_repair.py",
+      "lines": 111,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_projection_mask_modal_blender.py",
+      "lines": 110,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_uv_checker_overlay.py",
+      "lines": 110,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_narrow_smart_relax.py",
+      "lines": 109,
+      "definitions": 2
+    },
+    {
+      "file": "core/ui_folds.py",
+      "lines": 106,
+      "definitions": 5
+    },
+    {
+      "file": "tests/test_cutter_backup.py",
+      "lines": 106,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_cutter_grid.py",
+      "lines": 106,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_projection_mask_margin_blender.py",
+      "lines": 106,
+      "definitions": 1
+    },
+    {
+      "file": "services/gemini_images.py",
+      "lines": 105,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_render_textures_blender.py",
+      "lines": 105,
+      "definitions": 0
+    },
+    {
+      "file": "operators/unity_reexport.py",
+      "lines": 102,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_relocate_project_naming_blender.py",
+      "lines": 102,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_batch_separate_idle_state_blender.py",
+      "lines": 101,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_clear_edges_seam.py",
+      "lines": 101,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_custom_ui_sidebar_embed.py",
+      "lines": 101,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_uv_artifacts_blender.py",
+      "lines": 100,
+      "definitions": 1
+    },
+    {
+      "file": "operators/repair_mesh_folds.py",
+      "lines": 99,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_batch_autobake.py",
+      "lines": 99,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_narrow_panel.py",
+      "lines": 99,
+      "definitions": 2
+    },
+    {
+      "file": "operators/apply_weld.py",
+      "lines": 98,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_phase2_modal_blender.py",
+      "lines": 98,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_view_assists_toggle.py",
+      "lines": 97,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_remesh_progress.py",
+      "lines": 96,
+      "definitions": 1
+    },
+    {
+      "file": "standalone_ui/rounded.py",
+      "lines": 95,
+      "definitions": 4
+    },
+    {
+      "file": "tests/test_hierarchical_folds_ui.py",
+      "lines": 95,
+      "definitions": 4
+    },
+    {
+      "file": "operators/panel_visibility.py",
+      "lines": 94,
+      "definitions": 5
+    },
+    {
+      "file": "tests/test_phase2_mesh_repair_blender.py",
+      "lines": 94,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_smart_lods_multiple_blender.py",
+      "lines": 93,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_custom_ui_lifecycle.py",
+      "lines": 91,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_turnaround_rig_dual_video_blender.py",
+      "lines": 91,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_outliner_header.py",
+      "lines": 90,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_small_loose_parts.py",
+      "lines": 90,
+      "definitions": 1
+    },
+    {
+      "file": "pin_edges.py",
+      "lines": 89,
+      "definitions": 6
+    },
+    {
+      "file": "tests/test_seam_cursor_badges.py",
+      "lines": 89,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_unreal_lod_rename_blender.py",
+      "lines": 88,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_uv_repair_panel.py",
+      "lines": 88,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_unreal_lod_batch_blender.py",
+      "lines": 87,
+      "definitions": 0
+    },
+    {
+      "file": "operators/clear_edges_seam.py",
+      "lines": 86,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_batch_blend_append.py",
+      "lines": 86,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_generated_visibility.py",
+      "lines": 86,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_custom_ui_antialiasing.py",
+      "lines": 85,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_panel_search.py",
+      "lines": 85,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_seam_hotkeys_ui.py",
+      "lines": 85,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_unity_gltf_modes_blender.py",
+      "lines": 85,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_remesh_ui.py",
+      "lines": 84,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_remesh_undo_ui.py",
+      "lines": 84,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_render_selected_blender.py",
+      "lines": 84,
+      "definitions": 1
+    },
+    {
+      "file": "operators/narrow_cut_preview.py",
+      "lines": 83,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_pin_edges.py",
+      "lines": 82,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_panel_search_scope_blender.py",
+      "lines": 81,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_smart_lods_zero_area.py",
+      "lines": 81,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_turnaround_dual_async_blender.py",
+      "lines": 81,
+      "definitions": 3
+    },
+    {
+      "file": "__init__.py",
+      "lines": 80,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_bake_mask_export_blender.py",
+      "lines": 80,
+      "definitions": 0
+    },
+    {
+      "file": "core/remesh_cursor.py",
+      "lines": 78,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_custom_ui_viewport_scope.py",
+      "lines": 78,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_local_contour_retries.py",
+      "lines": 77,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_unity_turnaround_async_blender.py",
+      "lines": 77,
+      "definitions": 3
+    },
+    {
+      "file": "core/remesh_defaults.py",
+      "lines": 76,
+      "definitions": 5
+    },
+    {
+      "file": "object_stats_overlay.py",
+      "lines": 76,
+      "definitions": 5
+    },
+    {
+      "file": "tests/test_remesh_material_seams.py",
+      "lines": 75,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_unity_filename_controls_blender.py",
+      "lines": 75,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_multiview_preview.py",
+      "lines": 74,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_turnaround_animation_async_blender.py",
+      "lines": 74,
+      "definitions": 3
+    },
+    {
+      "file": "operators/smooth_face_selection.py",
+      "lines": 73,
+      "definitions": 2
+    },
+    {
+      "file": "core/import_timing.py",
+      "lines": 72,
+      "definitions": 2
+    },
+    {
+      "file": "operators/pin_edges.py",
+      "lines": 72,
+      "definitions": 4
+    },
+    {
+      "file": "scripts/check_refactor.py",
+      "lines": 71,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_import_timing.py",
+      "lines": 71,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_longitudinal_seam.py",
+      "lines": 70,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_panel_visibility_stages.py",
+      "lines": 70,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_dev_restart_current.py",
+      "lines": 69,
+      "definitions": 1
+    },
+    {
+      "file": "custom_ui/icons.py",
+      "lines": 68,
+      "definitions": 2
+    },
+    {
+      "file": "tests/benchmark_projection_mask_blender.py",
+      "lines": 68,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_local_contour_duplicates.py",
+      "lines": 68,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_projection_mask_batch_blender.py",
+      "lines": 68,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_remesh_defaults.py",
+      "lines": 67,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_show_seams_object_mode.py",
+      "lines": 67,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_preparation.py",
+      "lines": 66,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_remesh_cursor_ui.py",
+      "lines": 66,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_bake_artifact_mask.py",
+      "lines": 65,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_render_queue_output.py",
+      "lines": 65,
+      "definitions": 0
+    },
+    {
+      "file": "operators/mark_selection_boundary_seam.py",
+      "lines": 64,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_custom_ui_tooltips.py",
+      "lines": 64,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_edge_seam_hover.py",
+      "lines": 64,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_uvpackmaster_controls.py",
+      "lines": 64,
+      "definitions": 1
+    },
+    {
+      "file": "core/generated_index.py",
+      "lines": 63,
+      "definitions": 6
+    },
+    {
+      "file": "tests/probe_bake_projection_artifacts_blender.py",
+      "lines": 62,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_smart_lod_labels_blender.py",
+      "lines": 62,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_unity_prepare_export_async_blender.py",
+      "lines": 62,
+      "definitions": 3
+    },
+    {
+      "file": "tests/test_experimental_windows.py",
+      "lines": 61,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_relocate_project_dialog_ui.py",
+      "lines": 60,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_voxel_import_remesh.py",
+      "lines": 59,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_turnaround_labels_blender.py",
+      "lines": 58,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_local_contour_warped.py",
+      "lines": 57,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_custom_ui_maximize.py",
+      "lines": 56,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_selected_gltf_export.py",
+      "lines": 56,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_mirror_cutter_transforms.py",
+      "lines": 55,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_seam_auto_uv.py",
+      "lines": 55,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_unity_rename_meshes_blender.py",
+      "lines": 55,
+      "definitions": 0
+    },
+    {
+      "file": "custom_ui/primitives.py",
+      "lines": 54,
+      "definitions": 2
+    },
+    {
+      "file": "scripts/build_toolbar_icons.py",
+      "lines": 54,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_edge_menu.py",
+      "lines": 54,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_render_material_settings_blender.py",
+      "lines": 54,
+      "definitions": 1
+    },
+    {
+      "file": "tests/check_custom_icons_blender.py",
+      "lines": 53,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_smart_auto_relax.py",
+      "lines": 53,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_connect_vertex_seam.py",
+      "lines": 52,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_render_transparent_companion.py",
+      "lines": 52,
+      "definitions": 0
+    },
+    {
+      "file": "operators/uvpackmaster_controls.py",
+      "lines": 51,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_render_palettes_blender.py",
+      "lines": 51,
+      "definitions": 0
+    },
+    {
+      "file": "custom_ui/events.py",
+      "lines": 50,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_batch_start_folds_blender.py",
+      "lines": 49,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_custom_ui_width_blender.py",
+      "lines": 49,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_relocate_project_restart.py",
+      "lines": 49,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_seam_auto_uv_header.py",
+      "lines": 49,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_unity_turnaround_blender.py",
+      "lines": 49,
+      "definitions": 3
+    },
+    {
+      "file": "core/uv_repair.py",
+      "lines": 47,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_custom_ui_theme_blender.py",
+      "lines": 47,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_unity_export_start_blender.py",
+      "lines": 47,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_render_resolution_presets.py",
+      "lines": 46,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_unity_export_guards_blender.py",
+      "lines": 46,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_local_contour_cutter_apply.py",
+      "lines": 45,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_seam_gap_junctions.py",
+      "lines": 45,
+      "definitions": 0
+    },
+    {
+      "file": "core/facesets.py",
+      "lines": 44,
+      "definitions": 3
+    },
+    {
+      "file": "operators/face_sets_to_materials.py",
+      "lines": 44,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_double_walls_blender.py",
+      "lines": 44,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_render_image_formats_blender.py",
+      "lines": 43,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_render_suffix_blender.py",
+      "lines": 43,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_smart_decimate_blender.py",
+      "lines": 43,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_smart_uv_unwrap.py",
+      "lines": 43,
+      "definitions": 0
+    },
+    {
+      "file": "custom_ui/theme.py",
+      "lines": 42,
+      "definitions": 6
+    },
+    {
+      "file": "operators/mark_selected_edges_seam.py",
+      "lines": 42,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_smart_lods_prepare_blender.py",
+      "lines": 42,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_uv_seam_overlay.py",
+      "lines": 42,
+      "definitions": 0
+    },
+    {
+      "file": "core/batch_report.py",
+      "lines": 40,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_object_apply_menu.py",
+      "lines": 39,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_session_group_visibility_blender.py",
+      "lines": 39,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_unity_collection_navigation_blender.py",
+      "lines": 38,
+      "definitions": 1
+    },
+    {
+      "file": "core/mesh_segmentation.py",
+      "lines": 37,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_global_palettes_blender.py",
+      "lines": 37,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_seam_gap_operator.py",
+      "lines": 37,
+      "definitions": 0
+    },
+    {
+      "file": "sound.py",
+      "lines": 36,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_turnaround_dual_views_blender.py",
+      "lines": 36,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_turnaround_selection_blender.py",
+      "lines": 36,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_pie_persistence.py",
+      "lines": 35,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_edge_merger.py",
+      "lines": 34,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_render_cursor_overlay_blender.py",
+      "lines": 34,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_startup_notices.py",
+      "lines": 32,
+      "definitions": 0
+    },
+    {
+      "file": "scripts/build_custom_ui_inventory.py",
+      "lines": 30,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_dev_restart.py",
+      "lines": 30,
+      "definitions": 0
+    },
+    {
+      "file": "operators/select_seam_tool.py",
+      "lines": 29,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_cutter_draw_stabilize.py",
+      "lines": 29,
+      "definitions": 0
+    },
+    {
+      "file": "core/double_walls.py",
+      "lines": 28,
+      "definitions": 1
+    },
+    {
+      "file": "core/material_seams.py",
+      "lines": 26,
+      "definitions": 1
+    },
+    {
+      "file": "operators/remesh_presets.py",
+      "lines": 26,
+      "definitions": 1
+    },
+    {
+      "file": "core/lod_naming.py",
+      "lines": 25,
+      "definitions": 3
+    },
+    {
+      "file": "operators/clear_materials.py",
+      "lines": 25,
+      "definitions": 1
+    },
+    {
+      "file": "operators/render_resolution.py",
+      "lines": 23,
+      "definitions": 1
+    },
+    {
+      "file": "core/render_resolution.py",
+      "lines": 21,
+      "definitions": 1
+    },
+    {
+      "file": "operators/mark_material_boundaries_seam.py",
+      "lines": 21,
+      "definitions": 1
+    },
+    {
+      "file": "tests/test_weld_no_error_report.py",
+      "lines": 18,
+      "definitions": 0
+    },
+    {
+      "file": "tests/custom_ui_test_support.py",
+      "lines": 15,
+      "definitions": 2
+    },
+    {
+      "file": "core/__init__.py",
+      "lines": 11,
+      "definitions": 0
+    },
+    {
+      "file": "custom_ui/__init__.py",
+      "lines": 11,
+      "definitions": 2
+    },
+    {
+      "file": "tests/test_uv_seam_path_ui.py",
+      "lines": 7,
+      "definitions": 0
+    },
+    {
+      "file": "services/__init__.py",
+      "lines": 1,
+      "definitions": 0
+    },
+    {
+      "file": "settings/__init__.py",
+      "lines": 1,
+      "definitions": 0
+    }
+  ]
+}
