@@ -1,7 +1,7 @@
 {
   "baseline": "140a104",
-  "python_files": 326,
-  "total_lines": 74160,
+  "python_files": 331,
+  "total_lines": 74304,
   "unchanged_definitions": 188,
   "inventory": [
     {
@@ -11,8 +11,8 @@
     },
     {
       "file": "operators/object_seam_cutter.py",
-      "lines": 4310,
-      "definitions": 143
+      "lines": 3793,
+      "definitions": 126
     },
     {
       "file": "operators/baking.py",
@@ -285,6 +285,11 @@
       "definitions": 2
     },
     {
+      "file": "operators/cutter_screen.py",
+      "lines": 286,
+      "definitions": 13
+    },
+    {
       "file": "settings/baking.py",
       "lines": 284,
       "definitions": 2
@@ -323,6 +328,11 @@
       "file": "operators/seam_eraser.py",
       "lines": 262,
       "definitions": 7
+    },
+    {
+      "file": "operators/cutter_overlay.py",
+      "lines": 260,
+      "definitions": 4
     },
     {
       "file": "tests/test_uv_repair_blender.py",
@@ -1355,6 +1365,11 @@
       "definitions": 2
     },
     {
+      "file": "scripts/validate_refactor_blender.py",
+      "lines": 49,
+      "definitions": 0
+    },
+    {
       "file": "tests/test_batch_start_folds_blender.py",
       "lines": 49,
       "definitions": 0
@@ -1467,6 +1482,11 @@
     {
       "file": "tests/test_uv_seam_overlay.py",
       "lines": 42,
+      "definitions": 0
+    },
+    {
+      "file": "tests/test_refactor_settings_lifecycle_blender.py",
+      "lines": 41,
       "definitions": 0
     },
     {
@@ -1583,6 +1603,11 @@
       "file": "operators/clear_materials.py",
       "lines": 25,
       "definitions": 1
+    },
+    {
+      "file": "scripts/check_import_queue_baseline.py",
+      "lines": 25,
+      "definitions": 0
     },
     {
       "file": "operators/render_resolution.py",
