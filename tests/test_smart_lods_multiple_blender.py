@@ -49,8 +49,8 @@ assert set(bpy.context.selected_objects) == selection
 for source, count in zip(sources, counts):
     assert len(source.data.polygons) == count
     for index, target in ((1, 80), (2, 40)):
-        lod = bpy.data.objects[f'{source.name}.LOD.{index}']
-        assert lod[LOD_SOURCE] == source.name and lod[LOD_INDEX] == index
+        lod = bpy.data.objects[f'{source.name}.LOD{index-1}']
+        assert lod[LOD_SOURCE] == source.name and lod[LOD_INDEX] == index-1
         assert set(lod.users_collection) == set(source.users_collection)
         lod.data.calc_loop_triangles()
         assert 0 < len(lod.data.loop_triangles) <= target
@@ -63,14 +63,14 @@ for source in sources:
     for vertex in source.data.vertices:
         vertex.co.x += 7
     for index in (1, 2):
-        lod = bpy.data.objects[f'{source.name}.LOD.{index}']
+        lod = bpy.data.objects[f'{source.name}.LOD{index-1}']
         for child in list(lod.children):
             bpy.data.objects.remove(child, do_unlink=True)
         bpy.data.objects.remove(lod, do_unlink=True)
 settings.smart_lods_alignment = 'ORIGIN'
 settings.smart_lods_spacing = 3.25
 assert bpy.ops.object.polygroups_generate_smart_lods() == {'FINISHED'}
-packs = [[source] + [bpy.data.objects[f'{source.name}.LOD.{index}'] for index in (1, 2)] for source in sources]
+packs = [[source] + [bpy.data.objects[f'{source.name}.LOD{index-1}'] for index in (1, 2)] for source in sources]
 from mathutils import Vector
 all_objects = [obj for pack in packs for obj in pack]
 def size(obj, axis):

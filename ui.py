@@ -1564,7 +1564,7 @@ def draw_batch_processing(content, context, settings):
         lods.enabled = editable and settings.batch_smart_lods_enabled
         lods.prop(settings, "batch_smart_lods_count", text=t(context, "batch_lods_count"))
         for index in range(1, settings.batch_smart_lods_count + 1):
-            lods.prop(settings, f"batch_smart_lods_target_{index}", text=f"LOD.{index} Tris")
+            lods.prop(settings, f"batch_smart_lods_target_{index}", text=f"LOD{index-1} Tris")
         lods.prop(settings, "batch_smart_lods_final_decimate", text=t(context, "batch_lods_fallback"))
         lods.prop(settings, "batch_smart_lods_triangulate_all", text=t(context, "batch_lods_triangulate"))
 
@@ -3735,7 +3735,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         column = layout.column(align=True)
         column.prop(settings, "smart_lods_count")
         for index in range(1, settings.smart_lods_count + 1):
-            column.prop(settings, f"smart_lods_target_{index}", text=f"LOD.{index} Tris")
+            column.prop(settings, f"smart_lods_target_{index}", text=f"LOD{index-1} Tris")
         column.prop(settings, "smart_lods_final_decimate")
         column.prop(settings, "smart_lods_triangulate_all")
         column.prop(settings, "smart_lods_remove_zero_area", text=t(context, "smart_lods_remove_zero_area"))
@@ -3745,13 +3745,18 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         spacing_row.prop(settings, "smart_lods_spacing")
         column.prop(settings, "smart_lods_create_text")
         column.prop(settings, "smart_lods_text_size")
+        column.prop(settings, "smart_lods_prepare_mode", expand=True)
         column.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")
         prepare_box = column.box().column(align=True)
-        prepare_box.prop(settings, "smart_lods_prepare_mode", expand=True)
-        prepare_box.prop(settings, "unity_asset_name", text="Asset Name")
-        prepare_box.prop(settings, "unity_name_index")
-        prepare_box.prop(settings, "unity_asset_index", text="Version Index")
-        prepare_box.operator("object.polygroups_unity_load_from_file", text="Load from File", icon="FILE_BLEND")
+        if settings.smart_lods_prepare_mode == 'UNITY':
+            prepare_box.prop(settings, "unity_asset_name", text="Asset Name")
+            prepare_box.prop(settings, "unity_name_index")
+            prepare_box.prop(settings, "unity_asset_index", text="Version Index")
+            prepare_box.operator("object.polygroups_unity_load_from_file", text="Load from File", icon="FILE_BLEND")
+        else:
+            prepare_box.prop(settings, "unreal_lod_asset_name", text="Asset Name")
+            prepare_box.prop(settings, "unreal_lod_name_index", text="Name Index")
+            prepare_box.prop(settings, "unreal_lod_version_index", text="Version Index")
         prepare_box.operator("object.polygroups_smart_lods_prepare", icon="MOD_DECIM")
         box = column.box().column(align=True)
         box.prop(settings, "smart_lods_render_mode")

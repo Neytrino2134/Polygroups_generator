@@ -37,7 +37,7 @@ source_tris = len(source.data.loop_triangles)
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
 previous_count = source_tris
 for i, target in enumerate((700, 400, 200, 100), 1):
-    lod = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    lod = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     tris = len(lod.data.loop_triangles)
     assert 0 < tris <= target, (i, tris, target)
     assert tris <= previous_count
@@ -49,17 +49,17 @@ assert len(source.data.loop_triangles) == source_tris
 
 # An impossible final limit keeps all four objects and the smallest final mesh.
 for i in range(1, 5):
-    obj = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    obj = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     mesh = obj.data
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
 settings.smart_lods_target_4 = 1
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
-assert all(f"Mesh.002.LOD.{i}" in bpy.data.objects for i in range(1, 5))
-smart_floor = len(bpy.data.objects["Mesh.002.LOD.4"].data.loop_triangles)
+assert all(f"Mesh.002.LOD{i-1}" in bpy.data.objects for i in range(1, 5))
+smart_floor = len(bpy.data.objects["Mesh.002.LOD3"].data.loop_triangles)
 assert smart_floor > 1
 for i in range(1, 5):
-    obj = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    obj = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     mesh = obj.data
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
@@ -67,12 +67,12 @@ for i in range(1, 5):
 # The optional unrestricted pass only runs once the seam-aware passes stall.
 settings.smart_lods_final_decimate = True
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
-assert all(f"Mesh.002.LOD.{i}" in bpy.data.objects for i in range(1, 5))
-fallback_count = len(bpy.data.objects["Mesh.002.LOD.4"].data.loop_triangles)
+assert all(f"Mesh.002.LOD{i-1}" in bpy.data.objects for i in range(1, 5))
+fallback_count = len(bpy.data.objects["Mesh.002.LOD3"].data.loop_triangles)
 assert fallback_count < smart_floor, (fallback_count, smart_floor)
-assert all(len(bpy.data.objects[f"Mesh.002.LOD.{i}"].modifiers) == 0 for i in range(1, 5))
+assert all(len(bpy.data.objects[f"Mesh.002.LOD{i-1}"].modifiers) == 0 for i in range(1, 5))
 for i in range(1, 5):
-    obj = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    obj = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     mesh = obj.data
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
@@ -80,9 +80,9 @@ for i in range(1, 5):
 # The final pass can bring a stalled seam-aware result inside the limit.
 settings.smart_lods_target_4 = 4
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
-assert len(bpy.data.objects["Mesh.002.LOD.4"].data.loop_triangles) <= 4
+assert len(bpy.data.objects["Mesh.002.LOD3"].data.loop_triangles) <= 4
 for i in range(1, 5):
-    obj = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    obj = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     mesh = obj.data
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
@@ -92,12 +92,12 @@ settings.smart_lods_triangulate_all = True
 settings.smart_lods_target_4 = 100
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
 for i, target in enumerate((700, 400, 200, 100), 1):
-    lod = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    lod = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     assert all(len(face.vertices) == 3 for face in lod.data.polygons)
     assert len(lod.data.polygons) == len(lod.data.loop_triangles) <= target
     assert len(lod.modifiers) == 0
 for i in range(1, 5):
-    obj = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    obj = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     mesh = obj.data
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
@@ -115,15 +115,15 @@ def x_bounds(obj):
     return min(coords), max(coords)
 
 previous = source
-pack = [source] + [bpy.data.objects[f"Mesh.002.LOD.{i}"] for i in range(1, 5)]
+pack = [source] + [bpy.data.objects[f"Mesh.002.LOD{i-1}"] for i in range(1, 5)]
 x_step = max(x_bounds(obj)[1] - x_bounds(obj)[0] for obj in pack) + .1
 for i in range(1, 5):
-    lod = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    lod = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     assert abs(lod.matrix_world.translation.x - previous.matrix_world.translation.x - x_step) < 1e-4
     assert abs(lod.matrix_world.translation.y - source.matrix_world.translation.y) < 1e-6
     previous = lod
 for i in range(1, 5):
-    obj = bpy.data.objects[f"Mesh.002.LOD.{i}"]
+    obj = bpy.data.objects[f"Mesh.002.LOD{i-1}"]
     mesh = obj.data
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.meshes.remove(mesh)
@@ -132,7 +132,7 @@ for i in range(1, 5):
 settings.smart_lods_count = 1
 settings.smart_lods_spacing = 2.5
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
-lod = bpy.data.objects["Mesh.002.LOD.1"]
+lod = bpy.data.objects["Mesh.002.LOD0"]
 assert abs(lod.matrix_world.translation.x - source.matrix_world.translation.x - (max(x_bounds(obj)[1] - x_bounds(obj)[0] for obj in (source, lod)) + .1)) < 1e-4
 mesh = lod.data
 bpy.data.objects.remove(lod, do_unlink=True)
@@ -146,5 +146,5 @@ for edge in source.data.edges:
 bpy.ops.object.mode_set(mode="EDIT")
 assert bpy.ops.object.polygroups_generate_smart_lods() == {"FINISHED"}
 assert bpy.context.active_object == source and source.mode == "EDIT"
-assert len(bpy.data.objects["Mesh.002.LOD.1"].data.loop_triangles) <= 300
+assert len(bpy.data.objects["Mesh.002.LOD0"].data.loop_triangles) <= 300
 print("SMART_LODS_TEST_PASSED")

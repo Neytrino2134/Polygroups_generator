@@ -158,7 +158,17 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
                     if existing is not None and existing not in all_selected:
                         raise ValueError(f'Object exists outside selection: {target}')
                 collection = bpy.data.collections.get(base + "_Collection")
-                if collection and set(collection.all_objects) - all_selected:
+                outside = set(collection.all_objects) - all_selected if collection else set()
+                # Rebuilding from a prepared HIGH/MID/LOW keeps those originals
+                # in their asset collection. Only generated LODs are renamed.
+                sources = {obj.get('polygroups_lod_source') for obj in objects}
+                rebuilding = any(re.fullmatch(re.escape(f'SM_{base}') + r'_(?:HIGH|MID|LOW)', source or '', re.I)
+                                 for source in sources)
+                permitted = {obj for obj in outside if obj.type == 'FONT' and obj.parent in objects}
+                if rebuilding:
+                    permitted.update(obj for obj in outside if re.fullmatch(
+                        re.escape(f'SM_{base}') + r'_(?:HIGH|MID|LOW)', obj.name, re.I))
+                if outside - permitted:
                     raise ValueError(f'Collection contains unselected objects: {base}')
                 plans.append((base, meshes, names))
             if s.unreal_lod_prepare_materials:

@@ -974,11 +974,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Stage 12: Smart LODs", default=False, update=_update_batch_smart_lods,
     )
     batch_smart_lods_count: bpy.props.IntProperty(name="LOD Count", default=5, min=1, max=5)
-    batch_smart_lods_target_1: bpy.props.IntProperty(name="LOD.1 Tris", default=3000, min=1)
-    batch_smart_lods_target_2: bpy.props.IntProperty(name="LOD.2 Tris", default=1500, min=1)
-    batch_smart_lods_target_3: bpy.props.IntProperty(name="LOD.3 Tris", default=1000, min=1)
-    batch_smart_lods_target_4: bpy.props.IntProperty(name="LOD.4 Tris", default=500, min=1)
-    batch_smart_lods_target_5: bpy.props.IntProperty(name="LOD.5 Tris", default=150, min=1)
+    batch_smart_lods_target_1: bpy.props.IntProperty(name="LOD0 Tris", default=3000, min=1)
+    batch_smart_lods_target_2: bpy.props.IntProperty(name="LOD1 Tris", default=1500, min=1)
+    batch_smart_lods_target_3: bpy.props.IntProperty(name="LOD2 Tris", default=1000, min=1)
+    batch_smart_lods_target_4: bpy.props.IntProperty(name="LOD3 Tris", default=500, min=1)
+    batch_smart_lods_target_5: bpy.props.IntProperty(name="LOD4 Tris", default=150, min=1)
     batch_smart_lods_final_decimate: bpy.props.BoolProperty(name="Final Decimate Fallback", default=False)
     batch_smart_lods_triangulate_all: bpy.props.BoolProperty(name="Triangulate All LODs", default=False)
     batch_redo_collection_name: bpy.props.StringProperty(
@@ -2082,16 +2082,16 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         default=False,
     )
     show_smart_lods_settings: bpy.props.BoolProperty(name="Smart LODs", default=False)
-    smart_lods_prepare_mode: bpy.props.EnumProperty(name="Prepare For", items=(("UNITY", "Unity", "Prepare generated LODs for Unity"), ("UNREAL", "Unreal", "Prepare three generated meshes as a FAB HIGH/MID/LOW set")), default="UNITY")
+    smart_lods_prepare_mode: bpy.props.EnumProperty(name="Prepare For", items=(("UNITY", "Unity", "Prepare generated LODs for Unity"), ("UNREAL", "Unreal", "Prepare generated meshes as Unreal _LODN assets")), default="UNITY")
     smart_lods_count: bpy.props.IntProperty(
         name="LOD Count", description="Number of generated LOD meshes",
         default=5, min=1, max=5,
     )
-    smart_lods_target_1: bpy.props.IntProperty(name="LOD.1", default=2900, min=1, step=100)
-    smart_lods_target_2: bpy.props.IntProperty(name="LOD.2", step=100, default=1500, min=1)
-    smart_lods_target_3: bpy.props.IntProperty(name="LOD.3", step=100, default=1000, min=1)
-    smart_lods_target_4: bpy.props.IntProperty(name="LOD.4", step=100, default=500, min=1)
-    smart_lods_target_5: bpy.props.IntProperty(name="LOD.5", step=100, default=150, min=1)
+    smart_lods_target_1: bpy.props.IntProperty(name="LOD0", default=2900, min=1, step=100)
+    smart_lods_target_2: bpy.props.IntProperty(name="LOD1", step=100, default=1500, min=1)
+    smart_lods_target_3: bpy.props.IntProperty(name="LOD2", step=100, default=1000, min=1)
+    smart_lods_target_4: bpy.props.IntProperty(name="LOD3", step=100, default=500, min=1)
+    smart_lods_target_5: bpy.props.IntProperty(name="LOD4", step=100, default=150, min=1)
     smart_lods_final_decimate: bpy.props.BoolProperty(
         name="Final Decimate Fallback",
         description="If seam-aware decimation cannot reach a triangle limit, add an unrestricted Decimate pass",

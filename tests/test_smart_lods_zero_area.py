@@ -61,7 +61,7 @@ def cleanup_after_modifiers(lod):
 smart_lods._clean_zero_area_lod = cleanup_after_modifiers
 try:
     assert bpy.ops.object.polygroups_generate_smart_lods(active_only=True) == {'FINISHED'}
-    assert calls == [source.name + '.LOD.1', source.name + '.LOD.2']
+    assert calls == [source.name + '.LOD0', source.name + '.LOD1']
     for name in calls:
         lod = bpy.data.objects[name]
         bm = bmesh.new()

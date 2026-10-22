@@ -10,6 +10,10 @@ assert s.smart_lods_target_1 == 2900
 assert s.unity_name_index == '00'
 s.unity_asset_name = 'Tree'
 s.unity_asset_index = '01'
+s.unreal_lod_asset_name = 'Tree'
+s.unreal_lod_name_index = '00'
+s.unreal_lod_version_index = '01'
+s.unreal_lod_prepare_materials = False
 s.unity_auto_increment_index = False
 s.smart_lods_count = 2
 s.smart_lods_target_1 = 80
@@ -34,5 +38,5 @@ with TemporaryDirectory() as directory:
         if mode == 'UNITY':
             assert {o.name for o in meshes} == {'Tree_00_01','Tree_00_01.LOD1'}
         else:
-            assert {o.name for o in meshes} == {'SM_Tree_00_01_HIGH','SM_Tree_00_01_MID','SM_Tree_00_01_LOW'}
+            assert {o.name for o in meshes} == {'SM_Tree_00_01_LOD0','SM_Tree_00_01_LOD1'}
 print('SMART_LODS_PREPARE_PASSED')

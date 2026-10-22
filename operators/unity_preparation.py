@@ -304,7 +304,7 @@ class OBJECT_OT_polygroups_rename_unity_meshes(bpy.types.Operator):
             return {'CANCELLED'}
         base = unity_name(settings, '')
         plans = []
-        # Smart LODs use one-based .LOD.1 names before Unity preparation.
+        # Legacy Smart LODs used one-based .LOD.1; canonical .LODN is zero-based.
         smart_set = all(obj.get('polygroups_lod_source') and not obj.get('unity_prepared')
                         and re.search(r'\.LOD\.\d+$', obj.name) for obj in meshes)
         resolved = {}

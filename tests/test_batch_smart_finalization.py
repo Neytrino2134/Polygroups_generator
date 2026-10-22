@@ -33,7 +33,8 @@ assert settings.batch_expanded_stages == (1 << 10) | (1 << 11)
 
 assert settings.batch_smart_lods_count == final.smart_lods_count == 5
 for group, prefix in ((settings, 'batch_smart_lods'), (final, 'smart_lods')):
-    assert [getattr(group, f'{prefix}_target_{i}') for i in range(1, 6)] == [3000, 1500, 1000, 500, 150]
+    assert [getattr(group, f'{prefix}_target_{i}') for i in range(1, 6)] == [
+        3000 if group == settings else 2900, 1500, 1000, 500, 150]
 
 # Use real seam-aware operators while avoiding the external Quad Remesher engine.
 settings.batch_save_generated_separately = True
@@ -115,7 +116,7 @@ with tempfile.TemporaryDirectory() as directory:
         target.collections = [name for name in source.collections if name.startswith('Generated.')]
     collection = target.collections[0]
     bpy.context.scene.collection.children.link(collection)
-    lods = [obj for obj in collection.all_objects if '.LOD.' in obj.name]
+    lods = [obj for obj in collection.all_objects if '.LOD' in obj.name]
     assert len(lods) == 10
     assert all(not obj.modifiers and all(len(poly.vertices) == 3 for poly in obj.data.polygons) for obj in lods)
 

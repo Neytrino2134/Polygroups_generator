@@ -2,6 +2,8 @@
 
 import bpy
 import bmesh
+import re
+from ..core.lod_naming import lod_base, lod_name, lod_index
 from mathutils import Vector
 from ..core.mesh_fold_repair import repair_local_folds
 
@@ -272,10 +274,12 @@ class OBJECT_OT_polygroups_render_smart_lods(bpy.types.Operator):
         settings = context.scene.polygroups_mesh_finalization_settings
         render_settings = context.scene.polygroups_render_settings
         active = context.active_object
-        source_name = active.get(LOD_SOURCE) or re.sub(r"\.LOD\.\d+$", "", active.name)
+        source_name = active.get(LOD_SOURCE) or lod_base(active.name, settings.smart_lods_prepare_mode)
+        if any(obj.type == 'MESH' and obj.get(LOD_SOURCE) == active.name for obj in context.scene.objects):
+            source_name = active.name
         lods = sorted((obj for obj in context.scene.objects if obj.type == 'MESH' and (
-            obj.get(LOD_SOURCE) == source_name or re.fullmatch(re.escape(source_name) + r"\.LOD\.\d+", obj.name))),
-            key=lambda obj: int(obj.get(LOD_INDEX) or obj.name.rsplit('.', 1)[-1]))
+            obj.get(LOD_SOURCE) == source_name or lod_base(obj.name, settings.smart_lods_prepare_mode) == lod_base(source_name, settings.smart_lods_prepare_mode) and re.search(r"[._]LOD[._]?\d+$", obj.name))),
+            key=lod_index)
         if not lods:
             self.report({'ERROR'}, "No generated LODs for the active mesh")
             return {'CANCELLED'}
@@ -316,10 +320,10 @@ class OBJECT_OT_polygroups_render_smart_lods(bpy.types.Operator):
                     lod.hide_viewport = False
                     lod.select_set(True)
                     if settings.smart_lods_render_text:
-                        index = int(lod.get(LOD_INDEX) or lod.name.rsplit('.', 1)[-1])
+                        index = lod_index(lod)
                         ensure_lod_label(context, lod, source_name, index).select_set(True)
                 context.view_layer.objects.active = batch[0]
-                suffix = f"LOD_{int(batch[0].get(LOD_INDEX) or batch[0].name.rsplit('.', 1)[-1]):02d}" if render_mode == 'INDIVIDUAL' else 'All_LODs'
+                suffix = f"LOD_{lod_index(batch[0]):02d}" if render_mode == 'INDIVIDUAL' else 'All_LODs'
                 filepath = os.path.join(directory, f"{_safe_path_token(source_name)}_{suffix}_{stamp}{image_extension(render_settings.image_format)}")
                 result = bpy.ops.object.polygroups_render_selected_auto(output_path=filepath)
                 if 'FINISHED' not in result:
@@ -365,9 +369,15 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
         settings = context.scene.polygroups_mesh_finalization_settings
         # Validate every source before creating anything: one colliding pack
         # must not leave an accidental partial batch on an ordinary rerun.
-        collisions = [f'{source.name}.LOD.{index}' for source in sources
-                      for index in range(1, settings.smart_lods_count + 1)
-                      if bpy.data.objects.get(f'{source.name}.LOD.{index}')]
+        planned_names = [lod_name(source.name, index, settings.smart_lods_prepare_mode)
+                         for source in sources for index in range(settings.smart_lods_count)]
+        if len(set(planned_names)) != len(planned_names):
+            self.report({'WARNING'}, 'Select one source mesh per asset LOD pack')
+            return {'CANCELLED'}
+        collisions = [name for name in planned_names if bpy.data.objects.get(name)]
+        if settings.smart_lods_prepare_mode == 'UNITY':
+            collisions.extend(obj.name for source in sources for obj in bpy.data.objects
+                              if re.fullmatch(re.escape(source.name) + r'\.LOD\.\d+', obj.name))
         if collisions:
             self.report({'WARNING'}, 'Smart LODs already exist: ' + ', '.join(collisions))
             return {'CANCELLED'}
@@ -385,8 +395,8 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
             if completed and settings.smart_lods_auto_arrange:
                 from .batch_import import arrange_objects_zx
                 objects = [obj for source in sources[:completed]
-                           for obj in [source] + [bpy.data.objects[f'{source.name}.LOD.{i}']
-                                                 for i in range(1, settings.smart_lods_count + 1)]]
+                           for obj in [source] + [bpy.data.objects[lod_name(source.name, i, settings.smart_lods_prepare_mode)]
+                                                 for i in range(settings.smart_lods_count)]]
                 arrange_objects_zx(objects, spacing=0.1, mode='GRID', rows=completed,
                                    plane='XY', alignment='ORIGIN',
                                    secondary_spacing=settings.smart_lods_spacing, preserve_order=True)
@@ -410,9 +420,9 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
         settings = context.scene.polygroups_mesh_finalization_settings
         targets = [getattr(settings, f"smart_lods_target_{i}") for i in range(1, settings.smart_lods_count + 1)]
         existing = [
-            f"{source.name}.LOD.{index}"
-            for index in range(1, len(targets) + 1)
-            if f"{source.name}.LOD.{index}" in bpy.data.objects
+            lod_name(source.name, index, settings.smart_lods_prepare_mode)
+            for index in range(len(targets))
+            if lod_name(source.name, index, settings.smart_lods_prepare_mode) in bpy.data.objects
         ]
         if existing:
             self.report({"WARNING"}, f"Smart LODs already exist: {', '.join(existing)}")
@@ -424,8 +434,8 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
             if original_mode != "OBJECT":
                 bpy.ops.object.mode_set(mode="OBJECT")
             previous = source
-            for index, target in enumerate(targets, 1):
-                lod = _copy_into_source_collections(previous, f"{source.name}.LOD.{index}", context)
+            for index, target in enumerate(targets):
+                lod = _copy_into_source_collections(previous, lod_name(source.name, index, settings.smart_lods_prepare_mode), context)
                 generated.append(lod)
                 lod[LOD_SOURCE] = source.name
                 lod[LOD_INDEX] = index
@@ -451,13 +461,13 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
                 if settings.smart_lods_remove_zero_area:
                     removed = _clean_zero_area_lod(lod)
                     if removed:
-                        self.report({'INFO'}, f'LOD.{index}: removed {removed} zero-area triangles')
+                        self.report({'INFO'}, f'LOD{index}: removed {removed} zero-area triangles')
                 actual = _triangle_count(lod, context.evaluated_depsgraph_get())
                 if actual > target:
-                    over_budget.append(f"LOD.{index}: {actual}/{target} tris")
+                    over_budget.append(f"LOD{index}: {actual}/{target} tris")
                 else:
                     suffix = f", final {final_ratio:.3f}" if final_ratio is not None else ""
-                    self.report({"INFO"}, f"LOD.{index}: {actual}/{target} tris (body {body:.3f}, seams {seam:.3f}{suffix})")
+                    self.report({"INFO"}, f"LOD{index}: {actual}/{target} tris (body {body:.3f}, seams {seam:.3f}{suffix})")
                 if settings.smart_lods_create_text:
                     ensure_lod_label(context, lod, source.name, index)
                 previous = lod
@@ -492,7 +502,7 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
 class OBJECT_OT_polygroups_smart_lods_prepare(bpy.types.Operator):
     bl_idname = "object.polygroups_smart_lods_prepare"
     bl_label = "Smart LODs + Prepare Assets"
-    bl_description = "Generate LODs, then prepare only generated meshes for Unity or Unreal/FAB"
+    bl_description = "Generate LODs, then prepare only generated meshes for Unity or Unreal"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -502,20 +512,26 @@ class OBJECT_OT_polygroups_smart_lods_prepare(bpy.types.Operator):
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
         source = context.active_object
-        if (settings.unity_copy_textures if settings.smart_lods_prepare_mode == 'UNITY' else settings.fab_copy_textures) and not bpy.data.filepath:
+        engine = settings.smart_lods_prepare_mode
+        copy_textures = (settings.unity_copy_textures if engine == 'UNITY' else
+                         settings.unreal_lod_prepare_materials and settings.unreal_lod_copy_textures)
+        if copy_textures and not bpy.data.filepath:
             self.report({'ERROR'}, 'Save the blend file before copying textures')
             return {'CANCELLED'}
-        if not settings.unity_name_index.isdigit():
-            self.report({'ERROR'}, 'Name Index must be a two-digit number')
+        if engine == 'UNITY' and not settings.unity_name_index.isdigit():
+            self.report({'ERROR'}, 'Name Index must be numeric')
             return {'CANCELLED'}
+        identity = re.fullmatch(r'SM_(.+)_(\d+)_(\d+)', lod_base(source.name, 'UNREAL'))
+        if engine == 'UNREAL' and identity is None:
+            from .mesh_export import _safe_path_token
+            asset = settings.unreal_lod_asset_name.strip()
+            if (not asset or _safe_path_token(asset) != asset
+                    or not settings.unreal_lod_name_index.isdigit()
+                    or not settings.unreal_lod_version_index.isdigit()):
+                self.report({'ERROR'}, 'Enter a valid Unreal asset name and numeric indices')
+                return {'CANCELLED'}
         before = set(bpy.data.objects)
-        original_count = settings.smart_lods_count
-        try:
-            if settings.smart_lods_prepare_mode == 'UNREAL':
-                settings.smart_lods_count = 3
-            result = bpy.ops.object.polygroups_generate_smart_lods(active_only=True)
-        finally:
-            settings.smart_lods_count = original_count
+        result = bpy.ops.object.polygroups_generate_smart_lods(active_only=True)
         if 'FINISHED' not in result:
             return {'CANCELLED'}
         lods = sorted((obj for obj in bpy.data.objects if obj not in before and obj.type == 'MESH'
@@ -529,16 +545,20 @@ class OBJECT_OT_polygroups_smart_lods_prepare(bpy.types.Operator):
         if settings.smart_lods_prepare_mode == 'UNITY':
             result = bpy.ops.object.polygroups_prepare_unity(auto_lods=True)
         else:
-            saved = (settings.fab_asset_name, settings.fab_asset_index, settings.fab_auto_increment_index)
+            names = ('unreal_lod_asset_name', 'unreal_lod_name_index',
+                     'unreal_lod_version_index', 'unreal_lod_keep_high')
+            saved = {name: getattr(settings, name) for name in names}
             try:
-                settings.fab_asset_name = settings.unity_asset_name + '_' + settings.unity_name_index.zfill(2)
-                settings.fab_asset_index = settings.unity_asset_index
-                settings.fab_auto_increment_index = False
-                for obj, variant in zip(lods, ('HIGH', 'MID', 'LOW')):
-                    obj.name = f'SM_Generated_{variant}'
-                result = bpy.ops.object.polygroups_auto_prepare_fab_selection('EXEC_DEFAULT')
+                # Re-preparing an already named asset keeps its identity.
+                if identity:
+                    settings.unreal_lod_asset_name = identity.group(1)
+                    settings.unreal_lod_name_index = identity.group(2)
+                    settings.unreal_lod_version_index = identity.group(3)
+                settings.unreal_lod_keep_high = False
+                result = bpy.ops.object.polygroups_unreal_lod_rename('EXEC_DEFAULT')
             finally:
-                settings.fab_asset_name, settings.fab_asset_index, settings.fab_auto_increment_index = saved
+                for name, value in saved.items():
+                    setattr(settings, name, value)
         bpy.ops.object.select_all(action='DESELECT')
         for obj in lods:
             obj.select_set(True)

@@ -15,13 +15,13 @@ s.smart_lods_target_1=80
 s.smart_lods_target_2=40
 s.smart_lods_create_text=True
 assert bpy.ops.object.polygroups_generate_smart_lods()=={'FINISHED'}
-lods=[bpy.data.objects[f'LabelTest.LOD.{i}'] for i in (1,2)]
+lods=[bpy.data.objects[f'LabelTest.LOD{i-1}'] for i in (1,2)]
 labels=[o for o in bpy.data.objects if o.get(smart_lods.LOD_LABEL)]
 assert len(labels)==2
 for i,lod in enumerate(lods,1):
     label=next(o for o in labels if o.parent==lod)
     tris=smart_lods._triangle_count(lod,bpy.context.evaluated_depsgraph_get())
-    assert label.data.body==f'LabelTest | LOD {i}\n{tris:,} tris'
+    assert label.data.body==f'LabelTest | LOD {i-1}\n{tris:,} tris'
     assert label.matrix_world.translation.z>max((lod.matrix_world@smart_lods.Vector(c)).z for c in lod.bound_box)
 bpy.ops.object.camera_add()
 bpy.context.scene.camera=bpy.context.object
