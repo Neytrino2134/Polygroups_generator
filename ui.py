@@ -1671,6 +1671,16 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 save_hint.label(text=t(context, "batch_save_before_start_line2"), icon="BLANK1")
             content.separator(type="LINE")
 
+            heading = content.row(align=True)
+            heading.alignment = "CENTER"
+            heading.label(text="--  " + t(context, "batch_heading_reset") + "  --")
+            content.operator(
+                "object.polygroups_reset_import_state",
+                text=t(context, "batch_reset_state"),
+                icon="FILE_REFRESH",
+            )
+            content.separator(type="LINE")
+
             group = draw_collapsible_box(content, settings, "show_batch_start_autosave", t(context, "batch_start_autosave_group"), "RECOVER_LAST")
             if group is not None:
                 auto_save_row = group.row(align=True)
@@ -1785,17 +1795,6 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 selected_hint = group.column(align=True)
                 selected_hint.label(text=t(context, "batch_selected_hint_line1"), icon="OUTLINER_OB_MESH")
                 selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
-
-        layout.separator(type="LINE")
-        heading = layout.row(align=True)
-        heading.alignment = "CENTER"
-        heading.label(text="--  " + t(context, "batch_heading_reset") + "  --")
-        layout.operator(
-            "object.polygroups_reset_import_state",
-            text=t(context, "batch_reset_state"),
-            icon="FILE_REFRESH",
-        )
-        layout.separator(type="LINE")
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:
