@@ -5,6 +5,7 @@ import bmesh
 import re
 from ..core.lod_naming import lod_base, lod_name, lod_index
 from mathutils import Vector
+from .sequential_jobs import SequentialJob
 from ..core.mesh_fold_repair import repair_local_folds
 
 from .smart_decimate import (
@@ -344,7 +345,7 @@ class OBJECT_OT_polygroups_render_smart_lods(bpy.types.Operator):
             if mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode=mode)
 
-class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
+class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator):
     bl_idname = "object.polygroups_generate_smart_lods"
     bl_label = "Generate Smart LODs"
     bl_description = "Generate a separate sequential LOD set for each selected mesh using the configured triangle limits"
@@ -356,9 +357,16 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.active_object
-        return obj is not None and obj.type == "MESH"
+        from .sequential_jobs import ACTIVE_JOB
+        return obj is not None and obj.type == "MESH" and ACTIVE_JOB is None
 
     def execute(self, context):
+        return self.start_job(context, self.batch_steps(context))
+
+    def invoke(self, context, event):
+        return self.start_job(context, self.batch_steps(context), modal=True)
+
+    def batch_steps(self, context):
         active = context.active_object
         selected = tuple(context.selected_objects)
         mode = active.mode
@@ -372,35 +380,43 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
         planned_names = [lod_name(source.name, index, settings.smart_lods_prepare_mode)
                          for source in sources for index in range(settings.smart_lods_count)]
         if len(set(planned_names)) != len(planned_names):
-            self.report({'WARNING'}, 'Select one source mesh per asset LOD pack')
-            return {'CANCELLED'}
+            raise ValueError('Select one source mesh per asset LOD pack')
         collisions = [name for name in planned_names if bpy.data.objects.get(name)]
         if settings.smart_lods_prepare_mode == 'UNITY':
             collisions.extend(obj.name for source in sources for obj in bpy.data.objects
                               if re.fullmatch(re.escape(source.name) + r'\.LOD\.\d+', obj.name))
         if collisions:
-            self.report({'WARNING'}, 'Smart LODs already exist: ' + ', '.join(collisions))
-            return {'CANCELLED'}
+            raise ValueError('Smart LODs already exist: ' + ', '.join(collisions))
         completed = 0
         try:
             if mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
-            for source in sources:
+            if settings.smart_lods_auto_arrange:
+                from .batch_import import arrange_objects_zx
+                arrange_objects_zx(sources, mode='GRID', rows=len(sources), plane='XY',
+                    spacing=.1, secondary_spacing=settings.smart_lods_spacing,
+                    alignment='ORIGIN', preserve_order=True)
+                context.view_layer.update()
+            self._lod_x_step = max((_world_x_bounds(obj)[1] - _world_x_bounds(obj)[0] for obj in sources), default=0) + .1
+            yield 0.02, f'Arrange completed: {len(sources)} source meshes'
+            for pack_index, source in enumerate(sources):
                 bpy.ops.object.select_all(action='DESELECT')
                 source.select_set(True)
                 context.view_layer.objects.active = source
-                if self._generate_for_source(context) != {'FINISHED'}:
-                    break
+                for lod_index_done in self.source_steps(context):
+                    progress = .02 + .98 * (pack_index + lod_index_done / settings.smart_lods_count) / len(sources)
+                    yield progress, f'{pack_index+1}/{len(sources)} | {source.name} | LOD{lod_index_done-1}'
                 completed += 1
-            if completed and settings.smart_lods_auto_arrange:
-                from .batch_import import arrange_objects_zx
-                objects = [obj for source in sources[:completed]
-                           for obj in [source] + [bpy.data.objects[lod_name(source.name, i, settings.smart_lods_prepare_mode)]
-                                                 for i in range(settings.smart_lods_count)]]
-                arrange_objects_zx(objects, spacing=0.1, mode='GRID', rows=completed,
-                                   plane='XY', alignment='ORIGIN',
-                                   secondary_spacing=settings.smart_lods_spacing, preserve_order=True)
+            if settings.smart_lods_auto_arrange and completed:
+                objects = [obj for source in sources for obj in [source] +
+                    [bpy.data.objects[lod_name(source.name, i, settings.smart_lods_prepare_mode)]
+                     for i in range(settings.smart_lods_count)]]
+                # Decimation can slightly expand bounds; refine the preview grid.
+                arrange_objects_zx(objects, spacing=.1, mode='GRID', rows=completed,
+                    plane='XY', alignment='ORIGIN', secondary_spacing=settings.smart_lods_spacing,
+                    preserve_order=True)
                 context.view_layer.update()
+            yield 1, f'Completed {completed}/{len(sources)} LOD packs'
         finally:
             bpy.ops.object.select_all(action='DESELECT')
             for obj in selected:
@@ -409,11 +425,18 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
             context.view_layer.objects.active = active
             if mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode=mode)
-        if completed:
-            self.report({'INFO'}, f'Generated Smart LOD packs: {completed}/{len(sources)}')
-        return {'FINISHED'} if completed else {'CANCELLED'}
+        self.report({'INFO'}, f'Generated Smart LOD packs: {completed}/{len(sources)}')
 
     def _generate_for_source(self, context):
+        try:
+            for _ in self.source_steps(context):
+                pass
+            return {'FINISHED'}
+        except (RuntimeError, ValueError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+
+    def source_steps(self, context):
         source = context.active_object
         original_mode = source.mode
         selected = tuple(context.selected_objects)
@@ -425,8 +448,7 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
             if lod_name(source.name, index, settings.smart_lods_prepare_mode) in bpy.data.objects
         ]
         if existing:
-            self.report({"WARNING"}, f"Smart LODs already exist: {', '.join(existing)}")
-            return {"CANCELLED"}
+            raise ValueError(f"Smart LODs already exist: {', '.join(existing)}")
         generated = []
         over_budget = []
         success = False
@@ -468,14 +490,18 @@ class OBJECT_OT_polygroups_generate_smart_lods(bpy.types.Operator):
                 else:
                     suffix = f", final {final_ratio:.3f}" if final_ratio is not None else ""
                     self.report({"INFO"}, f"LOD{index}: {actual}/{target} tris (body {body:.3f}, seams {seam:.3f}{suffix})")
+                if settings.smart_lods_auto_arrange:
+                    step = getattr(self, '_lod_x_step', _world_x_bounds(source)[1] - _world_x_bounds(source)[0] + .1)
+                    _arrange_after_previous(context, lod, previous, step, 'ORIGIN')
                 if settings.smart_lods_create_text:
                     ensure_lod_label(context, lod, source.name, index)
                 previous = lod
+                yield index + 1
             success = True
             if over_budget:
                 self.report({"WARNING"}, "Smart LODs generated; limits not reached: " + "; ".join(over_budget))
         except (RuntimeError, ValueError) as error:
-            self.report({"ERROR"}, f"Smart LODs: {error}")
+            raise RuntimeError(f"Smart LODs: {error}") from error
         finally:
             if not success:
                 for lod in reversed(generated):
@@ -513,6 +539,8 @@ class OBJECT_OT_polygroups_smart_lods_prepare(bpy.types.Operator):
         settings = context.scene.polygroups_mesh_finalization_settings
         source = context.active_object
         engine = settings.smart_lods_prepare_mode
+        from ..core.asset_names import asset_name
+        settings.unreal_lod_asset_name = asset_name(settings.unreal_lod_asset_name)
         copy_textures = (settings.unity_copy_textures if engine == 'UNITY' else
                          settings.unreal_lod_prepare_materials and settings.unreal_lod_copy_textures)
         if copy_textures and not bpy.data.filepath:

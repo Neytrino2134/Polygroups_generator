@@ -1,0 +1,61 @@
+# Batch Finalization and sequential Smart LODs
+
+Phase 2 now contains Blend File Manager, Restore and Processing, Batch
+Finalization, and the common Processing Status group. File management, manual
+cleanup, restore/bake and finalization publish their current status there.
+
+## Batch Finalization
+
+Prepare LODs and Rename are independently switchable. The LOD engine defaults
+to Unreal; Unity is also available. Rename defaults to FAB, which uses the
+second Unreal LOD Rename pipeline. Unity uses Unity Prepare (Auto LODs).
+Generate uses triangle budgets, triangulation, zero-area cleanup, labels and
+Arrange settings from Mesh Finalization / Smart LODs.
+
+Execute opens Asset Name / Name Index / Version Index and Start. Each asset
+increments Version Index. Names normalize whitespace/punctuation to underscores
+and uppercase the first letter of each word: desert stones -> Desert_Stones.
+The shared normalizer is also used by standalone Unity and FAB preparation.
+
+The queue discovers the highest numbered Retopo in each scene Generated.N
+collection, including excluded/hidden collections. With no such collections,
+selected collection packs are supported. Duplicate source ownership is rejected.
+Existing LOD names are checked before generation. Originals are not decimated.
+FAB keeps the original Retopo as HIGH/MID when that option is on and renames
+only generated LODs as LOD0 onward. Unity prepares generated meshes only.
+Source collection visibility and temporary pipeline settings are restored.
+
+## Progress and stopping
+
+The source meshes are arranged first. Work then advances one LOD at a time in
+Blender's modal event loop, updating panel progress and the workspace status
+bar with percentages. Stop Processing or Esc stops at the next LOD boundary;
+the native Decimate operation currently in progress finishes first. Completed
+packs are retained and the incomplete pack is removed. Smart LODs refines its
+preview grid at the end to account for small bounds changes from decimation.
+Scripted/background Smart LODs calls remain synchronous for existing workflows.
+Jobs are closed on file load, Undo/Redo, and add-on unregister.
+
+## Unreal naming and colors
+
+Keep Highest as HIGH/MID defaults on. Highest Mesh Suffix is now an enum:
+_HIGH or _MID, with _MID as the default. Collection colors use the same icon
+menu as Unity. Random Color Tag defaults on; disable it to use the chosen tag.
+Saved blend properties retain their previously stored values.
+
+## Validation
+
+Blender 5.2.2:
+- test_batch_finalization_blender.py: FAB/Unity and mixed engines, independent
+  Generate/Rename, disabled collections, default/fixed/random colors and stop.
+- test_lod_finalization_modal_blender.py: actual UI progress, Stop Processing,
+  completed-pack retention, then modal Batch Finalization.
+- test_batch_finalization_dialog_blender.py: actual dialog, Start via Enter,
+  normalized name and successful generation/rename.
+- Existing Smart LODs multiple/prepare/zero-area, Unreal batch/rename, Unity
+  Export Workflow, FAB all-generated, Phase 2 processing and settings lifecycle.
+
+The old test_unity_preparation.py still expects Asset_01 where both the
+pre-change HEAD and current implementation produce Asset_00_01 (Name Index).
+This pre-existing assertion mismatch was verified separately; the current
+Unity Export Workflow and new Unity Batch Finalization tests pass.

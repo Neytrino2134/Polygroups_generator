@@ -17,6 +17,7 @@ s = bpy.context.scene.polygroups_mesh_finalization_settings
 s.unreal_lod_asset_name = 'Tree_Tropic'
 s.unreal_lod_name_index = '19'
 s.unreal_lod_version_index = '1'
+s.unreal_lod_keep_high = False
 unity_before = (s.unity_asset_name, s.unity_name_index, s.unity_asset_index)
 fab_before = (s.fab_asset_name, s.fab_asset_index)
 mat = bpy.data.materials.new('SourceMaterial')

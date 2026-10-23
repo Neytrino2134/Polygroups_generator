@@ -441,7 +441,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 t(context, "phase2_file_manager"), "FILE_BLEND")
             if manager is not None:
                 buttons = manager.column(align=True)
-                buttons.enabled = not settings.phase2_is_running and not settings.batch_is_running
+                buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
                 buttons.operator("object.polygroups_phase2_files_scan", icon="VIEWZOOM")
                 buttons.prop(settings, "phase2_files_cleanup")
                 move = buttons.row()
@@ -454,14 +454,14 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 t(context, "phase2_restore_processing"), "IMPORT")
             if group is not None:
                 controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.batch_is_running
+                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
                 controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))
                 controls.separator(type="LINE")
                 controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
                 group.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
                 group.label(text=t(context, "phase2_scanned_collections", value=settings.phase2_scanned_collections))
                 controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.batch_is_running
+                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
                 controls.separator(type="LINE")
                 controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
                 controls.separator(type="LINE")
@@ -490,12 +490,29 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls.operator("object.polygroups_phase2_clear_lower_retopo", icon="TRASH")
                 controls.operator("object.polygroups_phase2_clear_highpoly", icon="TRASH")
                 controls.operator("object.polygroups_phase2_clear_backups", icon="TRASH")
+            final = draw_collapsible_box(content, settings, "phase2_show_finalization", "Batch Finalization", "MOD_DECIM")
+            if final is not None:
+                config = final.column(align=True)
+                config.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
+                config.prop(settings, "phase2_final_lods")
+                engine = config.row()
+                engine.enabled = settings.phase2_final_lods
+                engine.prop(settings, "phase2_final_lod_engine", expand=True)
+                config.prop(settings, "phase2_final_rename")
+                engine = config.row()
+                engine.enabled = settings.phase2_final_rename
+                engine.prop(settings, "phase2_final_rename_engine", expand=True)
+                config.operator("object.polygroups_batch_finalization", text="Execute Batch Finalization", icon="PLAY")
+                if settings.phase2_final_is_running:
+                    final.operator("object.polygroups_stop_lod_job", icon="CANCEL")
             group = draw_collapsible_box(content, settings, "phase2_show_status",
                 t(context, "phase2_processing_status"), "INFO")
             if group is not None:
                 if settings.phase2_status:
                     group.separator(type="LINE")
                     group.label(text=settings.phase2_status, icon="INFO")
+                if settings.phase2_final_is_running or settings.phase2_final_progress:
+                    group.progress(factor=settings.phase2_final_progress / 100, type='BAR', text=f'{settings.phase2_final_progress:.0f}%')
                 if settings.phase2_total_count:
                     group.progress(
                         factor=(settings.phase2_done_count + settings.phase2_failed_count) / settings.phase2_total_count,
@@ -504,6 +521,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     )
                 if settings.phase2_is_running:
                     group.operator("object.polygroups_phase2_stop", text=t(context, "phase2_stop"), icon="PAUSE")
+                if settings.phase2_final_is_running:
+                    group.operator("object.polygroups_stop_lod_job", icon="CANCEL")
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:

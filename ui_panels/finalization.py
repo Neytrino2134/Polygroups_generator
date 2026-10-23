@@ -363,6 +363,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
     def draw_smart_lods(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
         column = layout.column(align=True)
+        column.enabled = not settings.smart_lods_is_running
         column.prop(settings, "smart_lods_count")
         for index in range(1, settings.smart_lods_count + 1):
             column.prop(settings, f"smart_lods_target_{index}", text=f"LOD{index-1} Tris")
@@ -376,7 +377,13 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         column.prop(settings, "smart_lods_create_text")
         column.prop(settings, "smart_lods_text_size")
         column.prop(settings, "smart_lods_prepare_mode", expand=True)
-        column.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")
+        generate = column.row()
+        generate.enabled = not settings.smart_lods_is_running
+        generate.operator("object.polygroups_generate_smart_lods", text="Generate LODs", icon="MOD_DECIM")
+        if settings.smart_lods_is_running:
+            layout.operator("object.polygroups_stop_lod_job", icon="CANCEL")
+        if settings.smart_lods_status:
+            layout.progress(factor=settings.smart_lods_progress / 100, type='BAR', text=settings.smart_lods_status)
         prepare_box = column.box().column(align=True)
         if settings.smart_lods_prepare_mode == 'UNITY':
             prepare_box.prop(settings, "unity_asset_name", text="Asset Name")
@@ -499,7 +506,11 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             high_suffix = unreal.row()
             high_suffix.enabled = settings.unreal_lod_keep_high
             high_suffix.prop(settings, "unreal_lod_high_suffix")
-            unreal.prop(settings, "unreal_lod_collection_color")
+            color = unreal.row(align=True)
+            icon = ('OUTLINER_COLLECTION' if settings.unreal_lod_collection_color == 'NONE'
+                else 'COLLECTION_' + settings.unreal_lod_collection_color)
+            color.prop(settings, "unreal_lod_collection_color", text="Set Color Tag", icon=icon)
+            unreal.prop(settings, "unreal_lod_random_collection_color")
             unreal.prop(settings, "unreal_lod_prepare_materials")
             row = unreal.row()
             row.enabled = settings.unreal_lod_prepare_materials

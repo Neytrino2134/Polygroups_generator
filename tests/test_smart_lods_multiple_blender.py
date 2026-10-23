@@ -83,7 +83,7 @@ for row, pack in enumerate(packs):
         expected = sources[0].matrix_world.translation.copy()
         expected.x += column * x_step
         expected.y += row * y_step
-        assert (obj.matrix_world.translation - expected).length < 1e-5
+        assert (obj.matrix_world.translation - expected).length < 1e-5, (obj.name, tuple(obj.matrix_world.translation), tuple(expected), x_step, y_step)
 from polygroups_generator.custom_ui.schema import capture
 from polygroups_generator import ui
 model = capture(bpy.context, ui.SECTION_PANEL_CLASSES.index(ui.VIEW3D_PT_polygroups_mesh_finalization))

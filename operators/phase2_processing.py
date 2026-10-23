@@ -210,6 +210,7 @@ class Phase2Queue:
         settings.phase2_is_running = True
         settings.phase2_done_count = settings.phase2_failed_count = 0
         settings.phase2_total_count = len(self.entries)
+        settings.phase2_final_progress = 0
         settings.phase2_status = 'Starting Phase 2'
 
     def repair_mesh(self, context):
@@ -383,9 +384,10 @@ def stop_phase2(*_args):
 def available(context):
     from .import_queue import ACTIVE_QUEUE
     from .remesh_progress import ACTIVE_REMESH
+    from .sequential_jobs import ACTIVE_JOB
     settings = context.scene.polygroups_model_preparation_settings
     return bool(bpy.data.filepath and ACTIVE_PHASE2 is None and ACTIVE_QUEUE is None
-                and ACTIVE_REMESH is None and not settings.batch_is_running
+                and ACTIVE_REMESH is None and ACTIVE_JOB is None and not settings.batch_is_running
                 and not bpy.app.is_job_running('OBJECT_BAKE')
                 and not context.scene.polygroups_baking_settings.bake_task_is_running)
 
@@ -505,8 +507,9 @@ class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        from .sequential_jobs import ACTIVE_JOB
         settings = context.scene.polygroups_model_preparation_settings
-        return (context.mode == 'OBJECT' and ACTIVE_PHASE2 is None
+        return (context.mode == 'OBJECT' and ACTIVE_PHASE2 is None and ACTIVE_JOB is None
             and not settings.phase2_is_running and not settings.batch_is_running
             and not context.scene.polygroups_baking_settings.bake_task_is_running
             and not bpy.app.is_job_running('OBJECT_BAKE'))
@@ -514,6 +517,9 @@ class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
     def execute(self, context):
         count = remove_mesh_objects(obj for obj in bpy.data.objects
             if obj.type == 'MESH' and obj.name.lower().startswith('backup_retopo_'))
+        context.scene.polygroups_model_preparation_settings.phase2_status = f'Deleted {count} Backup_Retopo objects'
+        context.scene.polygroups_model_preparation_settings.phase2_final_progress = 0
+        context.scene.polygroups_model_preparation_settings.phase2_total_count = 0
         self.report({'INFO'}, f'Deleted {count} Backup_Retopo objects')
         return {'FINISHED'}
 
@@ -540,6 +546,9 @@ class OBJECT_OT_polygroups_phase2_clear_lower_retopo(bpy.types.Operator):
             highest = max(stage for stage, obj in entries)
             doomed.extend(obj for stage, obj in entries if stage < highest)
         count = remove_mesh_objects(doomed)
+        context.scene.polygroups_model_preparation_settings.phase2_status = f'Deleted {count} lower Retopo objects; highest stages kept'
+        context.scene.polygroups_model_preparation_settings.phase2_final_progress = 0
+        context.scene.polygroups_model_preparation_settings.phase2_total_count = 0
         self.report({'INFO'}, f'Deleted {count} lower Retopo objects; highest stages kept')
         return {'FINISHED'}
 
@@ -557,6 +566,9 @@ class OBJECT_OT_polygroups_phase2_clear_highpoly(bpy.types.Operator):
     def execute(self, context):
         count = remove_mesh_objects(obj for obj in bpy.data.objects
             if obj.type == 'MESH' and HIGH.fullmatch(obj.name))
+        context.scene.polygroups_model_preparation_settings.phase2_status = f'Deleted {count} Highpoly_Generated objects'
+        context.scene.polygroups_model_preparation_settings.phase2_final_progress = 0
+        context.scene.polygroups_model_preparation_settings.phase2_total_count = 0
         self.report({'INFO'}, f'Deleted {count} Highpoly_Generated objects')
         return {'FINISHED'}
 
@@ -615,6 +627,9 @@ class OBJECT_OT_polygroups_phase2_files_scan(bpy.types.Operator):
             settings.phase2_files_found = len(records)
             settings.phase2_files_status = f'Found: {len(records)} blend files / {len(errors)} scan errors'
             settings.phase2_files_cleanup_status = ''
+            settings.phase2_status = settings.phase2_files_status
+            settings.phase2_final_progress = 0
+            settings.phase2_total_count = 0
         except (ValueError, OSError) as error:
             _FILE_SCAN = None
             settings.phase2_files_found = 0
@@ -664,6 +679,9 @@ class OBJECT_OT_polygroups_phase2_files_move(bpy.types.Operator):
             _FILE_SCAN = None
             settings.phase2_files_found = 0
             settings.phase2_files_status = f'{moved} files moved / {errors} errors'
+            settings.phase2_status = settings.phase2_files_status
+            settings.phase2_final_progress = 0
+            settings.phase2_total_count = 0
             if moved:
                 settings.phase2_scan_subfolders = True
             if settings.phase2_files_cleanup:

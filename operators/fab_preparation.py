@@ -51,6 +51,8 @@ TEXTURE_SUFFIX_PATTERNS = (
 
 
 def _safe_asset_token(value, fallback="Asset"):
+    from ..core.asset_names import asset_name as normalize_asset_name
+    value = normalize_asset_name(value or "")
     value = re.sub(r"[^A-Za-z0-9_]+", "_", value or "").strip("_")
     value = re.sub(r"_+", "_", value)
     return value or fallback
@@ -463,6 +465,8 @@ def prepare_object_for_fab(context, obj, variant, settings, report=None):
     if obj is None or obj.type != "MESH":
         return False
 
+    from ..core.asset_names import asset_name as normalize_asset_name
+    settings.fab_asset_name = normalize_asset_name(settings.fab_asset_name)
     asset_name = _safe_asset_token(settings.fab_asset_name)
     asset_index = _safe_index_token(settings.fab_asset_index)
     object_name = _object_name(asset_name, asset_index, variant)
@@ -566,6 +570,8 @@ class OBJECT_OT_polygroups_auto_prepare_fab_selection(bpy.types.Operator):
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
         mesh_objects = [obj for obj in context.selected_objects if obj.type == "MESH"]
+        from ..core.asset_names import asset_name as normalize_asset_name
+        settings.fab_asset_name = normalize_asset_name(settings.fab_asset_name)
         asset_name = _safe_asset_token(settings.fab_asset_name)
         asset_collection = _ensure_asset_collection(context, asset_name, _safe_index_token(settings.fab_asset_index))
         _apply_collection_color_tag(asset_collection, settings)

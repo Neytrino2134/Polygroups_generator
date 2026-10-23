@@ -6,6 +6,7 @@ from contextlib import ExitStack
 from array import array
 
 import bpy
+from ..core.asset_names import asset_name
 
 from .fab_preparation import _texture_suffix, _ungroup_source_texture_nodes
 from .mesh_export import (
@@ -21,7 +22,7 @@ from .mesh_export import (
 
 def unity_name(settings, lod):
     base = "_".join(filter(None, (
-        _safe_path_token(settings.unity_asset_name, "Asset"),
+        _safe_path_token(asset_name(settings.unity_asset_name), "Asset"),
         settings.unity_name_index.zfill(2),
         _safe_path_token(settings.unity_asset_index, ""),
         _safe_path_token(settings.unity_asset_suffix.strip(), ""),
@@ -497,7 +498,7 @@ class OBJECT_OT_polygroups_unity_collection_step(bpy.types.Operator):
 
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
-        asset = _safe_path_token(settings.unity_asset_name, 'Asset')
+        asset = _safe_path_token(asset_name(settings.unity_asset_name), 'Asset')
         suffix = _safe_path_token(settings.unity_asset_suffix.strip(), '')
         pattern = re.compile(r'^' + re.escape(asset) + '(?:_' + re.escape(settings.unity_name_index.zfill(2)) + ')?' + r'_(\d+)'  +
                              (r'_' + re.escape(suffix) if suffix else '') + r'_LOD(\d+)_Collection$')

@@ -200,6 +200,8 @@ from .smart_decimate import (
     OBJECT_OT_polygroups_smart_decimate, OBJECT_OT_polygroups_smart_decimate_all_generated,
     OBJECT_OT_polygroups_delete_all_decimated, OBJECT_OT_polygroups_show_all_low,
 )
+from .sequential_jobs import OBJECT_OT_polygroups_stop_lod_job, stop_jobs
+from .batch_finalization import OBJECT_OT_polygroups_batch_finalization
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods
 from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
@@ -230,6 +232,7 @@ from .relocate_project import WM_OT_airetopo_relocate_project, WM_OT_airetopo_re
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
+    OBJECT_OT_polygroups_stop_lod_job, OBJECT_OT_polygroups_batch_finalization,
     *PHASE2_CLASSES,
     WM_OT_airetopo_relocate_project,
     OBJECT_OT_polygroups_unity_load_from_file,
@@ -480,6 +483,9 @@ def register():
     from .fab_preparation import stop_fab_prepare
     bpy.app.handlers.load_pre.append(stop_fab_prepare)
     bpy.app.handlers.load_pre.append(stop_import_queue)
+    for handler in (bpy.app.handlers.load_pre, bpy.app.handlers.undo_pre, bpy.app.handlers.redo_pre):
+        if stop_jobs not in handler:
+            handler.append(stop_jobs)
     bpy.app.handlers.load_pre.append(stop_phase2)
     bpy.app.handlers.undo_pre.append(stop_phase2)
     bpy.app.handlers.redo_pre.append(stop_phase2)
@@ -524,6 +530,10 @@ def unregister():
     if stop_fab_prepare in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_fab_prepare)
     stop_import_queue()
+    stop_jobs()
+    for handler in (bpy.app.handlers.load_pre, bpy.app.handlers.undo_pre, bpy.app.handlers.redo_pre):
+        if stop_jobs in handler:
+            handler.remove(stop_jobs)
     stop_phase2()
     if stop_phase2 in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(stop_phase2)

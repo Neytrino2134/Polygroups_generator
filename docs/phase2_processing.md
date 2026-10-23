@@ -105,3 +105,6 @@ Stages groups canonical Retopo_XX_Highpoly_Generated names by asset suffix,
 keeps the maximum numbered stage per asset and deletes only earlier stages.
 Delete All Highpoly_Generated Objects removes canonical Highpoly sources.
 Both support Undo and are disabled while Phase 2 or baking is running.
+
+See [Batch Finalization](batch_finalization.md) for sequential LOD preparation,
+engine-specific renaming, shared status and Stop Processing.

@@ -189,14 +189,17 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unreal_lod_asset_name: bpy.props.StringProperty(name="Asset Name", default="Asset")
     unreal_lod_name_index: bpy.props.StringProperty(name="Name Index", default="00")
     unreal_lod_version_index: bpy.props.StringProperty(name="Version Index", default="01")
-    unreal_lod_keep_high: bpy.props.BoolProperty(name="Keep Highest as High", default=False,
+    unreal_lod_keep_high: bpy.props.BoolProperty(name="Keep Highest as HIGH/MID", default=True,
         description="Keep the highest polygon mesh separately; start LOD0 from the next mesh in every collection")
-    unreal_lod_high_suffix: bpy.props.StringProperty(name="High Suffix", default="_HIGH",
+    unreal_lod_high_suffix: bpy.props.EnumProperty(name="Highest Mesh Suffix",
+        items=(("_HIGH", "_HIGH", ""), ("_MID", "_MID", "")), default="_MID",
         description="Suffix appended to the highest polygon mesh instead of _LOD0")
     unreal_lod_prepare_materials: bpy.props.BoolProperty(name="Prepare Materials and Textures", default=True)
     unreal_lod_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
     unreal_lod_collection_color: bpy.props.EnumProperty(name="Collection Color Tag",
-        items=[('NONE', 'None', '')] + [(f'COLOR_{i:02d}', f'Color {i}', '') for i in range(1, 9)], default='NONE')
+        items=(("NONE", "None", "", "OUTLINER_COLLECTION", 0),
+            *((f"COLOR_{i:02d}", f"Color {i}", "", f"COLLECTION_COLOR_{i:02d}", i) for i in range(1, 9))), default='NONE')
+    unreal_lod_random_collection_color: bpy.props.BoolProperty(name="Random Color Tag", default=True)
     show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=False)
     show_unity_asset_render_settings: bpy.props.BoolProperty(name="Render Unity Assets", default=False)
     show_unity_turnaround_settings: bpy.props.BoolProperty(name="Turnaround", default=False)
@@ -267,6 +270,9 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         default=False,
     )
     show_smart_lods_settings: bpy.props.BoolProperty(name="Smart LODs", default=False)
+    smart_lods_is_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    smart_lods_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
+    smart_lods_status: bpy.props.StringProperty(default='', options={'SKIP_SAVE'})
     smart_lods_prepare_mode: bpy.props.EnumProperty(name="Prepare For", items=(("UNITY", "Unity", "Prepare generated LODs for Unity"), ("UNREAL", "Unreal", "Prepare generated meshes as Unreal _LODN assets")), default="UNITY")
     smart_lods_count: bpy.props.IntProperty(
         name="LOD Count", description="Number of generated LOD meshes",

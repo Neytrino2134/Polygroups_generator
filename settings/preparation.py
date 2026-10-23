@@ -167,6 +167,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     show_batch_start_mode: bpy.props.BoolProperty(name="Import Mode", default=True)
     phase2_show_files: bpy.props.BoolProperty(name="Blend File Manager", default=True)
     phase2_show_restore: bpy.props.BoolProperty(name="Restore and Processing", default=True)
+    phase2_show_finalization: bpy.props.BoolProperty(name="Batch Finalization", default=True)
+    phase2_final_lods: bpy.props.BoolProperty(name="Prepare LODs", default=True)
+    phase2_final_lod_engine: bpy.props.EnumProperty(name="LOD Pipeline",
+        items=(("UNREAL", "Unreal", ""), ("UNITY", "Unity", "")), default='UNREAL')
+    phase2_final_rename: bpy.props.BoolProperty(name="Rename", default=True)
+    phase2_final_rename_engine: bpy.props.EnumProperty(name="Rename Pipeline",
+        items=(("FAB", "FAB", "Unreal LOD Rename"), ("UNITY", "Unity", "Unity Prepare")), default='FAB')
+    phase2_final_is_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
     phase2_show_status: bpy.props.BoolProperty(name="Status", default=True)
     phase2_files_cleanup: bpy.props.BoolProperty(
         name="Auto Delete Backup Saves", default=False,

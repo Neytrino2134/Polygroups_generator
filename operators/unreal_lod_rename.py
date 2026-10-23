@@ -2,6 +2,8 @@
 from array import array
 from pathlib import Path
 import re
+import random
+from ..core.asset_names import asset_name
 import bpy
 from .mesh_export import _safe_path_token
 from .fab_preparation import _texture_suffix
@@ -131,7 +133,8 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
 
     def execute(self, context):
         s = context.scene.polygroups_mesh_finalization_settings
-        name = s.unreal_lod_asset_name.strip()
+        name = asset_name(s.unreal_lod_asset_name)
+        s.unreal_lod_asset_name = name
         if not name or _safe_path_token(name) != name or not s.unreal_lod_name_index.isdigit() or not s.unreal_lod_version_index.isdigit():
             self.report({'ERROR'}, 'Enter a valid asset name and numeric Name Index / Version Index')
             return {'CANCELLED'}
@@ -200,7 +203,8 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
                     collection = bpy.data.collections.new(base + '_Collection')
             if collection.name not in context.scene.collection.children:
                 context.scene.collection.children.link(collection)
-            collection.color_tag = s.unreal_lod_collection_color
+            collection.color_tag = (random.choice([f"COLOR_{i:02d}" for i in range(1, 9)])
+                if s.unreal_lod_random_collection_color else s.unreal_lod_collection_color)
             collection['unreal_lod_asset'] = base
             for index, (obj, target) in enumerate(zip(meshes, names)):
                 obj.name = obj.data.name = target
@@ -216,6 +220,6 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
                     prepare_materials(meshes, base, s.unreal_lod_copy_textures)
             except (RuntimeError, ValueError, OSError) as error:
                 self.report({'ERROR'}, f'Unreal material preparation failed for {base}: {error}')
-                return {'FINISHED'}  # Keep an undo entry for already applied naming.
+                return {'CANCELLED'}
         self.report({'INFO'}, f'Prepared {len(plans)} Unreal asset pack(s), {len(all_selected)} meshes')
         return {'FINISHED'}
