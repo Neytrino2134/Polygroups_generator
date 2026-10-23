@@ -201,6 +201,7 @@ from .smart_decimate import (
     OBJECT_OT_polygroups_delete_all_decimated, OBJECT_OT_polygroups_show_all_low,
 )
 from .sequential_jobs import OBJECT_OT_polygroups_stop_lod_job, stop_jobs
+from .auto_render import OBJECT_OT_polygroups_phase2_auto_render
 from .batch_finalization import OBJECT_OT_polygroups_batch_finalization
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods
 from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
@@ -233,6 +234,7 @@ from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_w
 
 CLASSES = (
     OBJECT_OT_polygroups_stop_lod_job, OBJECT_OT_polygroups_batch_finalization,
+    OBJECT_OT_polygroups_phase2_auto_render,
     *PHASE2_CLASSES,
     WM_OT_airetopo_relocate_project,
     OBJECT_OT_polygroups_unity_load_from_file,

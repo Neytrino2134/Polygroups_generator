@@ -441,7 +441,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 t(context, "phase2_file_manager"), "FILE_BLEND")
             if manager is not None:
                 buttons = manager.column(align=True)
-                buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
+                buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 buttons.operator("object.polygroups_phase2_files_scan", icon="VIEWZOOM")
                 buttons.prop(settings, "phase2_files_cleanup")
                 move = buttons.row()
@@ -454,14 +454,14 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 t(context, "phase2_restore_processing"), "IMPORT")
             if group is not None:
                 controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
+                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))
                 controls.separator(type="LINE")
                 controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
                 group.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
                 group.label(text=t(context, "phase2_scanned_collections", value=settings.phase2_scanned_collections))
                 controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
+                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 controls.separator(type="LINE")
                 controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
                 controls.separator(type="LINE")
@@ -493,7 +493,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             final = draw_collapsible_box(content, settings, "phase2_show_finalization", "Batch Finalization", "MOD_DECIM")
             if final is not None:
                 config = final.column(align=True)
-                config.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.batch_is_running
+                config.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 config.prop(settings, "phase2_final_lods")
                 engine = config.row()
                 engine.enabled = settings.phase2_final_lods
@@ -505,13 +505,51 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 config.operator("object.polygroups_batch_finalization", text="Execute Batch Finalization", icon="PLAY")
                 if settings.phase2_final_is_running:
                     final.operator("object.polygroups_stop_lod_job", icon="CANCEL")
+            auto = draw_collapsible_box(content, settings, "phase2_show_auto_render", "Auto Render", "RENDER_STILL")
+            if auto is not None:
+                config = auto.column(align=True)
+                config.enabled = not (settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
+                config.label(text="Quality and Output: 16:9 | 2K", icon="INFO")
+                config.label(text="2048 x 1152 | Eevee")
+                config.prop(context.scene.polygroups_render_settings, "output_directory")
+                scene = config.box()
+                scene.prop(settings, "phase2_auto_scene")
+                sub = scene.column(align=True)
+                sub.enabled = settings.phase2_auto_scene
+                sub.prop(settings, "phase2_auto_camera")
+                sub.label(text="Replace foreign studio / reset managed studio")
+                selection = config.box()
+                selection.prop(settings, "phase2_auto_selection")
+                selection.label(text="MID + LOD0 (LOW previews)")
+                freestyle = config.box()
+                freestyle.prop(settings, "phase2_auto_freestyle")
+                sub = freestyle.column(align=True)
+                sub.enabled = settings.phase2_auto_freestyle
+                sub.prop(settings, "phase2_auto_freestyle_pass")
+                sub.prop(settings, "phase2_auto_freestyle_color")
+                multiview = config.box()
+                multiview.prop(settings, "phase2_auto_multiview")
+                sub = multiview.column(align=True)
+                sub.enabled = settings.phase2_auto_multiview
+                sub.prop(settings, "phase2_auto_mv_offset")
+                sub.prop(settings, "phase2_auto_mv_angle", expand=True)
+                sub.prop(settings, "phase2_auto_mv_hero")
+                textures = config.box()
+                textures.prop(settings, "phase2_auto_textures")
+                sub = textures.column(align=True)
+                sub.enabled = settings.phase2_auto_textures
+                sub.prop(settings, "phase2_auto_texture_prepare", expand=True)
+                sub.label(text="Base Color + Normal | Texture Render Mode: Together")
+                config.operator("object.polygroups_phase2_auto_render", text="Start Render", icon="RENDER_STILL")
+                if settings.phase2_auto_render_running:
+                    auto.operator("object.polygroups_stop_lod_job", text="Stop Render", icon="CANCEL")
             group = draw_collapsible_box(content, settings, "phase2_show_status",
                 t(context, "phase2_processing_status"), "INFO")
             if group is not None:
                 if settings.phase2_status:
                     group.separator(type="LINE")
                     group.label(text=settings.phase2_status, icon="INFO")
-                if settings.phase2_final_is_running or settings.phase2_final_progress:
+                if settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.phase2_final_progress:
                     group.progress(factor=settings.phase2_final_progress / 100, type='BAR', text=f'{settings.phase2_final_progress:.0f}%')
                 if settings.phase2_total_count:
                     group.progress(
@@ -521,7 +559,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     )
                 if settings.phase2_is_running:
                     group.operator("object.polygroups_phase2_stop", text=t(context, "phase2_stop"), icon="PAUSE")
-                if settings.phase2_final_is_running:
+                if settings.phase2_final_is_running or settings.phase2_auto_render_running:
                     group.operator("object.polygroups_stop_lod_job", icon="CANCEL")
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")

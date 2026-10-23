@@ -176,6 +176,24 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         items=(("FAB", "FAB", "Unreal LOD Rename"), ("UNITY", "Unity", "Unity Prepare")), default='FAB')
     phase2_final_is_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
+    phase2_show_auto_render: bpy.props.BoolProperty(name="Auto Render", default=True)
+    phase2_auto_render_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    phase2_auto_scene: bpy.props.BoolProperty(name="Scene and Camera Setup", default=True)
+    phase2_auto_camera: bpy.props.BoolProperty(name="Auto Frame Camera (10% Margin)", default=True)
+    phase2_auto_selection: bpy.props.BoolProperty(name="Mesh Selection: MID and LOD0", default=True)
+    phase2_auto_freestyle: bpy.props.BoolProperty(name="Freestyle", default=True)
+    phase2_auto_freestyle_pass: bpy.props.BoolProperty(name="As Render Pass", default=True)
+    phase2_auto_freestyle_color: bpy.props.FloatVectorProperty(name="Line Color", size=4,
+        subtype='COLOR', min=0, max=1, default=(.80695226, .80695226, .80695226, 1))
+    phase2_auto_multiview: bpy.props.BoolProperty(name="Multiview", default=True)
+    phase2_auto_mv_offset: bpy.props.FloatProperty(name="Offset (m)", default=1, min=0)
+    phase2_auto_mv_angle: bpy.props.EnumProperty(name="Angle",
+        items=(("-30", "-30 degrees", ""), ("0", "0 degrees", ""), ("30", "+30 degrees", "")), default='-30')
+    phase2_auto_mv_hero: bpy.props.BoolProperty(name="Render Hero", default=True)
+    phase2_auto_textures: bpy.props.BoolProperty(name="Prepare Textures", default=True)
+    phase2_auto_texture_prepare: bpy.props.EnumProperty(name="Prepare Textures",
+        items=(("ALL", "All Assets First", "Prepare all texture pairs before rendering"),
+               ("EACH", "Per Asset", "Prepare the texture pair just before rendering each asset")), default='ALL')
     phase2_show_status: bpy.props.BoolProperty(name="Status", default=True)
     phase2_files_cleanup: bpy.props.BoolProperty(
         name="Auto Delete Backup Saves", default=False,

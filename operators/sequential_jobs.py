@@ -43,7 +43,8 @@ class SequentialJob:
         ACTIVE_JOB = self
         context.scene.polygroups_mesh_finalization_settings.smart_lods_is_running = True
         if getattr(self, 'phase2_job', False):
-            context.scene.polygroups_model_preparation_settings.phase2_final_is_running = True
+            setattr(context.scene.polygroups_model_preparation_settings,
+                getattr(self, 'phase2_running_property', 'phase2_final_is_running'), True)
             context.scene.polygroups_model_preparation_settings.phase2_total_count = 0
         context.window_manager.progress_begin(0, 100)
         self.update_job(context, 0, 'Starting')
@@ -62,7 +63,7 @@ class SequentialJob:
             fraction, message = next(self._iterator)
             self.update_job(context, fraction, message)
         except StopIteration:
-            return self.finish_job(context)
+            return self.finish_job(context, stopped=self.stop_requested)
         except Exception as error:
             self.report({'WARNING'} if isinstance(error, ValueError) else {'ERROR'}, str(error))
             return self.finish_job(context, error=str(error))
@@ -88,7 +89,7 @@ class SequentialJob:
             'Stopped' if stopped else 'Completed') + f' | {s.smart_lods_progress:.0f}%'
         if getattr(self, 'phase2_job', False):
             p = self._job_scene.polygroups_model_preparation_settings
-            p.phase2_final_is_running = False
+            setattr(p, getattr(self, 'phase2_running_property', 'phase2_final_is_running'), False)
             p.phase2_status = s.smart_lods_status
             p.phase2_final_progress = s.smart_lods_progress
         context.window_manager.progress_end()

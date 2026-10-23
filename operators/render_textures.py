@@ -1,5 +1,6 @@
 """Temporary emission previews for asset Base Color and Normal textures."""
 from math import radians
+import json
 import bpy
 
 PLANE_TAG = 'polygroups_texture_plane'
@@ -101,6 +102,7 @@ class OBJECT_OT_prepare_render_textures(bpy.types.Operator):
     bl_label = 'Prepare Textures'
     bl_description = 'Create Base Color and Normal emission planes for each asset collection without modifying source materials'
     bl_options = {'REGISTER', 'UNDO'}
+    collections_json: bpy.props.StringProperty(default='', options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -110,7 +112,10 @@ class OBJECT_OT_prepare_render_textures(bpy.types.Operator):
         from .render_queue import _asset_name_from_collection
         prepared = 0
         skipped = []
+        selected = set(json.loads(self.collections_json)) if self.collections_json else None
         for collection in context.scene.collection.children_recursive:
+            if selected is not None and collection.name not in selected:
+                continue
             if not _asset_name_from_collection(collection):
                 continue
             textures = collection_textures(collection)

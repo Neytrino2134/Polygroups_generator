@@ -389,7 +389,8 @@ def available(context):
     return bool(bpy.data.filepath and ACTIVE_PHASE2 is None and ACTIVE_QUEUE is None
                 and ACTIVE_REMESH is None and ACTIVE_JOB is None and not settings.batch_is_running
                 and not bpy.app.is_job_running('OBJECT_BAKE')
-                and not context.scene.polygroups_baking_settings.bake_task_is_running)
+                and not context.scene.polygroups_baking_settings.bake_task_is_running
+                and not context.scene.polygroups_render_settings.is_running)
 
 
 def scan(context, report):

@@ -108,3 +108,6 @@ Both support Undo and are disabled while Phase 2 or baking is running.
 
 See [Batch Finalization](batch_finalization.md) for sequential LOD preparation,
 engine-specific renaming, shared status and Stop Processing.
+
+See [Auto Render](phase2_auto_render.md) for fixed-quality asset previews,
+per-asset camera fitting, Freestyle, Multiview and paired texture output.
