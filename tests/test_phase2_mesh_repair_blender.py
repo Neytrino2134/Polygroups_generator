@@ -105,7 +105,11 @@ with TemporaryDirectory() as directory:
         ops=SimpleNamespace(mesh=bpy.ops.mesh,
             object=SimpleNamespace(mode_set=bpy.ops.object.mode_set,
                 polygroups_uvpackmaster_pack=pack)))
-    for enabled, no_change, expected in ((True, False, 1), (True, True, 0), (False, False, 0)):
+    assert settings.phase2_repack_only_if_changed is True
+    for enabled, no_change, only_changed, expected in (
+            (True, False, True, 1), (True, True, True, 0),
+            (True, True, False, 1), (False, False, False, 0)):
+        settings.phase2_repack_only_if_changed = only_changed
         settings.phase2_mesh_auto_repair = enabled
         pack_calls.clear()
         queue = phase2.Phase2Queue(context, [(str(source), 'Generated.009')], False, True, print)
@@ -121,6 +125,7 @@ with TemporaryDirectory() as directory:
                     break
         assert queue.finished and settings.phase2_done_count == 1, queue.results
         assert len(pack_calls) == expected, pack_calls
+    settings.phase2_repack_only_if_changed = True
     # UV-only changes must trigger the same conditional repack.
     settings.phase2_mesh_auto_repair = True
     def change_uv(*args, **kwargs):

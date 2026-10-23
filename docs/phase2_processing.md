@@ -44,7 +44,8 @@ vertices on that highest Retopo only. It ignores selection-area restrictions;
 shared mesh data is copied first to keep Highpoly and earlier Retopo stages
 unchanged. Repair failure skips the bake and marks that collection failed.
 
-Repack UV After Repair defaults off. When enabled, geometry/topology and all UV
+Repack UV After Repair defaults off. Its separate Only If Changed sub-option
+defaults on. When enabled, geometry/topology and all UV
 layers are compared before and after repair. Only changed targets run the existing
 UVPackmaster PACK operator, synchronously, before any optional bake. Unchanged
 targets skip packing. Missing UVs or a failed PACK mark that item failed. This
@@ -95,3 +96,6 @@ is always kept. Objects linked outside the completed collection tree are only
 unlinked from that tree, not deleted globally. The separate Delete All
 Backup_Retopo Objects button removes local mesh objects with that prefix and
 supports Undo; shared mesh data is kept while other objects use it.
+
+When Only If Changed is off, every successful Auto Repair runs PACK if Repack UV
+After Repair is enabled, even when the mesh and UVs were unchanged.

@@ -233,14 +233,15 @@ class Phase2Queue:
         self.view_layer.objects.active = low
         if low.data.users > 1:
             low.data = low.data.copy()
-        before = mesh_uv_signature(low.data)
+        check_changes = self.settings.phase2_repack_only_if_changed
+        before = mesh_uv_signature(low.data) if check_changes else None
         result = bpy.ops.mesh.polygroups_repair_mesh_folds(
             'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
             fix_degenerate=True, fix_zero_area=False, selected_only=False)
         if 'FINISHED' not in result:
             raise RuntimeError(f'Auto Repair failed for {low.name}; processing skipped')
-        changed = mesh_uv_signature(low.data) != before
-        if changed and self.settings.phase2_repack_after_repair:
+        changed = not check_changes or mesh_uv_signature(low.data) != before
+        if self.settings.phase2_repack_after_repair and changed:
             if low.data.uv_layers.active is None:
                 raise ValueError(f'{low.name}: UV repack requires a UV map')
             result = bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT')

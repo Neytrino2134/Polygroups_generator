@@ -190,7 +190,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     phase2_repack_after_repair: bpy.props.BoolProperty(
         name="Repack UV After Mesh Repair", default=False,
-        description="Run UVPackmaster PACK on the highest Retopo only when Auto Repair changed its mesh or UVs",
+        description="Run UVPackmaster PACK on the highest Retopo after successful Auto Repair",
+    )
+    phase2_repack_only_if_changed: bpy.props.BoolProperty(
+        name="Only If Changed", default=True,
+        description="Skip UVPackmaster PACK when Auto Repair did not change geometry or UVs",
     )
     phase2_delete_high_after_bake: bpy.props.BoolProperty(
         name="Delete Highpoly After Successful Bake", default=False,

@@ -475,6 +475,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 repack = controls.row()
                 repack.enabled = settings.phase2_mesh_auto_repair
                 repack.prop(settings, "phase2_repack_after_repair", text=t(context, "phase2_repack_after_repair"))
+                changed_only = controls.row()
+                changed_only.enabled = settings.phase2_mesh_auto_repair and settings.phase2_repack_after_repair
+                changed_only.separator()
+                changed_only.prop(settings, "phase2_repack_only_if_changed", text=t(context, "phase2_repack_only_if_changed"))
                 controls.prop(settings, "phase2_auto_bake", text=t(context, "phase2_autobake"))
                 if settings.phase2_auto_bake:
                     controls.prop(settings, "phase2_repair_artifacts", text=t(context, "phase2_repair"))
