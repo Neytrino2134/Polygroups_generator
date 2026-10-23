@@ -2,6 +2,8 @@
 import os
 import re
 import time
+import hashlib
+from array import array
 
 import bpy
 from bpy.app.handlers import persistent
@@ -144,6 +146,25 @@ def bake_pair(collection):
     return highs[0], max(lows, key=lambda item: item[0])[1]
 
 
+def mesh_uv_signature(mesh):
+    """Detect geometry/topology/UV changes without selection-state noise."""
+    digest = hashlib.blake2b()
+    for collection, attr, width, kind in (
+            (mesh.vertices, 'co', 3, 'f'), (mesh.edges, 'vertices', 2, 'i'),
+            (mesh.loops, 'vertex_index', 1, 'i'),
+            (mesh.polygons, 'loop_total', 1, 'i')):
+        values = array(kind, [0]) * (len(collection) * width)
+        collection.foreach_get(attr, values)
+        digest.update(len(values).to_bytes(8, 'little'))
+        digest.update(values.tobytes())
+    for layer in mesh.uv_layers:
+        digest.update(layer.name.encode('utf-8'))
+        values = array('f', [0]) * (len(layer.data) * 2)
+        layer.data.foreach_get('uv', values)
+        digest.update(values.tobytes())
+    return digest.digest()
+
+
 class Phase2Queue:
     def __init__(self, context, entries, auto_bake, repair, report):
         self.scene, self.view_layer = context.scene, context.view_layer
@@ -162,6 +183,41 @@ class Phase2Queue:
         settings.phase2_total_count = len(self.entries)
         settings.phase2_status = 'Starting Phase 2'
 
+    def repair_mesh(self, context):
+        if not self.settings.phase2_mesh_auto_repair:
+            return
+        from .rename_objects import ensure_collection_visible_in_view_layer
+        lows = [(int(match.group(1)), obj) for obj in self.collection.all_objects
+                if obj.type == 'MESH' and (match := LOW.fullmatch(obj.name))]
+        if not lows:
+            raise ValueError(f'{self.collection.name}: Auto Repair requires a numbered Retopo')
+        low = max(lows, key=lambda item: item[0])[1]
+        if not ensure_collection_visible_in_view_layer(context, self.collection):
+            raise ValueError(f'{self.collection.name}: cannot make collection visible')
+        if context.object and context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        for obj in context.selected_objects:
+            obj.select_set(False)
+        low.hide_viewport = low.hide_render = low.hide_select = False
+        low.hide_set(False)
+        low.select_set(True)
+        self.view_layer.objects.active = low
+        if low.data.users > 1:
+            low.data = low.data.copy()
+        before = mesh_uv_signature(low.data)
+        result = bpy.ops.mesh.polygroups_repair_mesh_folds(
+            'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
+            fix_degenerate=True, fix_zero_area=False, selected_only=False)
+        if 'FINISHED' not in result:
+            raise RuntimeError(f'Auto Repair failed for {low.name}; processing skipped')
+        changed = mesh_uv_signature(low.data) != before
+        if changed and self.settings.phase2_repack_after_repair:
+            if low.data.uv_layers.active is None:
+                raise ValueError(f'{low.name}: UV repack requires a UV map')
+            result = bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT')
+            if 'FINISHED' not in result:
+                raise RuntimeError(f'UVPackmaster PACK failed for {low.name}; processing skipped')
+
     def start_bake(self, context):
         from .rename_objects import ensure_collection_visible_in_view_layer
         high, low = bake_pair(self.collection)
@@ -178,19 +234,6 @@ class Phase2Queue:
             obj.hide_set(False)
             obj.select_set(True)
         self.view_layer.objects.active = low
-        if self.settings.phase2_mesh_auto_repair:
-            # Repair only the final Retopo. Imported objects can share mesh
-            # datablocks, so isolate this target before changing its geometry.
-            high.select_set(False)
-            if low.data.users > 1:
-                low.data = low.data.copy()
-            result = bpy.ops.mesh.polygroups_repair_mesh_folds(
-                'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
-                fix_degenerate=True, fix_zero_area=False, selected_only=False,
-            )
-            if 'FINISHED' not in result:
-                raise RuntimeError(f'Auto Repair failed for {low.name}; bake skipped')
-            high.select_set(True)
         bake = self.scene.polygroups_baking_settings
         overrides = dict(use_selected_to_active=True, auto_save_textures_after_bake=True,
                          bake_artifact_mask=self.repair, bake_artifact_autofill=self.repair)
@@ -251,6 +294,7 @@ class Phase2Queue:
             if self.stage == 'RESTORE':
                 self.collection = restore_collection(path, name, self.scene)
                 self.view_layer.update()
+                self.repair_mesh(context)
                 if self.auto_bake:
                     self.stage = 'BAKE_START'
                 else:

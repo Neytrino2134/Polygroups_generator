@@ -91,4 +91,69 @@ with TemporaryDirectory() as directory:
         assert queue.finished and len(calls) == 1, queue.results
         assert settings.phase2_done_count == 1 and settings.phase2_failed_count == 0
 
+    # Repair runs with Auto Bake off; PACK is conditional on actual mesh/UV changes.
+    settings.phase2_mesh_auto_repair = True
+    settings.phase2_repack_after_repair = True
+    real_bpy_phase = phase2.bpy
+    pack_calls = []
+    def pack(*args, **kwargs):
+        assert context.active_object.name.startswith('Retopo_12_')
+        assert len(context.selected_objects) == 1
+        pack_calls.append(context.active_object.name)
+        return {'FINISHED'}
+    proxy = SimpleNamespace(data=bpy.data, context=bpy.context,
+        ops=SimpleNamespace(mesh=bpy.ops.mesh,
+            object=SimpleNamespace(mode_set=bpy.ops.object.mode_set,
+                polygroups_uvpackmaster_pack=pack)))
+    for enabled, no_change, expected in ((True, False, 1), (True, True, 0), (False, False, 0)):
+        settings.phase2_mesh_auto_repair = enabled
+        pack_calls.clear()
+        queue = phase2.Phase2Queue(context, [(str(source), 'Generated.009')], False, True, print)
+        queue.begin()
+        if no_change:
+            proxy.ops.mesh = SimpleNamespace(polygroups_repair_mesh_folds=lambda *a, **k: {'FINISHED'})
+        else:
+            proxy.ops.mesh = real_bpy_phase.ops.mesh
+        with patch.object(phase2, 'bpy', proxy):
+            for _ in range(8):
+                queue.step(context)
+                if queue.finished:
+                    break
+        assert queue.finished and settings.phase2_done_count == 1, queue.results
+        assert len(pack_calls) == expected, pack_calls
+    # UV-only changes must trigger the same conditional repack.
+    settings.phase2_mesh_auto_repair = True
+    def change_uv(*args, **kwargs):
+        low = context.active_object
+        low.data.uv_layers.active.data[0].uv.x += .125
+        return {'FINISHED'}
+    proxy.ops.mesh = SimpleNamespace(polygroups_repair_mesh_folds=change_uv)
+    pack_calls.clear()
+    queue = phase2.Phase2Queue(context, [(str(source), 'Generated.009')], False, True, print)
+    queue.begin()
+    with patch.object(phase2, 'bpy', proxy):
+        for _ in range(8):
+            queue.step(context)
+            if queue.finished:
+                break
+    assert settings.phase2_done_count == 1 and len(pack_calls) == 1, queue.results
+
+# Optional installed-engine integration, explicitly requested by test argument.
+if '--real-pack' in sys.argv:
+    addon_utils.enable('uvpackmaster4', default_set=True)
+    settings.phase2_mesh_auto_repair = True
+    settings.phase2_repack_after_repair = True
+    # Completed queue clears its pointer; restore one more real defective target.
+    with TemporaryDirectory() as real_directory:
+        # Export an already retained defective Highpoly as the highest Retopo.
+        high = next(obj for obj in bpy.data.objects if phase2.HIGH.fullmatch(obj.name))
+        col = bpy.data.collections.new('Generated.999')
+        obj = bpy.data.objects.new('Retopo_99_Highpoly_Generated.999', high.data.copy())
+        col.objects.link(obj)
+        context.scene.collection.children.link(col)
+        real_queue = phase2.Phase2Queue(context, [('test', col.name)], False, False, print)
+        real_queue.collection = col
+        real_queue.repair_mesh(context)
+        assert context.object.mode == 'OBJECT'
+    print('PHASE2_REAL_UVPACK_PASSED')
 print('PHASE2_MESH_REPAIR_PASSED')

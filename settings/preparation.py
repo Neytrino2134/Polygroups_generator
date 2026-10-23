@@ -175,8 +175,12 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
     phase2_mesh_auto_repair: bpy.props.BoolProperty(
-        name="Auto Repair Mesh Before Bake", default=True,
-        description="Repair folded pockets and merge coincident vertices only on the highest Retopo stage before baking",
+        name="Auto Repair Mesh", default=True,
+        description="Repair folded pockets and merge coincident vertices only on the highest Retopo stage independently of Auto Bake",
+    )
+    phase2_repack_after_repair: bpy.props.BoolProperty(
+        name="Repack UV After Mesh Repair", default=False,
+        description="Run UVPackmaster PACK on the highest Retopo only when Auto Repair changed its mesh or UVs",
     )
     phase2_repair_artifacts: bpy.props.BoolProperty(
         name="Repair Projection Artifacts", default=True,
