@@ -720,6 +720,8 @@ CLASSES = (
 
 
 def register():
+    from . import save_cleanup
+    save_cleanup.register()
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     for handler, callback in (
@@ -736,6 +738,8 @@ def register():
 
 
 def unregister():
+    from . import save_cleanup
+    save_cleanup.unregister()
     if bpy.app.timers.is_registered(_initialize_status_timer):
         bpy.app.timers.unregister(_initialize_status_timer)
     if bpy.app.timers.is_registered(_timer_callback):

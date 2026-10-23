@@ -306,6 +306,12 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                         else:
                             recent_box.label(text=t(context, "no_recent_autosaves"), icon="INFO")
 
+            cleanup_group = draw_session_subgroup(session_box, context, preferences,
+                'show_panel_save_cleanup', 'save_cleanup_group', 'TRASH')
+            if cleanup_group is not None:
+                from .save_cleanup import draw_cleanup
+                draw_cleanup(cleanup_group, context)
+
         header = layout.row(align=True)
         expand_operator = header.operator(
             "object.airetopo_set_all_section_visibility",

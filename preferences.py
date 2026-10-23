@@ -497,6 +497,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     )
     show_panel_save_restart: bpy.props.BoolProperty(name='Save and Restart', default=True)
     show_panel_autosave: bpy.props.BoolProperty(name='Autosave', default=True)
+    show_panel_save_cleanup: bpy.props.BoolProperty(name='Save Cleanup', default=False)
     enable_dev_mode: bpy.props.BoolProperty(
         name="Enable Dev Mode",
         description="Show developer restart controls in the AI Retopo N-panel",
