@@ -166,6 +166,33 @@ def mesh_uv_signature(mesh):
     return digest.digest()
 
 
+def remove_mesh_objects(objects):
+    """Delete objects and only their now-unused mesh datablocks."""
+    count = 0
+    for obj in list(objects):
+        if obj.library:
+            continue
+        mesh = obj.data if obj.type == 'MESH' else None
+        bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh is not None and mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
+        count += 1
+    return count
+
+
+def disable_completed_collection(collection, view_layer):
+    collection.hide_render = True
+    collection.hide_viewport = True
+    def visit(layer):
+        if layer.collection == collection:
+            layer.exclude = True
+        else:
+            for child in layer.children:
+                visit(child)
+    visit(view_layer.layer_collection)
+
+
+
 class Phase2Queue:
     def __init__(self, context, entries, auto_bake, repair, report):
         self.scene, self.view_layer = context.scene, context.view_layer
@@ -176,6 +203,7 @@ class Phase2Queue:
         self.finished, self.stop_requested, self.timer = False, False, None
         self.saved_bake = {}
         self.results = []
+        self.baked_pair = None
 
     def begin(self):
         settings = self.settings
@@ -222,6 +250,7 @@ class Phase2Queue:
     def start_bake(self, context):
         from .rename_objects import ensure_collection_visible_in_view_layer
         high, low = bake_pair(self.collection)
+        self.baked_pair = (high, low)
         if low.data.uv_layers.active is None:
             raise ValueError(f'{low.name}: Auto Bake requires a UV map')
         if not ensure_collection_visible_in_view_layer(context, self.collection):
@@ -259,7 +288,34 @@ class Phase2Queue:
     def complete(self, error=''):
         self.restore_bake_settings()
         if self.collection is not None:
+            if not error:
+                if self.stage == 'BAKE_WAIT' and self.baked_pair is not None:
+                    high, low = self.baked_pair
+                    doomed = []
+                    if self.settings.phase2_delete_high_after_bake:
+                        doomed.append(high)
+                    if self.settings.phase2_delete_lower_retopo:
+                        stage = int(LOW.fullmatch(low.name).group(1))
+                        doomed.extend(obj for obj in self.collection.all_objects
+                            if obj.type == 'MESH' and (match := LOW.fullmatch(obj.name))
+                            and int(match.group(1)) < stage)
+                    # Preserve objects linked outside the completed collection tree.
+                    tree = set()
+                    def visit(col):
+                        tree.add(col)
+                        for child in col.children:
+                            visit(child)
+                    visit(self.collection)
+                    for obj in doomed:
+                        if set(obj.users_collection) <= tree:
+                            remove_mesh_objects([obj])
+                        else:
+                            for col in list(obj.users_collection):
+                                if col in tree:
+                                    col.objects.unlink(obj)
+                disable_completed_collection(self.collection, self.view_layer)
             self.collection.color_tag = 'COLOR_05' if error else 'COLOR_02'
+        self.baked_pair = None
         if error:
             self.settings.phase2_failed_count += 1
             self.report({'WARNING'}, f'{self.entries[self.index]}: {error}')
@@ -440,6 +496,27 @@ class OBJECT_OT_polygroups_phase2_stop(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_clear_backups'
+    bl_label = 'Delete All Backup_Retopo Objects'
+    bl_description = 'Remove all local mesh objects whose names start with Backup_Retopo_'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        settings = context.scene.polygroups_model_preparation_settings
+        return (context.mode == 'OBJECT' and ACTIVE_PHASE2 is None
+            and not settings.phase2_is_running and not settings.batch_is_running
+            and not context.scene.polygroups_baking_settings.bake_task_is_running
+            and not bpy.app.is_job_running('OBJECT_BAKE'))
+
+    def execute(self, context):
+        count = remove_mesh_objects(obj for obj in bpy.data.objects
+            if obj.type == 'MESH' and obj.name.lower().startswith('backup_retopo_'))
+        self.report({'INFO'}, f'Deleted {count} Backup_Retopo objects')
+        return {'FINISHED'}
+
+
 _FILE_SCAN = None
 
 
@@ -562,6 +639,6 @@ class OBJECT_OT_polygroups_phase2_files_move(bpy.types.Operator):
             return {'CANCELLED'}
 
 
-CLASSES = (OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
+CLASSES = (OBJECT_OT_polygroups_phase2_clear_backups, OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
            OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,
            OBJECT_OT_polygroups_phase2_stop)

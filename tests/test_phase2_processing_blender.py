@@ -193,6 +193,8 @@ with TemporaryDirectory() as directory:
     context.scene.render.engine = 'CYCLES'
     context.scene.cycles.device = 'CPU'
     context.scene.cycles.samples = 1
+    settings.phase2_delete_high_after_bake = True
+    settings.phase2_delete_lower_retopo = True
     real_queue = phase2.Phase2Queue(context, entries, True, True, lambda *_: None)
     run(real_queue)
     assert settings.phase2_done_count == 1 and settings.phase2_failed_count == 0, real_queue.results
@@ -200,6 +202,11 @@ with TemporaryDirectory() as directory:
     assert targets
     from polygroups_generator.core.bake_projection import current_mask
     target = targets[-1]
+    completed = next(col for col in target.users_collection if phase2.NUMBERED.fullmatch(col.name))
+    assert not any(phase2.HIGH.fullmatch(obj.name) for obj in completed.all_objects)
+    assert [obj for obj in completed.all_objects if phase2.LOW.fullmatch(obj.name)] == [target]
+    assert completed.hide_render and completed.hide_viewport
+
     normal = bpy.data.images[target[baking.BAKE_NORMAL_IMAGE_PROP]]
     assert current_mask(target, normal) is not None
     assert list(root.rglob('*_Normal.png'))

@@ -82,3 +82,16 @@ existing Save Cleanup scan and clean operators on the entire current project
 folder recursively (including !Blend), targeting only numbered .blendN and
 .blendAutosaveN saves. Cleanup status is displayed separately. The manager does
 not open or resave moved files.
+
+
+Successful Phase 2 items are disabled before the next restore: viewport/render
+visibility is off and their layer collection is excluded in the current view
+layer. Failed items remain visible for inspection.
+
+Delete Highpoly After Successful Bake and Delete Lower Retopo Stages After
+Successful Bake default off. They apply only after a confirmed successful bake;
+restore/repair-only jobs and failed bakes retain their meshes. The baked Retopo
+is always kept. Objects linked outside the completed collection tree are only
+unlinked from that tree, not deleted globally. The separate Delete All
+Backup_Retopo Objects button removes local mesh objects with that prefix and
+supports Undo; shared mesh data is kept while other objects use it.

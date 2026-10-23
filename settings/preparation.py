@@ -192,6 +192,14 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Repack UV After Mesh Repair", default=False,
         description="Run UVPackmaster PACK on the highest Retopo only when Auto Repair changed its mesh or UVs",
     )
+    phase2_delete_high_after_bake: bpy.props.BoolProperty(
+        name="Delete Highpoly After Successful Bake", default=False,
+        description="Remove the baked Highpoly source from the completed Generated collection only after successful rebaking",
+    )
+    phase2_delete_lower_retopo: bpy.props.BoolProperty(
+        name="Delete Lower Retopo Stages After Successful Bake", default=False,
+        description="Remove earlier numbered Retopo stages, keeping the target used by the successful bake",
+    )
     phase2_repair_artifacts: bpy.props.BoolProperty(
         name="Repair Projection Artifacts", default=True,
         description="Enable full projection artifact masks and Autofill for Phase 2 baking",
