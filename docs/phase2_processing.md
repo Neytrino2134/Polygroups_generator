@@ -65,3 +65,20 @@ scene; LOD preparation and rendering are not implemented in this phase yet.
 Validation: `tests/test_phase2_processing_blender.py` runs in background Blender
 and includes a real Cycles bake. `tests/test_phase2_modal_blender.py` runs without
 `--background` and verifies two sequential native bake tasks and exported maps.
+
+
+## Blend file manager
+
+Phase 2 has independent collapsible File Manager, Restore and Processing, and
+Processing Status groups. The file manager scans beside the saved current blend,
+including subfolders. It excludes the open blend and the top-level !Blend folder.
+Move uses that scan and preserves relative subfolders inside !Blend. Existing
+files are not overwritten; changed or missing sources count as errors. Status
+reports moved files and errors. Successful moves enable recursive Phase 2 scanning
+so restored Generated collections can be found in !Blend.
+
+Auto Delete Backup Saves defaults off. When enabled, after moving it invokes the
+existing Save Cleanup scan and clean operators on the entire current project
+folder recursively (including !Blend), targeting only numbered .blendN and
+.blendAutosaveN saves. Cleanup status is displayed separately. The manager does
+not open or resave moved files.

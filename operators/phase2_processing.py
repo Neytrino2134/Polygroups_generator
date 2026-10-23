@@ -4,6 +4,7 @@ import re
 import time
 import hashlib
 from array import array
+from pathlib import Path
 
 import bpy
 from bpy.app.handlers import persistent
@@ -439,5 +440,128 @@ class OBJECT_OT_polygroups_phase2_stop(bpy.types.Operator):
         return {'FINISHED'}
 
 
-CLASSES = (OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,
+_FILE_SCAN = None
+
+
+def blend_manager_root():
+    if not bpy.data.filepath:
+        raise ValueError('Save the active blend file first')
+    current = Path(bpy.data.filepath).resolve(strict=True)
+    return current.parent, current
+
+
+def scan_blend_manager(root, current):
+    destination = root / '!Blend'
+    if destination.is_symlink() or os.path.isjunction(destination):
+        raise ValueError('!Blend must be a regular folder inside the project')
+    records, errors = [], []
+    for folder, dirs, files in os.walk(root, followlinks=False,
+            onerror=lambda error: errors.append(str(error))):
+        dirs[:] = [name for name in dirs if Path(folder, name) != destination
+                   and not Path(folder, name).is_symlink()
+                   and not os.path.isjunction(Path(folder, name))]
+        for name in files:
+            path = Path(folder, name)
+            if path.suffix.lower() != '.blend' or path.is_symlink():
+                continue
+            try:
+                path = path.resolve(strict=True)
+                if path == current or not path.is_relative_to(root):
+                    continue
+                stat = path.stat()
+                records.append((path, stat.st_size, stat.st_mtime_ns))
+            except OSError as error:
+                errors.append(str(error))
+    return records, errors
+
+
+class OBJECT_OT_polygroups_phase2_files_scan(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_files_scan'
+    bl_label = 'Scan Blend Files From Current Folder'
+    bl_description = 'Scan all subfolders; exclude the open file and !Blend destination'
+
+    @classmethod
+    def poll(cls, context):
+        return available(context)
+
+    def execute(self, context):
+        global _FILE_SCAN
+        settings = context.scene.polygroups_model_preparation_settings
+        try:
+            root, current = blend_manager_root()
+            records, errors = scan_blend_manager(root, current)
+            _FILE_SCAN = (root, current, records, len(errors))
+            settings.phase2_files_found = len(records)
+            settings.phase2_files_status = f'Found: {len(records)} blend files / {len(errors)} scan errors'
+            settings.phase2_files_cleanup_status = ''
+        except (ValueError, OSError) as error:
+            _FILE_SCAN = None
+            settings.phase2_files_found = 0
+            settings.phase2_files_status = str(error)
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_phase2_files_move(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_files_move'
+    bl_label = 'Move Blend Files to !Blend'
+    bl_description = 'Move scanned files preserving subfolders; existing destination files are never overwritten'
+
+    @classmethod
+    def poll(cls, context):
+        return available(context)
+
+    def execute(self, context):
+        global _FILE_SCAN
+        settings = context.scene.polygroups_model_preparation_settings
+        try:
+            root, current = blend_manager_root()
+            if _FILE_SCAN is None or _FILE_SCAN[:2] != (root, current):
+                raise ValueError('Scan the current folder before moving files')
+            moved, errors = 0, _FILE_SCAN[3]
+            for source, size, modified in _FILE_SCAN[2]:
+                try:
+                    resolved = source.resolve(strict=True)
+                    if source.is_symlink() or resolved != source or not resolved.is_relative_to(root):
+                        raise ValueError('Source path changed')
+                    stat = source.stat()
+                    if (stat.st_size, stat.st_mtime_ns) != (size, modified):
+                        raise ValueError('Source file changed after scanning')
+                    target = root / '!Blend' / source.relative_to(root)
+                    # Check the final absolute destination before creating or moving.
+                    if not target.resolve().is_relative_to(root / '!Blend'):
+                        raise ValueError('Destination escapes !Blend')
+                    if target.exists():
+                        raise ValueError('Destination already exists')
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    source.rename(target)
+                    moved += 1
+                except (ValueError, OSError) as error:
+                    errors += 1
+                    self.report({'WARNING'}, f'{source.name}: {error}')
+            _FILE_SCAN = None
+            settings.phase2_files_found = 0
+            settings.phase2_files_status = f'{moved} files moved / {errors} errors'
+            if moved:
+                settings.phase2_scan_subfolders = True
+            if settings.phase2_files_cleanup:
+                cleanup = context.window_manager.airetopo_save_cleanup
+                cleanup.directory = str(root)
+                result = bpy.ops.wm.airetopo_scan_save_cleanup()
+                if 'FINISHED' in result and cleanup.file_count:
+                    result = bpy.ops.wm.airetopo_clean_backup_saves()
+                settings.phase2_files_cleanup_status = cleanup.status
+                if 'FINISHED' not in result:
+                    self.report({'WARNING'}, 'Save Cleanup did not complete')
+            self.report({'WARNING'} if errors else {'INFO'}, settings.phase2_files_status)
+            return {'FINISHED'}
+        except (ValueError, OSError) as error:
+            self.report({'ERROR'}, str(error))
+            settings.phase2_files_status = str(error)
+            return {'CANCELLED'}
+
+
+CLASSES = (OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
+           OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,
            OBJECT_OT_polygroups_phase2_stop)

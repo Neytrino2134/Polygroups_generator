@@ -165,6 +165,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     show_batch_start_file: bpy.props.BoolProperty(name="Save and Reset", default=True)
     show_batch_start_autosave: bpy.props.BoolProperty(name="Auto Save", default=True)
     show_batch_start_mode: bpy.props.BoolProperty(name="Import Mode", default=True)
+    phase2_show_files: bpy.props.BoolProperty(name="Blend File Manager", default=True)
+    phase2_show_restore: bpy.props.BoolProperty(name="Restore and Processing", default=True)
+    phase2_show_status: bpy.props.BoolProperty(name="Status", default=True)
+    phase2_files_cleanup: bpy.props.BoolProperty(
+        name="Auto Delete Backup Saves", default=False,
+        description="After moving blend files, use Save Cleanup to delete numbered backups throughout the current project folder",
+    )
+    phase2_files_found: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
+    phase2_files_status: bpy.props.StringProperty(default="Scan required", options={"SKIP_SAVE"})
+    phase2_files_cleanup_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     phase2_scan_subfolders: bpy.props.BoolProperty(
         name="All Blends Including Subfolders", default=False,
         description="Scan all blend files beside the working blend and in subfolders, excluding the working file",
