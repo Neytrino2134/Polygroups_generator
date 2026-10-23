@@ -518,6 +518,49 @@ class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class OBJECT_OT_polygroups_phase2_clear_lower_retopo(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_clear_lower_retopo'
+    bl_label = 'Find and Delete All Lower Retopo Stages'
+    bl_description = 'Keep the highest Retopo_XX for each Highpoly_Generated asset and delete its earlier stages'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return OBJECT_OT_polygroups_phase2_clear_backups.poll(context)
+
+    def execute(self, context):
+        groups = {}
+        for obj in bpy.data.objects:
+            match = LOW.fullmatch(obj.name) if obj.type == 'MESH' and not obj.library else None
+            if match:
+                key = re.sub(r'^Retopo_\d+_', '', obj.name, flags=re.I).lower()
+                groups.setdefault(key, []).append((int(match.group(1)), obj))
+        doomed = []
+        for entries in groups.values():
+            highest = max(stage for stage, obj in entries)
+            doomed.extend(obj for stage, obj in entries if stage < highest)
+        count = remove_mesh_objects(doomed)
+        self.report({'INFO'}, f'Deleted {count} lower Retopo objects; highest stages kept')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_phase2_clear_highpoly(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_clear_highpoly'
+    bl_label = 'Find and Delete All Highpoly_Generated Objects'
+    bl_description = 'Delete all local Highpoly_Generated meshes, including hidden collections'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return OBJECT_OT_polygroups_phase2_clear_backups.poll(context)
+
+    def execute(self, context):
+        count = remove_mesh_objects(obj for obj in bpy.data.objects
+            if obj.type == 'MESH' and HIGH.fullmatch(obj.name))
+        self.report({'INFO'}, f'Deleted {count} Highpoly_Generated objects')
+        return {'FINISHED'}
+
+
 _FILE_SCAN = None
 
 
@@ -640,6 +683,7 @@ class OBJECT_OT_polygroups_phase2_files_move(bpy.types.Operator):
             return {'CANCELLED'}
 
 
-CLASSES = (OBJECT_OT_polygroups_phase2_clear_backups, OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
+CLASSES = (OBJECT_OT_polygroups_phase2_clear_lower_retopo, OBJECT_OT_polygroups_phase2_clear_highpoly,
+           OBJECT_OT_polygroups_phase2_clear_backups, OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
            OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,
            OBJECT_OT_polygroups_phase2_stop)

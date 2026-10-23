@@ -41,4 +41,16 @@ for name in ('Backup_Retopo_A','Backup_Retopo_12_Highpoly_Generated.001'):
 assert bpy.ops.object.polygroups_phase2_clear_backups()=={'FINISHED'}
 assert not any(o.name.startswith('Backup_Retopo_') for o in bpy.data.objects)
 assert keep.name in bpy.data.objects and shared.users==1
+# Manual cleanup works in disabled collections and keeps each asset's max stage.
+s.phase2_delete_high_after_bake=s.phase2_delete_lower_retopo=False
+q,col,objs=fixture(405);names405=[o.name for o in objs];q.complete();q.finish()
+q,col,objs=fixture(406);names406=[o.name for o in objs];q.complete();q.finish()
+assert bpy.ops.object.polygroups_phase2_clear_lower_retopo()=={'FINISHED'}
+for names in (names405,names406):
+ assert names[1] not in bpy.data.objects and names[2] in bpy.data.objects
+ assert names[0] in bpy.data.objects
+assert bpy.ops.object.polygroups_phase2_clear_highpoly()=={'FINISHED'}
+assert not any(phase.HIGH.fullmatch(o.name) for o in bpy.data.objects if o.type=='MESH')
+assert all(names[2] in bpy.data.objects for names in (names405,names406))
+assert keep.name in bpy.data.objects
 print('PHASE2_COMPLETION_CLEANUP_PASSED')

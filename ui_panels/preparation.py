@@ -487,6 +487,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     controls.label(text=t(context, "phase2_bake_hint1"), icon="INFO")
                     controls.label(text=t(context, "phase2_bake_hint2"), icon="BLANK1")
                 controls.separator(type="LINE")
+                controls.operator("object.polygroups_phase2_clear_lower_retopo", icon="TRASH")
+                controls.operator("object.polygroups_phase2_clear_highpoly", icon="TRASH")
                 controls.operator("object.polygroups_phase2_clear_backups", icon="TRASH")
             group = draw_collapsible_box(content, settings, "phase2_show_status",
                 t(context, "phase2_processing_status"), "INFO")

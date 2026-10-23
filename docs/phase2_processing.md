@@ -99,3 +99,9 @@ supports Undo; shared mesh data is kept while other objects use it.
 
 When Only If Changed is off, every successful Auto Repair runs PACK if Repack UV
 After Repair is enabled, even when the mesh and UVs were unchanged.
+
+Manual cleanup buttons also find hidden/disabled objects. Delete Lower Retopo
+Stages groups canonical Retopo_XX_Highpoly_Generated names by asset suffix,
+keeps the maximum numbered stage per asset and deletes only earlier stages.
+Delete All Highpoly_Generated Objects removes canonical Highpoly sources.
+Both support Undo and are disabled while Phase 2 or baking is running.
