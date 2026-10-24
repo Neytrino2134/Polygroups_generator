@@ -22,24 +22,25 @@ Prepare Textures operator.
 
 ## Scene and camera
 
-The section 13 Reset Studio operator prepares the backdrop, camera and lights.
-Foreign cameras/lights and old Scene_/Camera_/Light_ support objects are removed;
-asset meshes are retained. Correct managed studio objects are reset and reused,
-including recovery of tagged objects when their settings pointers were lost.
-With setup disabled an existing active camera is required.
+The section 13 Prepare Scene operator creates missing studio support and reuses
+managed objects, retaining tuned light powers and studio parameters. Foreign
+cameras/lights and old Scene_/Camera_/Light_ support objects are removed when
+scene setup is enabled; asset meshes are retained. Tagged studio pointers are
+recovered before preparation. With setup disabled an active camera is required.
 
-Each asset moves the existing Scene/Camera/Light Position empties. Temporary
-multiview meshes use the same backend as Prepare Selected Multi View. MID and
-LOD0 variants are aligned to a common preview origin without changing their
-stored transforms. A union of the evaluated bounds of all three views and both
-variants is fitted once, also allowing room for the texture pair. Perspective
-camera distance is solved along Y, with X/Z centered on the union bounds; all
-projected corners remain between 10% and 90% of the image. Hero and texture jobs
-reuse the same camera matrix. No refitting occurs within an asset.
+Auto Render uses the same `prepared_queue_job` path as Start Render: asset
+isolation, prepared or temporary Multiview, Scene/Camera/Light Position movement,
+Hero isolation, rendering and cleanup. Original mesh transforms and the exact
+configured offset and rotations are retained. Bounds are measured through this
+same preparation path before rendering, then normalized to each source origin
+so MID and LOD0 share one camera fit. Camera X/Z are centered on the union and
+distance is solved along Y with 10% edge margins. The fit is computed once per
+asset; ordinary queue movement of the position controls is retained. Texture
+jobs keep section 13's dedicated texture rendering behavior.
 
 ## Rendering and stopping
 
-The implementation reuses Reset Studio, Prepare Textures, Scan Queue and the
+The implementation reuses Prepare Scene, Prepare Textures, Scan Queue and the
 same image/Freestyle/texture rendering backend as section 13. Textures can be
 prepared for the entire target set first or immediately before each asset.
 Every asset is isolated; unrelated geometry and prepared previews do not leak
@@ -56,7 +57,7 @@ and the configured studio remain available for use in section 13.
 
 Blender 5.2.2:
 - test_phase2_auto_render_blender.py: real render of two differently sized assets,
-  10% camera margins, identical camera matrices for every job within an asset,
+  10% camera margins, fixed camera fit relative to each source origin,
   26 outputs with Freestyle pass/overlay, both texture preparation modes,
   foreign studio removal, tagged studio recovery without duplicate cameras or
   lights, original transforms/color spaces, switchable groups, injected failure
@@ -70,12 +71,9 @@ Blender 5.2.2:
 
 ## Multiview visibility and transparent companions
 
-Auto Render now treats the configured multiview offset as a minimum. Rotated
-views are measured before camera fitting; left/right silhouettes are separated
-from the front by at least 10% of the largest view width. This prevents large
-meshes from overlapping at the default one-metre offset. The cyclorama bend and
-back wall are moved behind the complete view bounds to avoid scene occlusion.
-Hero still shows only the front view, using the same camera frame.
+Multiview uses section 13's exact configured offset (default one metre) and
+rotations. Auto Render does not add spacing or resize the studio backdrop.
+Hero uses the ordinary queue isolation of the front view and the same camera fit.
 
 Render Transparent PNG (Without Scene) defaults off. Prefix Scene defaults to
 Scene and maps to the existing section 13 transparent-background behavior.
@@ -84,8 +82,8 @@ hidden; the regular image is retained. Freestyle companions are also included
 in existing-output completeness checks. Asset collections and their multiview
 children are protected even if their asset names begin with Scene_.
 
-The regression test test_phase2_multiview_visibility_blender.py reproduces the
-old overlap on a large mesh, checks visible object counts for Multiview/Hero,
-and counts three disconnected alpha silhouettes in the rendered transparent
-Multiview PNG versus one in Hero. It also checks backdrop clearance and prefix
-protection for a Scene_Stones asset.
+The regression test test_phase2_multiview_visibility_blender.py checks visible
+object counts and three transparent silhouettes versus one in Hero, together
+with Scene_ prefix protection. test_auto_render_shared_queue_blender.py compares
+manual and automatic queue transforms and output pixels, verifies the fixed
+camera fit, and measures real light contribution from a manually configured rig.

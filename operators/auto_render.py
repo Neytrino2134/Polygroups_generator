@@ -131,88 +131,21 @@ def scan_jobs(context, collections, include_textures):
     settings = context.scene.polygroups_render_settings
     names = {col.name for col in collections}
     settings.is_running = False
-    prepared = [(obj, obj.get(rq.MULTIVIEW_PREPARED_PROP)) for obj in context.scene.objects
-                if obj.get(rq.MULTIVIEW_PREPARED_PROP)]
     try:
-        # Explicit Auto Render toggles override legacy prepared multiview geometry.
-        for obj, flag in prepared:
-            obj[rq.MULTIVIEW_PREPARED_PROP] = False
         result = bpy.ops.object.polygroups_scan_render_queue('EXEC_DEFAULT')
         if 'FINISHED' not in result:
             raise RuntimeError('Scan Queue failed')
         return [job for job in rq._load_queue(settings) if job['collection'] in names
                 and (include_textures or not job.get('texture_kind'))]
     finally:
-        for obj, flag in prepared:
-            obj[rq.MULTIVIEW_PREPARED_PROP] = flag
         settings.is_running = True
 
 
-def spread_multiview(context, views):
-    """Keep the requested center offset as a minimum; never overlap side silhouettes."""
-    context.view_layer.update()
-    front, left, right = views
-    def bounds(obj):
-        points, _, _ = selected_bounds(context, [obj])
-        return min(p.x for p in points), max(p.x for p in points)
-    fmin, fmax = bounds(front)
-    lmin, lmax = bounds(left)
-    rmin, rmax = bounds(right)
-    gap = max(.01, .1 * max(fmax-fmin, lmax-lmin, rmax-rmin))
-    for obj, shift in ((left, min(0, fmin-gap-lmax)), (right, max(0, fmax+gap-rmin))):
-        matrix = obj.matrix_world.copy()
-        matrix.translation.x += shift
-        obj.matrix_world = matrix
-    context.view_layer.update()
-
-
-def frame_asset(context, objects, origin):
-    """One perspective frame, shared by every variant and Hero of this asset."""
+def render_asset_job(context, job):
+    """Run Start Render's preparation and backend, without refitting the camera."""
     settings = context.scene.polygroups_render_settings
-    camera = context.scene.camera
-    if camera is None:
-        raise ValueError('Enable Scene and Camera Setup or provide an active camera')
-    points, center, size = selected_bounds(context, objects)
-    if settings.studio_camera_aim and camera == settings.studio_camera:
-        aim = settings.studio_camera_aim
-        matrix = aim.matrix_world.copy()
-        matrix.translation = center
-        aim.matrix_world = matrix
-    fit_camera(context, camera, points, center, size)
-    context.view_layer.update()
-    return points
-
-
-def render_asset_job(context, job, views, origin):
-    """Same rendering backend as Render Queue, without moving/refitting the camera."""
-    if not rq._prepare_scene_for_job(job):
-        raise RuntimeError('Missing render job: ' + job['object'])
-    source = bpy.data.objects.get(job['object'])
-    matrices = []
-    if not job.get('texture_kind'):
-        current_views = views.get(source, [])
-        if current_views:
-            source.hide_render = source.hide_viewport = True
-            for obj in current_views:
-                show = job.get('view_mode') != 'Hero' or rq._base_name(obj.name).endswith('_MV_Front')
-                obj.hide_render = obj.hide_viewport = not show
-                for col in obj.users_collection:
-                    rq._set_collection_enabled(col, True)
-        else:
-            matrices.append((source, source.matrix_world.copy()))
-            matrix = source.matrix_world.copy()
-            matrix.translation = origin
-            source.matrix_world = matrix
-    context.view_layer.update()
-    for obj in views.get(source, []):
-        if not obj.hide_render and obj.name in context.view_layer.objects:
-            obj.hide_set(False)
-    try:
-        rq._render_current_job(context, context.scene.polygroups_render_settings, job)
-    finally:
-        for obj, matrix in matrices:
-            obj.matrix_world = matrix
-        context.view_layer.update()
+    with rq.prepared_queue_job(context, settings, job):
+        rq._render_current_job(context, settings, job)
 
 
 class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator):
@@ -241,7 +174,9 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
         if p.phase2_auto_scene:
             replace_foreign_studio(context)
             recover_managed_studio(context)
-            if 'FINISHED' not in bpy.ops.render.polygroups_reset_studio('EXEC_DEFAULT', scope='ALL'):
+            # Keep a working section-13 studio's tuned lights and settings.
+            # Prepare Scene creates missing support and updates existing support.
+            if 'FINISHED' not in bpy.ops.render.polygroups_prepare_studio('EXEC_DEFAULT'):
                 raise RuntimeError('Scene Setup failed')
         if context.scene.camera is None:
             raise ValueError('The scene needs an active camera')
@@ -259,14 +194,15 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
         if s.freestyle_edges:
             rq._mark_freestyle_edges([obj for col, sources in assets for obj in sources], True)
         snapshot = rq._snapshot_visibility()
-        all_views, done, history = [], 0, []
+        done, history = 0, []
         completed = False
         try:
             s.is_running, s.stop_requested = True, False
             if p.phase2_auto_textures and p.phase2_auto_texture_prepare == 'ALL':
                 prepare_textures(context, [col for col, sources in assets])
             # Exact expected count, including only available linked texture pairs.
-            expected = sum(len(sources) * (2 if s.multiview_render and s.multiview_render_hero else 1)
+            expected = sum(sum(2 if s.multiview_render_hero and
+                (s.multiview_render or rq._prepared_multiview_views(source)) else 1 for source in sources)
                 + int(p.phase2_auto_textures and collection_textures(col) is not None)
                 for col, sources in assets)
             yield .02, f'Auto Render: {len(assets)} assets | 2048 x 1152 | Eevee'
@@ -280,60 +216,29 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                 s.total_count, s.collection_count = expected, len(assets)
                 s.queue_scanned = True
                 s.queue_index = done
-                # MID and LOD0 variants share an origin in the preview, without
-                # changing the saved arrangement of the original meshes.
+                # Use exactly Start Render's setup to measure the actual views.
+                # No alternate copies, rotations, spacing or light placement.
                 origin = sources[0].matrix_world.translation.copy()
-                studio.position_studio_at_origin(context, origin)
-                views, frame_objects = {}, []
-                for source in sources:
-                    if s.multiview_render:
-                        generated = rq._multiview_views(source, col, rq._asset_name_from_collection(col), s)
-                        # Copies still carry the source's cached world matrix until
-                        # Blender evaluates their new rotation and offset.
-                        context.view_layer.update()
+                points = []
+                for job in jobs:
+                    if job.get('texture_kind') or job.get('view_mode') == 'Hero':
+                        continue
+                    with rq.prepared_queue_job(context, s, job) as objects:
+                        source = bpy.data.objects[job['object']]
+                        bounds, _, _ = selected_bounds(context, objects)
                         offset = origin - source.matrix_world.translation
-                        for obj in generated:
-                            matrix = obj.matrix_world.copy()
-                            matrix.translation += offset
-                            obj.matrix_world = matrix
-                        spread_multiview(context, generated)
-                        views[source] = generated
-                        all_views.extend(generated)
-                        frame_objects.extend(generated)
-                    else:
-                        # Virtual points use the same aligned origin as the render.
-                        frame_objects.append(source)
-                planes = texture_planes(col) if p.phase2_auto_textures else []
-                for plane in planes:
-                    plane.location = origin + Vector((-.7 if plane.get('polygroups_texture_plane') == 'BaseColor' else .7, 0, .5))
-                frame_objects.extend(planes)
-                context.view_layer.update()
-                if p.phase2_auto_scene and p.phase2_auto_camera:
-                    virtual_matrices = []
-                    try:
-                        if not s.multiview_render:
-                            for source in sources:
-                                virtual_matrices.append((source, source.matrix_world.copy()))
-                                matrix = source.matrix_world.copy();matrix.translation = origin
-                                source.matrix_world = matrix
-                        context.view_layer.update()
-                        frame_asset(context, frame_objects, origin)
-                    finally:
-                        for source, matrix in virtual_matrices:
-                            source.matrix_world = matrix
-                    # Place the studio floor under the lowest view, using its root.
-                    points, center, size = selected_bounds(context, frame_objects)
-                    root = s.studio_scene_position
-                    if root:
-                        matrix = root.matrix_world.copy();matrix.translation.z = min(point.z for point in points)
-                        root.matrix_world = matrix
-                    s.studio_width = max(6, size.x * 2)
-                    s.studio_height = max(4, size.z * 2)
-                    # Keep the cyclorama bend behind even large rotated views.
-                    margin = max(.1, size.y * .1)
-                    s.studio_distance = max(3, max(point.y for point in points) - origin.y + s.studio_radius + margin)
-                    s.studio_depth = max(8, origin.y - min(point.y for point in points) + margin)
-                    studio.update_backdrop(s, context)
+                        points.extend(point + offset for point in bounds)
+                studio.position_studio_at_origin(context, origin)
+                if p.phase2_auto_camera and points:
+                    minimum = Vector(tuple(min(v[i] for v in points) for i in range(3)))
+                    maximum = Vector(tuple(max(v[i] for v in points) for i in range(3)))
+                    center = (minimum + maximum) * .5
+                    if s.studio_camera_aim and context.scene.camera == s.studio_camera:
+                        matrix = s.studio_camera_aim.matrix_world.copy()
+                        matrix.translation = center
+                        s.studio_camera_aim.matrix_world = matrix
+                    fit_camera(context, context.scene.camera, points, center, maximum - minimum)
+                    context.view_layer.update()
                 yield .02 + .98 * done/max(1, expected), f'{ordinal+1}/{len(assets)} | Camera ready: {col.name}'
                 for job in jobs:
                     if s.stop_requested:
@@ -352,16 +257,13 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                             outputs += [rq._freestyle_pass_path(transparent), rq._freestyle_overlay_path(transparent)]
                     skip = s.skip_existing and not s.overwrite_existing and all(os.path.exists(path) for path in outputs)
                     if not skip:
-                        render_asset_job(context, job, views, origin)
+                        render_asset_job(context, job)
                     done += 1;s.queue_index = done;rq._sync_progress(s)
                     yield .02 + .98 * done/max(1, expected), f'Auto Render {done}/{expected} | {col.name}'
-                rq._remove_multiview_objects([obj for group in views.values() for obj in group])
-                all_views.clear()
                 rq._set_asset_collection_enabled(col, False)
             completed = True
             s.status = f'Auto Render complete: {done} jobs / {len(assets)} assets'
         finally:
-            rq._remove_multiview_objects(all_views)
             rq._restore_visibility(snapshot)
             s.is_running = False
             if not completed:

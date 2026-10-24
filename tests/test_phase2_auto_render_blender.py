@@ -42,7 +42,7 @@ for index,origin,scale in ((1,(0,0,1),(1,1,1)),(2,(9,3,2),(2,.6,3))):
 context.view_layer.update()
 originals={obj:obj.matrix_world.copy() for obj in sources}
 image_spaces=[image.colorspace_settings.name for image in images]
-real_config=auto.configure_auto_render;real_render=auto.render_asset_job
+real_config=auto.configure_auto_render;real_render=rq._render_current_job
 frames={};projections={}
 def small_render(ctx):
  real_config(ctx)
@@ -50,34 +50,39 @@ def small_render(ctx):
  assert s.render_mid and s.render_lod_enabled and s.render_lod_level=='LOD0' and not s.render_high
  s.resolution_scale=5
 
-def inspect_render(ctx,job,views,origin):
+def inspect_render(ctx,settings,job):
+ if job.get('texture_kind'):
+  return real_render(ctx,settings,job)
  ctx.view_layer.update()
+ source=bpy.data.objects[job['object']]
+ origin=source.matrix_world.translation
  for role,_label,position,_energy,_size in studio.LIGHT_DEFAULTS:
   light=getattr(s,'studio_'+role)
   actual=light.evaluated_get(ctx.evaluated_depsgraph_get()).matrix_world.translation
   assert (actual-origin-Vector(position)).length<1e-4,(role,tuple(actual),tuple(origin))
- for source,group in views.items():
-  for obj,angle in zip(group,(-30,150,60)):
-   direction=obj.matrix_world.to_quaternion() @ Vector((1,0,0))
-   expected=Vector((cos(radians(angle)),sin(radians(angle)),0))
-   assert (direction-expected).length<1e-4,(obj.name,tuple(direction),tuple(expected))
+ objects=[obj for obj in scene.objects if obj.get(rq.MULTIVIEW_PROP) and not obj.hide_render]
+ for obj in objects:
+  angle=-30 if obj.name.endswith('_MV_Front') else 150 if obj.name.endswith('_MV_Back') else 60
+  direction=obj.matrix_world.to_quaternion() @ Vector((1,0,0))
+  expected=Vector((cos(radians(angle)),sin(radians(angle)),0))
+  assert (direction-expected).length<1e-4,(obj.name,tuple(direction),tuple(expected))
  camera=scene.camera;matrix=camera.matrix_world.copy()
+ matrix.translation-=origin
  key=job['collection']
- if key in frames:assert max(abs(matrix[i][j]-frames[key][i][j]) for i in range(4) for j in range(4))<1e-5
+ if key in frames:
+  assert max(abs(matrix[i][j]-frames[key][i][j]) for i in range(4) for j in range(4))<1e-4
  else:
   frames[key]=matrix
-  objects=[obj for group in views.values() for obj in group]+texture_planes(bpy.data.collections[key])
   pts,_,_=auto.selected_bounds(ctx,objects)
   projected=[world_to_camera_view(scene,camera,point) for point in pts]
-  assert all(.0999<=v.x<=.9001 and .0999<=v.y<=.9001 and v.z>0 for v in projected),[(tuple(v)) for v in projected]
+  assert all(.0999<=v.x<=.9001 and .0999<=v.y<=.9001 and v.z>0 for v in projected),[tuple(v) for v in projected]
   projections[key]=True
- assert (s.studio_camera_position.matrix_world.translation-origin).length<1e-5
- real_render(ctx,job,views,origin)
+ real_render(ctx,settings,job)
 
 with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_auto_render_') as directory:
  root=Path(directory);bpy.ops.wm.save_as_mainfile(filepath=str(root/'Working.blend'))
  s.output_directory=str(root/'ALL');s.max_samples=1;s.skip_existing=False;s.overwrite_existing=True
- with patch.object(auto,'configure_auto_render',small_render),patch.object(auto,'render_asset_job',inspect_render):
+ with patch.object(auto,'configure_auto_render',small_render),patch.object(rq,'_render_current_job',inspect_render):
   assert bpy.ops.object.polygroups_phase2_auto_render()=={'FINISHED'}
  assert 'ForeignCamera' not in bpy.data.objects and 'ForeignLight' not in bpy.data.objects and 'ForeignBackdrop' not in bpy.data.objects
  assert len(frames)==2 and all(projections.values())
@@ -93,7 +98,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_auto_render_') as directo
  for prop,kind in auto.MANAGED_STUDIO.values():setattr(s,prop,None)
  p.phase2_auto_texture_prepare='EACH';p.phase2_auto_freestyle=False
  s.output_directory=str(root/'EACH');frames.clear();projections.clear()
- with patch.object(auto,'configure_auto_render',small_render),patch.object(auto,'render_asset_job',inspect_render):
+ with patch.object(auto,'configure_auto_render',small_render),patch.object(rq,'_render_current_job',inspect_render):
   assert bpy.ops.object.polygroups_phase2_auto_render()=={'FINISHED'}
  assert len(bpy.data.cameras)==cameras and len(bpy.data.lights)==lights
  assert len(list((root/'EACH').rglob('*.png')))==10

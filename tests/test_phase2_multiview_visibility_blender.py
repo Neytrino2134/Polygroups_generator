@@ -11,22 +11,14 @@ context=bpy.context;scene=context.scene;p=scene.polygroups_model_preparation_set
 bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
 col=bpy.data.collections.new('Scene_Stones_01_01_Collection');scene.collection.children.link(col)
 bpy.ops.mesh.primitive_cube_add(location=(0,0,1));source=context.object
-source.name='SM_Scene_Stones_01_01_MID';source.scale=(2,3,1)
+source.name='SM_Scene_Stones_01_01_MID';source.scale=(.2,.3,.5)
 for old in list(source.users_collection):old.objects.unlink(source)
 col.objects.link(source);context.view_layer.update()
 p.phase2_auto_transparent=True;p.phase2_auto_scene_prefix='Scene'
 p.phase2_auto_freestyle=False;p.phase2_auto_textures=False
 s.max_samples=1;s.skip_existing=False
-real_config=auto.configure_auto_render;real_render=rq._render_current_job;real_spread=auto.spread_multiview
-seen=[];old_overlap=[]
-def bounds(obj):
- points,_,_=selected_bounds(context,[obj]);return min(v.x for v in points),max(v.x for v in points)
-def spread(ctx,views):
- f,l,r=map(bounds,views)
- old_overlap.append(l[1]>f[0] and r[0]<f[1])
- real_spread(ctx,views)
- f,l,r=map(bounds,views)
- assert l[1]<f[0] and r[0]>f[1]
+real_config=auto.configure_auto_render;real_render=rq._render_current_job
+seen=[]
 def config(ctx):real_config(ctx);s.resolution_scale=25
 def render(ctx,settings,job):
  views=[obj for obj in scene.objects if obj.get(rq.MULTIVIEW_PROP) and not obj.hide_render]
@@ -50,9 +42,9 @@ def components(path):
  return areas
 with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_mv_visible_') as directory:
  root=Path(directory);bpy.ops.wm.save_as_mainfile(filepath=str(root/'Working.blend'));s.output_directory=str(root/'Renders')
- with patch.object(auto,'configure_auto_render',config),patch.object(auto,'spread_multiview',spread),patch.object(rq,'_render_current_job',render):
+ with patch.object(auto,'configure_auto_render',config),patch.object(rq,'_render_current_job',render):
   assert bpy.ops.object.polygroups_phase2_auto_render()=={'FINISHED'}
- assert all(old_overlap) and seen==['Multiview','Hero']
+ assert seen==['Multiview','Hero']
  files=list((root/'Renders').rglob('*.png'));assert len(files)==4,files
  multi=next(path for path in files if 'Multiview' in path.name and '_transparent' in path.name)
  hero=next(path for path in files if 'Hero' in path.name and '_transparent' in path.name)

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from contextlib import contextmanager
 from datetime import datetime
 from math import radians
 
@@ -1117,6 +1118,36 @@ def _finish_render_job(job, multiview_objects=None):
         _set_asset_collection_enabled(collection, False)
 
 
+@contextmanager
+def prepared_queue_job(context, settings, job):
+    """The shared Start Render setup, placement, Hero isolation and cleanup."""
+    if not _prepare_scene_for_job(job):
+        raise ValueError('Missing render job: ' + job.get('object', ''))
+    source = bpy.data.objects.get(job.get('object', ''))
+    temporary = []
+    snapshot = []
+    try:
+        if not job.get('texture_kind') and source is not None:
+            if settings.multiview_render or _prepared_multiview_views(source):
+                temporary = _create_multiview_setup(job)
+            views = temporary or _prepared_multiview_views(source)
+            central = next((obj for obj in views if _base_name(obj.name).endswith('_MV_Front')), source)
+            context.view_layer.update()
+            from .render_studio import position_studio_at_origin
+            snapshot = position_studio_at_origin(context, central.matrix_world.translation.copy())
+            if job.get('view_mode') == 'Hero':
+                _isolate_hero_view(source, temporary)
+            context.view_layer.update()
+        else:
+            views = []
+        yield views or ([source] if source is not None else [])
+    finally:
+        for root, matrix in snapshot:
+            root.matrix_world = matrix
+        context.view_layer.update()
+        _finish_render_job(job, temporary)
+
+
 def _configure_render(scene, settings, job, filepath=None, file_format=None, freestyle=False):
     file_format = file_format or settings.image_format
     _apply_render_engine(scene, settings, freestyle)
@@ -1575,36 +1606,15 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         settings.current_object = job.get("object", "")
         settings.last_output_path = job.get("output_path", "")
         settings.status = f"Rendering {settings.current_object}"
-        source = bpy.data.objects.get(job.get("object", ""))
-        use_multiview = not job.get("texture_kind") and (settings.multiview_render or (source is not None and
-                                                     bool(_prepared_multiview_views(source))))
-        multiview_objects = _create_multiview_setup(job) if use_multiview else []
-        studio_snapshot = []
         try:
-            if not job.get('texture_kind') and source is not None:
-                from .render_studio import position_studio_at_origin
-                views = multiview_objects or _prepared_multiview_views(source)
-                central = next((obj for obj in views if _base_name(obj.name).endswith('_MV_Front')), source)
-                context.view_layer.update()
-                studio_snapshot = position_studio_at_origin(context, central.matrix_world.translation.copy())
-            if job.get("view_mode") == "Hero":
-                _isolate_hero_view(source, multiview_objects)
-            # The actual render is synchronous; paint the queue status before
-            # it blocks the modal event loop for the next image.
-            if not bpy.app.background:
-                bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
-            _render_current_job(context, settings, job)
+            with prepared_queue_job(context, settings, job):
+                if not bpy.app.background:
+                    bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
+                _render_current_job(context, settings, job)
         except Exception as error:
-            _finish_render_job(job, multiview_objects)
             self._finish(context, f"Render failed: {error}")
             self.report({"ERROR"}, f"Render failed: {error}")
             return {"CANCELLED"}
-        finally:
-            for root, matrix in studio_snapshot:
-                root.matrix_world = matrix
-            context.view_layer.update()
-            if settings.is_running:
-                _finish_render_job(job, multiview_objects)
 
         settings.queue_index += 1
         _sync_progress(settings)
