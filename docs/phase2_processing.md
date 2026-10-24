@@ -169,3 +169,15 @@ test_phase2_periodic_autosave_blender.py checks actual checkpoints at N=2,
 failure exclusion, saved cleanup/visibility, and save-failure stopping.
 test_phase2_retopo01_blender.py checks one save only after both real native
 bakes and all secondary processing have completed.
+
+## Retopo backups on restore
+
+Skip Retopo Backup Objects in Restore and Processing defaults off. The Phase 2
+restore appends saved collection contents, which may already contain
+Backup_Retopo objects originally created by cutter operations. When enabled,
+the restore omits these objects from the appended collection hierarchy before
+processing. Existing scene backups and mesh data shared with real asset objects
+are preserved. Source blend files and manual cutter backup behavior are unchanged.
+
+test_phase2_skip_retopo_backups_blender.py checks root and nested backups, name
+collisions with existing backups, shared geometry, and both checkbox states.

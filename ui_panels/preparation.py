@@ -458,6 +458,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     warning.alert = True
                     warning.label(text=t(context, "phase2_clear_hint1"), icon="ERROR")
                     warning.label(text=t(context, "phase2_clear_hint2"), icon="BLANK1")
+                controls.prop(settings, 'phase2_skip_retopo_backups')
                 controls.prop(settings, "phase2_mesh_auto_repair", text=t(context, "phase2_mesh_auto_repair"))
                 repack = controls.row()
                 repack.enabled = settings.phase2_mesh_auto_repair

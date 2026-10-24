@@ -89,6 +89,17 @@ def restore_collection(filepath, source_name, scene):
                 raise ValueError(f'Missing collection: {source_name}')
             target.collections = [source_name]
         collection = target.collections[0]
+        if scene.polygroups_model_preparation_settings.phase2_skip_retopo_backups:
+            imported_collections = set(bpy.data.collections) - before['collections']
+            for obj in list(collection.all_objects):
+                if not obj.name.lower().startswith('backup_retopo_'):
+                    continue
+                for owner in list(obj.users_collection):
+                    if owner in imported_collections:
+                        owner.objects.unlink(obj)
+                # Never delete existing scene data or shared mesh datablocks.
+                if obj not in before['objects'] and not obj.users_collection:
+                    remove_mesh_objects([obj])
         objects = sorted(collection.all_objects, key=lambda obj: import_path_sort_key(obj.name))
         highs = [obj for obj in objects if obj.type == 'MESH' and HIGH.fullmatch(obj.name)]
         lows = [(obj, int(LOW.fullmatch(obj.name).group(1))) for obj in objects
