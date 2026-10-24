@@ -19,6 +19,8 @@ high=mesh('Highpoly_Generated.001',col)
 low=mesh('Retopo_02_Highpoly_Generated.001',col)
 wrong=mesh('Highpoly_Generated.002',other)
 s=ctx.scene.polygroups_resculpting_settings;s.multires_levels=1
+assert s.apply_shrinkwrap
+s.apply_shrinkwrap=False
 high.hide_viewport=high.hide_render=high.hide_select=True;high.hide_set(True)
 bpy.ops.object.select_all(action='DESELECT');low.select_set(True);wrong.select_set(True)
 ctx.view_layer.objects.active=low
@@ -35,6 +37,12 @@ assert high.hide_viewport and high.hide_render and high.hide_get() and high.hide
 assert not high.select_get() and ctx.active_object==low and low.select_get()
 assert bpy.ops.object.polygroups_setup_resculpting()=={'FINISHED'}
 assert len(low.modifiers)==2
+s.apply_shrinkwrap=True
+base_vertices=len(low.data.vertices)
+assert bpy.ops.object.polygroups_setup_resculpting()=={'FINISHED'}
+assert len(low.data.vertices)==base_vertices
+assert low.modifiers.get(sculpt.SHRINKWRAP_MODIFIER_NAME) is None
+assert low.modifiers.get(sculpt.MULTIRES_MODIFIER_NAME) is not None
 # A namesake outside the matching collection cannot be used as the source.
 other.objects.link(high);col.objects.unlink(high)
 assert bpy.ops.object.polygroups_setup_resculpting()=={'CANCELLED'}

@@ -275,6 +275,7 @@ class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
             column = content.column(align=True)
             column.prop(settings, "multires_levels", text=t(context, "multires_levels"))
             column.prop(settings, "shrinkwrap_limit", text=t(context, "shrinkwrap_limit"))
+            column.prop(settings, 'apply_shrinkwrap')
             column.prop(settings, "shrinkwrap_offset", text=t(context, "shrinkwrap_offset"))
 
         content = draw_topic(layout, context, "sculpt_1", 'Prepare Sculpting', "SCULPTMODE_HLT")

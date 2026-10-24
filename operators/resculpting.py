@@ -211,7 +211,11 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             lowpoly.select_set(True)
             context.view_layer.update()
             add_multires_modifier(context, lowpoly, settings.multires_levels)
-            add_shrinkwrap_modifier(lowpoly, highpoly, settings.shrinkwrap_limit, settings.shrinkwrap_offset)
+            shrinkwrap = add_shrinkwrap_modifier(lowpoly, highpoly, settings.shrinkwrap_limit, settings.shrinkwrap_offset)
+            if settings.apply_shrinkwrap:
+                result = bpy.ops.object.modifier_apply(modifier=shrinkwrap.name)
+                if 'FINISHED' not in result:
+                    raise RuntimeError('Could not apply Shrinkwrap')
         finally:
             highpoly.select_set(False)
             highpoly.hide_viewport = highpoly.hide_render = True

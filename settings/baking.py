@@ -256,6 +256,8 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
 
 
 class POLYGROUPS_PG_resculpting_settings(bpy.types.PropertyGroup):
+    apply_shrinkwrap: bpy.props.BoolProperty(name="Apply Shrinkwrap", default=True,
+        description="Apply Shrinkwrap during Setup Resculpting")
     multires_levels: bpy.props.IntProperty(
         name="Multires Levels",
         description="Subdivision levels to create on the active lowpoly mesh",
