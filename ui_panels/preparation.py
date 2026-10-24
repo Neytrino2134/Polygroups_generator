@@ -532,6 +532,16 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                             controls.prop(final_settings, 'unreal_gltf_mode')
                     controls.operator('object.polygroups_phase2_export', text='Export', icon='EXPORT')
                     controls.label(text=settings.phase2_export_status)
+                blend_export = draw_collapsible_box(final, settings, 'phase2_show_export_blend', 'Export Blend Files', 'FILE_BLEND')
+                if blend_export is not None:
+                    controls = blend_export.column(align=True)
+                    controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    controls.prop(settings, 'phase2_blend_export_pack')
+                    controls.label(text='One clean blend per *_Collection in !Blend', icon='INFO')
+                    row = controls.row(align=True)
+                    row.operator('object.polygroups_phase2_export_blend', text='Export Blend Files', icon='EXPORT')
+                    row.operator('object.polygroups_phase2_open_blend_folder', text='', icon='FILE_FOLDER')
+                    controls.label(text=settings.phase2_blend_export_status)
             auto = draw_collapsible_box(content, settings, "phase2_show_auto_render", "Auto Render", "RENDER_STILL")
             if auto is not None:
                 config = auto.column(align=True)

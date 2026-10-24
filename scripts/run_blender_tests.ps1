@@ -3,7 +3,7 @@
 param(
     [string]$Suite = 'ui-bake',
     [string[]]$Tests,
-    [string]$BlenderDir = 'D:\Blender Library\Blender\daily\blender-5.2.0-stable+v52.fbe6228777e7-windows.amd64-release'
+    [string]$BlenderDir = 'D:\Blender Library\Blender\stable\blender-5.2.2-lts.d13f752e3b9c'
 )
 $root = Split-Path $PSScriptRoot -Parent
 $python = Join-Path $BlenderDir '5.2\python\bin\python.exe'

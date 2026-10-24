@@ -47,3 +47,16 @@ shell are removed; child collections are kept reachable.
 - test_batch_finalization_blender.py checks existing LOD and rename workflows.
 - test_unreal_lod_export_blender.py checks existing multi-format texture export.
 - test_unity_export_workflow_blender.py checks existing Unity workflow/presets.
+
+## Export Blend Files
+
+Batch Finalization has a second export box, Export Blend Files. Each top-level
+*_Collection asset with objects is written to !Blend beside the saved blend as
+its own file, named like the collection without _Collection (Stone_01_01.blend).
+Every file holds a Scene, Camera, Light and the one collection; only the
+textures used by that collection's materials are packed (Pack Textures, on by
+default), and temporary packing is removed from the working file afterwards.
+Existing files with the same name are overwritten. Open !Blend Folder shows the
+result. Implementation: operators/phase2_blend_export.py. The scene is derived
+from a copy of the active scene because bpy.data.scenes.new() crashes
+libraries.write in Blender 5.2. Test: test_phase2_blend_export_blender.py.
