@@ -308,7 +308,8 @@ class Phase2Queue:
                         stage = int(LOW.fullmatch(low.name).group(1))
                         doomed.extend(obj for obj in self.collection.all_objects
                             if obj.type == 'MESH' and (match := LOW.fullmatch(obj.name))
-                            and int(match.group(1)) < stage and obj != self.retopo01)
+                            and int(match.group(1)) < stage
+                            and not (self.settings.phase2_keep_retopo01 and int(match.group(1)) == 1))
                     # Preserve objects linked outside the completed collection tree.
                     tree = set()
                     def visit(col):
@@ -578,7 +579,7 @@ class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
 class OBJECT_OT_polygroups_phase2_clear_lower_retopo(bpy.types.Operator):
     bl_idname = 'object.polygroups_phase2_clear_lower_retopo'
     bl_label = 'Find and Delete All Lower Retopo Stages'
-    bl_description = 'Keep the highest Retopo_XX for each Highpoly_Generated asset and delete its earlier stages'
+    bl_description = 'Delete earlier Retopo stages, keeping the highest and optionally Retopo_01'
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -595,7 +596,8 @@ class OBJECT_OT_polygroups_phase2_clear_lower_retopo(bpy.types.Operator):
         doomed = []
         for entries in groups.values():
             highest = max(stage for stage, obj in entries)
-            doomed.extend(obj for stage, obj in entries if stage < highest)
+            keep_first = context.scene.polygroups_model_preparation_settings.phase2_keep_retopo01
+            doomed.extend(obj for stage, obj in entries if stage < highest and not (keep_first and stage == 1))
         count = remove_mesh_objects(doomed)
         context.scene.polygroups_model_preparation_settings.phase2_status = f'Deleted {count} lower Retopo objects; highest stages kept'
         context.scene.polygroups_model_preparation_settings.phase2_final_progress = 0

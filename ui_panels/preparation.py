@@ -475,12 +475,19 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                         controls.label(text='Retopo_01: Repack ignores Only If Changed', icon='INFO')
                     controls.prop(settings, "phase2_delete_high_after_bake")
                     controls.prop(settings, "phase2_delete_lower_retopo")
+                    keep = controls.row()
+                    keep.enabled = settings.phase2_delete_lower_retopo
+                    keep.prop(settings, 'phase2_keep_retopo01')
                     controls.label(text=t(context, "phase2_bake_hint1"), icon="INFO")
                     controls.label(text=t(context, "phase2_bake_hint2"), icon="BLANK1")
-                controls.separator(type="LINE")
-                controls.operator("object.polygroups_phase2_clear_lower_retopo", icon="TRASH")
-                controls.operator("object.polygroups_phase2_clear_highpoly", icon="TRASH")
-                controls.operator("object.polygroups_phase2_clear_backups", icon="TRASH")
+                manual = draw_collapsible_box(group, settings, 'phase2_show_manual_cleanup', 'Manual Cleanup', 'TRASH')
+                if manual is not None:
+                    buttons = manual.column(align=True)
+                    buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    buttons.prop(settings, 'phase2_keep_retopo01')
+                    buttons.operator("object.polygroups_phase2_clear_lower_retopo", icon="TRASH")
+                    buttons.operator("object.polygroups_phase2_clear_highpoly", icon="TRASH")
+                    buttons.operator("object.polygroups_phase2_clear_backups", icon="TRASH")
             final = draw_collapsible_box(content, settings, "phase2_show_finalization", "Batch Finalization", "MOD_DECIM")
             if final is not None:
                 preparation = draw_collapsible_box(final, settings, 'phase2_show_lods_rename', 'Prepare LODs / Rename', 'MOD_DECIM')

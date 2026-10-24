@@ -252,6 +252,9 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Delete Lower Retopo Stages After Successful Bake", default=False,
         description="Remove earlier numbered Retopo stages, keeping the target used by the successful bake",
     )
+    phase2_keep_retopo01: bpy.props.BoolProperty(name="Keep Retopo_01 (Resculpted)", default=True,
+        description="Preserve Retopo_01 during automatic and manual lower-stage cleanup")
+    phase2_show_manual_cleanup: bpy.props.BoolProperty(name="Manual Cleanup", default=False)
     phase2_repair_artifacts: bpy.props.BoolProperty(
         name="Repair Projection Artifacts", default=True,
         description="Enable full projection artifact masks and Autofill for Phase 2 baking",

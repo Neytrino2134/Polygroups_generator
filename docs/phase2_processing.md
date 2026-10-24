@@ -129,7 +129,9 @@ Order: highest repair/conditional repack -> highest bake -> optional Retopo_01
 resculpt -> optional Retopo_01 repair/forced repack/bake -> successful cleanup.
 Requested follow-up processing requires exactly one Retopo_01 in the restored
 collection. Missing targets or failures retain the highpoly and lower stages.
-An enabled follow-up target is protected from Delete Lower Retopo Stages.
+Keep Retopo_01 (Resculpted), enabled by default, preserves stage 01 during both
+automatic Delete Lower Retopo and the manual lower-stage cleanup. Turning it
+off allows that stage to be deleted along with the other lower stages.
 The collection is disabled only after all requested stages succeed.
 
 Retopo_01's secondary bake stores maps under Bakes/Generated.N_Retopo_01 with
@@ -143,3 +145,8 @@ and restored bake preferences. It also performs real CPU Cycles normal and
 artifact-mask/Autofill bakes for both targets and verifies separate saved maps.
 UVPackmaster calls in the ordering test are mocked; native PACK is covered by
 the existing optional installed-engine repair test.
+
+The three manual cleanup operators (lower Retopo, all Highpoly, and backups)
+are grouped in the collapsible Manual Cleanup subsection, closed by default.
+Its Keep Retopo_01 checkbox controls the same retention setting as the checkbox
+beneath Delete Lower Retopo.

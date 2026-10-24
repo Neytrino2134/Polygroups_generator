@@ -53,4 +53,23 @@ assert bpy.ops.object.polygroups_phase2_clear_highpoly()=={'FINISHED'}
 assert not any(phase.HIGH.fullmatch(o.name) for o in bpy.data.objects if o.type=='MESH')
 assert all(names[2] in bpy.data.objects for names in (names405,names406))
 assert keep.name in bpy.data.objects
+assert s.phase2_keep_retopo01
+for manual in (False,True):
+ for keep in (True,False):
+  s.phase2_keep_retopo01=keep
+  s.phase2_delete_lower_retopo=True
+  q,col,objs=fixture(500+int(manual)*10+int(keep))
+  objs[1].name=objs[1].name.replace('Retopo_02_','Retopo_01_')
+  first=objs[1].name;highest=objs[2].name
+  if manual:
+   q.finish()
+   assert bpy.ops.object.polygroups_phase2_clear_lower_retopo()=={'FINISHED'}
+  else:
+   q.complete();q.finish()
+  assert (first in bpy.data.objects)==keep
+  assert highest in bpy.data.objects
+s.phase2_keep_retopo01=True
+s.phase2_show_manual_cleanup=True
+from polygroups_generator.custom_ui.schema import capture
+assert not capture(context,1).errors
 print('PHASE2_COMPLETION_CLEANUP_PASSED')
