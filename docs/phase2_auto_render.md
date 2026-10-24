@@ -7,7 +7,7 @@ recursively. Default selection is *_MID and *_LOD0; LOD0 renders use LOW filenam
 ## Defaults
 
 - Quality and Output: 16:9, 2K = 2048 x 1152, 100%, Eevee, PNG.
-- Scene and Camera Setup: on; Auto Frame Camera: on, minimum 10% edge margins.
+- Scene and Camera Setup: on; Auto Frame Camera: on, target 7.5% silhouette margins.
 - Mesh Selection MID + LOD0: on.
 - Freestyle: on; As Render Pass: on; color #E8E8E8FF (stored scene-linear).
 - Multiview: on; offset 1 metre, angle -30 degrees, Hero on.
@@ -31,10 +31,10 @@ recovered before preparation. With setup disabled an active camera is required.
 Auto Render uses the same `prepared_queue_job` path as Start Render: asset
 isolation, prepared or temporary Multiview, Scene/Camera/Light Position movement,
 Hero isolation, rendering and cleanup. Original mesh transforms and the exact
-configured offset and rotations are retained. Bounds are measured through this
+configured offset and rotations are retained. Evaluated mesh vertices are measured through this
 same preparation path before rendering, then normalized to each source origin
 so MID and LOD0 share one camera fit. Camera X/Z are centered on the union and
-distance is solved along Y with 10% edge margins. The fit is computed once per
+distance is solved along Y with 7.5% silhouette margins on the limiting dimension. The fit is computed once per
 asset; ordinary queue movement of the position controls is retained. Texture
 jobs keep section 13's dedicated texture rendering behavior.
 
@@ -57,7 +57,7 @@ and the configured studio remain available for use in section 13.
 
 Blender 5.2.2:
 - test_phase2_auto_render_blender.py: real render of two differently sized assets,
-  10% camera margins, fixed camera fit relative to each source origin,
+  7.5% silhouette margins, fixed camera fit relative to each source origin,
   26 outputs with Freestyle pass/overlay, both texture preparation modes,
   foreign studio removal, tagged studio recovery without duplicate cameras or
   lights, original transforms/color spaces, switchable groups, injected failure
@@ -93,3 +93,10 @@ Camera clipping is derived from the fitted bounds' depths. The previous
 to disappear in camera renders. test_area_light_camera_blender.py verifies real
 Hero illumination with only the three default Area lights and a black world,
 by comparing the rendered pixels with the same lights switched off.
+
+Exact evaluated vertices replace conservative rotated bounding boxes during Auto
+Render fitting. This avoids empty box corners producing excessive padding. The
+perspective fit solves the frustum constraints directly, keeping dense meshes
+linear in vertex count. test_camera_silhouette_blender.py checks 5-10% horizontal
+margins for a wide Multiview with evaluated subdivision geometry. On the user
+Desert Stones asset the measured margins were 8.7% left and 7.5% right.

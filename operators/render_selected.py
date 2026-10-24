@@ -19,7 +19,7 @@ def selected_bounds(context, objects=None):
     return points, (minimum + maximum) / 2, maximum - minimum
 
 
-def fit_camera(context, camera, points, center, size):
+def fit_camera(context, camera, points, center, size, margin=.1):
     if camera.data.type not in {'PERSP', 'ORTHO'}:
         raise RuntimeError('Use a perspective or orthographic camera')
     camera.data.shift_x = camera.data.shift_y = 0
@@ -39,22 +39,34 @@ def fit_camera(context, camera, points, center, size):
             camera.data.ortho_scale = value
         context.view_layer.update()
         projections = [world_to_camera_view(context.scene, camera, p) for p in points]
-        return all(p.z > camera.data.clip_start and .1 <= p.x <= .9 and .1 <= p.y <= .9 for p in projections)
+        return all(p.z > camera.data.clip_start and margin <= p.x <= 1-margin and margin <= p.y <= 1-margin for p in projections)
 
-    upper = span
-    for _ in range(40):
-        if fits(upper):
-            break
-        upper *= 2
+    if camera.data.type == 'PERSP':
+        # Solve the perspective frustum inequalities directly. This permits
+        # exact evaluated vertices rather than conservative box corners,
+        # without projecting a dense mesh 48 times during binary search.
+        frame = camera.data.view_frame(scene=context.scene)
+        x_limit = max(abs(v.x / v.z) for v in frame) * (1 - 2 * margin)
+        z_limit = max(abs(v.y / v.z) for v in frame) * (1 - 2 * margin)
+        upper = max(.0001, max(max(abs(p.x-center.x) / x_limit,
+                                   abs(p.z-center.z) / z_limit,
+                                   camera.data.clip_start * 2) - (p.y-center.y)
+                               for p in points))
     else:
-        raise RuntimeError('Unable to fit selection in camera')
-    lower = .0001
-    for _ in range(48):
-        middle = (lower + upper) / 2
-        if fits(middle):
-            upper = middle
+        upper = span
+        for _ in range(40):
+            if fits(upper):
+                break
+            upper *= 2
         else:
-            lower = middle
+            raise RuntimeError('Unable to fit selection in camera')
+        lower = .0001
+        for _ in range(48):
+            middle = (lower + upper) / 2
+            if fits(middle):
+                upper = middle
+            else:
+                lower = middle
     fits(upper * 1.0001)
     view = camera.matrix_world.inverted()
     depths = [-(view @ point).z for point in points]

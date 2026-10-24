@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 from . import render_queue as rq
 from . import render_studio as studio
-from .render_selected import selected_bounds, fit_camera
+from .render_selected import fit_camera
 from .render_textures import texture_planes, collection_textures
 from .sequential_jobs import SequentialJob
 
@@ -148,6 +148,21 @@ def render_asset_job(context, job):
         rq._render_current_job(context, settings, job)
 
 
+def silhouette_points(context, objects):
+    """Actual evaluated geometry avoids empty corners of rotated mesh boxes."""
+    depsgraph = context.evaluated_depsgraph_get()
+    points = []
+    for obj in objects:
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        try:
+            if mesh is not None:
+                points.extend(evaluated.matrix_world @ vertex.co for vertex in mesh.vertices)
+        finally:
+            evaluated.to_mesh_clear()
+    return points
+
+
 class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator):
     bl_idname = 'object.polygroups_phase2_auto_render'
     bl_label = 'Start Auto Render'
@@ -225,7 +240,7 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                         continue
                     with rq.prepared_queue_job(context, s, job) as objects:
                         source = bpy.data.objects[job['object']]
-                        bounds, _, _ = selected_bounds(context, objects)
+                        bounds = silhouette_points(context, objects)
                         offset = origin - source.matrix_world.translation
                         points.extend(point + offset for point in bounds)
                 studio.position_studio_at_origin(context, origin)
@@ -237,7 +252,7 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                         matrix = s.studio_camera_aim.matrix_world.copy()
                         matrix.translation = center
                         s.studio_camera_aim.matrix_world = matrix
-                    fit_camera(context, context.scene.camera, points, center, maximum - minimum)
+                    fit_camera(context, context.scene.camera, points, center, maximum - minimum, margin=.075)
                     context.view_layer.update()
                 yield .02 + .98 * done/max(1, expected), f'{ordinal+1}/{len(assets)} | Camera ready: {col.name}'
                 for job in jobs:

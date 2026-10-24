@@ -73,9 +73,9 @@ def inspect_render(ctx,settings,job):
   assert max(abs(matrix[i][j]-frames[key][i][j]) for i in range(4) for j in range(4))<1e-4
  else:
   frames[key]=matrix
-  pts,_,_=auto.selected_bounds(ctx,objects)
+  pts=auto.silhouette_points(ctx,objects)
   projected=[world_to_camera_view(scene,camera,point) for point in pts]
-  assert all(.0999<=v.x<=.9001 and .0999<=v.y<=.9001 and v.z>0 for v in projected),[tuple(v) for v in projected]
+  assert all(.0749<=v.x<=.9251 and .0749<=v.y<=.9251 and v.z>0 for v in projected),[tuple(v) for v in projected]
   projections[key]=True
  real_render(ctx,settings,job)
 
