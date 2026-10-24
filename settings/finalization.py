@@ -198,8 +198,8 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unreal_lod_copy_textures: bpy.props.BoolProperty(name="Copy Textures", default=True)
     unreal_lod_collection_color: bpy.props.EnumProperty(name="Collection Color Tag",
         items=(("NONE", "None", "", "OUTLINER_COLLECTION", 0),
-            *((f"COLOR_{i:02d}", f"Color {i}", "", f"COLLECTION_COLOR_{i:02d}", i) for i in range(1, 9))), default='NONE')
-    unreal_lod_random_collection_color: bpy.props.BoolProperty(name="Random Color Tag", default=True)
+            *((f"COLOR_{i:02d}", f"Color {i}", "", f"COLLECTION_COLOR_{i:02d}", i) for i in range(1, 9))), default='COLOR_04')
+    unreal_lod_random_collection_color: bpy.props.BoolProperty(name="Random Color Tag", default=False)
     show_unity_rename_settings: bpy.props.BoolProperty(name="Unity Rename", default=False)
     show_unity_asset_render_settings: bpy.props.BoolProperty(name="Render Unity Assets", default=False)
     show_unity_turnaround_settings: bpy.props.BoolProperty(name="Turnaround", default=False)
