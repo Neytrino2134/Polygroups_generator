@@ -4,6 +4,31 @@ from .callbacks import (
     _prompt_file_items,
     bpy,
 )
+from ..services.ai_text import OPENAI_MODELS, GOOGLE_MODELS
+
+
+def _text_properties(models, default):
+    return {
+        'model': bpy.props.EnumProperty(name='Model', items=models, default=default),
+        'custom_model': bpy.props.StringProperty(name='Model ID'),
+        'task': bpy.props.EnumProperty(name='Task', items=(('GENERATE', 'Generate Text', ''), ('TRANSLATE', 'Translate', '')), default='GENERATE'),
+        'language': bpy.props.StringProperty(name='Target Language', default='English'),
+        'prompt': bpy.props.StringProperty(name='Prompt / Source Text'),
+        'input_text': bpy.props.PointerProperty(name='Multiline Input', type=bpy.types.Text),
+        'instructions': bpy.props.StringProperty(name='Instructions'),
+        'max_tokens': bpy.props.IntProperty(name='Max Output Tokens', default=8192, min=128, max=128000),
+        'result_text': bpy.props.PointerProperty(name='Result', type=bpy.types.Text),
+        'is_generating': bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'}),
+        'last_status': bpy.props.StringProperty(name='Status'),
+    }
+
+
+class AIRETOPO_PG_openai_text_settings(bpy.types.PropertyGroup):
+    __annotations__ = _text_properties(OPENAI_MODELS, 'gpt-6-luna')
+
+
+class AIRETOPO_PG_google_text_settings(bpy.types.PropertyGroup):
+    __annotations__ = _text_properties(GOOGLE_MODELS, 'gemini-3.5-flash-lite')
 
 
 class AIRETOPO_PG_ai_generation_settings(bpy.types.PropertyGroup):

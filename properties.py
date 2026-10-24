@@ -81,6 +81,8 @@ from .settings.baking import (
 )
 
 from .settings.ai import (
+    AIRETOPO_PG_openai_text_settings,
+    AIRETOPO_PG_google_text_settings,
     AIRETOPO_PG_ai_generation_settings,
     AIRETOPO_PG_google_image_settings,
 )
@@ -88,6 +90,8 @@ from .settings.ai import (
 
 
 CLASSES = (
+    AIRETOPO_PG_openai_text_settings,
+    AIRETOPO_PG_google_text_settings,
     *PALETTE_PROPERTY_CLASSES,
     POLYGROUPS_PG_remesh_status,
     AIRETOPO_PG_panel_visibility_settings,
@@ -110,6 +114,8 @@ CLASSES = (
 def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+    bpy.types.Scene.airetopo_openai_text_settings = bpy.props.PointerProperty(type=AIRETOPO_PG_openai_text_settings)
+    bpy.types.Scene.airetopo_google_text_settings = bpy.props.PointerProperty(type=AIRETOPO_PG_google_text_settings)
 
     bpy.types.Scene.polygroups_remesh_status = bpy.props.PointerProperty(type=POLYGROUPS_PG_remesh_status)
 
@@ -158,6 +164,8 @@ def register():
 
 
 def unregister():
+    del bpy.types.Scene.airetopo_openai_text_settings
+    del bpy.types.Scene.airetopo_google_text_settings
     del bpy.types.Scene.polygroups_remesh_status
     del bpy.types.Scene.airetopo_panel_visibility_settings
     del bpy.types.Scene.airetopo_google_image_settings

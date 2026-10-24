@@ -1,5 +1,6 @@
 """Ai section panels."""
 import os
+import textwrap
 import bpy
 from ..localization import get_preferences
 from ..localization import t
@@ -41,6 +42,52 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
         google_content = draw_topic(layout, context, "ai_2", "google_image", "IMAGE_DATA")
         if google_content is not None:
             self.draw_google_image(context, google_content)
+
+        text_content = draw_topic(layout, context, 'ai_3', 'text_generation', 'TEXT')
+        if text_content is not None:
+            self.draw_text_generation(context, text_content, 'OPENAI')
+            self.draw_text_generation(context, text_content, 'GOOGLE')
+
+    def draw_text_generation(self, context, layout, provider):
+        from ..operators.ai_text import settings_for
+        s = settings_for(context.scene, provider)
+        box = layout.box()
+        box.label(text='OpenAI Text' if provider == 'OPENAI' else 'Google Text', icon='TEXT')
+        controls = box.column(align=True)
+        controls.enabled = not s.is_generating
+        controls.prop(s, 'model')
+        if s.model == 'CUSTOM':
+            controls.prop(s, 'custom_model')
+        controls.prop(s, 'task')
+        if s.task == 'TRANSLATE':
+            controls.prop(s, 'language', text=t(context, 'text_target_language'))
+        controls.prop(s, 'prompt', text=t(context, 'text_prompt'))
+        controls.prop(s, 'input_text', text=t(context, 'text_multiline_input'))
+        if s.input_text is not None:
+            controls.label(text=t(context, 'text_multiline_used'), icon='INFO')
+        row = controls.row(align=True)
+        for action, label, icon in (('INPUT', 'text_edit_input', 'TEXT'), ('PASTE', 'text_paste_input', 'PASTEDOWN')):
+            op = row.operator('object.airetopo_text_document', text=t(context, label), icon=icon)
+            op.provider, op.action = provider, action
+        controls.prop(s, 'instructions', text=t(context, 'text_instructions'))
+        controls.prop(s, 'max_tokens')
+        op = controls.operator('object.airetopo_generate_text', text=t(context, 'text_generate'), icon='PLAY')
+        op.provider = provider
+        if s.last_status:
+            box.label(text=s.last_status, icon='TIME' if s.is_generating else 'INFO')
+        if s.result_text is not None:
+            row = box.row(align=True)
+            for action, label, icon in (('RESULT', 'text_open_result', 'TEXT'), ('COPY', 'text_copy_result', 'COPYDOWN')):
+                op = row.operator('object.airetopo_text_document', text=t(context, label), icon=icon)
+                op.provider, op.action = provider, action
+            preview = box.box()
+            lines = []
+            for line in s.result_text.as_string()[:3000].splitlines():
+                lines.extend(textwrap.wrap(line, width=48) or [''])
+            for line in lines[:12]:
+                preview.label(text=line)
+            if len(lines)>12:
+                preview.label(text='...')
 
     def draw_prompt_library(self, context, layout):
         settings = context.scene.airetopo_ai_generation_settings

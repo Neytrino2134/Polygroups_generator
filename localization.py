@@ -1911,6 +1911,24 @@ TEXT = {
 }
 
 
+TEXT['EN'].update({
+    'text_generation': 'Text Generation', 'text_target_language': 'Target Language',
+    'text_prompt': 'Prompt / Source Text', 'text_multiline_input': 'Multiline Input',
+    'text_multiline_used': 'Using multiline input instead of the prompt field',
+    'text_edit_input': 'Edit Input', 'text_paste_input': 'Paste Input',
+    'text_instructions': 'Instructions', 'text_generate': 'Generate / Translate',
+    'text_open_result': 'Open Result', 'text_copy_result': 'Copy Result',
+})
+TEXT['RU'].update({
+    'text_generation': 'Text Generation / Генерация текста', 'text_target_language': 'Язык перевода',
+    'text_prompt': 'Запрос / Исходный текст', 'text_multiline_input': 'Многострочный текст',
+    'text_multiline_used': 'Используется многострочный текст вместо поля запроса',
+    'text_edit_input': 'Изменить текст', 'text_paste_input': 'Вставить текст',
+    'text_instructions': 'Инструкции', 'text_generate': 'Генерировать / Перевести',
+    'text_open_result': 'Открыть результат', 'text_copy_result': 'Копировать результат',
+})
+
+
 def get_preferences(context):
     if context is None:
         return None

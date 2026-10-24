@@ -472,6 +472,8 @@ CLASSES = (
 
 
 def register():
+    from . import ai_text
+    ai_text.register()
     import bpy
     from .import_queue import stop_import_queue
     from .remesh_progress import stop_remesh
@@ -505,6 +507,8 @@ def register():
 
 
 def unregister():
+    from . import ai_text
+    ai_text.unregister()
     import bpy
     from ..core.render_palettes import clear_swatches
     clear_swatches()
