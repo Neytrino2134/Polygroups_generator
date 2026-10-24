@@ -560,6 +560,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     controls = blend_export.column(align=True)
                     controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     controls.prop(settings, 'phase2_blend_export_pack')
+                    controls.prop(settings, 'phase2_blend_export_generated')
                     controls.label(text='One clean blend per *_Collection in !Blend', icon='INFO')
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_export_blend', text='Export Blend Files', icon='EXPORT')

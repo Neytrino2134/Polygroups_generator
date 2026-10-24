@@ -77,4 +77,25 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_blend_export_') as direc
         dst.scenes = src.scenes
     assert dst.scenes[0].camera.name.startswith('Studio_Cam_1')
     assert ctx.scene.name == 'Scene' and ctx.scene.camera.name == 'Studio_Cam_1'
+    # Generated.N collections are exported only when enabled, with their own textures packed.
+    image = bpy.data.images.new('Resc_Color', 8, 8)
+    image.filepath_raw = str(root / 'Resc_Color.png'); image.file_format = 'PNG'; image.save()
+    image.source = 'FILE'; image.reload()
+    material = bpy.data.materials.new('Resc_Mat'); material.use_nodes = True
+    material.node_tree.nodes.new('ShaderNodeTexImage').image = image
+    generated = bpy.data.collections.new('Generated.001'); ctx.scene.collection.children.link(generated)
+    mesh = bpy.data.meshes.new('Resculpting_01_Mesh'); mesh.from_pydata([(0, 0, 0), (1, 0, 0), (0, 1, 0)], [], [(0, 1, 2)])
+    mesh.materials.append(material)
+    generated.objects.link(bpy.data.objects.new('Resculpting_01.001', mesh))
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Pack.blend'))
+    assert not p.phase2_blend_export_generated
+    assert bpy.ops.object.polygroups_phase2_export_blend() == {'FINISHED'}
+    assert not (out / 'Generated.001.blend').exists()
+    p.phase2_blend_export_generated = True
+    assert bpy.ops.object.polygroups_phase2_export_blend() == {'FINISHED'}, p.phase2_blend_export_status
+    assert image.packed_file is None
+    with bpy.data.libraries.load(str(out / 'Generated.001.blend')) as (src, dst):
+        assert 'Generated.001' in src.collections and src.images == ['Resc_Color'], (src.collections, src.images)
+        dst.images = src.images
+    assert dst.images[0].packed_file is not None
 print('PHASE2_BLEND_EXPORT_PASSED')

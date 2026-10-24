@@ -9,6 +9,7 @@ from mathutils import Vector
 
 from .phase2_processing import available
 from .render_studio import TAG as STUDIO_TAG
+from ..core.generated_index import GENERATED_INDEX_PATTERN
 
 BLEND_FOLDER = '!Blend'
 COLLECTION_SUFFIX = '_Collection'
@@ -30,8 +31,16 @@ def asset_collections(scene):
     return result
 
 
+def generated_collections(scene):
+    """Generated.N collections (Retopo / Resculpting meshes) that contain objects."""
+    return [col for col in scene.collection.children_recursive
+            if GENERATED_INDEX_PATTERN.match(col.name) and col.all_objects]
+
+
 def blend_file_stem(collection):
-    stem = collection.name[:-len(COLLECTION_SUFFIX)]
+    stem = collection.name
+    if stem.endswith(COLLECTION_SUFFIX):
+        stem = stem[:-len(COLLECTION_SUFFIX)]
     stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', stem).strip(' .')
     return stem or 'Asset'
 
@@ -179,6 +188,8 @@ class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
             self.report({'WARNING'}, p.phase2_blend_export_status)
             return {'CANCELLED'}
         collections = asset_collections(context.scene)
+        if p.phase2_blend_export_generated:
+            collections += generated_collections(context.scene)
         if not collections:
             p.phase2_blend_export_status = 'No *_Collection assets in the scene'
             self.report({'WARNING'}, p.phase2_blend_export_status)
@@ -186,7 +197,7 @@ class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
         folder = Path(bpy.data.filepath).parent / BLEND_FOLDER
         names = [blend_file_stem(col) for col in collections]
         if len({name.casefold() for name in names}) != len(names):
-            p.phase2_blend_export_status = 'Export failed: collection names collide after removing _Collection'
+            p.phase2_blend_export_status = 'Export failed: collection file names collide'
             self.report({'ERROR'}, p.phase2_blend_export_status)
             return {'CANCELLED'}
         done = 0

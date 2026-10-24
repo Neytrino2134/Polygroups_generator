@@ -66,3 +66,8 @@ Light_Studio (tagged by Render Studio), they are linked into every exported
 scene with all nested collections and objects, and the active camera is kept.
 Their textures are packed too. A generated Camera/Light is used only when the
 scene has no studio collections.
+
+Export Generated.N Collections (off by default): also writes every Generated.N
+collection that contains objects (Retopo / Resculpting meshes) to !Blend as
+Generated.001.blend etc., using the same clean scene and packing only that
+collection's textures.
