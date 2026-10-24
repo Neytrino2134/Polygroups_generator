@@ -124,6 +124,9 @@ Restore and Processing includes two opt-in options beneath Auto Bake:
   If Auto Repair and Repack After Repair are enabled, its UVPackmaster PACK
   always runs, even when the repair signature is unchanged. Only If Changed
   continues to apply normally to the highest Retopo.
+  During the Retopo_01 bake, its Multires modifiers are temporarily disabled in
+  viewport and render. Their previous visibility is restored after completion,
+  failure or cancellation; primary-target modifiers are unaffected.
 
 Order: highest repair/conditional repack -> highest bake -> optional Retopo_01
 resculpt -> optional Retopo_01 repair/forced repack/bake -> successful cleanup.

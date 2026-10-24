@@ -28,6 +28,7 @@ def fixture():
 def run(resculpt,rebake,failure='',stop_when=''):
  col,objects=fixture();high,low01,low02,highest=objects
  names=[o.name for o in objects];events=[]
+ primary_multires=highest.modifiers.new('Primary Multires unchanged','MULTIRES')
  p.phase2_resculpt_retopo01=resculpt;p.phase2_autobake_retopo01=rebake
  original=(bake.bake_artifact_mask,bake.bake_artifact_autofill,bake.auto_save_textures_after_bake)
  def repair(*args,**kwargs):events.append(('repair',ctx.active_object.name));return {'FINISHED'}
@@ -44,6 +45,10 @@ def run(resculpt,rebake,failure='',stop_when=''):
   assert set(ctx.selected_objects)=={high,target}
   assert bake.bake_artifact_mask and bake.bake_artifact_autofill
   assert bake.auto_save_textures_after_bake
+  assert primary_multires.show_viewport and primary_multires.show_render
+  if target==low01 and resculpt:
+   modifier=low01.modifiers[MULTIRES_MODIFIER_NAME]
+   assert not modifier.show_viewport and not modifier.show_render
   events.append(('bake',target.name))
   bake.bake_task_is_running=False
   bake.bake_task_stage='FAILED' if target==low01 and failure=='bake' else 'DONE'
@@ -68,6 +73,8 @@ def run(resculpt,rebake,failure='',stop_when=''):
  if resculpt:
   assert ('sculpt',names[1]) in events
   assert low01.modifiers.get(MULTIRES_MODIFIER_NAME) is not None
+  assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_viewport
+  assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_render
  if rebake:
   assert ('repair',names[1]) in events and ('pack',names[1]) in events
   if failure!='pack':assert ('bake',names[1]) in events
@@ -84,6 +91,25 @@ for resculpt,rebake in ((True,True),(True,False),(False,True)):
   assert [kind for kind,name in events]==['repair','bake','sculpt','repair','pack','bake']
 run(True,True,'bake');run(False,True,'pack')
 run(True,True,stop_when='RETOPO01_RESCULPT')
+# An in-flight secondary bake keeps Multires disabled until it actually ends.
+col,objects=fixture();high,low01,low02,highest=objects
+modifier=low01.modifiers.new('Visibility restore test','MULTIRES')
+modifier.show_viewport=True;modifier.show_render=False
+def async_bake(*args,**kwargs):
+ bake.bake_task_is_running=True
+ return {'RUNNING_MODAL'}
+proxy=SimpleNamespace(data=real.data,ops=SimpleNamespace(object=SimpleNamespace(polygroups_checked_prepare_and_bake=async_bake)))
+q=phase2.Phase2Queue(ctx,[('mock',col.name)],True,True,lambda *args:None)
+q.begin();q.collection=col;q.retopo01=low01
+with patch.object(phase2,'bpy',proxy):
+ q.start_bake(ctx,target=low01);q.stage='RETOPO01_BAKE_WAIT';q.stop_requested=True
+ q.step(ctx)
+ assert not q.finished and not modifier.show_viewport and not modifier.show_render
+ bake.bake_task_is_running=False;bake.bake_task_stage='DONE'
+ q.step(ctx);q.step(ctx)
+assert q.finished and p.phase2_status.startswith('Stopped')
+assert modifier.show_viewport and not modifier.show_render
+assert not q.saved_multires_visibility
 # Real CPU Cycles normal + artifact-mask/Autofill bakes on both targets.
 from polygroups_generator.operators import baking
 for obj in list(bpy.data.objects):bpy.data.objects.remove(obj,do_unlink=True)
@@ -115,6 +141,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_native_retopo01_') as fol
  targets=[o for o in bpy.data.objects if phase2.LOW.fullmatch(o.name)]
  assert len(targets)==2 and any(o.name.startswith('Retopo_01_') for o in targets)
  assert all(o.get(baking.BAKE_NORMAL_IMAGE_PROP) for o in targets)
+ assert all(m.show_viewport and m.show_render for o in targets for m in o.modifiers if m.type=='MULTIRES')
  from polygroups_generator.core.bake_projection import current_mask
  assert all(current_mask(o,bpy.data.images[o[baking.BAKE_NORMAL_IMAGE_PROP]]) is not None for o in targets)
  assert not any(phase2.HIGH.fullmatch(o.name) for o in bpy.data.objects)

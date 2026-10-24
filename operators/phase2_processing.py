@@ -202,6 +202,7 @@ class Phase2Queue:
         self.index, self.stage, self.collection = 0, 'RESTORE', None
         self.finished, self.stop_requested, self.timer = False, False, None
         self.saved_bake = {}
+        self.saved_multires_visibility = []
         self.results = []
         self.baked_pair = None
         self.primary_pair = None
@@ -283,6 +284,12 @@ class Phase2Queue:
         self.saved_bake = {key: getattr(bake, key) for key in overrides}
         for key, value in overrides.items():
             setattr(bake, key, value)
+        if target is not None:
+            for modifier in low.modifiers:
+                if modifier.type == 'MULTIRES':
+                    self.saved_multires_visibility.append((modifier, modifier.show_viewport, modifier.show_render))
+                    modifier.show_viewport = modifier.show_render = False
+            self.view_layer.update()
         bake.bake_task_stage = ''
         result = bpy.ops.object.polygroups_checked_prepare_and_bake('EXEC_DEFAULT')
         if not ({'FINISHED', 'RUNNING_MODAL'} & result):
@@ -293,6 +300,13 @@ class Phase2Queue:
         for key, value in self.saved_bake.items():
             setattr(bake, key, value)
         self.saved_bake.clear()
+        for modifier, viewport, render in self.saved_multires_visibility:
+            try:
+                modifier.show_viewport, modifier.show_render = viewport, render
+            except ReferenceError:
+                pass
+        self.saved_multires_visibility.clear()
+        self.view_layer.update()
 
     def complete(self, error=''):
         self.restore_bake_settings()
