@@ -53,4 +53,28 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_blend_export_') as direc
             [o.name for o in scene.objects]
         assert scene.camera and strip(scene.camera.name) == 'Camera'
         bpy.data.scenes.remove(scene)
+    # Studio collections (with nested children) replace the generated Camera/Light.
+    from polygroups_generator.operators.render_studio import TAG
+    for obj in list(bpy.data.objects):
+        if obj.name == 'Camera': bpy.data.objects.remove(obj, do_unlink=True)
+    roles = {}
+    for role, name in (('scene', 'Scene_Studio'), ('camera', 'Camera_Studio'), ('light', 'Light_Studio')):
+        col = bpy.data.collections.new(name); col[TAG] = role; ctx.scene.collection.children.link(col)
+        roles[role] = col
+    nested = bpy.data.collections.new('Camera_Nested'); roles['camera'].children.link(nested)
+    for i, parent in enumerate((roles['camera'], nested)):
+        parent.objects.link(bpy.data.objects.new(f'Studio_Cam_{i}', bpy.data.cameras.new(f'Studio_Cam_{i}')))
+    roles['light'].objects.link(bpy.data.objects.new('Studio_Lamp', bpy.data.lights.new('Studio_Lamp', 'AREA')))
+    roles['scene'].objects.link(bpy.data.objects.new('Studio_Floor', bpy.data.meshes.new('Studio_Floor')))
+    ctx.scene.camera = bpy.data.objects['Studio_Cam_1']
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Pack.blend'))
+    assert bpy.ops.object.polygroups_phase2_export_blend() == {'FINISHED'}, p.phase2_blend_export_status
+    with bpy.data.libraries.load(str(out / 'Stone_01_01.blend')) as (src, dst):
+        assert set(src.collections) == {'Stone_01_01_Collection', 'Scene_Studio', 'Camera_Studio',
+                                        'Light_Studio', 'Camera_Nested'}, src.collections
+        assert sorted(src.cameras) == ['Studio_Cam_0', 'Studio_Cam_1'] and src.lights == ['Studio_Lamp']
+        assert 'Studio_Floor' in src.objects and 'Camera' not in list(src.objects) and 'Light' not in list(src.objects)
+        dst.scenes = src.scenes
+    assert dst.scenes[0].camera.name.startswith('Studio_Cam_1')
+    assert ctx.scene.name == 'Scene' and ctx.scene.camera.name == 'Studio_Cam_1'
 print('PHASE2_BLEND_EXPORT_PASSED')

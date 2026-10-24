@@ -60,3 +60,9 @@ Existing files with the same name are overwritten. Open !Blend Folder shows the
 result. Implementation: operators/phase2_blend_export.py. The scene is derived
 from a copy of the active scene because bpy.data.scenes.new() crashes
 libraries.write in Blender 5.2. Test: test_phase2_blend_export_blender.py.
+
+Studio collections: when the source scene has Scene_Studio, Camera_Studio and
+Light_Studio (tagged by Render Studio), they are linked into every exported
+scene with all nested collections and objects, and the active camera is kept.
+Their textures are packed too. A generated Camera/Light is used only when the
+scene has no studio collections.

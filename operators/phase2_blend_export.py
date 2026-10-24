@@ -1,13 +1,14 @@
 """Write every prepared *_Collection asset as its own clean blend file in !Blend."""
 import os
 import re
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import bpy
 from mathutils import Vector
 
 from .phase2_processing import available
+from .render_studio import TAG as STUDIO_TAG
 
 BLEND_FOLDER = '!Blend'
 COLLECTION_SUFFIX = '_Collection'
@@ -84,19 +85,35 @@ def _frame_camera(camera_object, collection):
     return center, radius
 
 
+def studio_collections(scene):
+    """Scene_Studio / Camera_Studio / Light_Studio of the source scene, in that order."""
+    return [item for role in ('scene', 'camera', 'light')
+            for item in scene.collection.children if item.get(STUDIO_TAG) == role]
+
+
 def build_clean_scene(collection):
-    """Create Scene + Camera + Light + the one collection, return the datablocks to remove."""
+    """Create a scene holding the studio collections (or a generated Camera and Light) plus the one collection.
+
+    Returns the scene and the temporary generated objects and data to remove afterwards."""
     # bpy.data.scenes.new() crashes Blender 5.2 inside libraries.write, so derive the
     # scene from a copy of the active one and empty it.
-    scene = bpy.context.scene.copy()
+    source = bpy.context.scene
+    scene = source.copy()
     scene.name = 'Scene'
     for child in list(scene.collection.children):
         scene.collection.children.unlink(child)
     for obj in list(scene.collection.objects):
         scene.collection.objects.unlink(obj)
     scene.world = None
-    scene.camera = None
+    studio = studio_collections(source)
     scene.collection.children.link(collection)
+    if studio:
+        for item in studio:
+            scene.collection.children.link(item)
+        if scene.camera is None or not any(scene.camera.name in item.all_objects for item in studio):
+            scene.camera = next((obj for item in studio for obj in item.all_objects if obj.type == 'CAMERA'), None)
+        return scene, (), ()
+    scene.camera = None
     camera_data = bpy.data.cameras.new('Camera')
     camera_object = bpy.data.objects.new('Camera', camera_data)
     scene.collection.objects.link(camera_object)
@@ -113,15 +130,20 @@ def build_clean_scene(collection):
 def export_collection_blend(collection, filepath, pack_textures=True):
     """Write one collection with only its own textures; return the packed image count."""
     packed = []
+    studio = studio_collections(bpy.context.scene)
     if pack_textures:
-        for image in collection_images(collection):
+        for image in set().union(*(collection_images(item) for item in [collection, *studio])):
             if image.source == 'FILE' and image.packed_file is None:
                 image.pack()
                 packed.append(image)
     try:
-        with reserved_name(bpy.data.scenes, 'Scene'), \
-                reserved_name(bpy.data.objects, 'Camera'), reserved_name(bpy.data.objects, 'Light'), \
-                reserved_name(bpy.data.cameras, 'Camera'), reserved_name(bpy.data.lights, 'Light'):
+        with ExitStack() as holds:
+            holds.enter_context(reserved_name(bpy.data.scenes, 'Scene'))
+            if not studio:
+                # Generated Camera/Light need their plain names in the exported file.
+                for id_collection, name in ((bpy.data.objects, 'Camera'), (bpy.data.objects, 'Light'),
+                                            (bpy.data.cameras, 'Camera'), (bpy.data.lights, 'Light')):
+                    holds.enter_context(reserved_name(id_collection, name))
             scene = objects = datas = None
             try:
                 scene, objects, datas = build_clean_scene(collection)
