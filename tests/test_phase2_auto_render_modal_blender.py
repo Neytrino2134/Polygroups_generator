@@ -15,11 +15,24 @@ def check():
   p=bpy.context.scene.polygroups_model_preparation_settings;s=bpy.context.scene.polygroups_render_settings
   if p.phase2_auto_render_running and 3<p.phase2_final_progress<100 and not state.get('stop'):
    assert s.is_running
+   from polygroups_generator.operators import sequential_jobs as jobs,render_queue as rq
+   preview=jobs.ACTIVE_JOB._preview
+   assert preview.handle is not None and preview.completed==s.queue_index==1
+   assert preview.total==s.total_count==4
+   assert preview.views and all(space.region_3d.view_perspective=='CAMERA' and space.camera==bpy.context.scene.camera
+                               for area,space,*_ in preview.views)
+   visible=[o for o in bpy.context.scene.objects if o.get(rq.MULTIVIEW_PROP) and not o.hide_render]
+   assert len(visible)==3 and all(o.visible_get() for o in visible)
+   state['preview']=preview
+   screenshot=ROOT/'user_data/render_diagnostics/auto_render_progress.png'
+   screenshot.parent.mkdir(parents=True,exist_ok=True)
+   bpy.ops.screen.screenshot(filepath=str(screenshot))
    bpy.ops.object.polygroups_stop_lod_job();state['stop']=True
   if not p.phase2_auto_render_running:
    from polygroups_generator.operators import sequential_jobs as jobs,render_queue as rq
    assert state.get('stop') and p.phase2_status.startswith('Stopped'),p.phase2_status
    assert not s.is_running and jobs.ACTIVE_JOB is None
+   assert state['preview'].handle is None and not state['preview'].views
    assert not any(o.get(rq.MULTIVIEW_PROP) for o in bpy.data.objects)
    assert len(list(state['directory'].rglob('*.png')))>=1
    return finish()

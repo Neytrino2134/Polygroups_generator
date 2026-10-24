@@ -49,6 +49,12 @@ into its render. Source geometry/material/image color spaces are preserved.
 The modal queue updates percentages in Processing Status and the workspace
 status bar. Stop Render or Esc stops at the next image-job boundary. Native
 rendering and its Freestyle companion passes finish before that boundary.
+During each image job, 3D viewports show the active camera and the actual
+prepared asset views. Preparation yields to the UI before rendering and keeps
+the scene visible through the completion update. A bottom-left overlay shows
+completed/total image jobs and their overall percentage, plus the current asset
+index and render type. Previous viewport camera settings are restored and the
+overlay removed on completion, cancellation or failure.
 Temporary multiview objects are removed and working flags cleared on completion,
 stop, error, file load, Undo/Redo or add-on unregister. Prepared texture planes
 and the configured studio remain available for use in section 13.

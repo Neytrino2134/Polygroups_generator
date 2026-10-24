@@ -9,6 +9,7 @@ from . import render_studio as studio
 from .render_selected import fit_camera
 from .render_textures import texture_planes, collection_textures
 from .sequential_jobs import SequentialJob
+from ..core.render_progress import RenderProgressPreview
 
 ASSET = re.compile(r'.+_\d+_\d+_Collection$', re.I)
 
@@ -141,11 +142,19 @@ def scan_jobs(context, collections, include_textures):
         settings.is_running = True
 
 
-def render_asset_job(context, job):
+def render_asset_job(context, job, completed, total, preview, asset_label):
     """Run Start Render's preparation and backend, without refitting the camera."""
     settings = context.scene.polygroups_render_settings
     with rq.prepared_queue_job(context, settings, job):
+        preview.show(completed, total, asset_label)
+        # Leave the prepared objects visible for a UI frame before rendering.
+        yield completed/max(1, total), f'Rendering {completed+1}/{total} | {asset_label}'
         rq._render_current_job(context, settings, job)
+        settings.queue_index = completed + 1
+        rq._sync_progress(settings)
+        preview.show(completed+1, total, asset_label)
+        # Keep the scene visible between images, including the completion tick.
+        yield (completed+1)/max(1, total), f'Auto Render {completed+1}/{total} | {asset_label}'
 
 
 def silhouette_points(context, objects):
@@ -177,7 +186,18 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
         return context.mode == 'OBJECT' and available(context)
 
     def execute(self, context):
-        return self.start_job(context, self.steps(context), modal=not bpy.app.background)
+        self._preview = RenderProgressPreview(context)
+        result = self.start_job(context, self.steps(context), modal=not bpy.app.background)
+        if result == {'CANCELLED'}:
+            self._preview.close()
+        return result
+
+    def finish_job(self, context, stopped=False, error=''):
+        try:
+            return super().finish_job(context, stopped=stopped, error=error)
+        finally:
+            if getattr(self, '_preview', None) is not None:
+                self._preview.close()
 
     def steps(self, context):
         p = context.scene.polygroups_model_preparation_settings
@@ -220,6 +240,7 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                 (s.multiview_render or rq._prepared_multiview_views(source)) else 1 for source in sources)
                 + int(p.phase2_auto_textures and collection_textures(col) is not None)
                 for col, sources in assets)
+            self._preview.total = expected
             yield .02, f'Auto Render: {len(assets)} assets | 2048 x 1152 | Eevee'
             for ordinal, (col, sources) in enumerate(assets):
                 rq._set_asset_collection_enabled(col, True)
@@ -272,9 +293,12 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                             outputs += [rq._freestyle_pass_path(transparent), rq._freestyle_overlay_path(transparent)]
                     skip = s.skip_existing and not s.overwrite_existing and all(os.path.exists(path) for path in outputs)
                     if not skip:
-                        render_asset_job(context, job)
+                        label = f'Asset {ordinal+1}/{len(assets)} | {col.name} | {job.get("view_mode") or job.get("texture_kind") or "Single"}'
+                        yield from render_asset_job(context, job, done, expected, self._preview, label)
                     done += 1;s.queue_index = done;rq._sync_progress(s)
-                    yield .02 + .98 * done/max(1, expected), f'Auto Render {done}/{expected} | {col.name}'
+                    if skip:
+                        self._preview.show(done, expected, f'Asset {ordinal+1}/{len(assets)} | Skipped existing')
+                        yield done/max(1, expected), f'Auto Render {done}/{expected} | {col.name}'
                 rq._set_asset_collection_enabled(col, False)
             completed = True
             s.status = f'Auto Render complete: {done} jobs / {len(assets)} assets'
