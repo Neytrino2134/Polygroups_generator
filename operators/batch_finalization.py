@@ -19,7 +19,7 @@ def finalization_packs(context):
         if not re.fullmatch(r'Generated(?:\.\d+)*', col.name, re.I):
             continue
         meshes = [obj for obj in col.all_objects if obj in scene_objects and obj.type == 'MESH'
-                  and not HIGH.fullmatch(obj.name) and not obj.name.lower().startswith('backup_retopo_')]
+                  and not HIGH.fullmatch(obj.name) and not obj.name.lower().startswith(('backup_retopo_', 'backup_resculpting_'))]
         lows = [(int(match.group(1)), obj) for obj in meshes if (match := LOW.fullmatch(obj.name))]
         if lows:
             packs.append((col, max(lows, key=lambda item: item[0])[1], meshes))

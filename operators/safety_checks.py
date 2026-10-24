@@ -14,12 +14,12 @@ HIGHPOLY_NAME_PATTERN = re.compile(r"^Highpoly_Generated\.\d+$", re.IGNORECASE)
 FAB_HIGHPOLY_NAME_PATTERN = re.compile(r"^SM_.+_HIGH(?:\.\d+)?$")
 FAB_LOWPOLY_NAME_PATTERN = re.compile(r"^SM_.+_LOW(?:\.\d+)?$")
 FAB_MIDPOLY_NAME_PATTERN = re.compile(r"^SM_.+_MID(?:\.\d+)?$")
-LOWPOLY_PREFIXES = ("Retopo_", "Retopology")
+LOWPOLY_PREFIXES = ("Retopo_", "Retopology", "Resculpting_")
 LOWPOLY_TOKEN_PATTERN = re.compile(
-    r"^(?:low|retopo(?:logy)?)(?:[_. -]|$)|(?:^|[_. -])(?:low|retopo(?:logy)?)(?:\.\d+)?$",
+    r"^(?:low|retopo(?:logy)?|resculpting)(?:[_. -]|$)|(?:^|[_. -])(?:low|retopo(?:logy)?|resculpting)(?:\.\d+)?$",
     re.IGNORECASE,
 )
-RETOPO_SOURCE_PATTERN = re.compile(r"^Retopo_(?:\d+_)?(.+)$", re.IGNORECASE)
+RETOPO_SOURCE_PATTERN = re.compile(r"^(?:Retopo|Resculpting)_(?:\d+_)?(.+)$", re.IGNORECASE)
 
 
 def is_generated_highpoly_name(name):
@@ -51,7 +51,7 @@ def is_quad_remesh_ready_name(name):
 
 
 def is_polygroups_ready_name(name):
-    return is_generated_highpoly_name(name) or name.startswith("Retopo_")
+    return is_generated_highpoly_name(name) or name.startswith(("Retopo_", "Resculpting_"))
 
 
 def selected_mesh_objects(context):

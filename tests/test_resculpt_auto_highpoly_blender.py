@@ -32,6 +32,7 @@ def inspect(context,obj,levels):
 with patch.object(sculpt,'add_multires_modifier',inspect):
  assert bpy.ops.object.polygroups_setup_resculpting()=={'FINISHED'}
 assert low.modifiers[sculpt.SHRINKWRAP_MODIFIER_NAME].target==high
+assert low.name=='Resculpting_02_Highpoly_Generated.001'
 assert low.modifiers[sculpt.MULTIRES_MODIFIER_NAME].total_levels==1
 assert high.hide_viewport and high.hide_render and high.hide_get() and high.hide_select
 assert not high.select_get() and ctx.active_object==low and low.select_get()
@@ -56,4 +57,22 @@ except RuntimeError:pass
 else:raise AssertionError('Expected setup failure')
 assert high.hide_viewport and high.hide_render and high.hide_get()
 assert ctx.active_object==low and low.select_get()
+# Names without Retopo use a suffix, and repeating setup does not append it twice.
+generic=mesh('Rock',col)
+high.hide_viewport=high.hide_render=high.hide_select=False;high.hide_set(False)
+bpy.ops.object.select_all(action='DESELECT');generic.select_set(True);high.select_set(True)
+ctx.view_layer.objects.active=generic
+s.apply_shrinkwrap=False
+assert bpy.ops.object.polygroups_setup_resculpting()=={'FINISHED'}
+assert generic.name=='Rock_Resculpting'
+high.hide_viewport=False;high.hide_set(False);high.select_set(True)
+assert bpy.ops.object.polygroups_setup_resculpting()=={'FINISHED'}
+assert generic.name=='Rock_Resculpting'
+collision=mesh('Retopo_02_Highpoly_Generated.001',col)
+try:
+ bpy.ops.object.polygroups_setup_resculpting()
+except RuntimeError as error:
+ assert 'Resculpting object already exists' in str(error)
+else:raise AssertionError('Expected naming conflict')
+assert collision.name=='Retopo_02_Highpoly_Generated.001' and not collision.modifiers
 print('RESCULPT_AUTO_HIGHPOLY_SELECTION_AND_VISIBILITY_PASSED')

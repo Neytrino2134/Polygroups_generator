@@ -1,13 +1,24 @@
+import re
 import bpy
 
 from .safety_checks import find_selected_lowpoly
 from .safety_checks import is_lowpoly_name
 from .safety_checks import expected_highpoly_name, find_matching_highpoly
 from .safety_checks import auto_select_matching_highpoly, report_missing_matching_highpoly
+from .safety_checks import is_generated_highpoly_name
 
 
 MULTIRES_MODIFIER_NAME = "PolyGroups Multires"
 SHRINKWRAP_MODIFIER_NAME = "PolyGroups Shrinkwrap"
+
+
+def resculpted_name(name):
+    renamed, count = re.subn(r'Retopo(?=_|$)', 'Resculpting', name, count=1, flags=re.I)
+    if count:
+        return renamed
+    if re.search(r'Resculpting(?:_|$)', name, re.I) or re.search(r'_Resculpting(?:\.\d+)?$', name, re.I):
+        return name
+    return name + '_Resculpting'
 
 
 def _mesh_polygon_count(obj):
@@ -149,7 +160,7 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
 
     def invoke(self, context, event):
         lowpoly = _active_mesh(context)
-        if lowpoly and is_lowpoly_name(lowpoly.name):
+        if lowpoly and (is_lowpoly_name(lowpoly.name) or not is_generated_highpoly_name(lowpoly.name)):
             return self.execute(context)
 
         return context.window_manager.invoke_props_dialog(
@@ -173,9 +184,11 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
         if lowpoly is None:
             self.report({"ERROR"}, "Active object must be a mesh lowpoly target")
             return {"CANCELLED"}
-        if not is_lowpoly_name(lowpoly.name):
-            lowpoly = find_selected_lowpoly(context)
-            if lowpoly is None:
+        if not is_lowpoly_name(lowpoly.name) and is_generated_highpoly_name(lowpoly.name):
+            selected_lowpoly = find_selected_lowpoly(context)
+            if selected_lowpoly is not None:
+                lowpoly = selected_lowpoly
+            else:
                 self.report(
                     {"ERROR"},
                     "Select a mesh named Retopo_... or Retopology...",
@@ -196,6 +209,12 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             highpoly = _selected_highpoly_target(context, lowpoly)
         if highpoly is None:
             self.report({'ERROR'}, 'Select a highpoly mesh and make the lowpoly mesh active')
+            return {'CANCELLED'}
+
+        target_name = resculpted_name(lowpoly.name)
+        existing = bpy.data.objects.get(target_name)
+        if existing is not None and existing != lowpoly:
+            self.report({'ERROR'}, 'Resculpting object already exists: ' + target_name)
             return {'CANCELLED'}
 
         locked = highpoly.hide_select
@@ -224,6 +243,9 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             context.view_layer.objects.active = lowpoly
             lowpoly.select_set(True)
             context.view_layer.update()
+        lowpoly.name = target_name
+        if lowpoly.data.users == 1:
+            lowpoly.data.name = target_name
         self.report(
             {"INFO"},
             f"Resculpting setup: {lowpoly.name} projects to {highpoly.name}",

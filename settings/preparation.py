@@ -229,7 +229,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
     phase2_skip_retopo_backups: bpy.props.BoolProperty(name="Skip Retopo Backup Objects", default=False,
-        description="Do not restore Backup_Retopo objects from saved collections during Phase 2 processing")
+        description="Do not restore Backup_Retopo or Backup_Resculpting objects from saved collections during Phase 2 processing")
     phase2_autosave: bpy.props.BoolProperty(name="Autosave Completed Collections", default=False,
         description="Save the current blend after every N successfully completed collection pipelines")
     phase2_autosave_every: bpy.props.IntProperty(name="Successful Collections per Save", default=1, min=1)

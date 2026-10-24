@@ -75,14 +75,15 @@ def run(resculpt,rebake,failure='',stop_when=''):
   assert low01.modifiers.get(MULTIRES_MODIFIER_NAME) is not None
   assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_viewport
   assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_render
+ processed_name=names[1].replace('Retopo_','Resculpting_',1) if resculpt else names[1]
  if rebake:
-  assert ('repair',names[1]) in events and ('pack',names[1]) in events
-  if failure!='pack':assert ('bake',names[1]) in events
+  assert ('repair',processed_name) in events and ('pack',processed_name) in events
+  if failure!='pack':assert ('bake',processed_name) in events
  if failure:
   assert p.phase2_failed_count==1 and names[0] in bpy.data.objects and names[2] in bpy.data.objects
  else:
   assert p.phase2_done_count==1 and names[0] not in bpy.data.objects and names[2] not in bpy.data.objects
-  assert names[1] in bpy.data.objects and names[3] in bpy.data.objects
+  assert processed_name in bpy.data.objects and names[3] in bpy.data.objects
   assert col.hide_render and col.hide_viewport
  return events
 for resculpt,rebake in ((True,True),(True,False),(False,True)):
@@ -143,7 +144,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_native_retopo01_') as fol
  assert q.finished and p.phase2_done_count==1 and p.phase2_failed_count==0,q.results
  assert p.phase2_autosave_status=='Autosaved after 1 successful collections'
  targets=[o for o in bpy.data.objects if phase2.LOW.fullmatch(o.name)]
- assert len(targets)==2 and any(o.name.startswith('Retopo_01_') for o in targets)
+ assert len(targets)==2 and any(o.name.startswith('Resculpting_01_') for o in targets)
  assert all(o.get(baking.BAKE_NORMAL_IMAGE_PROP) for o in targets)
  assert all(m.show_viewport and m.show_render for o in targets for m in o.modifiers if m.type=='MULTIRES')
  from polygroups_generator.core.bake_projection import current_mask

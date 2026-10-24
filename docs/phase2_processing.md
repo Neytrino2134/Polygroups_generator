@@ -137,8 +137,9 @@ automatic Delete Lower Retopo and the manual lower-stage cleanup. Turning it
 off allows that stage to be deleted along with the other lower stages.
 The collection is disabled only after all requested stages succeed.
 
-Retopo_01's secondary bake stores maps under Bakes/Generated.N_Retopo_01 with
-distinct image names. It does not overwrite the highest Retopo's maps under
+The secondary bake stores maps under Bakes/Generated.N_Resculpting_01 after
+resculpting, or Bakes/Generated.N_Retopo_01 when only rebaking the original mesh,
+with distinct image names. It does not overwrite the highest Retopo's maps under
 Bakes/Generated.N. The output suffix remains on the Retopo_01 object so later
 Save Textures operations use the same separate location.
 
@@ -200,3 +201,20 @@ selection, restore/cleanup preferences, autosave, backup omission and Only If
 Changed. Switching is disabled during processing/baking/rendering.
 test_phase2_processing_presets_blender.py checks switching, pressed states,
 unrelated-setting preservation and the busy-state guard.
+
+## Resculpting mesh names
+
+Successful Setup Resculpting (section 07 and the Phase 2 follow-up) replaces the
+Retopo_ token with Resculpting_. Other mesh names receive _Resculpting. Existing
+Resculpting names are retained on repeat setup. Naming conflicts cancel before
+modifying the target. Arbitrary mesh names are accepted with an active low mesh
+and selected highpoly; a generated highpoly alone is not accepted as lowpoly.
+
+Restore preserves Resculpting_XX while assigning the new Generated.N index.
+Source matching, rebaking, stage-01 retention, lower-stage cleanup and Batch
+Finalization recognize the renamed stages. Backup_Resculpting objects are
+covered by the existing backup-omission and backup-cleanup controls.
+test_resculpt_auto_highpoly_blender.py checks manual naming, suffix/idempotence
+and conflicts. test_resculpting_restore_names_blender.py checks restored names,
+highpoly matching and retention. The full Retopo_01 test performs both native
+bakes using the renamed Resculpting_01 mesh.

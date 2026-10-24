@@ -15,7 +15,7 @@ from .import_queue import generated_collection_files, redraw
 GENERATED = re.compile(r'^Generated(?:\.\d+)*$', re.I)
 NUMBERED = re.compile(r'^Generated\.\d+(?:\.\d+)*$', re.I)
 HIGH = re.compile(r'^Highpoly_Generated(?:\.\d+)*$', re.I)
-LOW = re.compile(r'^Retopo_(\d+)_Highpoly_Generated(?:\.\d+)*$', re.I)
+LOW = re.compile(r'^(?:Retopo|Resculpting)_(\d+)_Highpoly_Generated(?:\.\d+)*$', re.I)
 ACTIVE_PHASE2 = None
 
 
@@ -92,7 +92,7 @@ def restore_collection(filepath, source_name, scene):
         if scene.polygroups_model_preparation_settings.phase2_skip_retopo_backups:
             imported_collections = set(bpy.data.collections) - before['collections']
             for obj in list(collection.all_objects):
-                if not obj.name.lower().startswith('backup_retopo_'):
+                if not obj.name.lower().startswith(('backup_retopo_', 'backup_resculpting_')):
                     continue
                 for owner in list(obj.users_collection):
                     if owner in imported_collections:
@@ -127,17 +127,19 @@ def restore_collection(filepath, source_name, scene):
         collection.color_tag = 'COLOR_05'
         scene.collection.children.link(collection)
         # Vacate all imported names before assigning canonical destinations.
+        resculpted = {obj for obj, stage in lows if obj.name.lower().startswith('resculpting_')}
         for ordinal, obj in enumerate(highs + [obj for obj, _stage in lows]):
             obj.name = f'__Phase2_{digits}_{ordinal:05d}__'
         if highs:
             highs[0].name = f'Highpoly_Generated.{digits}'
         stages = set()
         for obj, stage in lows:
+            prefix = 'Resculpting' if obj in resculpted else 'Retopo'
             # Heal duplicate stage names rather than letting Blender add .001.
-            while stage in stages:
+            while (prefix, stage) in stages:
                 stage += 1
-            stages.add(stage)
-            obj.name = f'Retopo_{stage:02d}_Highpoly_Generated.{digits}'
+            stages.add((prefix, stage))
+            obj.name = f'{prefix}_{stage:02d}_Highpoly_Generated.{digits}'
         return collection
     except Exception:
         # A malformed file must not leave appended objects or affect old data.
@@ -291,7 +293,7 @@ class Phase2Queue:
             self.primary_pair = (high, low)
         if target is not None:
             low = target
-            low['polygroups_bake_output_suffix'] = 'Retopo_01'
+            low['polygroups_bake_output_suffix'] = ('Resculpting_01' if low.name.lower().startswith('resculpting_') else 'Retopo_01')
         self.baked_pair = (high, low)
         if low.data.uv_layers.active is None:
             raise ValueError(f'{low.name}: Auto Bake requires a UV map')
@@ -418,7 +420,7 @@ class Phase2Queue:
                     candidates = [obj for obj in self.collection.all_objects if obj.type == 'MESH'
                         and (match := LOW.fullmatch(obj.name)) and int(match.group(1)) == 1]
                     if len(candidates) != 1:
-                        raise ValueError(f'{self.collection.name}: expected exactly one Retopo_01 mesh')
+                        raise ValueError(f'{self.collection.name}: expected exactly one Retopo_01 / Resculpting_01 mesh')
                     self.retopo01 = candidates[0]
                 self.repair_mesh(context)
                 if self.auto_bake:
@@ -603,8 +605,8 @@ class OBJECT_OT_polygroups_phase2_stop(bpy.types.Operator):
 
 class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
     bl_idname = 'object.polygroups_phase2_clear_backups'
-    bl_label = 'Delete All Backup_Retopo Objects'
-    bl_description = 'Remove all local mesh objects whose names start with Backup_Retopo_'
+    bl_label = 'Delete All Retopo / Resculpting Backups'
+    bl_description = 'Remove all local Backup_Retopo_ and Backup_Resculpting_ mesh objects'
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -618,11 +620,11 @@ class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
 
     def execute(self, context):
         count = remove_mesh_objects(obj for obj in bpy.data.objects
-            if obj.type == 'MESH' and obj.name.lower().startswith('backup_retopo_'))
-        context.scene.polygroups_model_preparation_settings.phase2_status = f'Deleted {count} Backup_Retopo objects'
+            if obj.type == 'MESH' and obj.name.lower().startswith(('backup_retopo_', 'backup_resculpting_')))
+        context.scene.polygroups_model_preparation_settings.phase2_status = f'Deleted {count} Retopo / Resculpting backups'
         context.scene.polygroups_model_preparation_settings.phase2_final_progress = 0
         context.scene.polygroups_model_preparation_settings.phase2_total_count = 0
-        self.report({'INFO'}, f'Deleted {count} Backup_Retopo objects')
+        self.report({'INFO'}, f'Deleted {count} Retopo / Resculpting backups')
         return {'FINISHED'}
 
 
@@ -641,7 +643,7 @@ class OBJECT_OT_polygroups_phase2_clear_lower_retopo(bpy.types.Operator):
         for obj in bpy.data.objects:
             match = LOW.fullmatch(obj.name) if obj.type == 'MESH' and not obj.library else None
             if match:
-                key = re.sub(r'^Retopo_\d+_', '', obj.name, flags=re.I).lower()
+                key = re.sub(r'^(?:Retopo|Resculpting)_\d+_', '', obj.name, flags=re.I).lower()
                 groups.setdefault(key, []).append((int(match.group(1)), obj))
         doomed = []
         for entries in groups.values():
