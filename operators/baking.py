@@ -7,7 +7,7 @@ import blf
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
-from ..core.generated_index import bake_collection_name, fix_object_generated_index
+from ..core.generated_index import bake_output_name, fix_object_generated_index
 from ..localization import t
 from ..core.bake_projection import ProjectionSession, invalidate as _invalidate_artifact_mask, current_mask, save_mask_png, seal_mask
 
@@ -483,7 +483,7 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             normal_image = _find_material_bake_image(active_material, BAKE_NORMAL_NODE)
             alpha_image = _find_material_bake_image(active_material, BAKE_ALPHA_NODE)
         else:
-            output_name = _safe_path_name(bake_collection_name(target) or target.name)
+            output_name = _safe_path_name(bake_output_name(target))
             base_image = _find_current_bake_image(
                 target,
                 BAKE_BASE_COLOR_NODE,

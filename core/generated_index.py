@@ -61,3 +61,9 @@ def fix_object_generated_index(obj):
 def bake_collection_name(obj):
     collection, _index = generated_collection_info(obj)
     return collection.name if collection is not None else ""
+
+
+def bake_output_name(obj):
+    name = bake_collection_name(obj) or obj.name
+    suffix = str(obj.get('polygroups_bake_output_suffix', '')).strip()
+    return f'{name}_{suffix}' if suffix else name

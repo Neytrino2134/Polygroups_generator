@@ -111,3 +111,35 @@ engine-specific renaming, shared status and Stop Processing.
 
 See [Auto Render](phase2_auto_render.md) for fixed-quality asset previews,
 per-asset camera fitting, Freestyle, Multiview and paired texture output.
+
+## Retopo_01 follow-up processing
+
+Restore and Processing includes two opt-in options beneath Auto Bake:
+
+- Resculpting Retopo_01 runs the existing Setup Resculpting operator on
+  Retopo_01_Highpoly_Generated.N after the highest Retopo has baked successfully.
+  The resculpt Multires, Shrinkwrap and Apply Shrinkwrap settings are reused.
+- Autobake Retopo_01 repairs and rebakes that mesh using the same enabled
+  geometry repair and full artifact-mask/Autofill settings as the primary bake.
+  If Auto Repair and Repack After Repair are enabled, its UVPackmaster PACK
+  always runs, even when the repair signature is unchanged. Only If Changed
+  continues to apply normally to the highest Retopo.
+
+Order: highest repair/conditional repack -> highest bake -> optional Retopo_01
+resculpt -> optional Retopo_01 repair/forced repack/bake -> successful cleanup.
+Requested follow-up processing requires exactly one Retopo_01 in the restored
+collection. Missing targets or failures retain the highpoly and lower stages.
+An enabled follow-up target is protected from Delete Lower Retopo Stages.
+The collection is disabled only after all requested stages succeed.
+
+Retopo_01's secondary bake stores maps under Bakes/Generated.N_Retopo_01 with
+distinct image names. It does not overwrite the highest Retopo's maps under
+Bakes/Generated.N. The output suffix remains on the Retopo_01 object so later
+Save Textures operations use the same separate location.
+
+test_phase2_retopo01_blender.py validates stage order, independent switches,
+forced repack after unchanged repair, cleanup deferral, failure/stop retention
+and restored bake preferences. It also performs real CPU Cycles normal and
+artifact-mask/Autofill bakes for both targets and verifies separate saved maps.
+UVPackmaster calls in the ordering test are mocked; native PACK is covered by
+the existing optional installed-engine repair test.

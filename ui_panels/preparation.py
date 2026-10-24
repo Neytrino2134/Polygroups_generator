@@ -482,6 +482,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls.prop(settings, "phase2_auto_bake", text=t(context, "phase2_autobake"))
                 if settings.phase2_auto_bake:
                     controls.prop(settings, "phase2_repair_artifacts", text=t(context, "phase2_repair"))
+                    controls.prop(settings, 'phase2_resculpt_retopo01')
+                    controls.prop(settings, 'phase2_autobake_retopo01')
+                    if settings.phase2_autobake_retopo01 and settings.phase2_mesh_auto_repair and settings.phase2_repack_after_repair:
+                        controls.label(text='Retopo_01: Repack ignores Only If Changed', icon='INFO')
                     controls.prop(settings, "phase2_delete_high_after_bake")
                     controls.prop(settings, "phase2_delete_lower_retopo")
                     controls.label(text=t(context, "phase2_bake_hint1"), icon="INFO")

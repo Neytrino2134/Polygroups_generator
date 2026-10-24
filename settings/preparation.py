@@ -228,6 +228,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Remove existing Generated.N collections before restoring the scanned files",
     )
     phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
+    phase2_resculpt_retopo01: bpy.props.BoolProperty(name="Resculpting Retopo_01", default=False,
+        description="Run Setup Resculpting on Retopo_01 after the highest Retopo finishes baking")
+    phase2_autobake_retopo01: bpy.props.BoolProperty(name="Autobake Retopo_01", default=False,
+        description="Repair and rebake Retopo_01 before highpoly cleanup; enabled UV repacking ignores Only If Changed")
     phase2_mesh_auto_repair: bpy.props.BoolProperty(
         name="Auto Repair Mesh", default=True,
         description="Repair folded pockets and merge coincident vertices only on the highest Retopo stage independently of Auto Bake",

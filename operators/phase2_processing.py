@@ -204,6 +204,8 @@ class Phase2Queue:
         self.saved_bake = {}
         self.results = []
         self.baked_pair = None
+        self.primary_pair = None
+        self.retopo01 = None
 
     def begin(self):
         settings = self.settings
@@ -213,7 +215,7 @@ class Phase2Queue:
         settings.phase2_final_progress = 0
         settings.phase2_status = 'Starting Phase 2'
 
-    def repair_mesh(self, context):
+    def repair_mesh(self, context, low=None, force_repack=False):
         if not self.settings.phase2_mesh_auto_repair:
             return
         from .rename_objects import ensure_collection_visible_in_view_layer
@@ -221,7 +223,7 @@ class Phase2Queue:
                 if obj.type == 'MESH' and (match := LOW.fullmatch(obj.name))]
         if not lows:
             raise ValueError(f'{self.collection.name}: Auto Repair requires a numbered Retopo')
-        low = max(lows, key=lambda item: item[0])[1]
+        low = low if low is not None else max(lows, key=lambda item: item[0])[1]
         if not ensure_collection_visible_in_view_layer(context, self.collection):
             raise ValueError(f'{self.collection.name}: cannot make collection visible')
         if context.object and context.object.mode != 'OBJECT':
@@ -234,7 +236,7 @@ class Phase2Queue:
         self.view_layer.objects.active = low
         if low.data.users > 1:
             low.data = low.data.copy()
-        check_changes = self.settings.phase2_repack_only_if_changed
+        check_changes = self.settings.phase2_repack_only_if_changed and not force_repack
         before = mesh_uv_signature(low.data) if check_changes else None
         result = bpy.ops.mesh.polygroups_repair_mesh_folds(
             'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
@@ -249,9 +251,14 @@ class Phase2Queue:
             if 'FINISHED' not in result:
                 raise RuntimeError(f'UVPackmaster PACK failed for {low.name}; processing skipped')
 
-    def start_bake(self, context):
+    def start_bake(self, context, target=None):
         from .rename_objects import ensure_collection_visible_in_view_layer
         high, low = bake_pair(self.collection)
+        if self.primary_pair is None:
+            self.primary_pair = (high, low)
+        if target is not None:
+            low = target
+            low['polygroups_bake_output_suffix'] = 'Retopo_01'
         self.baked_pair = (high, low)
         if low.data.uv_layers.active is None:
             raise ValueError(f'{low.name}: Auto Bake requires a UV map')
@@ -291,8 +298,9 @@ class Phase2Queue:
         self.restore_bake_settings()
         if self.collection is not None:
             if not error:
-                if self.stage == 'BAKE_WAIT' and self.baked_pair is not None:
-                    high, low = self.baked_pair
+                cleanup_pair = self.primary_pair or (self.baked_pair if self.stage == 'BAKE_WAIT' else None)
+                if cleanup_pair is not None:
+                    high, low = cleanup_pair
                     doomed = []
                     if self.settings.phase2_delete_high_after_bake:
                         doomed.append(high)
@@ -300,7 +308,7 @@ class Phase2Queue:
                         stage = int(LOW.fullmatch(low.name).group(1))
                         doomed.extend(obj for obj in self.collection.all_objects
                             if obj.type == 'MESH' and (match := LOW.fullmatch(obj.name))
-                            and int(match.group(1)) < stage)
+                            and int(match.group(1)) < stage and obj != self.retopo01)
                     # Preserve objects linked outside the completed collection tree.
                     tree = set()
                     def visit(col):
@@ -318,6 +326,8 @@ class Phase2Queue:
                 disable_completed_collection(self.collection, self.view_layer)
             self.collection.color_tag = 'COLOR_05' if error else 'COLOR_02'
         self.baked_pair = None
+        self.primary_pair = None
+        self.retopo01 = None
         if error:
             self.settings.phase2_failed_count += 1
             self.report({'WARNING'}, f'{self.entries[self.index]}: {error}')
@@ -341,7 +351,7 @@ class Phase2Queue:
         # Stop after the active bake completes; never mutate its inputs mid-job.
         if bake.bake_task_is_running:
             return
-        if self.stop_requested and self.stage != 'BAKE_WAIT':
+        if self.stop_requested and self.stage not in {'BAKE_WAIT', 'RETOPO01_BAKE_WAIT'}:
             self.finish(stopped=True)
             return
         if self.index >= len(self.entries):
@@ -353,6 +363,12 @@ class Phase2Queue:
             if self.stage == 'RESTORE':
                 self.collection = restore_collection(path, name, self.scene)
                 self.view_layer.update()
+                if self.auto_bake and (self.settings.phase2_resculpt_retopo01 or self.settings.phase2_autobake_retopo01):
+                    candidates = [obj for obj in self.collection.all_objects if obj.type == 'MESH'
+                        and (match := LOW.fullmatch(obj.name)) and int(match.group(1)) == 1]
+                    if len(candidates) != 1:
+                        raise ValueError(f'{self.collection.name}: expected exactly one Retopo_01 mesh')
+                    self.retopo01 = candidates[0]
                 self.repair_mesh(context)
                 if self.auto_bake:
                     self.stage = 'BAKE_START'
@@ -364,6 +380,40 @@ class Phase2Queue:
             elif self.stage == 'BAKE_WAIT':
                 if bake.bake_task_stage != 'DONE':
                     raise RuntimeError(f'Auto Bake failed: {bake.bake_task_message}')
+                self.restore_bake_settings()
+                if self.settings.phase2_resculpt_retopo01:
+                    self.stage = 'RETOPO01_RESCULPT'
+                elif self.settings.phase2_autobake_retopo01:
+                    self.stage = 'RETOPO01_PREPARE'
+                else:
+                    self.complete()
+            elif self.stage == 'RETOPO01_RESCULPT':
+                if context.object and context.object.mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                for obj in context.selected_objects:
+                    obj.select_set(False)
+                low = self.retopo01
+                if low.data.users > 1:
+                    low.data = low.data.copy()
+                low.hide_viewport = low.hide_render = low.hide_select = False
+                low.hide_set(False)
+                low.select_set(True)
+                self.view_layer.objects.active = low
+                if 'FINISHED' not in bpy.ops.object.polygroups_setup_resculpting('EXEC_DEFAULT'):
+                    raise RuntimeError(f'Setup Resculpting failed for {low.name}')
+                if self.settings.phase2_autobake_retopo01:
+                    self.stage = 'RETOPO01_PREPARE'
+                else:
+                    self.complete()
+            elif self.stage == 'RETOPO01_PREPARE':
+                self.repair_mesh(context, low=self.retopo01, force_repack=True)
+                self.stage = 'RETOPO01_BAKE_START'
+            elif self.stage == 'RETOPO01_BAKE_START':
+                self.start_bake(context, target=self.retopo01)
+                self.stage = 'RETOPO01_BAKE_WAIT'
+            elif self.stage == 'RETOPO01_BAKE_WAIT':
+                if bake.bake_task_stage != 'DONE':
+                    raise RuntimeError(f'Retopo_01 Auto Bake failed: {bake.bake_task_message}')
                 self.complete()
         except Exception as error:
             self.complete(str(error))

@@ -2,7 +2,7 @@
 import re
 from array import array
 import bpy
-from ..core.generated_index import bake_collection_name, fix_object_generated_index
+from ..core.generated_index import bake_output_name, fix_object_generated_index
 from .bake_constants import (
     BAKE_ALPHA_IMAGE_PROP,
     BAKE_ALPHA_NODE,
@@ -91,7 +91,7 @@ def _make_image(name, resolution, colorspace):
 
 
 def _bake_data_name(settings, target, suffix):
-    object_name = _safe_path_name(bake_collection_name(target) or target.name)
+    object_name = _safe_path_name(bake_output_name(target))
     prefix = _safe_path_name(settings.image_prefix)
     return f"{prefix}_{object_name}_{suffix}"
 
