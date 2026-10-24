@@ -8,9 +8,9 @@ addon_utils.enable(ROOT.name,default_set=False)
 ctx=bpy.context;p=ctx.scene.polygroups_model_preparation_settings
 p.phase2_autosave=True;p.phase2_autosave_every=7;p.phase2_skip_retopo_backups=True
 p.phase2_delete_high_after_bake=p.phase2_delete_lower_retopo=True
-p.phase2_repack_only_if_changed=False
+p.phase2_mid_remesh=True
 kept=('phase2_autosave','phase2_autosave_every','phase2_skip_retopo_backups',
-      'phase2_delete_high_after_bake','phase2_delete_lower_retopo','phase2_repack_only_if_changed')
+      'phase2_delete_high_after_bake','phase2_delete_lower_retopo')
 original={name:getattr(p,name) for name in kept}
 def switch(name):
  assert bpy.ops.object.polygroups_phase2_processing_preset(preset=name)=={'FINISHED'}
@@ -22,11 +22,11 @@ def verify_ui():
  buttons=[node for node in walk(model.node) if node.get('kind')=='button'
           and 'polygroups_phase2_processing_preset' in node.get('id','')]
  assert len(buttons)==3,buttons
- assert buttons[0].get('depress')==(not p.phase2_auto_bake and not p.phase2_mesh_auto_repair)
+ assert buttons[0].get('depress')==(not any((p.phase2_auto_bake,p.phase2_mesh_auto_repair,p.phase2_mid_remesh,p.phase2_repack_after_repair)))
  assert buttons[1].get('depress')==p.phase2_auto_bake
  assert buttons[2].get('depress')==p.phase2_resculpt_retopo01
 switch('IMPORT')
-assert not any(getattr(p,name) for name in ('phase2_auto_bake','phase2_mesh_auto_repair',
+assert not any(getattr(p,name) for name in ('phase2_mid_remesh','phase2_auto_bake','phase2_mesh_auto_repair',
  'phase2_repack_after_repair','phase2_repair_artifacts','phase2_resculpt_retopo01','phase2_autobake_retopo01'))
 verify_ui()
 switch('REBAKE')

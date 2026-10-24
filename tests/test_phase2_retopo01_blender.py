@@ -12,7 +12,7 @@ from polygroups_generator.operators.resculpting import MULTIRES_MODIFIER_NAME
 ctx=bpy.context;p=ctx.scene.polygroups_model_preparation_settings;bake=ctx.scene.polygroups_baking_settings
 assert not p.phase2_resculpt_retopo01 and not p.phase2_autobake_retopo01
 real=bpy
-p.phase2_mesh_auto_repair=True;p.phase2_repack_after_repair=True;p.phase2_repack_only_if_changed=True
+p.phase2_mesh_auto_repair=True;p.phase2_repack_after_repair=True
 p.phase2_delete_high_after_bake=True;p.phase2_delete_lower_retopo=True
 ctx.scene.polygroups_resculpting_settings.multires_levels=1
 def fixture():
@@ -33,8 +33,8 @@ def run(resculpt,rebake,failure='',stop_when=''):
  original=(bake.bake_artifact_mask,bake.bake_artifact_autofill,bake.auto_save_textures_after_bake)
  def repair(*args,**kwargs):events.append(('repair',ctx.active_object.name));return {'FINISHED'}
  def pack(*args,**kwargs):
-  assert ctx.active_object==low01,'Unchanged highest Retopo must skip repack'
-  events.append(('pack',low01.name));return {'CANCELLED'} if failure=='pack' else {'FINISHED'}
+  assert ctx.active_object in (low01,objects[3])
+  events.append(('pack',ctx.active_object.name));return {'CANCELLED'} if failure=='pack' and ctx.active_object==low01 else {'FINISHED'}
  def sculpt(*args,**kwargs):
   assert ctx.active_object==low01 and high.name in bpy.data.objects
   events.append(('sculpt',low01.name))
@@ -65,7 +65,7 @@ def run(resculpt,rebake,failure='',stop_when=''):
    if q.finished:break
  assert q.finished and not p.phase2_is_running
  assert original==(bake.bake_artifact_mask,bake.bake_artifact_autofill,bake.auto_save_textures_after_bake)
- assert events[0:2]==[('repair',names[3]),('bake',names[3])]
+ assert events[0:3]==[('repair',names[3]),('pack',names[3]),('bake',names[3])]
  if stop_when:
   assert p.phase2_status.startswith('Stopped') and names[0] in bpy.data.objects
   assert p.phase2_done_count==0 and p.phase2_failed_count==0
@@ -89,7 +89,7 @@ def run(resculpt,rebake,failure='',stop_when=''):
 for resculpt,rebake in ((True,True),(True,False),(False,True)):
  events=run(resculpt,rebake)
  if resculpt and rebake:
-  assert [kind for kind,name in events]==['repair','bake','sculpt','repair','pack','bake']
+  assert [kind for kind,name in events]==['repair','pack','bake','sculpt','repair','pack','bake']
 run(True,True,'bake');run(False,True,'pack')
 run(True,True,stop_when='RETOPO01_RESCULPT')
 # An in-flight secondary bake keeps Multires disabled until it actually ends.

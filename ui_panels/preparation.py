@@ -444,7 +444,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 presets.enabled = not (settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
                 modes = presets.row(align=True)
                 modes.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_import'),
-                    icon='IMPORT', depress=not settings.phase2_auto_bake and not settings.phase2_mesh_auto_repair).preset = 'IMPORT'
+                    icon='IMPORT', depress=not any((settings.phase2_auto_bake, settings.phase2_mesh_auto_repair, settings.phase2_mid_remesh, settings.phase2_repack_after_repair))).preset = 'IMPORT'
                 modes.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_rebake'),
                     icon='RENDER_STILL', depress=settings.phase2_auto_bake).preset = 'REBAKE'
                 presets.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_resculpt'),
@@ -469,20 +469,18 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     warning.label(text=t(context, "phase2_clear_hint2"), icon="BLANK1")
                 controls.prop(settings, 'phase2_skip_retopo_backups')
                 controls.prop(settings, "phase2_mesh_auto_repair", text=t(context, "phase2_mesh_auto_repair"))
+                controls.prop(settings, 'phase2_mid_remesh')
+                if settings.phase2_mid_remesh:
+                    controls.label(text='Clear seams + pins | Smart Seams 22 degrees | MID', icon='INFO')
                 repack = controls.row()
-                repack.enabled = settings.phase2_mesh_auto_repair
                 repack.prop(settings, "phase2_repack_after_repair", text=t(context, "phase2_repack_after_repair"))
-                changed_only = controls.row()
-                changed_only.enabled = settings.phase2_mesh_auto_repair and settings.phase2_repack_after_repair
-                changed_only.separator()
-                changed_only.prop(settings, "phase2_repack_only_if_changed", text=t(context, "phase2_repack_only_if_changed"))
                 controls.prop(settings, "phase2_auto_bake", text=t(context, "phase2_autobake"))
                 if settings.phase2_auto_bake:
                     controls.prop(settings, "phase2_repair_artifacts", text=t(context, "phase2_repair"))
                     controls.prop(settings, 'phase2_resculpt_retopo01')
+                    if settings.phase2_resculpt_retopo01:
+                        controls.prop(settings, 'phase2_repair_after_resculpt')
                     controls.prop(settings, 'phase2_autobake_retopo01')
-                    if settings.phase2_autobake_retopo01 and settings.phase2_mesh_auto_repair and settings.phase2_repack_after_repair:
-                        controls.label(text='Retopo_01: Repack ignores Only If Changed', icon='INFO')
                     controls.prop(settings, "phase2_delete_high_after_bake")
                     controls.prop(settings, "phase2_delete_lower_retopo")
                     keep = controls.row()

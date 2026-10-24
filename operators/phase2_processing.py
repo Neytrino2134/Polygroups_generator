@@ -228,6 +228,7 @@ class Phase2Queue:
         self.retopo01 = None
         self.autosave_error = ''
         self.previous_collection = None
+        self.mid_remesh = None
 
     def begin(self):
         settings = self.settings
@@ -257,8 +258,8 @@ class Phase2Queue:
             self.stop_requested = True
             self.report({'WARNING'}, self.autosave_error)
 
-    def repair_mesh(self, context, low=None, force_repack=False):
-        if not self.settings.phase2_mesh_auto_repair:
+    def repair_mesh(self, context, low=None, force_repack=False, repack=True, enabled=None):
+        if not (self.settings.phase2_mesh_auto_repair if enabled is None else enabled):
             return
         from .rename_objects import ensure_collection_visible_in_view_layer
         lows = [(int(match.group(1)), obj) for obj in self.collection.all_objects
@@ -278,15 +279,21 @@ class Phase2Queue:
         self.view_layer.objects.active = low
         if low.data.users > 1:
             low.data = low.data.copy()
-        check_changes = self.settings.phase2_repack_only_if_changed and not force_repack
-        before = mesh_uv_signature(low.data) if check_changes else None
         result = bpy.ops.mesh.polygroups_repair_mesh_folds(
             'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
             fix_degenerate=True, fix_zero_area=False, selected_only=False)
         if 'FINISHED' not in result:
             raise RuntimeError(f'Auto Repair failed for {low.name}; processing skipped')
-        changed = not check_changes or mesh_uv_signature(low.data) != before
-        if self.settings.phase2_repack_after_repair and changed:
+        if repack:
+            self.repack_mesh(context,low)
+
+    def repack_mesh(self, context, low=None):
+        if self.settings.phase2_repack_after_repair:
+            low = low if low is not None else bake_pair(self.collection)[1]
+            if context.object and context.object.mode != 'OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
+            for obj in context.selected_objects:obj.select_set(False)
+            low.hide_viewport=low.hide_render=low.hide_select=False
+            low.hide_set(False);low.select_set(True);self.view_layer.objects.active=low
             if low.data.uv_layers.active is None:
                 raise ValueError(f'{low.name}: UV repack requires a UV map')
             result = bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT')
@@ -350,6 +357,8 @@ class Phase2Queue:
         self.view_layer.update()
 
     def complete(self, error=''):
+        if self.mid_remesh is not None:
+            self.mid_remesh.abort();self.mid_remesh=None
         self.restore_bake_settings()
         if self.collection is not None:
             if not error:
@@ -399,6 +408,8 @@ class Phase2Queue:
     def finish(self, stopped=False):
         if self.finished:
             return
+        if self.mid_remesh is not None:
+            self.mid_remesh.abort();self.mid_remesh=None
         self.restore_bake_settings()
         self.settings.phase2_is_running = False
         self.settings.phase2_status = ('Stopped' if stopped else 'Completed') + (
@@ -433,11 +444,24 @@ class Phase2Queue:
                     if len(candidates) != 1:
                         raise ValueError(f'{self.collection.name}: expected exactly one Retopo_01 / Resculpting_01 mesh')
                     self.retopo01 = candidates[0]
-                self.repair_mesh(context)
-                if self.auto_bake:
-                    self.stage = 'BAKE_START'
+                self.repair_mesh(context,repack=False)
+                if self.settings.phase2_mid_remesh:
+                    from .phase2_mid_remesh import Phase2MidRemesh
+                    self.mid_remesh=Phase2MidRemesh(context,self.collection,self.report)
+                    self.mid_remesh.start(context)
+                    self.stage='MID_REMESH_WAIT'
                 else:
-                    self.complete()
+                    self.repack_mesh(context)
+                    if self.auto_bake:self.stage='BAKE_START'
+                    else:self.complete()
+            elif self.stage == 'MID_REMESH_WAIT':
+                done,progress=self.mid_remesh.poll()
+                self.settings.phase2_status=f'{self.index+1}/{len(self.entries)}: {name} / MID Remesh {progress*100:.0f}%'
+                if done:
+                    self.mid_remesh.finish(context);self.mid_remesh=None
+                    self.repack_mesh(context)
+                    if self.auto_bake:self.stage='BAKE_START'
+                    else:self.complete()
             elif self.stage == 'BAKE_START':
                 self.start_bake(context)
                 self.stage = 'BAKE_WAIT'
@@ -465,12 +489,16 @@ class Phase2Queue:
                 self.view_layer.objects.active = low
                 if 'FINISHED' not in bpy.ops.object.polygroups_setup_resculpting('EXEC_DEFAULT'):
                     raise RuntimeError(f'Setup Resculpting failed for {low.name}')
+                self.repair_mesh(context,low=low,repack=False,enabled=self.settings.phase2_repair_after_resculpt)
                 if self.settings.phase2_autobake_retopo01:
                     self.stage = 'RETOPO01_PREPARE'
                 else:
+                    self.repack_mesh(context,low)
                     self.complete()
             elif self.stage == 'RETOPO01_PREPARE':
-                self.repair_mesh(context, low=self.retopo01, force_repack=True)
+                if not self.settings.phase2_resculpt_retopo01:
+                    self.repair_mesh(context,low=self.retopo01,repack=False)
+                self.repack_mesh(context,self.retopo01)
                 self.stage = 'RETOPO01_BAKE_START'
             elif self.stage == 'RETOPO01_BAKE_START':
                 self.start_bake(context, target=self.retopo01)
@@ -839,7 +867,7 @@ class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
     def execute(self, context):
         p = context.scene.polygroups_model_preparation_settings
         if self.preset == 'IMPORT':
-            for name in ('phase2_auto_bake', 'phase2_mesh_auto_repair', 'phase2_repack_after_repair',
+            for name in ('phase2_mid_remesh', 'phase2_auto_bake', 'phase2_mesh_auto_repair', 'phase2_repack_after_repair',
                          'phase2_repair_artifacts', 'phase2_resculpt_retopo01', 'phase2_autobake_retopo01'):
                 setattr(p, name, False)
         else:

@@ -44,13 +44,18 @@ vertices on that highest Retopo only. It ignores selection-area restrictions;
 shared mesh data is copied first to keep Highpoly and earlier Retopo stages
 unchanged. Repair failure skips the bake and marks that collection failed.
 
-Repack UV After Repair defaults off. Its separate Only If Changed sub-option
-defaults on. When enabled, geometry/topology and all UV
-layers are compared before and after repair. Only changed targets run the existing
-UVPackmaster PACK operator, synchronously, before any optional bake. Unchanged
-targets skip packing. Missing UVs or a failed PACK mark that item failed. This
-option also works when Auto Bake is off. Existing Bake UV packing settings remain
-independent.
+MID Remesh Before Repack is optional (off by default). After Auto Repair it
+selects the highest Retopo_XX, clears all seams, pinned seam edges and UV pins,
+and runs Smart Seams Generator with Surface Angle 22 degrees. Quad Remesher
+uses the configured MID preset count and creates the next numbered Retopo.
+Smart Seams 22 degrees and Angle Based unwrap prepare its new UVs. Subsequent
+packing and baking select the highest stage again. The queue reports remesh
+progress and supports stopping; temporary settings are restored on all exits.
+
+Repack UV defaults off. When enabled, UVPackmaster PACK always runs on the
+current target before baking, independently of Auto Repair or Auto Bake.
+Only If Changed has been removed. Missing UVs or a failed PACK mark that item
+failed. Existing Bake UV packing settings remain independent.
 
 Repair Projection Artifacts defaults on. During each bake it enables the full
 projection mask, matching normal resolution and Autofill. These overrides and
@@ -99,8 +104,6 @@ unlinked from that tree, not deleted globally. The separate Delete All
 Backup_Retopo Objects button removes local mesh objects with that prefix and
 supports Undo; shared mesh data is kept while other objects use it.
 
-When Only If Changed is off, every successful Auto Repair runs PACK if Repack UV
-After Repair is enabled, even when the mesh and UVs were unchanged.
 
 Manual cleanup buttons also find hidden/disabled objects. Delete Lower Retopo
 Stages groups canonical Retopo_XX_Highpoly_Generated names by asset suffix,
@@ -123,15 +126,15 @@ Restore and Processing includes two opt-in options beneath Auto Bake:
   The resculpt Multires, Shrinkwrap and Apply Shrinkwrap settings are reused.
 - Autobake Retopo_01 repairs and rebakes that mesh using the same enabled
   geometry repair and full artifact-mask/Autofill settings as the primary bake.
-  If Auto Repair and Repack After Repair are enabled, its UVPackmaster PACK
-  always runs, even when the repair signature is unchanged. Only If Changed
-  continues to apply normally to the highest Retopo.
+  Auto Repair After Resculpting defaults on and runs immediately after Setup
+  Resculpting. Repack UV always runs when enabled, including unchanged meshes.
   During the Retopo_01 bake, its Multires modifiers are temporarily disabled in
   viewport and render. Their previous visibility is restored after completion,
   failure or cancellation; primary-target modifiers are unaffected.
 
-Order: highest repair/conditional repack -> highest bake -> optional Retopo_01
-resculpt -> optional Retopo_01 repair/forced repack/bake -> successful cleanup.
+Order: highest repair -> optional MID remesh -> repack -> highest bake ->
+optional Retopo_01 resculpt -> post-resculpt repair -> repack -> optional
+Retopo_01 bake -> successful cleanup.
 Requested follow-up processing requires exactly one Retopo_01 in the restored
 collection. Missing targets or failures retain the highpoly and lower stages.
 Keep Retopo_01 (Resculpted), enabled by default, preserves stage 01 during both
