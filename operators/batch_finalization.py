@@ -45,6 +45,23 @@ def layer_tree(root):
         yield from layer_tree(child)
 
 
+def remove_completed_generated(collection):
+    """Remove an old Generated.N shell and its exclusive leftovers only."""
+    if not re.fullmatch(r'Generated(?:\.\d+)+', collection.name, re.I):
+        return
+    # Prepared objects have already been moved to their final collections.
+    # Shared objects and child collections remain linked wherever else used.
+    for obj in list(collection.objects):
+        if len(obj.users_collection) == 1:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    for child in list(collection.children):
+        # Keep child data reachable after removing the processing shell.
+        for scene in bpy.data.scenes:
+            if collection in scene.collection.children_recursive and child.name not in scene.collection.children:
+                scene.collection.children.link(child)
+    bpy.data.collections.remove(collection)
+
+
 class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator):
     bl_idname = 'object.polygroups_batch_finalization'
     bl_label = 'Batch Finalization'
@@ -107,6 +124,7 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
             for col, source, meshes in packs]
         worker = LODWorker()
         worker.report = self.report
+        completed_collections = []
         try:
             # Reveal source collection paths, including previously completed Phase 2 items.
             def reveal(layer):
@@ -168,6 +186,7 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
                         raise RuntimeError(f'Rename failed for asset {ordinal+1}')
                     for obj in generated:
                         obj[LOD_SOURCE] = source.name
+                    completed_collections.append(col)
                 yield .02 + .98*(ordinal+1)/len(packs), f'{ordinal+1}/{len(packs)} assets completed'
         finally:
             for name, value in saved.items():
@@ -192,3 +211,6 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
                     obj.select_set(True)
             if active and active.name in context.view_layer.objects:
                 context.view_layer.objects.active = active
+            if p.phase2_final_cleanup_generated:
+                for collection in completed_collections:
+                    remove_completed_generated(collection)

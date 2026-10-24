@@ -17,6 +17,7 @@ from .mesh_export import (
     _safe_path_token,
     _write_export_mesh_info,
     _export_gltf_asset,
+    _export_selected_object,
 )
 
 
@@ -707,6 +708,8 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
     bl_idname = "object.polygroups_export_unity"
     bl_label = "Export Unity Assets"
     bl_description = "Export prepared Unity meshes as FBX with textures and/or embedded GLTF"
+    batch_prepared: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
+    batch_sort: bpy.props.EnumProperty(items=(('LODS', 'LODs', ''), ('LODS_FORMAT', 'LODs / Format', '')), default='LODS_FORMAT', options={'HIDDEN', 'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -733,6 +736,29 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
 
     def _steps(self, context, interactive=False):
         settings = context.scene.polygroups_mesh_finalization_settings
+        if getattr(self, 'batch_prepared', False):
+            from types import SimpleNamespace
+            from .unreal_lod_export import export_lods
+            meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+            if settings.unity_use_auto_rig_pro:
+                self.report({'ERROR'}, 'Use section 12 Unity Export for rigged Auto-Rig Pro assets')
+                return {'CANCELLED'}
+            if not settings.unity_export_directory.strip():
+                self.report({'ERROR'}, 'Choose a Unity export directory')
+                return {'CANCELLED'}
+            if settings.unity_export_autosave and 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath):
+                return {'CANCELLED'}
+            normalize_unity_texture_names(meshes)
+            options = SimpleNamespace(mesh_export_fbx=settings.unity_export_fbx,
+                mesh_export_glb=settings.unity_export_glb, mesh_export_gltf=settings.unity_export_gltf,
+                mesh_export_sort=self.batch_sort, mesh_export_info_format=settings.unity_export_info_format,
+                unreal_glb_mode=settings.unity_glb_mode, unreal_gltf_mode=settings.unity_gltf_mode,
+                is_property_set=lambda name: True)
+            result = export_lods(context, options, self.report, engine='Unity',
+                output_root=bpy.path.abspath(settings.unity_export_directory),
+                overwrite=settings.unity_export_overwrite or settings.unity_export_clear_asset_folder)
+            settings.unity_export_status = 'Prepared model batch exported' if 'FINISHED' in result else 'Prepared model batch export failed'
+            return result
         error = validate_unity_arp_selection(context)
         if error:
             settings.unity_export_status = error
@@ -742,9 +768,9 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             self.report({'ERROR'}, "Set a scene camera before exporting renders")
             return {'CANCELLED'}
         directory = settings.unity_export_directory
-        formats = [name for name, enabled in (('FBX', settings.unity_export_fbx), ('GLTF', settings.unity_export_gltf)) if enabled]
+        formats = [name for name, enabled in (('FBX', settings.unity_export_fbx), ('GLTF', settings.unity_export_gltf), ('GLB', settings.unity_export_glb)) if enabled]
         if not formats:
-            self.report({'ERROR'}, "Enable FBX or GLTF export")
+            self.report({'ERROR'}, "Enable FBX, GLB or GLTF export")
             return {'CANCELLED'}
         if directory.startswith("//") and not bpy.data.filepath:
             self.report({"ERROR"}, "Save the blend file or choose an absolute export directory")
@@ -826,8 +852,9 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                     # Unity Prepare assigns one common material and texture set to all LODs.
                     if export_format == "FBX":
                         save_textures(lods[0], folder)
-                    combined = export_format == 'GLTF' and settings.unity_gltf_mode == 'COMBINED'
-                    combined_path = os.path.join(folder, _safe_path_token(asset_name) + '.gltf')
+                    combined = ((export_format == 'GLTF' and settings.unity_gltf_mode == 'COMBINED') or
+                                (export_format == 'GLB' and settings.unity_glb_mode == 'COMBINED'))
+                    combined_path = os.path.join(folder, _safe_path_token(asset_name) + '.' + export_format.lower())
                     if combined:
                         bpy.ops.object.select_all(action='DESELECT')
                         for obj in lods:
@@ -836,18 +863,22 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                         with ExitStack() as stack:
                             for obj in lods:
                                 stack.enter_context(_export_at_world_origin(obj, context.view_layer))
-                            result = _export_gltf_asset(combined_path, True)
+                            result = (_export_selected_object(combined_path, 'GLB') if export_format == 'GLB'
+                                      else _export_gltf_asset(combined_path, True))
                         if 'FINISHED' not in result:
                             raise RuntimeError(f'GLTF export failed: {asset_name}')
                     mesh_info = []
                     for obj in lods:
                         bpy.ops.object.select_all(action="DESELECT")
                         obj.select_set(True)
-                        filepath = combined_path if combined else os.path.join(folder, _safe_path_token(obj.name) + (".fbx" if export_format == "FBX" else ".gltf"))
+                        filepath = combined_path if combined else os.path.join(folder, _safe_path_token(obj.name) + '.' + export_format.lower())
                         use_rig = rig is not None and obj.name == asset_name
                         with _export_at_world_origin(obj, context.view_layer, rig if use_rig else None):
                             if combined:
                                 result = {'FINISHED'}
+                            elif export_format == 'GLB':
+                                context.view_layer.objects.active = obj
+                                result = _export_selected_object(filepath, 'GLB')
                             elif export_format == "GLTF":
                                 context.view_layer.objects.active = obj
                                 result = _export_gltf_asset(filepath, False)
@@ -917,6 +948,8 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             counts.append(f'{len(meshes)} FBX')
         if settings.unity_export_gltf:
             counts.append(f'{len(groups) if settings.unity_gltf_mode == "COMBINED" else len(meshes)} GLTF')
+        if settings.unity_export_glb:
+            counts.append(f'{len(groups) if settings.unity_glb_mode == "COMBINED" else len(meshes)} GLB')
         self._completion_status = (f'{len(groups)} meshes exported ({len(meshes)} LODs)\n' + ' / '.join(counts) +
             f'\n{texture_count} textures\n{render_count} renders\n{video_count} videos x ' +
             f'{max(2, int(context.scene.polygroups_render_settings.animation_frame_count)) if video_count else 0} frames')

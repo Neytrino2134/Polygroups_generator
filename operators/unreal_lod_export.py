@@ -11,22 +11,25 @@ from .mesh_export import (
 )
 
 
-def lod_identity(obj):
+def lod_identity(obj, engine='Unreal'):
+    if engine == 'Unity' and obj.get('unity_prepared'):
+        match = re.fullmatch(r'(.+)\.LOD(\d+)', obj.name, re.IGNORECASE)
+        return (match[1], 'LOD', int(match[2])) if match else (obj.name, 'LOD', 0)
     match = re.fullmatch(r'SM_(.+)_LOD(\d+)', obj.name, re.IGNORECASE)
     if match:
         return match[1], 'LOD', int(match[2])
     base = obj.get('unreal_lod_asset')
     if base and obj.get('unreal_lod_index') == -1:
         return base, 'HIGH', None
-    match = re.fullmatch(r'SM_(.+)_High', obj.name, re.IGNORECASE)
+    match = re.fullmatch(r'(?:SM_)?(.+)_(?:High|MID)', obj.name, re.IGNORECASE)
     if match:
         return match[1], 'HIGH', None
     raise ValueError(f'Use Unreal LOD Rename first: {obj.name}')
 
 
-def export_lods(context, settings, report):
+def export_lods(context, settings, report, engine='Unreal', output_root=None, overwrite=True):
     formats = enabled_mesh_export_formats(settings)
-    root = _export_root_directory(settings)
+    root = output_root or _export_root_directory(settings)
     if not formats or root is None:
         report({'ERROR'}, 'Enable an export format and save the blend file before exporting')
         return {'CANCELLED'}
@@ -38,7 +41,7 @@ def export_lods(context, settings, report):
     try:
         tokens = {}
         for obj in meshes:
-            base, role, index = lod_identity(obj)
+            base, role, index = lod_identity(obj, engine)
             token = _safe_path_token(base)
             if token.casefold() in tokens and tokens[token.casefold()] != base:
                 raise ValueError(f'Asset folder names conflict: {base}')
@@ -73,6 +76,8 @@ def export_lods(context, settings, report):
         paths = [str(path).casefold() for _, _, path, _, _ in tasks]
         if len(paths) != len(set(paths)):
             raise ValueError('Export filenames conflict after filename normalization')
+        if not overwrite and any(path.exists() for _, _, path, _, _ in tasks):
+            raise ValueError('Export files already exist; enable Unity Overwrite Existing')
     except (ValueError, RuntimeError) as error:
         report({'ERROR'}, str(error))
         return {'CANCELLED'}
@@ -127,9 +132,9 @@ def export_lods(context, settings, report):
                                    if not format_first or format == scope_key}
                 record['file'] = next(iter(record['files'].values()))
                 local_entries.append(record)
-            _write_export_mesh_info(str(scope_folder), settings.mesh_export_info_format, local_entries, engine='Unreal')
+            _write_export_mesh_info(str(scope_folder), settings.mesh_export_info_format, local_entries, engine=engine)
         _write_export_mesh_info(str(root), settings.mesh_export_info_format,
-                                [records[obj] for base in sorted(groups, key=str.casefold) for obj in groups[base]], engine='Unreal')
+                                [records[obj] for base in sorted(groups, key=str.casefold) for obj in groups[base]], engine=engine)
     except (ValueError, RuntimeError, OSError) as error:
         report({'ERROR'}, str(error))
         return {'CANCELLED'}
@@ -141,5 +146,5 @@ def export_lods(context, settings, report):
         context.view_layer.objects.active = active
         if mode != 'OBJECT' and active:
             bpy.ops.object.mode_set(mode=mode)
-    report({'INFO'}, f'Exported {len(groups)} Unreal assets, {len(meshes)} meshes, {count} files')
+    report({'INFO'}, f'Exported {len(groups)} {engine} assets, {len(meshes)} meshes, {count} files')
     return {'FINISHED'}

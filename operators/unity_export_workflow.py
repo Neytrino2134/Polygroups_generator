@@ -9,6 +9,7 @@ MESH_FIELDS = (
     'unity_skip_lods',
     'unity_export_directory', 'unity_export_overwrite', 'unity_export_clear_asset_folder',
     'unity_export_autosave', 'unity_export_fbx', 'unity_export_gltf', 'unity_gltf_mode',
+    'unity_export_glb', 'unity_glb_mode',
     'unity_export_all_renders', 'unity_export_info_format', 'unity_use_auto_rig_pro',
     'unity_render_freestyle', 'unity_render_image_format', 'unity_render_mesh_info',
     'unity_render_separate', 'unity_render_mode', 'unity_render_text',
@@ -256,7 +257,7 @@ class OBJECT_OT_polygroups_prepare_and_export_unity(bpy.types.Operator):
         if settings.unity_use_auto_rig_pro:
             self.report({'ERROR'}, 'Prepare and Export creates mesh LODs; disable Auto-Rig Pro Export for this operation')
             return {'CANCELLED'}
-        if not settings.unity_export_fbx and not settings.unity_export_gltf:
+        if not settings.unity_export_fbx and not settings.unity_export_gltf and not settings.unity_export_glb:
             self.report({'ERROR'}, 'Enable FBX or GLTF export')
             return {'CANCELLED'}
         if settings.unity_export_all_renders and context.scene.camera is None:

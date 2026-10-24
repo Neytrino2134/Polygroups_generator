@@ -1,4 +1,5 @@
 from .unity_export_workflow import (OBJECT_OT_polygroups_prepare_and_export_unity, OBJECT_OT_polygroups_save_unity_export_preset, OBJECT_OT_polygroups_load_unity_export_preset, OBJECT_OT_polygroups_unity_load_from_file)
+from .phase2_export import OBJECT_OT_polygroups_phase2_export
 from .smart_lods import OBJECT_OT_polygroups_smart_lods_prepare
 from .unity_preparation import OBJECT_OT_polygroups_unity_collection_step
 from .unity_preparation import OBJECT_OT_polygroups_fix_unity_textures
@@ -233,6 +234,7 @@ from .relocate_project import WM_OT_airetopo_relocate_project, WM_OT_airetopo_re
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 CLASSES = (
+    OBJECT_OT_polygroups_phase2_export,
     OBJECT_OT_polygroups_stop_lod_job, OBJECT_OT_polygroups_batch_finalization,
     OBJECT_OT_polygroups_phase2_auto_render,
     *PHASE2_CLASSES,

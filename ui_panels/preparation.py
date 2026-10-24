@@ -502,9 +502,34 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 engine = config.row()
                 engine.enabled = settings.phase2_final_rename
                 engine.prop(settings, "phase2_final_rename_engine", expand=True)
+                cleanup = config.row()
+                cleanup.enabled = settings.phase2_final_rename
+                cleanup.prop(settings, 'phase2_final_cleanup_generated')
                 config.operator("object.polygroups_batch_finalization", text="Execute Batch Finalization", icon="PLAY")
                 if settings.phase2_final_is_running:
                     final.operator("object.polygroups_stop_lod_job", icon="CANCEL")
+                export = draw_collapsible_box(final, settings, 'phase2_show_export', 'Export Prepared Models', 'EXPORT')
+                if export is not None:
+                    controls = export.column(align=True)
+                    controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    controls.prop(settings, 'phase2_export_engine', expand=True)
+                    row = controls.row(align=True)
+                    for name in ('phase2_export_glb', 'phase2_export_gltf', 'phase2_export_fbx'):
+                        row.prop(settings, name)
+                    controls.prop(settings, 'phase2_export_sort')
+                    controls.prop(settings, 'phase2_export_json')
+                    final_settings = context.scene.polygroups_mesh_finalization_settings
+                    if settings.phase2_export_engine == 'UNITY':
+                        controls.prop(final_settings, 'unity_export_directory')
+                        controls.prop(final_settings, 'unity_gltf_mode')
+                        controls.prop(final_settings, 'unity_glb_mode')
+                    else:
+                        if settings.phase2_export_glb:
+                            controls.prop(final_settings, 'unreal_glb_mode')
+                        if settings.phase2_export_gltf:
+                            controls.prop(final_settings, 'unreal_gltf_mode')
+                    controls.operator('object.polygroups_phase2_export', text='Export', icon='EXPORT')
+                    controls.label(text=settings.phase2_export_status)
             auto = draw_collapsible_box(content, settings, "phase2_show_auto_render", "Auto Render", "RENDER_STILL")
             if auto is not None:
                 config = auto.column(align=True)

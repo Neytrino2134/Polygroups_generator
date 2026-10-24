@@ -245,6 +245,8 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     unity_export_overwrite: bpy.props.BoolProperty(name="Overwrite Existing", default=False)
     unity_export_fbx: bpy.props.BoolProperty(name="FBX", default=True)
     unity_export_gltf: bpy.props.BoolProperty(name="GLTF", default=True)
+    unity_export_glb: bpy.props.BoolProperty(name="GLB", default=False)
+    unity_glb_mode: bpy.props.EnumProperty(name="GLB LODs", items=(("SEPARATE", "Separate Files", ""), ("COMBINED", "One File per Asset", "")), default='COMBINED')
     unity_gltf_mode: bpy.props.EnumProperty(name="GLTF Mode", items=(
         ("COMBINED", "All LODs in One GLTF", "One embedded GLTF containing all selected asset LODs and one shared texture set"),
         ("SHARED", "Separate LODs / Shared Textures", "Separate GLTF and BIN files for LODs referencing one common Textures folder")),
