@@ -34,7 +34,7 @@ class TextGenerationError(Exception):
     pass
 
 
-def generate_text(provider, api_key, model, prompt, instructions='', max_tokens=8192, timeout=600):
+def generate_text(provider, api_key, model, prompt, instructions='', max_tokens=8192, timeout=600, response_schema=None):
     if not api_key:
         raise TextGenerationError('API key is missing')
     if not prompt.strip() or not model.strip():
@@ -44,6 +44,10 @@ def generate_text(provider, api_key, model, prompt, instructions='', max_tokens=
         payload = {'model': model, 'input': prompt, 'max_output_tokens': max_tokens, 'store': False}
         if instructions.strip():
             payload['instructions'] = instructions
+        if response_schema is not None:
+            payload['text'] = {'format': {'type': 'json_schema', 'name': 'asset_name',
+                                         'strict': True, 'schema': response_schema}}
+            payload['reasoning'] = {'effort': 'none' if model == 'gpt-6-luna' else 'low'}
         headers = {'Authorization': 'Bearer ' + api_key}
     elif provider == 'GOOGLE':
         url = 'https://generativelanguage.googleapis.com/v1beta/models/' + quote(model, safe='-._') + ':generateContent'
@@ -51,6 +55,8 @@ def generate_text(provider, api_key, model, prompt, instructions='', max_tokens=
                    'generationConfig': {'maxOutputTokens': max_tokens}}
         if instructions.strip():
             payload['systemInstruction'] = {'parts': [{'text': instructions}]}
+        if response_schema is not None:
+            payload['generationConfig'].update(responseMimeType='application/json', responseJsonSchema=response_schema)
         headers = {'x-goog-api-key': api_key}
     else:
         raise TextGenerationError('Unknown text provider')

@@ -157,6 +157,8 @@ CLASSES = (OBJECT_OT_airetopo_generate_text, OBJECT_OT_airetopo_text_document)
 
 
 def register():
+    from . import asset_translation
+    asset_translation.register()
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     for handlers in (bpy.app.handlers.load_pre, bpy.app.handlers.undo_pre, bpy.app.handlers.redo_pre):
@@ -165,6 +167,8 @@ def register():
 
 
 def unregister():
+    from . import asset_translation
+    asset_translation.unregister()
     stop_text_jobs()
     for handlers in (bpy.app.handlers.load_pre, bpy.app.handlers.undo_pre, bpy.app.handlers.redo_pre):
         if stop_text_jobs in handlers:

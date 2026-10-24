@@ -85,14 +85,23 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
         self.asset = s.unity_asset_name if unity else s.unreal_lod_asset_name
         self.name_index = s.unity_name_index if unity else s.unreal_lod_name_index
         self.version_index = s.unity_asset_index if unity else s.unreal_lod_version_index
+        from .asset_translation import bind_dialog
+        self._translation_dialog = bind_dialog(self)
         return context.window_manager.invoke_props_dialog(self, width=400, confirm_text='Start')
 
     def draw(self, context):
-        for key in ('asset', 'name_index', 'version_index'):
+        from .asset_translation import draw_asset_name
+        draw_asset_name(self.layout, context, self, 'asset', dialog=getattr(self, '_translation_dialog', ''))
+        for key in ('name_index', 'version_index'):
             self.layout.prop(self, key)
         self.layout.label(text='Preview: ' + asset_name(self.asset))
 
+    def cancel(self, context):
+        from .asset_translation import release_dialog
+        release_dialog(getattr(self, '_translation_dialog', ''))
+
     def execute(self, context):
+        self.cancel(context)
         self.asset = asset_name(self.asset)
         if not self.asset or not self.name_index.isdigit() or not self.version_index.isdigit():
             self.report({'ERROR'}, 'Enter an asset name and numeric indices')

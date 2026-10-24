@@ -17,6 +17,7 @@ from .hotkeys import PIE_COMMAND_ITEMS
 from . import pie_presets
 from .localization import LANGUAGE_ITEMS
 from .localization import t
+from .services.asset_translation import TEXT_TASK_MODELS
 
 
 ADDON_AUTHOR = "Meowmaster"
@@ -564,6 +565,10 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         description="Play the bundled notification sound after long operations finish",
         default=True,
     )
+    default_text_task_model: bpy.props.EnumProperty(
+        name="Default Text / Translation Model", items=TEXT_TASK_MODELS, default='gpt-6-luna',
+        description="Model used for Asset Name translation and shared short text tasks; uses its provider's existing API key",
+    )
     use_env_openai_api_key: bpy.props.BoolProperty(
         name="Use OPENAI_API_KEY",
         description="Prefer the OPENAI_API_KEY environment variable when it is available",
@@ -965,6 +970,8 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
 
     def draw_api(self, context, layout):
         column = layout.column(align=True)
+        column.prop(self, "default_text_task_model")
+        column.separator()
         column.prop(self, "use_env_openai_api_key", text=t(context, "use_env_openai_api_key"))
         column.prop(self, "openai_api_key", text=t(context, "openai_api_key"))
         column.separator()

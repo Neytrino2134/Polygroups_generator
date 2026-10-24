@@ -565,7 +565,8 @@ class OBJECT_OT_polygroups_auto_prepare_fab_selection(bpy.types.Operator):
         settings = context.scene.polygroups_mesh_finalization_settings
         layout = self.layout
         layout.label(text=t(context, "fab_rename_set_warning"), icon="ERROR")
-        layout.prop(settings, "fab_asset_name", text=t(context, "fab_asset_name"))
+        from .asset_translation import draw_asset_name
+        draw_asset_name(layout, context, settings, "fab_asset_name", text=t(context, "fab_asset_name"))
 
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
@@ -826,8 +827,9 @@ class OBJECT_OT_polygroups_auto_prepare_all_generated(bpy.types.Operator):
 
     def draw(self, context):
         self.layout.label(text=t(context, 'fab_rename_asset_warning'), icon='ERROR')
-        self.layout.prop(context.scene.polygroups_mesh_finalization_settings,
-                         'fab_asset_name', text=t(context, 'fab_asset_name'))
+        from .asset_translation import draw_asset_name
+        draw_asset_name(self.layout, context, context.scene.polygroups_mesh_finalization_settings,
+                        'fab_asset_name', text=t(context, 'fab_asset_name'))
         self.layout.prop(context.scene.polygroups_mesh_finalization_settings,
                          'fab_asset_index', text=t(context, 'fab_asset_index'))
 

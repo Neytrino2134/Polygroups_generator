@@ -54,3 +54,32 @@ Blender 5.2 tests use mocked HTTP responses and do not make paid API requests:
   .blend persistence and repeated addon registration.
 - test_ai_text_ui_blender.py: native provider controls, clipboard copy/paste.
 - test_refactor_settings_lifecycle_blender.py: existing settings lifecycle.
+
+## Asset Name translation (2026-10-25)
+
+The globe button beside FAB, Unity and Unreal Asset Name fields translates the
+current name into English, normalizes words to underscores and writes it back:
+`Пустынные камни` -> `Desert_Rocks`. It is also available in the Phase 2 Batch
+Finalization Start dialog and the FAB rename dialogs. It translates the name
+only; it does not run renaming or processing.
+
+Preferences -> API -> Default Text / Translation Model controls these short
+requests. The default is GPT-6 Luna. The shared menu includes GPT-6.1 Sol,
+GPT-5.4 Mini and text Flash/Flash-Lite Gemini choices from the existing catalog,
+including Gemini 3.5 Flash-Lite, 3.6 Flash and 3.8 Flash. Provider keys and their
+environment preference are reused automatically. This does not override model
+choices in the full OpenAI Text / Google Text editor.
+
+Both providers are requested to return a JSON object with exactly one
+`asset_name` string. The response is validated before assignment. Invalid,
+partial or failed replies preserve the original field. Requests run off the
+main thread. A field edited while waiting is preserved; closing the Batch
+Finalization dialog, scene load, Undo/Redo and addon shutdown discard pending
+local results. The status below the field shows progress or the API error.
+
+Validation: test_asset_translation_blender.py checks both structured payloads,
+all target fields, provider/model selection, stale edits and errors.
+test_asset_translation_popup_blender.py opens the real native Phase 2 dialog.
+test_asset_translation_live_blender.py is an explicit paid live smoke using
+existing addon keys; both GPT-6 Luna and Gemini 3.5 Flash-Lite returned
+`Desert_Rocks` during validation on 2026-10-25.
