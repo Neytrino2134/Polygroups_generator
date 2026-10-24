@@ -28,4 +28,20 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_resculpt_names_') as fold
  p.phase2_keep_retopo01=False
  assert bpy.ops.object.polygroups_phase2_clear_lower_retopo()=={'FINISHED'}
  assert name not in bpy.data.objects and low.name in bpy.data.objects
+data=bpy.data.meshes.new('Manual rename geometry')
+objects=[]
+for name in ('Retopo_01_Manual_A','Retopo_01_Manual_B','Retopo_010_Untouched','Retopo_02_Untouched','Resculpting_01_Manual_B'):
+ obj=bpy.data.objects.new(name,data);ctx.scene.collection.objects.link(obj);objects.append(obj)
+objects[0].hide_viewport=True
+assert bpy.ops.object.polygroups_phase2_rename_retopo01()=={'CANCELLED'}
+assert objects[0].name=='Retopo_01_Manual_A' and objects[1].name=='Retopo_01_Manual_B'
+bpy.data.objects.remove(objects[-1],do_unlink=True)
+assert bpy.ops.object.polygroups_phase2_rename_retopo01()=={'FINISHED'}
+assert objects[0].name=='Resculpting_01_Manual_A' and objects[1].name=='Resculpting_01_Manual_B'
+assert objects[0].hide_viewport and objects[0].data==data
+assert objects[2].name=='Retopo_010_Untouched' and objects[3].name=='Retopo_02_Untouched'
+assert bpy.ops.object.polygroups_phase2_rename_retopo01()=={'FINISHED'}
+from polygroups_generator.custom_ui.schema import capture
+p.phase2_show_manual_cleanup=True
+assert not capture(ctx,1).errors
 print('RESCULPTING_RESTORE_NAMES_AND_RETENTION_PASSED')

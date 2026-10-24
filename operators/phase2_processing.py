@@ -843,7 +843,38 @@ class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
         return {'FINISHED'}
 
 
-CLASSES = (OBJECT_OT_polygroups_phase2_processing_preset,
+class OBJECT_OT_polygroups_phase2_rename_retopo01(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_rename_retopo01'
+    bl_label = 'Rename All Retopo_01 -> Resculpting_01'
+    bl_description = 'Rename all local Retopo_01 mesh objects, including hidden collections; geometry and modifiers stay unchanged'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return OBJECT_OT_polygroups_phase2_clear_backups.poll(context)
+
+    def execute(self, context):
+        from .resculpting import resculpted_name
+        plans = [(obj, resculpted_name(obj.name)) for obj in bpy.data.objects
+                 if obj.type == 'MESH' and not obj.library and re.match(r'^Retopo_01(?:_|$)', obj.name, re.I)]
+        if len({name for obj, name in plans}) != len(plans):
+            self.report({'WARNING'}, 'Conflicting target names; no objects renamed')
+            return {'CANCELLED'}
+        for obj, name in plans:
+            if bpy.data.objects.get(name) not in (None, obj):
+                self.report({'WARNING'}, 'Naming conflict; no objects renamed: ' + name)
+                return {'CANCELLED'}
+        for obj, name in plans:
+            obj.name = name
+            if obj.data.users == 1:
+                obj.data.name = name
+        message = f'Renamed {len(plans)} Retopo_01 meshes to Resculpting_01'
+        context.scene.polygroups_model_preparation_settings.phase2_status = message
+        self.report({'INFO'}, message)
+        return {'FINISHED'}
+
+
+CLASSES = (OBJECT_OT_polygroups_phase2_rename_retopo01, OBJECT_OT_polygroups_phase2_processing_preset,
            OBJECT_OT_polygroups_phase2_clear_lower_retopo, OBJECT_OT_polygroups_phase2_clear_highpoly,
            OBJECT_OT_polygroups_phase2_clear_backups, OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
            OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,

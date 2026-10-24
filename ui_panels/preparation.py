@@ -501,6 +501,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     buttons = manual.column(align=True)
                     buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     buttons.prop(settings, 'phase2_keep_retopo01')
+                    buttons.operator('object.polygroups_phase2_rename_retopo01', icon='SORTALPHA')
                     buttons.operator("object.polygroups_phase2_clear_lower_retopo", icon="TRASH")
                     buttons.operator("object.polygroups_phase2_clear_highpoly", icon="TRASH")
                     buttons.operator("object.polygroups_phase2_clear_backups", icon="TRASH")

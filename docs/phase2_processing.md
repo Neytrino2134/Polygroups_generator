@@ -218,3 +218,9 @@ test_resculpt_auto_highpoly_blender.py checks manual naming, suffix/idempotence
 and conflicts. test_resculpting_restore_names_blender.py checks restored names,
 highpoly matching and retention. The full Retopo_01 test performs both native
 bakes using the renamed Resculpting_01 mesh.
+
+Manual Cleanup also provides Rename All Retopo_01 -> Resculpting_01. It renames
+all local stage-01 mesh names, including hidden collections, without running
+resculpting or changing geometry/modifiers. Other numbered stages are excluded.
+All target names are checked before any changes; conflicts cancel the whole
+rename. The operator supports Undo.
