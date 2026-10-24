@@ -61,6 +61,22 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_blend_export_') as direc
     with bpy.data.libraries.load(str(out / 'Stone_01_01.blend')) as (src, dst):
         dst.objects = [n for n in src.objects if n == 'SM_Stone_01_01_MID']
     assert tuple(dst.objects[0].location) == (2, 0, 3), tuple(dst.objects[0].location)
+    # Hidden collections/meshes are enabled in the file; the working file keeps its flags.
+    col1 = bpy.data.collections['Stone_01_01_Collection']
+    col1.hide_viewport = col1.hide_render = True
+    mid.hide_viewport = mid.hide_render = True
+    layer = ctx.view_layer.layer_collection.children['Stone_01_01_Collection']; layer.exclude = True
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Pack.blend'))
+    assert bpy.ops.object.polygroups_phase2_export_blend() == {'FINISHED'}
+    assert col1.hide_viewport and col1.hide_render and mid.hide_viewport and layer.exclude
+    with bpy.data.libraries.load(str(out / 'Stone_01_01.blend')) as (src, dst):
+        dst.collections = ['Stone_01_01_Collection']; dst.objects = ['SM_Stone_01_01_MID']
+        dst.scenes = src.scenes
+    exported = dst.collections[0]
+    assert not exported.hide_viewport and not exported.hide_render
+    assert not dst.objects[0].hide_viewport and not dst.objects[0].hide_render
+    assert not dst.scenes[0].view_layers[0].layer_collection.children[exported.name].exclude
+    col1.hide_viewport = col1.hide_render = mid.hide_viewport = mid.hide_render = False; layer.exclude = False
     # Studio collections (with nested children) replace the generated Camera/Light.
     from polygroups_generator.operators.render_studio import TAG
     for obj in list(bpy.data.objects):

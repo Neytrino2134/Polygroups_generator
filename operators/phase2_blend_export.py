@@ -101,6 +101,14 @@ def studio_collections(scene):
             for item in scene.collection.children if item.get(STUDIO_TAG) == role]
 
 
+def enable_layer_collections(layer_collection):
+    """Tick the collection checkbox and show it in the exported view layer."""
+    layer_collection.exclude = False
+    layer_collection.hide_viewport = False
+    for child in layer_collection.children:
+        enable_layer_collections(child)
+
+
 def build_clean_scene(collection):
     """Create a scene holding the studio collections (or a generated Camera and Light) plus the one collection.
 
@@ -117,6 +125,10 @@ def build_clean_scene(collection):
     scene.world = None
     studio = studio_collections(source)
     scene.collection.children.link(collection)
+    for view_layer in scene.view_layers:
+        enable_layer_collections(view_layer.layer_collection.children[collection.name])
+        for obj in collection.all_objects:
+            obj.hide_set(False, view_layer=view_layer)
     if studio:
         for item in studio:
             scene.collection.children.link(item)
@@ -144,6 +156,21 @@ def prepared_asset_meshes(collection):
             and (PREPARED_NAME.search(obj.name) or obj.get('unity_prepared'))]
 
 
+@contextmanager
+def enabled_for_export(collection):
+    """Enable viewport/render on the collection tree and its meshes; restore the working file afterwards."""
+    targets = [collection, *collection.children_recursive,
+               *(obj for obj in collection.all_objects if obj.type == 'MESH')]
+    saved = [(item, item.hide_viewport, item.hide_render) for item in targets]
+    for item in targets:
+        item.hide_viewport = item.hide_render = False
+    try:
+        yield
+    finally:
+        for item, viewport, render in saved:
+            item.hide_viewport, item.hide_render = viewport, render
+
+
 def export_collection_blend(collection, filepath, pack_textures=True, reset_y=False):
     """Write one collection with only its own textures; return the packed image count.
 
@@ -161,6 +188,7 @@ def export_collection_blend(collection, filepath, pack_textures=True, reset_y=Fa
     try:
         with ExitStack() as holds:
             holds.enter_context(reserved_name(bpy.data.scenes, 'Scene'))
+            holds.enter_context(enabled_for_export(collection))
             if not studio:
                 # Generated Camera/Light need their plain names in the exported file.
                 for id_collection, name in ((bpy.data.objects, 'Camera'), (bpy.data.objects, 'Light'),

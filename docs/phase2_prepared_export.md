@@ -76,3 +76,7 @@ Reset Mesh Y to 0 (on by default): the unparented prepared meshes (SM_..._MID,
 _HIGH, _LODN, or Unity-prepared) of each *_Collection asset are written at
 Y = 0 (X and Z kept). The working file keeps its original positions. Generated.N
 files are not changed.
+
+Visibility check: before writing each file the collection tree and its meshes get
+Enable in Viewports / Renders on, and the collection checkbox (view-layer
+exclude) and eye are on in the exported scene. The working file keeps its flags.
