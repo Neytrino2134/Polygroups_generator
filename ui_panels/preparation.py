@@ -480,6 +480,12 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     keep.prop(settings, 'phase2_keep_retopo01')
                     controls.label(text=t(context, "phase2_bake_hint1"), icon="INFO")
                     controls.label(text=t(context, "phase2_bake_hint2"), icon="BLANK1")
+                controls.prop(settings, 'phase2_autosave')
+                autosave = controls.row()
+                autosave.enabled = settings.phase2_autosave
+                autosave.prop(settings, 'phase2_autosave_every')
+                if settings.phase2_autosave_status:
+                    group.label(text=settings.phase2_autosave_status, icon='INFO')
                 manual = draw_collapsible_box(group, settings, 'phase2_show_manual_cleanup', 'Manual Cleanup', 'TRASH')
                 if manual is not None:
                     buttons = manual.column(align=True)

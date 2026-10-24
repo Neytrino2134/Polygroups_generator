@@ -153,3 +153,19 @@ The three manual cleanup operators (lower Retopo, all Highpoly, and backups)
 are grouped in the collapsible Manual Cleanup subsection, closed by default.
 Its Keep Retopo_01 checkbox controls the same retention setting as the checkbox
 beneath Delete Lower Retopo.
+
+## Periodic autosave
+
+Autosave Completed Collections is opt-in. Successful Collections per Save
+defaults to 1 and accepts any positive N. Only complete, successful collection
+pipelines count: highest bake, optional Retopo_01 processing, restored modifier
+visibility, cleanup and collection disabling all finish before the checkpoint.
+Failed collections do not trigger or advance the successful-operation interval.
+The current working blend is saved in place; partial intervals do not force an
+extra save when the batch finishes. An autosave error stops before the next
+collection and retains the successful processing count and error message.
+
+test_phase2_periodic_autosave_blender.py checks actual checkpoints at N=2,
+failure exclusion, saved cleanup/visibility, and save-failure stopping.
+test_phase2_retopo01_blender.py checks one save only after both real native
+bakes and all secondary processing have completed.

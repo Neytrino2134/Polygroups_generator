@@ -228,6 +228,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Remove existing Generated.N collections before restoring the scanned files",
     )
     phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
+    phase2_autosave: bpy.props.BoolProperty(name="Autosave Completed Collections", default=False,
+        description="Save the current blend after every N successfully completed collection pipelines")
+    phase2_autosave_every: bpy.props.IntProperty(name="Successful Collections per Save", default=1, min=1)
+    phase2_autosave_status: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
     phase2_resculpt_retopo01: bpy.props.BoolProperty(name="Resculpting Retopo_01", default=False,
         description="Run Setup Resculpting on Retopo_01 after the highest Retopo finishes baking")
     phase2_autobake_retopo01: bpy.props.BoolProperty(name="Autobake Retopo_01", default=False,

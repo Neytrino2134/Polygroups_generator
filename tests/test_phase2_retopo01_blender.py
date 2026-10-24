@@ -133,11 +133,15 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_native_retopo01_') as fol
  bake.auto_pack_uv_before_bake=False
  bake.use_smart_cage=bake.autogenerate_smart_cage=False;bake.use_auto_cage=True
  ctx.scene.render.engine='CYCLES';ctx.scene.cycles.device='CPU';ctx.scene.cycles.samples=1
+ p.phase2_autosave=True;p.phase2_autosave_every=1
  q=phase2.Phase2Queue(ctx,[(str(source),'Generated.009')],True,True,lambda *args:None);q.begin()
- for _ in range(30):
-  q.step(ctx)
-  if q.finished:break
+ with patch.object(q,'autosave_completed',wraps=q.autosave_completed) as save_boundary:
+  for _ in range(30):
+   q.step(ctx)
+   if q.finished:break
+  assert save_boundary.call_count==1
  assert q.finished and p.phase2_done_count==1 and p.phase2_failed_count==0,q.results
+ assert p.phase2_autosave_status=='Autosaved after 1 successful collections'
  targets=[o for o in bpy.data.objects if phase2.LOW.fullmatch(o.name)]
  assert len(targets)==2 and any(o.name.startswith('Retopo_01_') for o in targets)
  assert all(o.get(baking.BAKE_NORMAL_IMAGE_PROP) for o in targets)

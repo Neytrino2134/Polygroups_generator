@@ -207,6 +207,7 @@ class Phase2Queue:
         self.baked_pair = None
         self.primary_pair = None
         self.retopo01 = None
+        self.autosave_error = ''
 
     def begin(self):
         settings = self.settings
@@ -215,6 +216,26 @@ class Phase2Queue:
         settings.phase2_total_count = len(self.entries)
         settings.phase2_final_progress = 0
         settings.phase2_status = 'Starting Phase 2'
+        settings.phase2_autosave_status = ''
+
+    def autosave_completed(self):
+        settings = self.settings
+        if not settings.phase2_autosave or settings.phase2_done_count % settings.phase2_autosave_every:
+            return
+        try:
+            if not bpy.data.filepath:
+                raise RuntimeError('Save the working blend file first')
+            self.view_layer.update()
+            if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath, check_existing=False):
+                raise RuntimeError('Blender did not finish saving the working file')
+            settings.phase2_autosave_status = f'Autosaved after {settings.phase2_done_count} successful collections'
+        except Exception as error:
+            # Processing succeeded; do not count it twice or mark it as a bake
+            # failure. Stop before starting the next collection instead.
+            self.autosave_error = 'Autosave failed: ' + str(error)
+            settings.phase2_autosave_status = self.autosave_error
+            self.stop_requested = True
+            self.report({'WARNING'}, self.autosave_error)
 
     def repair_mesh(self, context, low=None, force_repack=False):
         if not self.settings.phase2_mesh_auto_repair:
@@ -351,6 +372,8 @@ class Phase2Queue:
         self.results.append((self.entries[self.index], error))
         self.index += 1
         self.stage, self.collection = 'RESTORE', None
+        if not error:
+            self.autosave_completed()
 
     def finish(self, stopped=False):
         if self.finished:
@@ -359,6 +382,8 @@ class Phase2Queue:
         self.settings.phase2_is_running = False
         self.settings.phase2_status = ('Stopped' if stopped else 'Completed') + (
             f': {self.settings.phase2_done_count} OK, {self.settings.phase2_failed_count} failed')
+        if self.autosave_error:
+            self.settings.phase2_status += ' | ' + self.autosave_error
         self.finished = True
 
     def step(self, context):
