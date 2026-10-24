@@ -168,6 +168,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_show_files: bpy.props.BoolProperty(name="Blend File Manager", default=True)
     phase2_show_restore: bpy.props.BoolProperty(name="Restore and Processing", default=True)
     phase2_show_finalization: bpy.props.BoolProperty(name="Batch Finalization", default=True)
+    phase2_show_lods_rename: bpy.props.BoolProperty(name="Prepare LODs / Rename", default=True)
     phase2_final_lods: bpy.props.BoolProperty(name="Prepare LODs", default=True)
     phase2_final_lod_engine: bpy.props.EnumProperty(name="LOD Pipeline",
         items=(("UNREAL", "Unreal", ""), ("UNITY", "Unity", "")), default='UNREAL')

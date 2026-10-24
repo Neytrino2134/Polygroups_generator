@@ -492,22 +492,24 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls.operator("object.polygroups_phase2_clear_backups", icon="TRASH")
             final = draw_collapsible_box(content, settings, "phase2_show_finalization", "Batch Finalization", "MOD_DECIM")
             if final is not None:
-                config = final.column(align=True)
-                config.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
-                config.prop(settings, "phase2_final_lods")
-                engine = config.row()
-                engine.enabled = settings.phase2_final_lods
-                engine.prop(settings, "phase2_final_lod_engine", expand=True)
-                config.prop(settings, "phase2_final_rename")
-                engine = config.row()
-                engine.enabled = settings.phase2_final_rename
-                engine.prop(settings, "phase2_final_rename_engine", expand=True)
-                cleanup = config.row()
-                cleanup.enabled = settings.phase2_final_rename
-                cleanup.prop(settings, 'phase2_final_cleanup_generated')
-                config.operator("object.polygroups_batch_finalization", text="Execute Batch Finalization", icon="PLAY")
-                if settings.phase2_final_is_running:
-                    final.operator("object.polygroups_stop_lod_job", icon="CANCEL")
+                preparation = draw_collapsible_box(final, settings, 'phase2_show_lods_rename', 'Prepare LODs / Rename', 'MOD_DECIM')
+                if preparation is not None:
+                    config = preparation.column(align=True)
+                    config.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    config.prop(settings, "phase2_final_lods")
+                    engine = config.row()
+                    engine.enabled = settings.phase2_final_lods
+                    engine.prop(settings, "phase2_final_lod_engine", expand=True)
+                    config.prop(settings, "phase2_final_rename")
+                    engine = config.row()
+                    engine.enabled = settings.phase2_final_rename
+                    engine.prop(settings, "phase2_final_rename_engine", expand=True)
+                    cleanup = config.row()
+                    cleanup.enabled = settings.phase2_final_rename
+                    cleanup.prop(settings, 'phase2_final_cleanup_generated')
+                    config.operator("object.polygroups_batch_finalization", text="Execute Batch Finalization", icon="PLAY")
+                    if settings.phase2_final_is_running:
+                        preparation.operator("object.polygroups_stop_lod_job", icon="CANCEL")
                 export = draw_collapsible_box(final, settings, 'phase2_show_export', 'Export Prepared Models', 'EXPORT')
                 if export is not None:
                     controls = export.column(align=True)
