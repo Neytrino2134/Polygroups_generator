@@ -24,8 +24,9 @@ def fit_camera(context, camera, points, center, size):
         raise RuntimeError('Use a perspective or orthographic camera')
     camera.data.shift_x = camera.data.shift_y = 0
     span = max(max(size), .01)
-    camera.data.clip_start = min(camera.data.clip_start, .001)
-    camera.data.clip_end = max(camera.data.clip_end, span * 10000)
+    # A very small near plane combined with a huge far plane loses Eevee
+    # light-culling precision: Area lights disappear in the camera render.
+    camera.data.clip_start = max(.00001, span * .0001)
     camera.rotation_euler = Vector((0, 1, 0)).to_track_quat('-Z', 'Y').to_euler()
     # Use world transforms, even when the camera has a parent.
     rotation = Vector((0, 1, 0)).to_track_quat('-Z', 'Y').to_matrix().to_4x4()
@@ -55,6 +56,10 @@ def fit_camera(context, camera, points, center, size):
         else:
             lower = middle
     fits(upper * 1.0001)
+    view = camera.matrix_world.inverted()
+    depths = [-(view @ point).z for point in points]
+    camera.data.clip_start = max(.00001, min(depths) * .01)
+    camera.data.clip_end = max(max(depths) * 4, span * 10, camera.data.clip_start * 100)
 
 
 def fit_render_aspect(context, camera, points, center, size, settings):

@@ -87,3 +87,9 @@ object counts and three transparent silhouettes versus one in Hero, together
 with Scene_ prefix protection. test_auto_render_shared_queue_blender.py compares
 manual and automatic queue transforms and output pixels, verifies the fixed
 camera fit, and measures real light contribution from a manually configured rig.
+
+Camera clipping is derived from the fitted bounds' depths. The previous
+0.001 near plane and size * 10000 far plane caused Eevee Area-light illumination
+to disappear in camera renders. test_area_light_camera_blender.py verifies real
+Hero illumination with only the three default Area lights and a black world,
+by comparing the rendered pixels with the same lights switched off.
