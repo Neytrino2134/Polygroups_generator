@@ -928,8 +928,15 @@ def _prepare_transparent_background(settings):
         return
 
     bpy.context.scene.render.film_transparent = True
+    # A Scene_* asset and its multiview descendants are render subjects,
+    # not backdrop collections, even when they share the selected prefix.
+    protected = set()
+    for asset in bpy.data.collections:
+        if _asset_name_from_collection(asset):
+            protected.add(asset)
+            protected.update(asset.children_recursive)
     for collection in bpy.data.collections:
-        if _scene_collection_matches(collection, settings):
+        if collection not in protected and _scene_collection_matches(collection, settings):
             _set_collection_enabled(collection, False)
 
 

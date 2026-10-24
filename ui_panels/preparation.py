@@ -512,6 +512,11 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 config.label(text="Quality and Output: 16:9 | 2K", icon="INFO")
                 config.label(text="2048 x 1152 | Eevee")
                 config.prop(context.scene.polygroups_render_settings, "output_directory")
+                transparent = config.box()
+                transparent.prop(settings, "phase2_auto_transparent")
+                prefix = transparent.row()
+                prefix.enabled = settings.phase2_auto_transparent
+                prefix.prop(settings, "phase2_auto_scene_prefix")
                 scene = config.box()
                 scene.prop(settings, "phase2_auto_scene")
                 sub = scene.column(align=True)

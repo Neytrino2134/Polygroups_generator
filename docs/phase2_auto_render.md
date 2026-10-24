@@ -14,8 +14,8 @@ recursively. Default selection is *_MID and *_LOD0; LOD0 renders use LOW filenam
 - Prepare Textures: on; All Assets First by default, Per Asset also available.
   Base Color and Normal are rendered Together in one image.
 
-Output Directory is shared with section 13. Existing skip/overwrite and optional
-transparent companion settings are respected. Turning off the selection override
+Output Directory is shared with section 13. Existing skip/overwrite settings
+are respected; transparent companions use the Auto Render checkbox and prefix. Turning off the selection override
 uses the current section 13 mesh filter. Texture output requires linked Base
 Color and Normal images; unsupported/missing pairs are skipped by the existing
 Prepare Textures operator.
@@ -66,3 +66,26 @@ Blender 5.2.2:
   the first rendered image, with temporary preview cleanup.
 - Existing Render Queue Output, Render Textures, Render Studio, Batch
   Finalization and settings registration/persistence checks also pass.
+
+
+## Multiview visibility and transparent companions
+
+Auto Render now treats the configured multiview offset as a minimum. Rotated
+views are measured before camera fitting; left/right silhouettes are separated
+from the front by at least 10% of the largest view width. This prevents large
+meshes from overlapping at the default one-metre offset. The cyclorama bend and
+back wall are moved behind the complete view bounds to avoid scene occlusion.
+Hero still shows only the front view, using the same camera frame.
+
+Render Transparent PNG (Without Scene) defaults off. Prefix Scene defaults to
+Scene and maps to the existing section 13 transparent-background behavior.
+When enabled, a separate _transparent.png is rendered with the backdrop prefix
+hidden; the regular image is retained. Freestyle companions are also included
+in existing-output completeness checks. Asset collections and their multiview
+children are protected even if their asset names begin with Scene_.
+
+The regression test test_phase2_multiview_visibility_blender.py reproduces the
+old overlap on a large mesh, checks visible object counts for Multiview/Hero,
+and counts three disconnected alpha silhouettes in the rendered transparent
+Multiview PNG versus one in Hero. It also checks backdrop clearance and prefix
+protection for a Scene_Stones asset.

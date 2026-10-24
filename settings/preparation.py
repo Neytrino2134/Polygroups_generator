@@ -178,6 +178,9 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
     phase2_show_auto_render: bpy.props.BoolProperty(name="Auto Render", default=True)
     phase2_auto_render_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    phase2_auto_transparent: bpy.props.BoolProperty(name="Render Transparent PNG (Without Scene)", default=False)
+    phase2_auto_scene_prefix: bpy.props.StringProperty(name="Prefix Scene", default="Scene",
+        description="Studio collection prefix hidden for the additional transparent PNG")
     phase2_auto_scene: bpy.props.BoolProperty(name="Scene and Camera Setup", default=True)
     phase2_auto_camera: bpy.props.BoolProperty(name="Auto Frame Camera (10% Margin)", default=True)
     phase2_auto_selection: bpy.props.BoolProperty(name="Mesh Selection: MID and LOD0", default=True)

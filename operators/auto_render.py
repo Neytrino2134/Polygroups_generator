@@ -22,6 +22,8 @@ def configure_auto_render(context):
     s.render_engine = 'EEVEE'
     s.image_format = 'PNG'
     s.texture_render_mode = 'COMBINED'
+    s.transparent_background = p.phase2_auto_transparent
+    s.scene_collection_prefix = p.phase2_auto_scene_prefix.strip() or 'Scene'
     if p.phase2_auto_selection:
         s.render_low = False
         s.render_mid, s.render_high = True, False
@@ -146,6 +148,24 @@ def scan_jobs(context, collections, include_textures):
         settings.is_running = True
 
 
+def spread_multiview(context, views):
+    """Keep the requested center offset as a minimum; never overlap side silhouettes."""
+    context.view_layer.update()
+    front, left, right = views
+    def bounds(obj):
+        points, _, _ = selected_bounds(context, [obj])
+        return min(p.x for p in points), max(p.x for p in points)
+    fmin, fmax = bounds(front)
+    lmin, lmax = bounds(left)
+    rmin, rmax = bounds(right)
+    gap = max(.01, .1 * max(fmax-fmin, lmax-lmin, rmax-rmin))
+    for obj, shift in ((left, min(0, fmin-gap-lmax)), (right, max(0, fmax+gap-rmin))):
+        matrix = obj.matrix_world.copy()
+        matrix.translation.x += shift
+        obj.matrix_world = matrix
+    context.view_layer.update()
+
+
 def frame_asset(context, objects, origin):
     """One perspective frame, shared by every variant and Hero of this asset."""
     settings = context.scene.polygroups_render_settings
@@ -184,6 +204,9 @@ def render_asset_job(context, job, views, origin):
             matrix.translation = origin
             source.matrix_world = matrix
     context.view_layer.update()
+    for obj in views.get(source, []):
+        if not obj.hide_render and obj.name in context.view_layer.objects:
+            obj.hide_set(False)
     try:
         rq._render_current_job(context, context.scene.polygroups_render_settings, job)
     finally:
@@ -270,6 +293,7 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                             matrix = obj.matrix_world.copy()
                             matrix.translation += offset
                             obj.matrix_world = matrix
+                        spread_multiview(context, generated)
                         views[source] = generated
                         all_views.extend(generated)
                         frame_objects.extend(generated)
@@ -302,6 +326,10 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                         root.matrix_world = matrix
                     s.studio_width = max(6, size.x * 2)
                     s.studio_height = max(4, size.z * 2)
+                    # Keep the cyclorama bend behind even large rotated views.
+                    margin = max(.1, size.y * .1)
+                    s.studio_distance = max(3, max(point.y for point in points) - origin.y + s.studio_radius + margin)
+                    s.studio_depth = max(8, origin.y - min(point.y for point in points) + margin)
                     studio.update_backdrop(s, context)
                 yield .02 + .98 * done/max(1, expected), f'{ordinal+1}/{len(assets)} | Camera ready: {col.name}'
                 for job in jobs:
@@ -314,6 +342,11 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                     outputs = [job['output_path']]
                     if s.freestyle_edges and s.freestyle_as_render_pass and not job.get('texture_kind'):
                         outputs += [job['freestyle_output_path'], job['freestyle_overlay_path']]
+                    if s.transparent_background and not job.get('texture_kind'):
+                        transparent = job.get('transparent_output_path') or rq._transparent_output_path(job['output_path'])
+                        outputs.append(transparent)
+                        if s.freestyle_edges and s.freestyle_as_render_pass:
+                            outputs += [rq._freestyle_pass_path(transparent), rq._freestyle_overlay_path(transparent)]
                     skip = s.skip_existing and not s.overwrite_existing and all(os.path.exists(path) for path in outputs)
                     if not skip:
                         render_asset_job(context, job, views, origin)
