@@ -437,19 +437,6 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         content = draw_topic(layout, context, "batch_5", t(context, "phase2_title"), "RECOVER_LAST")
         if content is not None:
-            manager = draw_collapsible_box(content, settings, "phase2_show_files",
-                t(context, "phase2_file_manager"), "FILE_BLEND")
-            if manager is not None:
-                buttons = manager.column(align=True)
-                buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
-                buttons.operator("object.polygroups_phase2_files_scan", icon="VIEWZOOM")
-                buttons.prop(settings, "phase2_files_cleanup")
-                move = buttons.row()
-                move.enabled = settings.phase2_files_found > 0
-                move.operator("object.polygroups_phase2_files_move", icon="FILE_FOLDER")
-                manager.label(text=settings.phase2_files_status, icon="INFO")
-                if settings.phase2_files_cleanup_status:
-                    manager.label(text=settings.phase2_files_cleanup_status)
             group = draw_collapsible_box(content, settings, "phase2_show_restore",
                 t(context, "phase2_restore_processing"), "IMPORT")
             if group is not None:
@@ -607,6 +594,20 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     group.operator("object.polygroups_phase2_stop", text=t(context, "phase2_stop"), icon="PAUSE")
                 if settings.phase2_final_is_running or settings.phase2_auto_render_running:
                     group.operator("object.polygroups_stop_lod_job", icon="CANCEL")
+
+            manager = draw_collapsible_box(content, settings, "phase2_show_files",
+                t(context, "phase2_file_manager"), "FILE_BLEND")
+            if manager is not None:
+                buttons = manager.column(align=True)
+                buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                buttons.operator("object.polygroups_phase2_files_scan", icon="VIEWZOOM")
+                buttons.prop(settings, "phase2_files_cleanup")
+                move = buttons.row()
+                move.enabled = settings.phase2_files_found > 0
+                move.operator("object.polygroups_phase2_files_move", icon="FILE_FOLDER")
+                manager.label(text=settings.phase2_files_status, icon="INFO")
+                if settings.phase2_files_cleanup_status:
+                    manager.label(text=settings.phase2_files_cleanup_status)
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:
