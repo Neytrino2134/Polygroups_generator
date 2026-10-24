@@ -2,6 +2,8 @@ import bpy
 
 from .safety_checks import find_selected_lowpoly
 from .safety_checks import is_lowpoly_name
+from .safety_checks import expected_highpoly_name, find_matching_highpoly
+from .safety_checks import auto_select_matching_highpoly, report_missing_matching_highpoly
 
 
 MULTIRES_MODIFIER_NAME = "PolyGroups Multires"
@@ -138,7 +140,7 @@ class OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly(bpy.types.Operator):
 class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
     bl_idname = "object.polygroups_setup_resculpting"
     bl_label = "Setup Resculpting"
-    bl_description = "Add Multiresolution and Shrinkwrap to the active lowpoly using the selected highpoly"
+    bl_description = "Auto-select the matching Generated highpoly, prepare the active lowpoly and disable the highpoly afterward"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -182,18 +184,42 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             lowpoly.select_set(True)
             context.view_layer.objects.active = lowpoly
 
-        highpoly = _selected_highpoly_target(context, lowpoly)
+        # Use the same exact source/collection resolution as Autobake, rather
+        # than picking an unrelated selected mesh by its polygon count.
+        automatic = bool(expected_highpoly_name(lowpoly.name))
+        if automatic:
+            highpoly, expected, collection = find_matching_highpoly(lowpoly)
+            if highpoly is None:
+                report_missing_matching_highpoly(self, context, lowpoly, expected, collection)
+                return {'CANCELLED'}
+        else:
+            highpoly = _selected_highpoly_target(context, lowpoly)
         if highpoly is None:
-            self.report({"ERROR"}, "Select a highpoly mesh and make the lowpoly mesh active")
-            return {"CANCELLED"}
+            self.report({'ERROR'}, 'Select a highpoly mesh and make the lowpoly mesh active')
+            return {'CANCELLED'}
 
-        add_multires_modifier(context, lowpoly, settings.multires_levels)
-        add_shrinkwrap_modifier(
-            lowpoly,
-            highpoly,
-            settings.shrinkwrap_limit,
-            settings.shrinkwrap_offset,
-        )
+        locked = highpoly.hide_select
+        try:
+            _set_object_mode(context)
+            highpoly.hide_select = False
+            if automatic:
+                auto_select_matching_highpoly(context, lowpoly)
+            else:
+                highpoly.hide_viewport = highpoly.hide_render = False
+                highpoly.hide_set(False)
+            context.view_layer.objects.active = lowpoly
+            lowpoly.select_set(True)
+            context.view_layer.update()
+            add_multires_modifier(context, lowpoly, settings.multires_levels)
+            add_shrinkwrap_modifier(lowpoly, highpoly, settings.shrinkwrap_limit, settings.shrinkwrap_offset)
+        finally:
+            highpoly.select_set(False)
+            highpoly.hide_viewport = highpoly.hide_render = True
+            highpoly.hide_set(True)
+            highpoly.hide_select = locked
+            context.view_layer.objects.active = lowpoly
+            lowpoly.select_set(True)
+            context.view_layer.update()
         self.report(
             {"INFO"},
             f"Resculpting setup: {lowpoly.name} projects to {highpoly.name}",
