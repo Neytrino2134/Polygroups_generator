@@ -86,6 +86,8 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_auto_render_') as directo
   assert bpy.ops.object.polygroups_phase2_auto_render()=={'FINISHED'}
  assert 'ForeignCamera' not in bpy.data.objects and 'ForeignLight' not in bpy.data.objects and 'ForeignBackdrop' not in bpy.data.objects
  assert len(frames)==2 and all(projections.values())
+ for role in ('camera','scene','light'):
+  assert getattr(s,'studio_'+role+'_position').matrix_world.translation.length<1e-6
  assert s.queue_index==s.total_count==10,(s.queue_index,s.total_count)
  files=list((root/'ALL').rglob('*.png'));assert len(files)==26,len(files)
  assert len([path for path in files if 'BaseColor_Normal' in path.name])==2
@@ -101,6 +103,8 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_auto_render_') as directo
  with patch.object(auto,'configure_auto_render',small_render),patch.object(rq,'_render_current_job',inspect_render):
   assert bpy.ops.object.polygroups_phase2_auto_render()=={'FINISHED'}
  assert len(bpy.data.cameras)==cameras and len(bpy.data.lights)==lights
+ for role in ('camera','scene','light'):
+  assert getattr(s,'studio_'+role+'_position').matrix_world.translation.length<1e-6
  assert len(list((root/'EACH').rglob('*.png')))==10
  # Unscaled production 2K render, with the optional groups switched off.
  for obj in sources[1:]:bpy.data.objects.remove(obj,do_unlink=True)

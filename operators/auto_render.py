@@ -304,6 +304,8 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
             s.status = f'Auto Render complete: {done} jobs / {len(assets)} assets'
         finally:
             rq._restore_visibility(snapshot)
+            if completed:
+                studio.position_studio_at_origin(context, Vector((0, 0, 0)))
             s.is_running = False
             if not completed:
                 s.status = f'Auto Render interrupted: {done} jobs completed'

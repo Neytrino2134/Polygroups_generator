@@ -55,6 +55,8 @@ the scene visible through the completion update. A bottom-left overlay shows
 completed/total image jobs and their overall percentage, plus the current asset
 index and render type. Previous viewport camera settings are restored and the
 overlay removed on completion, cancellation or failure.
+After a successfully completed batch, Camera Position, Scene Position and Light
+Position return to world (0, 0, 0), retaining their child objects' local setup.
 Temporary multiview objects are removed and working flags cleared on completion,
 stop, error, file load, Undo/Redo or add-on unregister. Prepared texture planes
 and the configured studio remain available for use in section 13.
