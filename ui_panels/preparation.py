@@ -502,6 +502,16 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     buttons.prop(settings, 'phase2_keep_retopo01')
                     buttons.operator('object.polygroups_phase2_rename_retopo01', icon='SORTALPHA')
+                    for family, label in (('RETOPO', 'Retopo_'), ('RESCULPTING', 'Resculpting_')):
+                        row = buttons.row(align=True)
+                        row.label(text=label)
+                        for show, text, icon in ((True, 'Show All', 'HIDE_OFF'), (False, 'Hide All', 'HIDE_ON')):
+                            op = row.operator('object.polygroups_phase2_mesh_visibility', text=text, icon=icon)
+                            op.family, op.show = family, show
+                    row = buttons.row(align=True)
+                    row.label(text='Multires (Resculpting)')
+                    for enable, text in ((True, 'Enable'), (False, 'Disable')):
+                        row.operator('object.polygroups_phase2_multires_visibility', text=text, icon='MOD_MULTIRES').enable = enable
                     buttons.operator("object.polygroups_phase2_clear_lower_retopo", icon="TRASH")
                     buttons.operator("object.polygroups_phase2_clear_highpoly", icon="TRASH")
                     buttons.operator("object.polygroups_phase2_clear_backups", icon="TRASH")

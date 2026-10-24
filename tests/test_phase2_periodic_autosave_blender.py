@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_phase2_autosave_') as fol
  q.begin();saves=[];current=[]
  def save(**kwargs):
   assert q.collection is None and q.stage=='RESTORE'
-  assert current[0].hide_render and current[0].hide_viewport and current[0].color_tag=='COLOR_02'
+  assert not current[0].hide_render and not current[0].hide_viewport and current[0].color_tag=='COLOR_02'
   assert not any(phase.HIGH.fullmatch(o.name) for o in current[0].objects)
   saves.append(p.phase2_done_count)
   ctx.scene['checkpoint_collection_index']=q.index
@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_phase2_autosave_') as fol
  p=ctx.scene.polygroups_model_preparation_settings
  assert ctx.scene['checkpoint_collection_index']==6
  assert 'Generated.006' in bpy.data.collections and 'Generated.007' not in bpy.data.collections
- assert bpy.data.collections['Generated.006'].hide_viewport
+ assert not bpy.data.collections['Generated.006'].hide_viewport
  assert 'Highpoly_Generated.006' not in bpy.data.objects
  # Save failure must not turn a successful collection into a second completion.
  p.phase2_autosave=True;p.phase2_autosave_every=1

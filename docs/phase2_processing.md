@@ -85,9 +85,11 @@ folder recursively (including !Blend), targeting only numbered .blendN and
 not open or resave moved files.
 
 
-Successful Phase 2 items are disabled before the next restore: viewport/render
-visibility is off and their layer collection is excluded in the current view
-layer. Failed items remain visible for inspection.
+Successful Phase 2 items retain globally enabled viewport/render visibility.
+Only the previous item's View Layer checkbox is excluded after the next
+collection has been restored. The final collection remains included in the view
+layer. Failed items also remain visible until moving on. If the next restore
+fails, the last available collection is retained on screen.
 
 Delete Highpoly After Successful Bake and Delete Lower Retopo Stages After
 Successful Bake default off. They apply only after a confirmed successful bake;
@@ -135,7 +137,8 @@ collection. Missing targets or failures retain the highpoly and lower stages.
 Keep Retopo_01 (Resculpted), enabled by default, preserves stage 01 during both
 automatic Delete Lower Retopo and the manual lower-stage cleanup. Turning it
 off allows that stage to be deleted along with the other lower stages.
-The collection is disabled only after all requested stages succeed.
+The current collection remains included through every requested stage and at
+completion; it is excluded by checkbox only when the next collection arrives.
 
 The secondary bake stores maps under Bakes/Generated.N_Resculpting_01 after
 resculpting, or Bakes/Generated.N_Retopo_01 when only rebaking the original mesh,
@@ -160,7 +163,8 @@ beneath Delete Lower Retopo.
 Autosave Completed Collections is opt-in. Successful Collections per Save
 defaults to 1 and accepts any positive N. Only complete, successful collection
 pipelines count: highest bake, optional Retopo_01 processing, restored modifier
-visibility, cleanup and collection disabling all finish before the checkpoint.
+visibility and cleanup all finish before the checkpoint, with the current
+collection still included for inspection.
 Failed collections do not trigger or advance the successful-operation interval.
 The current working blend is saved in place; partial intervals do not force an
 extra save when the batch finishes. An autosave error stops before the next
@@ -224,3 +228,16 @@ all local stage-01 mesh names, including hidden collections, without running
 resculpting or changing geometry/modifiers. Other numbered stages are excluded.
 All target names are checked before any changes; conflicts cancel the whole
 rename. The operator supports Undo.
+
+Manual Cleanup also includes Show All / Hide All for Retopo_ and Resculpting
+meshes. These use the per-view-layer object eye visibility; Show also enables
+the required collection paths and viewport restrictions. Object render flags
+are not changed by these two family visibility controls. Resculpting includes
+both Resculpting_ prefixes and the _Resculpting suffix.
+
+Enable / Disable Multires controls all existing Multires modifiers on those
+resculpted meshes, setting viewport and render visibility together. It does not
+create modifiers or change subdivision levels. Unrelated meshes are unaffected.
+
+test_phase2_visibility_controls_blender.py checks checkbox-only transitions,
+final/stop/failure visibility, both Show/Hide families, and Multires controls.

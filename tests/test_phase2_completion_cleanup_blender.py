@@ -22,9 +22,9 @@ def fixture(index):
 q,col,objs=fixture(401);names=[o.name for o in objs];q.complete()
 assert names[0] not in bpy.data.objects and names[1] not in bpy.data.objects
 assert names[2] in bpy.data.objects
-assert col.hide_render and col.hide_viewport
+assert not col.hide_render and not col.hide_viewport
 layer=next(c for c in context.view_layer.layer_collection.children if c.collection==col)
-assert layer.exclude
+assert not layer.exclude
 q,col,objs=fixture(402);names=[o.name for o in objs];q.complete('injected bake failure')
 assert all(n in bpy.data.objects for n in names)
 assert not col.hide_render and not col.hide_viewport

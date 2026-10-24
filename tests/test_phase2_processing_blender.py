@@ -205,7 +205,7 @@ with TemporaryDirectory() as directory:
     completed = next(col for col in target.users_collection if phase2.NUMBERED.fullmatch(col.name))
     assert not any(phase2.HIGH.fullmatch(obj.name) for obj in completed.all_objects)
     assert [obj for obj in completed.all_objects if phase2.LOW.fullmatch(obj.name)] == [target]
-    assert completed.hide_render and completed.hide_viewport
+    assert not completed.hide_render and not completed.hide_viewport
 
     normal = bpy.data.images[target[baking.BAKE_NORMAL_IMAGE_PROP]]
     assert current_mask(target, normal) is not None

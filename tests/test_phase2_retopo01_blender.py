@@ -84,7 +84,7 @@ def run(resculpt,rebake,failure='',stop_when=''):
  else:
   assert p.phase2_done_count==1 and names[0] not in bpy.data.objects and names[2] not in bpy.data.objects
   assert processed_name in bpy.data.objects and names[3] in bpy.data.objects
-  assert col.hide_render and col.hide_viewport
+  assert not col.hide_render and not col.hide_viewport
  return events
 for resculpt,rebake in ((True,True),(True,False),(False,True)):
  events=run(resculpt,rebake)

@@ -193,16 +193,22 @@ def remove_mesh_objects(objects):
     return count
 
 
-def disable_completed_collection(collection, view_layer):
-    collection.hide_render = True
-    collection.hide_viewport = True
+def set_collection_excluded(collection, view_layer, excluded):
+    """Use the View Layer checkbox, keeping global viewport/render enabled."""
+    collection.hide_render = False
+    collection.hide_viewport = False
     def visit(layer):
         if layer.collection == collection:
-            layer.exclude = True
+            layer.exclude = excluded
+            layer.hide_viewport = False
         else:
             for child in layer.children:
                 visit(child)
     visit(view_layer.layer_collection)
+
+
+def disable_completed_collection(collection, view_layer):
+    set_collection_excluded(collection, view_layer, True)
 
 
 
@@ -221,6 +227,7 @@ class Phase2Queue:
         self.primary_pair = None
         self.retopo01 = None
         self.autosave_error = ''
+        self.previous_collection = None
 
     def begin(self):
         settings = self.settings
@@ -372,7 +379,8 @@ class Phase2Queue:
                             for col in list(obj.users_collection):
                                 if col in tree:
                                     col.objects.unlink(obj)
-                disable_completed_collection(self.collection, self.view_layer)
+            set_collection_excluded(self.collection, self.view_layer, False)
+            self.previous_collection = self.collection
             self.collection.color_tag = 'COLOR_05' if error else 'COLOR_02'
         self.baked_pair = None
         self.primary_pair = None
@@ -415,6 +423,9 @@ class Phase2Queue:
         try:
             if self.stage == 'RESTORE':
                 self.collection = restore_collection(path, name, self.scene)
+                if self.previous_collection is not None and self.previous_collection != self.collection:
+                    disable_completed_collection(self.previous_collection, self.view_layer)
+                    self.previous_collection = None
                 self.view_layer.update()
                 if self.auto_bake and (self.settings.phase2_resculpt_retopo01 or self.settings.phase2_autobake_retopo01):
                     candidates = [obj for obj in self.collection.all_objects if obj.type == 'MESH'
@@ -843,6 +854,75 @@ class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def processing_mesh_matches(obj, family):
+    if obj.type != 'MESH':
+        return False
+    if family == 'RETOPO':
+        return obj.name.lower().startswith('retopo_')
+    return bool(re.match(r'^Resculpting(?:_|$)', obj.name, re.I)
+                or re.search(r'_Resculpting(?:\.\d+)?$', obj.name, re.I))
+
+
+class OBJECT_OT_polygroups_phase2_multires_visibility(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_multires_visibility'
+    bl_label = 'Enable / Disable Resculpting Multires'
+    bl_description = 'Set viewport and render visibility of existing Multires modifiers on all resculpted meshes'
+    bl_options = {'REGISTER', 'UNDO'}
+    enable: bpy.props.BoolProperty(default=True)
+
+    @classmethod
+    def poll(cls, context):
+        return OBJECT_OT_polygroups_phase2_clear_backups.poll(context)
+
+    def execute(self, context):
+        count = 0
+        for obj in context.scene.objects:
+            if processing_mesh_matches(obj, 'RESCULPTING'):
+                for modifier in obj.modifiers:
+                    if modifier.type == 'MULTIRES':
+                        modifier.show_viewport = modifier.show_render = self.enable
+                        count += 1
+        context.view_layer.update()
+        message = f'{"Enabled" if self.enable else "Disabled"} {count} Resculpting Multires modifiers'
+        context.scene.polygroups_model_preparation_settings.phase2_status = message
+        self.report({'INFO'}, message)
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_phase2_mesh_visibility(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_mesh_visibility'
+    bl_label = 'Show / Hide Processing Meshes'
+    bl_description = 'Show or hide all Retopo_ or Resculpting_ meshes in the current View Layer'
+    bl_options = {'REGISTER', 'UNDO'}
+    family: bpy.props.EnumProperty(items=(('RETOPO', 'Retopo_', ''), ('RESCULPTING', 'Resculpting_', '')))
+    show: bpy.props.BoolProperty(default=True)
+
+    @classmethod
+    def poll(cls, context):
+        return OBJECT_OT_polygroups_phase2_clear_backups.poll(context)
+
+    def execute(self, context):
+        from .rename_objects import layer_collection_paths
+        objects = [obj for obj in context.scene.objects if processing_mesh_matches(obj, self.family)]
+        if self.show:
+            for obj in objects:
+                for col in obj.users_collection:
+                    for path in layer_collection_paths(context.view_layer.layer_collection, col):
+                        for layer in path:
+                            layer.collection.hide_viewport = layer.collection.hide_render = False
+                            layer.exclude = layer.hide_viewport = False
+                obj.hide_viewport = False
+            context.view_layer.update()
+        for obj in objects:
+            if obj.name in context.view_layer.objects:
+                obj.hide_set(not self.show)
+        context.view_layer.update()
+        message = f'{"Shown" if self.show else "Hidden"} {len(objects)} {self.family.title()} meshes'
+        context.scene.polygroups_model_preparation_settings.phase2_status = message
+        self.report({'INFO'}, message)
+        return {'FINISHED'}
+
+
 class OBJECT_OT_polygroups_phase2_rename_retopo01(bpy.types.Operator):
     bl_idname = 'object.polygroups_phase2_rename_retopo01'
     bl_label = 'Rename All Retopo_01 -> Resculpting_01'
@@ -874,7 +954,7 @@ class OBJECT_OT_polygroups_phase2_rename_retopo01(bpy.types.Operator):
         return {'FINISHED'}
 
 
-CLASSES = (OBJECT_OT_polygroups_phase2_rename_retopo01, OBJECT_OT_polygroups_phase2_processing_preset,
+CLASSES = (OBJECT_OT_polygroups_phase2_multires_visibility, OBJECT_OT_polygroups_phase2_mesh_visibility, OBJECT_OT_polygroups_phase2_rename_retopo01, OBJECT_OT_polygroups_phase2_processing_preset,
            OBJECT_OT_polygroups_phase2_clear_lower_retopo, OBJECT_OT_polygroups_phase2_clear_highpoly,
            OBJECT_OT_polygroups_phase2_clear_backups, OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
            OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,
