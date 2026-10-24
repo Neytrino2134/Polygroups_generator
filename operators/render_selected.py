@@ -19,11 +19,16 @@ def selected_bounds(context, objects=None):
     return points, (minimum + maximum) / 2, maximum - minimum
 
 
-def fit_camera(context, camera, points, center, size, margin=.1):
+def fit_camera(context, camera, points, center, size, margin=.1, only_y=False):
     if camera.data.type not in {'PERSP', 'ORTHO'}:
         raise RuntimeError('Use a perspective or orthographic camera')
     camera.data.shift_x = camera.data.shift_y = 0
     span = max(max(size), .01)
+    frame_center = center.copy()
+    if only_y:
+        # Preserve the configured studio height and horizontal position.
+        position = camera.matrix_world.translation
+        frame_center.x, frame_center.z = position.x, position.z
     # A very small near plane combined with a huge far plane loses Eevee
     # light-culling precision: Area lights disappear in the camera render.
     camera.data.clip_start = max(.00001, span * .0001)
@@ -33,7 +38,7 @@ def fit_camera(context, camera, points, center, size, margin=.1):
 
     def fits(value):
         matrix = rotation.copy()
-        matrix.translation = center + Vector((0, -(span * 2 if camera.data.type == 'ORTHO' else value), 0))
+        matrix.translation = frame_center + Vector((0, -(span * 2 if camera.data.type == 'ORTHO' else value), 0))
         camera.matrix_world = matrix
         if camera.data.type == 'ORTHO':
             camera.data.ortho_scale = value
@@ -48,9 +53,9 @@ def fit_camera(context, camera, points, center, size, margin=.1):
         frame = camera.data.view_frame(scene=context.scene)
         x_limit = max(abs(v.x / v.z) for v in frame) * (1 - 2 * margin)
         z_limit = max(abs(v.y / v.z) for v in frame) * (1 - 2 * margin)
-        upper = max(.0001, max(max(abs(p.x-center.x) / x_limit,
-                                   abs(p.z-center.z) / z_limit,
-                                   camera.data.clip_start * 2) - (p.y-center.y)
+        upper = max(.0001, max(max(abs(p.x-frame_center.x) / x_limit,
+                                   abs(p.z-frame_center.z) / z_limit,
+                                   camera.data.clip_start * 2) - (p.y-frame_center.y)
                                for p in points))
     else:
         upper = span

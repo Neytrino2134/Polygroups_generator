@@ -33,8 +33,9 @@ isolation, prepared or temporary Multiview, Scene/Camera/Light Position movement
 Hero isolation, rendering and cleanup. Original mesh transforms and the exact
 configured offset and rotations are retained. Evaluated mesh vertices are measured through this
 same preparation path before rendering, then normalized to each source origin
-so MID and LOD0 share one camera fit. Camera X/Z are centered on the union and
-distance is solved along Y with 7.5% silhouette margins on the limiting dimension. The fit is computed once per
+so MID and LOD0 share one camera fit. Camera X/Z and the configured aim remain
+unchanged (default studio height: 0.5 m); only distance along Y is fitted,
+with 7.5% silhouette margins on the limiting dimension. The fit is computed once per
 asset; ordinary queue movement of the position controls is retained. Texture
 jobs keep section 13's dedicated texture rendering behavior.
 

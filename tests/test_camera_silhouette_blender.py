@@ -38,4 +38,11 @@ assert all(.05<=value<=.10 for value in new),(old,new)
 assert sum(new)<sum(old)-.02,(old,new)
 assert [obj.matrix_world for obj in objects]==originals
 assert camera.data.clip_end/camera.data.clip_start<10000
+for height in (.5, 1.25):
+ camera.location = (.2, -3.5, height)
+ ctx.view_layer.update()
+ fit_camera(ctx,camera,points,(minimum+maximum)*.5,maximum-minimum,margin=.075,only_y=True)
+ assert abs(camera.matrix_world.translation.x-.2)<1e-6
+ assert abs(camera.matrix_world.translation.z-height)<1e-6
+ margins()
 print('SILHOUETTE_CAMERA_MARGINS_PASSED',old,new)

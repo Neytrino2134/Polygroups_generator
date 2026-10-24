@@ -269,11 +269,8 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                     minimum = Vector(tuple(min(v[i] for v in points) for i in range(3)))
                     maximum = Vector(tuple(max(v[i] for v in points) for i in range(3)))
                     center = (minimum + maximum) * .5
-                    if s.studio_camera_aim and context.scene.camera == s.studio_camera:
-                        matrix = s.studio_camera_aim.matrix_world.copy()
-                        matrix.translation = center
-                        s.studio_camera_aim.matrix_world = matrix
-                    fit_camera(context, context.scene.camera, points, center, maximum - minimum, margin=.075)
+                    fit_camera(context, context.scene.camera, points, center, maximum - minimum,
+                               margin=.075, only_y=True)
                     context.view_layer.update()
                 yield .02 + .98 * done/max(1, expected), f'{ordinal+1}/{len(assets)} | Camera ready: {col.name}'
                 for job in jobs:

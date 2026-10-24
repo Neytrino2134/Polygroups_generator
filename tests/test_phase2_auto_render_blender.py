@@ -68,6 +68,8 @@ def inspect_render(ctx,settings,job):
   assert (direction-expected).length<1e-4,(obj.name,tuple(direction),tuple(expected))
  camera=scene.camera;matrix=camera.matrix_world.copy()
  matrix.translation-=origin
+ assert abs(matrix.translation.z-.5)<1e-5,tuple(matrix.translation)
+ assert abs(matrix.translation.x)<1e-5,tuple(matrix.translation)
  key=job['collection']
  if key in frames:
   assert max(abs(matrix[i][j]-frames[key][i][j]) for i in range(4) for j in range(4))<1e-4
