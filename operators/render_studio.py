@@ -378,6 +378,11 @@ def reset_studio(context, scope):
     for role in ('camera', 'scene'):
         if scope in ('ALL', role.upper()):
             reset_transform(getattr(settings, 'studio_' + role + '_position'), (0, 0, 0))
+    if scope in ('ALL', 'LIGHTS'):
+        # Lights below are reset in world space before parenting. Their root
+        # must also start at zero, otherwise the previous asset offset cancels
+        # the translation applied for the next asset.
+        reset_transform(settings.studio_light_position, (0, 0, 0))
     context.view_layer.update()
     if scope == 'ALL':
         settings.property_unset('studio_move_step')

@@ -1,5 +1,6 @@
 """Real Auto Render outputs, fixed 10%-margin camera, studio replacement, texture modes."""
 import sys,tempfile
+from math import cos, sin, radians
 from pathlib import Path
 from unittest.mock import patch
 import bpy,addon_utils
@@ -50,6 +51,16 @@ def small_render(ctx):
  s.resolution_scale=5
 
 def inspect_render(ctx,job,views,origin):
+ ctx.view_layer.update()
+ for role,_label,position,_energy,_size in studio.LIGHT_DEFAULTS:
+  light=getattr(s,'studio_'+role)
+  actual=light.evaluated_get(ctx.evaluated_depsgraph_get()).matrix_world.translation
+  assert (actual-origin-Vector(position)).length<1e-4,(role,tuple(actual),tuple(origin))
+ for source,group in views.items():
+  for obj,angle in zip(group,(-30,150,60)):
+   direction=obj.matrix_world.to_quaternion() @ Vector((1,0,0))
+   expected=Vector((cos(radians(angle)),sin(radians(angle)),0))
+   assert (direction-expected).length<1e-4,(obj.name,tuple(direction),tuple(expected))
  camera=scene.camera;matrix=camera.matrix_world.copy()
  key=job['collection']
  if key in frames:assert max(abs(matrix[i][j]-frames[key][i][j]) for i in range(4) for j in range(4))<1e-5

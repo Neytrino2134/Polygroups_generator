@@ -288,6 +288,9 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                 for source in sources:
                     if s.multiview_render:
                         generated = rq._multiview_views(source, col, rq._asset_name_from_collection(col), s)
+                        # Copies still carry the source's cached world matrix until
+                        # Blender evaluates their new rotation and offset.
+                        context.view_layer.update()
                         offset = origin - source.matrix_world.translation
                         for obj in generated:
                             matrix = obj.matrix_world.copy()
