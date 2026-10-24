@@ -440,6 +440,15 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             group = draw_collapsible_box(content, settings, "phase2_show_restore",
                 t(context, "phase2_restore_processing"), "IMPORT")
             if group is not None:
+                presets = group.column(align=True)
+                presets.enabled = not (settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
+                modes = presets.row(align=True)
+                modes.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_import'),
+                    icon='IMPORT', depress=not settings.phase2_auto_bake and not settings.phase2_mesh_auto_repair).preset = 'IMPORT'
+                modes.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_rebake'),
+                    icon='RENDER_STILL', depress=settings.phase2_auto_bake).preset = 'REBAKE'
+                presets.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_resculpt'),
+                    icon='MOD_MULTIRES', depress=settings.phase2_resculpt_retopo01).preset = 'RESCULPT'
                 controls = group.column(align=True)
                 controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))

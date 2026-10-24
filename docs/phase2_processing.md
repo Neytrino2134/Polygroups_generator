@@ -181,3 +181,22 @@ are preserved. Source blend files and manual cutter backup behavior are unchange
 
 test_phase2_skip_retopo_backups_blender.py checks root and nested backups, name
 collisions with existing backups, shared geometry, and both checkbox states.
+
+## Processing preset switches
+
+Three buttons precede Restore and Processing settings. Their pressed states
+follow the actual settings, including later manual checkbox changes:
+
+- Import Only disables Auto Bake, Auto Repair, Repack, artifact repair and both
+  Retopo_01 follow-up operations.
+- Import + Rebake enables Auto Bake, Auto Repair, Repack and artifact repair.
+  It retains the independent Retopo_01 toggle state.
+- Retopo_01 Resculpting toggles both Resculpting and Autobake Retopo_01. Turning
+  it on also enables the primary rebake pipeline and Keep Retopo_01; turning it
+  off leaves the primary rebake pipeline enabled.
+
+Presets change settings only; they do not start processing. They preserve file
+selection, restore/cleanup preferences, autosave, backup omission and Only If
+Changed. Switching is disabled during processing/baking/rendering.
+test_phase2_processing_presets_blender.py checks switching, pressed states,
+unrelated-setting preservation and the busy-state guard.

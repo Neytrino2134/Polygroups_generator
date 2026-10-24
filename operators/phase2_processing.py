@@ -804,7 +804,45 @@ class OBJECT_OT_polygroups_phase2_files_move(bpy.types.Operator):
             return {'CANCELLED'}
 
 
-CLASSES = (OBJECT_OT_polygroups_phase2_clear_lower_retopo, OBJECT_OT_polygroups_phase2_clear_highpoly,
+class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_processing_preset'
+    bl_label = 'Restore and Processing Preset'
+    bl_description = 'Switch import/rebake settings or toggle Retopo_01 resculpting and rebaking'
+    bl_options = {'REGISTER', 'UNDO'}
+    preset: bpy.props.EnumProperty(items=(
+        ('IMPORT', 'Import Only', 'Restore collections without repair, repacking or baking'),
+        ('REBAKE', 'Import and Rebake', 'Enable mesh repair, UV repacking, baking and artifact repair'),
+        ('RESCULPT', 'Toggle Retopo_01 Resculpting', 'Enable or disable Retopo_01 resculpting and rebaking; enabling also enables the primary bake')))
+
+    @classmethod
+    def poll(cls, context):
+        if context.scene is None:
+            return False
+        p = context.scene.polygroups_model_preparation_settings
+        return not (p.phase2_is_running or p.phase2_final_is_running or p.phase2_auto_render_running
+                    or p.batch_is_running or context.scene.polygroups_baking_settings.bake_task_is_running
+                    or context.scene.polygroups_render_settings.is_running)
+
+    def execute(self, context):
+        p = context.scene.polygroups_model_preparation_settings
+        if self.preset == 'IMPORT':
+            for name in ('phase2_auto_bake', 'phase2_mesh_auto_repair', 'phase2_repack_after_repair',
+                         'phase2_repair_artifacts', 'phase2_resculpt_retopo01', 'phase2_autobake_retopo01'):
+                setattr(p, name, False)
+        else:
+            enabled = not p.phase2_resculpt_retopo01 if self.preset == 'RESCULPT' else True
+            if enabled:
+                for name in ('phase2_auto_bake', 'phase2_mesh_auto_repair', 'phase2_repack_after_repair', 'phase2_repair_artifacts'):
+                    setattr(p, name, True)
+            if self.preset == 'RESCULPT':
+                p.phase2_resculpt_retopo01 = p.phase2_autobake_retopo01 = enabled
+                if enabled:
+                    p.phase2_keep_retopo01 = True
+        return {'FINISHED'}
+
+
+CLASSES = (OBJECT_OT_polygroups_phase2_processing_preset,
+           OBJECT_OT_polygroups_phase2_clear_lower_retopo, OBJECT_OT_polygroups_phase2_clear_highpoly,
            OBJECT_OT_polygroups_phase2_clear_backups, OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
            OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,
            OBJECT_OT_polygroups_phase2_stop)

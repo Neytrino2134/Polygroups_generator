@@ -1912,6 +1912,8 @@ TEXT = {
 
 
 TEXT['EN'].update({
+    'phase2_preset_import': 'Import Only', 'phase2_preset_rebake': 'Import + Rebake',
+    'phase2_preset_resculpt': 'Retopo_01 Resculpting',
     'text_generation': 'Text Generation', 'text_target_language': 'Target Language',
     'text_prompt': 'Prompt / Source Text', 'text_multiline_input': 'Multiline Input',
     'text_multiline_used': 'Using multiline input instead of the prompt field',
@@ -1920,6 +1922,8 @@ TEXT['EN'].update({
     'text_open_result': 'Open Result', 'text_copy_result': 'Copy Result',
 })
 TEXT['RU'].update({
+    'phase2_preset_import': 'Только импорт', 'phase2_preset_rebake': 'Импорт + перезапечка',
+    'phase2_preset_resculpt': 'Рескульптинг Retopo_01',
     'text_generation': 'Text Generation / Генерация текста', 'text_target_language': 'Язык перевода',
     'text_prompt': 'Запрос / Исходный текст', 'text_multiline_input': 'Многострочный текст',
     'text_multiline_used': 'Используется многострочный текст вместо поля запроса',
