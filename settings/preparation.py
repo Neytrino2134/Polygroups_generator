@@ -196,6 +196,21 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Also export each Generated.N collection (Retopo / Resculpting meshes) as its own blend with packed textures",
         default=False)
     phase2_blend_export_status: bpy.props.StringProperty(default="Not exported")
+    phase2_show_export_zbrush: bpy.props.BoolProperty(name="Export ZBrush", default=True)
+    phase2_zbrush_directory: bpy.props.StringProperty(
+        name="Output", subtype='DIR_PATH', default="",
+        description="Folder for OBJ levels, ZTL files and the job script. Empty: !ZBrush beside the pack root")
+    phase2_zbrush_exe: bpy.props.StringProperty(
+        name="ZBrush.exe", subtype='FILE_PATH', default="",
+        description="Empty: the newest ZBrush found in Program Files")
+    phase2_zbrush_build: bpy.props.EnumProperty(
+        name="Levels", default='AUTO',
+        items=(('AUTO', 'Auto', 'Reconstruct Subdiv with a point-count check, falling back to Project All'),
+               ('RECONSTRUCT', 'Reconstruct', 'Rebuild lower levels from the top level (needs regular quad subdivision)'),
+               ('PROJECT', 'Project All', 'Divide the base mesh and project the top level onto it (works with triangles)')))
+    phase2_zbrush_launch: bpy.props.BoolProperty(
+        name="Launch ZBrush", default=True, description="Start ZBrush and build the ZTL files after the export")
+    phase2_zbrush_status: bpy.props.StringProperty(default="Not exported")
     phase2_final_is_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
     phase2_show_auto_render: bpy.props.BoolProperty(name="Auto Render", default=True)

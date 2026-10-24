@@ -567,6 +567,22 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     row.operator('object.polygroups_phase2_export_blend', text='Export Blend Files', icon='EXPORT')
                     row.operator('object.polygroups_phase2_open_blend_folder', text='', icon='FILE_FOLDER')
                     controls.label(text=settings.phase2_blend_export_status)
+                zbrush_export = draw_collapsible_box(final, settings, 'phase2_show_export_zbrush', 'Export ZBrush', 'MOD_MULTIRES')
+                if zbrush_export is not None:
+                    controls = zbrush_export.column(align=True)
+                    controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    controls.prop(settings, 'phase2_zbrush_directory')
+                    controls.prop(settings, 'phase2_zbrush_exe')
+                    controls.prop(settings, 'phase2_zbrush_build', expand=True)
+                    controls.prop(settings, 'phase2_zbrush_launch')
+                    controls.label(text='Multires levels -> ZBrush subdiv levels | polygroups | one ZTL per mesh', icon='INFO')
+                    row = controls.row(align=True)
+                    row.operator('object.polygroups_phase2_export_zbrush', text='Export Active Mesh', icon='EXPORT').scope = 'ACTIVE'
+                    row.operator('object.polygroups_phase2_export_zbrush', text='Export All Generated.N', icon='EXPORT').scope = 'ALL'
+                    row = controls.row(align=True)
+                    row.operator('object.polygroups_phase2_launch_zbrush', text='Launch ZBrush', icon='PLAY')
+                    row.operator('object.polygroups_phase2_open_zbrush_folder', text='', icon='FILE_FOLDER')
+                    controls.label(text=settings.phase2_zbrush_status)
             auto = draw_collapsible_box(content, settings, "phase2_show_auto_render", "Auto Render", "RENDER_STILL")
             if auto is not None:
                 config = auto.column(align=True)
