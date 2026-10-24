@@ -53,6 +53,14 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_blend_export_') as direc
             [o.name for o in scene.objects]
         assert scene.camera and strip(scene.camera.name) == 'Camera'
         bpy.data.scenes.remove(scene)
+    # Prepared meshes are written at Y = 0 while the working file keeps its positions.
+    mid = bpy.data.objects['SM_Stone_01_01_MID']; mid.location = (2, 7, 3)
+    bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Pack.blend'))
+    assert bpy.ops.object.polygroups_phase2_export_blend() == {'FINISHED'}
+    assert tuple(mid.location) == (2, 7, 3)
+    with bpy.data.libraries.load(str(out / 'Stone_01_01.blend')) as (src, dst):
+        dst.objects = [n for n in src.objects if n == 'SM_Stone_01_01_MID']
+    assert tuple(dst.objects[0].location) == (2, 0, 3), tuple(dst.objects[0].location)
     # Studio collections (with nested children) replace the generated Camera/Light.
     from polygroups_generator.operators.render_studio import TAG
     for obj in list(bpy.data.objects):

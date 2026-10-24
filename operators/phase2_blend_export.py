@@ -13,6 +13,7 @@ from ..core.generated_index import GENERATED_INDEX_PATTERN
 
 BLEND_FOLDER = '!Blend'
 COLLECTION_SUFFIX = '_Collection'
+PREPARED_NAME = re.compile(r'_(MID|HIGH|LOD\d+)$', re.IGNORECASE)
 
 
 def asset_collections(scene):
@@ -136,9 +137,21 @@ def build_clean_scene(collection):
     return scene, (camera_object, light_object), (camera_data, light_data)
 
 
-def export_collection_blend(collection, filepath, pack_textures=True):
-    """Write one collection with only its own textures; return the packed image count."""
+def prepared_asset_meshes(collection):
+    """Unparented prepared MID/HIGH/LODN meshes of an asset collection."""
+    return [obj for obj in collection.all_objects
+            if obj.type == 'MESH' and obj.parent is None
+            and (PREPARED_NAME.search(obj.name) or obj.get('unity_prepared'))]
+
+
+def export_collection_blend(collection, filepath, pack_textures=True, reset_y=False):
+    """Write one collection with only its own textures; return the packed image count.
+
+    With reset_y the prepared meshes are written at Y = 0; the working file keeps its positions."""
     packed = []
+    moved = [(obj, obj.location.y) for obj in prepared_asset_meshes(collection)] if reset_y else []
+    for obj, _y in moved:
+        obj.location.y = 0.0
     studio = studio_collections(bpy.context.scene)
     if pack_textures:
         for image in set().union(*(collection_images(item) for item in [collection, *studio])):
@@ -166,6 +179,8 @@ def export_collection_blend(collection, filepath, pack_textures=True):
                 for data in datas or ():
                     (bpy.data.cameras if data.id_type == 'CAMERA' else bpy.data.lights).remove(data)
     finally:
+        for obj, y in moved:
+            obj.location.y = y
         for image in packed:
             image.unpack(method='REMOVE')
     return len(packed)
@@ -205,7 +220,8 @@ class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
             folder.mkdir(exist_ok=True)
             for collection, name in zip(collections, names):
                 p.phase2_blend_export_status = f'Exporting {done + 1}/{len(collections)}: {name}'
-                export_collection_blend(collection, str(folder / f'{name}.blend'), p.phase2_blend_export_pack)
+                export_collection_blend(collection, str(folder / f'{name}.blend'), p.phase2_blend_export_pack,
+                                        reset_y=p.phase2_blend_export_reset_y and collection.name.endswith(COLLECTION_SUFFIX))
                 done += 1
         except (RuntimeError, ValueError, OSError) as error:
             p.phase2_blend_export_status = f'Export failed after {done}/{len(collections)}: {error}'

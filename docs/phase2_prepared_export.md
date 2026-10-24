@@ -71,3 +71,8 @@ Export Generated.N Collections (off by default): also writes every Generated.N
 collection that contains objects (Retopo / Resculpting meshes) to !Blend as
 Generated.001.blend etc., using the same clean scene and packing only that
 collection's textures.
+
+Reset Mesh Y to 0 (on by default): the unparented prepared meshes (SM_..._MID,
+_HIGH, _LODN, or Unity-prepared) of each *_Collection asset are written at
+Y = 0 (X and Z kept). The working file keeps its original positions. Generated.N
+files are not changed.

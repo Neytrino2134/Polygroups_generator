@@ -187,6 +187,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_show_export_blend: bpy.props.BoolProperty(name="Export Blend Files", default=True)
     phase2_blend_export_pack: bpy.props.BoolProperty(
         name="Pack Textures", description="Pack only the textures used by each exported collection", default=True)
+    phase2_blend_export_reset_y: bpy.props.BoolProperty(
+        name="Reset Mesh Y to 0",
+        description="Write the prepared MID/HIGH/LODN meshes of each asset collection at Y = 0 (the working file is not changed)",
+        default=True)
     phase2_blend_export_generated: bpy.props.BoolProperty(
         name="Export Generated.N Collections",
         description="Also export each Generated.N collection (Retopo / Resculpting meshes) as its own blend with packed textures",
