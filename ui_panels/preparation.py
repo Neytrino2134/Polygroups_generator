@@ -443,6 +443,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls = group.column(align=True)
                 controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 controls.separator(type="LINE")
+                controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
                 controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
                 controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))
                 group.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
@@ -450,7 +451,6 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls = group.column(align=True)
                 controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 controls.separator(type="LINE")
-                controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
                 presets = group.column(align=True)
                 presets.enabled = not (settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
                 modes = presets.row(align=True)
@@ -505,7 +505,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     for family, label in (('RETOPO', 'Retopo_'), ('RESCULPTING', 'Resculpting_')):
                         row = buttons.row(align=True)
                         row.label(text=label)
-                        for show, text, icon in ((True, 'Show All', 'HIDE_OFF'), (False, 'Hide All', 'HIDE_ON')):
+                        for show, text, icon in ((True, 'Show All', 'RESTRICT_VIEW_OFF'), (False, 'Hide All', 'RESTRICT_VIEW_ON')):
                             op = row.operator('object.polygroups_phase2_mesh_visibility', text=text, icon=icon)
                             op.family, op.show = family, show
                     row = buttons.row(align=True)

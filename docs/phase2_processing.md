@@ -235,9 +235,9 @@ All target names are checked before any changes; conflicts cancel the whole
 rename. The operator supports Undo.
 
 Manual Cleanup also includes Show All / Hide All for Retopo_ and Resculpting
-meshes. These use the per-view-layer object eye visibility; Show also enables
-the required collection paths and viewport restrictions. Object render flags
-are not changed by these two family visibility controls. Resculpting includes
+meshes. These set object viewport and render disable flags together; Show also enables
+the required collection paths and clears existing eye hiding. Hide leaves the
+per-view-layer eye state unchanged. Resculpting includes
 both Resculpting_ prefixes and the _Resculpting suffix.
 
 Enable / Disable Multires controls all existing Multires modifiers on those
@@ -248,6 +248,6 @@ test_phase2_visibility_controls_blender.py checks checkbox-only transitions,
 final/stop/failure visibility, both Show/Hide families, and Multires controls.
 
 Restore and Processing places scan subfolders directly below Scan Files and the
-processing presets directly below Restore from Separated. Recursive scanning,
+Restore from Separated above Scan Files, followed by the processing presets. Recursive scanning,
 skipping Retopo backups, MID remesh, deleting highpoly and deleting lower Retopo
 stages are enabled by default for new settings. Saved blend values are retained.

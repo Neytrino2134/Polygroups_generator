@@ -931,7 +931,7 @@ class OBJECT_OT_polygroups_phase2_multires_visibility(bpy.types.Operator):
 class OBJECT_OT_polygroups_phase2_mesh_visibility(bpy.types.Operator):
     bl_idname = 'object.polygroups_phase2_mesh_visibility'
     bl_label = 'Show / Hide Processing Meshes'
-    bl_description = 'Show or hide all Retopo_ or Resculpting_ meshes in the current View Layer'
+    bl_description = 'Enable or disable all Retopo_ or Resculpting_ meshes in viewport and render'
     bl_options = {'REGISTER', 'UNDO'}
     family: bpy.props.EnumProperty(items=(('RETOPO', 'Retopo_', ''), ('RESCULPTING', 'Resculpting_', '')))
     show: bpy.props.BoolProperty(default=True)
@@ -950,11 +950,12 @@ class OBJECT_OT_polygroups_phase2_mesh_visibility(bpy.types.Operator):
                         for layer in path:
                             layer.collection.hide_viewport = layer.collection.hide_render = False
                             layer.exclude = layer.hide_viewport = False
-                obj.hide_viewport = False
+                obj.hide_viewport = obj.hide_render = False
             context.view_layer.update()
         for obj in objects:
-            if obj.name in context.view_layer.objects:
-                obj.hide_set(not self.show)
+            if self.show and obj.name in context.view_layer.objects:
+                obj.hide_set(False)
+            obj.hide_viewport = obj.hide_render = not self.show
         context.view_layer.update()
         message = f'{"Shown" if self.show else "Hidden"} {len(objects)} {self.family.title()} meshes'
         context.scene.polygroups_model_preparation_settings.phase2_status = message
