@@ -197,6 +197,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         default=False)
     phase2_blend_export_status: bpy.props.StringProperty(default="Not exported")
     phase2_show_export_zbrush: bpy.props.BoolProperty(name="Export ZBrush", default=True)
+    phase2_show_zbrush_folder_launch: bpy.props.BoolProperty(name="Folder Export / Launch", default=False)
     phase2_zbrush_directory: bpy.props.StringProperty(
         name="Output", subtype='DIR_PATH', default="",
         description="Folder for OBJ levels, ZTL files and the job script. Empty: a !ZBrush folder beside the blend file")

@@ -590,19 +590,23 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     row.operator('object.polygroups_phase2_export_zbrush', text='Export Active Mesh', icon='EXPORT').scope = 'ACTIVE'
                     row.operator('object.polygroups_phase2_export_zbrush', text='Export All Generated.N', icon='EXPORT').scope = 'ALL'
                     controls.separator(type='LINE')
-                    controls.prop(settings, 'phase2_zbrush_blend_folder')
-                    controls.operator('object.polygroups_phase2_export_zbrush_folder', text='Export Folder of Generated.N.blend', icon='FILE_FOLDER')
-                    controls.separator(type='LINE')
                     heading = controls.row()
                     heading.alignment = 'CENTER'
                     heading.label(text='--  Delete  --')
                     controls.operator('object.polygroups_zbrush_delete_generated', text='Delete All Generated.N Collections + Meshes', icon='TRASH')
                     controls.operator('object.polygroups_zbrush_clear_obj', text='Delete Temporary OBJ Files', icon='TRASH')
-                    controls.separator(type='LINE')
-                    row = controls.row(align=True)
-                    row.operator('object.polygroups_phase2_launch_zbrush', text='Launch ZBrush', icon='PLAY')
-                    row.operator('object.polygroups_phase2_open_zbrush_folder', text='', icon='FILE_FOLDER')
                     controls.label(text=settings.phase2_zbrush_status)
+                    extra = draw_collapsible_box(zbrush_export, settings, 'phase2_show_zbrush_folder_launch',
+                        'Folder Export / Launch', 'FILE_FOLDER')
+                    if extra is not None:
+                        tools = extra.column(align=True)
+                        tools.enabled = controls.enabled
+                        tools.prop(settings, 'phase2_zbrush_blend_folder')
+                        tools.operator('object.polygroups_phase2_export_zbrush_folder', text='Export Folder of Generated.N.blend', icon='FILE_FOLDER')
+                        tools.separator(type='LINE')
+                        row = tools.row(align=True)
+                        row.operator('object.polygroups_phase2_launch_zbrush', text='Launch ZBrush', icon='PLAY')
+                        row.operator('object.polygroups_phase2_open_zbrush_folder', text='', icon='FILE_FOLDER')
             auto = draw_collapsible_box(content, settings, "phase2_show_auto_render", "Auto Render", "RENDER_STILL")
             if auto is not None:
                 config = auto.column(align=True)
