@@ -105,4 +105,4 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_zbrush_export_') as dire
     for item in batch['assets']:
         assert all((base / 'Batch' / level['obj']).is_file() for level in item['levels']), item
     assert not (base / 'Batch' / '_parts').exists()
-    print('zbrush export ok')
+    from polygroups_generator.core import zbrush_export as zb_core\n    assert isinstance(zb_core.zbrush_running(), bool)  # tasklist output is OEM-encoded on localized Windows\n    print('zbrush export ok')

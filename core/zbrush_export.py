@@ -62,11 +62,12 @@ def zbrush_running():
     if os.name != 'nt':
         return False
     try:
+        # Raw bytes: tasklist prints in the OEM code page, which text mode cannot always decode.
         output = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq ZBrush.exe', '/NH'], capture_output=True,
-                                text=True, timeout=10, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout
+                                timeout=10, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout or b''
     except (OSError, subprocess.SubprocessError):
         return False
-    return 'zbrush.exe' in output.casefold()
+    return b'zbrush.exe' in output.lower()
 
 
 def level_file(stem, level):
