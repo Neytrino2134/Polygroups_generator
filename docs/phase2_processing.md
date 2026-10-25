@@ -131,6 +131,8 @@ Restore and Processing includes two opt-in options beneath Auto Bake:
   During the Retopo_01 bake, its Multires modifiers are temporarily disabled in
   viewport and render. Their previous visibility is restored after completion,
   failure or cancellation; primary-target modifiers are unaffected.
+  After a successful resculpt pipeline, the resculpted stage 01 mesh and all its
+  Multires modifiers are disabled in viewport and render before autosaving.
 
 Order: highest repair -> optional MID remesh -> repack -> highest bake ->
 optional Retopo_01 resculpt -> post-resculpt repair -> repack -> optional
@@ -180,7 +182,7 @@ bakes and all secondary processing have completed.
 
 ## Retopo backups on restore
 
-Skip Retopo Backup Objects in Restore and Processing defaults off. The Phase 2
+Skip Retopo Backup Objects in Restore and Processing defaults on. The Phase 2
 restore appends saved collection contents, which may already contain
 Backup_Retopo objects originally created by cutter operations. When enabled,
 the restore omits these objects from the appended collection hierarchy before
@@ -244,3 +246,8 @@ create modifiers or change subdivision levels. Unrelated meshes are unaffected.
 
 test_phase2_visibility_controls_blender.py checks checkbox-only transitions,
 final/stop/failure visibility, both Show/Hide families, and Multires controls.
+
+Restore and Processing places scan subfolders directly below Scan Files and the
+processing presets directly below Restore from Separated. Recursive scanning,
+skipping Retopo backups, MID remesh, deleting highpoly and deleting lower Retopo
+stages are enabled by default for new settings. Saved blend values are retained.

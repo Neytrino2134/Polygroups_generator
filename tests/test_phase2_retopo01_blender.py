@@ -11,6 +11,8 @@ from polygroups_generator.operators import phase2_processing as phase2
 from polygroups_generator.operators.resculpting import MULTIRES_MODIFIER_NAME
 ctx=bpy.context;p=ctx.scene.polygroups_model_preparation_settings;bake=ctx.scene.polygroups_baking_settings
 assert not p.phase2_resculpt_retopo01 and not p.phase2_autobake_retopo01
+assert all(getattr(p, key) for key in ("phase2_scan_subfolders", "phase2_skip_retopo_backups", "phase2_mid_remesh", "phase2_delete_high_after_bake", "phase2_delete_lower_retopo"))
+p.phase2_mid_remesh=False
 real=bpy
 p.phase2_mesh_auto_repair=True;p.phase2_repack_after_repair=True
 p.phase2_delete_high_after_bake=True;p.phase2_delete_lower_retopo=True
@@ -73,8 +75,8 @@ def run(resculpt,rebake,failure='',stop_when=''):
  if resculpt:
   assert ('sculpt',names[1]) in events
   assert low01.modifiers.get(MULTIRES_MODIFIER_NAME) is not None
-  assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_viewport
-  assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_render
+  assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_viewport == bool(failure)
+  assert low01.modifiers[MULTIRES_MODIFIER_NAME].show_render == bool(failure)
  processed_name=names[1].replace('Retopo_','Resculpting_',1) if resculpt else names[1]
  if rebake:
   assert ('repair',processed_name) in events and ('pack',processed_name) in events
@@ -85,6 +87,7 @@ def run(resculpt,rebake,failure='',stop_when=''):
   assert p.phase2_done_count==1 and names[0] not in bpy.data.objects and names[2] not in bpy.data.objects
   assert processed_name in bpy.data.objects and names[3] in bpy.data.objects
   assert not col.hide_render and not col.hide_viewport
+  if resculpt:assert low01.hide_viewport and low01.hide_render and low01.hide_get()
  return events
 for resculpt,rebake in ((True,True),(True,False),(False,True)):
  events=run(resculpt,rebake)
@@ -146,7 +149,9 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_native_retopo01_') as fol
  targets=[o for o in bpy.data.objects if phase2.LOW.fullmatch(o.name)]
  assert len(targets)==2 and any(o.name.startswith('Resculpting_01_') for o in targets)
  assert all(o.get(baking.BAKE_NORMAL_IMAGE_PROP) for o in targets)
- assert all(m.show_viewport and m.show_render for o in targets for m in o.modifiers if m.type=='MULTIRES')
+ resculpted=next(o for o in targets if o.name.startswith('Resculpting_01_'))
+ assert resculpted.hide_viewport and resculpted.hide_render and resculpted.hide_get()
+ assert all(not m.show_viewport and not m.show_render for m in resculpted.modifiers if m.type=='MULTIRES')
  from polygroups_generator.core.bake_projection import current_mask
  assert all(current_mask(o,bpy.data.images[o[baking.BAKE_NORMAL_IMAGE_PROP]]) is not None for o in targets)
  assert not any(phase2.HIGH.fullmatch(o.name) for o in bpy.data.objects)

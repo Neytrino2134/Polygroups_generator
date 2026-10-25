@@ -440,6 +440,17 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             group = draw_collapsible_box(content, settings, "phase2_show_restore",
                 t(context, "phase2_restore_processing"), "IMPORT")
             if group is not None:
+                controls = group.column(align=True)
+                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                controls.separator(type="LINE")
+                controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
+                controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))
+                group.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
+                group.label(text=t(context, "phase2_scanned_collections", value=settings.phase2_scanned_collections))
+                controls = group.column(align=True)
+                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                controls.separator(type="LINE")
+                controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
                 presets = group.column(align=True)
                 presets.enabled = not (settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
                 modes = presets.row(align=True)
@@ -450,16 +461,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 presets.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_resculpt'),
                     icon='MOD_MULTIRES', depress=settings.phase2_resculpt_retopo01).preset = 'RESCULPT'
                 controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
-                controls.prop(settings, "phase2_scan_subfolders", text=t(context, "phase2_recursive"))
-                controls.separator(type="LINE")
-                controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
-                group.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
-                group.label(text=t(context, "phase2_scanned_collections", value=settings.phase2_scanned_collections))
-                controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
-                controls.separator(type="LINE")
-                controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
+                controls.enabled = presets.enabled
                 controls.separator(type="LINE")
                 controls.prop(settings, "phase2_clear_generated", text=t(context, "phase2_clear"))
                 if settings.phase2_clear_generated:

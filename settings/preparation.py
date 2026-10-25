@@ -245,7 +245,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_files_status: bpy.props.StringProperty(default="Scan required", options={"SKIP_SAVE"})
     phase2_files_cleanup_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     phase2_scan_subfolders: bpy.props.BoolProperty(
-        name="All Blends Including Subfolders", default=False,
+        name="All Blends Including Subfolders", default=True,
         description="Scan all blend files beside the working blend and in subfolders, excluding the working file",
     )
     phase2_clear_generated: bpy.props.BoolProperty(
@@ -253,10 +253,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Remove existing Generated.N collections before restoring the scanned files",
     )
     phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
-    phase2_mid_remesh: bpy.props.BoolProperty(name="MID Remesh Before Repack", default=False,
+    phase2_mid_remesh: bpy.props.BoolProperty(name="MID Remesh Before Repack", default=True,
         description="Clear all seams/pins, generate Smart Seams at 22 degrees, remesh the highest Retopo using MID, unwrap and repack the next stage")
     phase2_repair_after_resculpt: bpy.props.BoolProperty(name="Auto Repair After Resculpting", default=True)
-    phase2_skip_retopo_backups: bpy.props.BoolProperty(name="Skip Retopo Backup Objects", default=False,
+    phase2_skip_retopo_backups: bpy.props.BoolProperty(name="Skip Retopo Backup Objects", default=True,
         description="Do not restore Backup_Retopo or Backup_Resculpting objects from saved collections during Phase 2 processing")
     phase2_autosave: bpy.props.BoolProperty(name="Autosave Completed Collections", default=False,
         description="Save the current blend after every N successfully completed collection pipelines")
@@ -275,11 +275,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Always run UVPackmaster PACK on the current target when enabled",
     )
     phase2_delete_high_after_bake: bpy.props.BoolProperty(
-        name="Delete Highpoly After Successful Bake", default=False,
+        name="Delete Highpoly After Successful Bake", default=True,
         description="Remove the baked Highpoly source from the completed Generated collection only after successful rebaking",
     )
     phase2_delete_lower_retopo: bpy.props.BoolProperty(
-        name="Delete Lower Retopo Stages After Successful Bake", default=False,
+        name="Delete Lower Retopo Stages After Successful Bake", default=True,
         description="Remove earlier numbered Retopo stages, keeping the target used by the successful bake",
     )
     phase2_keep_retopo01: bpy.props.BoolProperty(name="Keep Retopo_01 (Resculpted)", default=True,

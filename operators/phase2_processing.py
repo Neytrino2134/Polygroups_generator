@@ -229,6 +229,7 @@ class Phase2Queue:
         self.autosave_error = ''
         self.previous_collection = None
         self.mid_remesh = None
+        self.resculpt_completed = False
 
     def begin(self):
         settings = self.settings
@@ -360,6 +361,15 @@ class Phase2Queue:
         if self.mid_remesh is not None:
             self.mid_remesh.abort();self.mid_remesh=None
         self.restore_bake_settings()
+        if not error and self.resculpt_completed and self.retopo01 is not None:
+            low = self.retopo01
+            for modifier in low.modifiers:
+                if modifier.type == 'MULTIRES':
+                    modifier.show_viewport = modifier.show_render = False
+            low.select_set(False)
+            low.hide_set(True)
+            low.hide_viewport = low.hide_render = True
+        self.resculpt_completed = False
         if self.collection is not None:
             if not error:
                 cleanup_pair = self.primary_pair or (self.baked_pair if self.stage == 'BAKE_WAIT' else None)
@@ -489,6 +499,7 @@ class Phase2Queue:
                 self.view_layer.objects.active = low
                 if 'FINISHED' not in bpy.ops.object.polygroups_setup_resculpting('EXEC_DEFAULT'):
                     raise RuntimeError(f'Setup Resculpting failed for {low.name}')
+                self.resculpt_completed = True
                 self.repair_mesh(context,low=low,repack=False,enabled=self.settings.phase2_repair_after_resculpt)
                 if self.settings.phase2_autobake_retopo01:
                     self.stage = 'RETOPO01_PREPARE'
