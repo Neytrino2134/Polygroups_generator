@@ -59,3 +59,18 @@ The old test_unity_preparation.py still expects Asset_01 where both the
 pre-change HEAD and current implementation produce Asset_00_01 (Name Index).
 This pre-existing assertion mismatch was verified separately; the current
 Unity Export Workflow and new Unity Batch Finalization tests pass.
+
+## Portable texture references
+
+Unity Prepare and Unreal LOD Rename now store copied texture references as
+`//Textures/<asset>/...`, relative to the saved blend file, matching FAB Prepare
+and AutoBake (which already use relative paths). Enable Copy Textures when
+preparing an asset so external source images are actually copied beside the
+blend. Save the blend after preparation/baking, then move the entire directory
+including Textures and Bakes while retaining its internal structure. Existing
+absolute references in an old blend require preparing again while the originals
+are accessible, then saving the updated blend.
+
+`tests/test_portable_texture_paths_blender.py` saves all four pipeline outputs,
+moves the project so the original directory no longer exists, opens the moved
+blend, and reloads the referenced images from their new locations.

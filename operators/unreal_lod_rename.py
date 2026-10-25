@@ -87,7 +87,7 @@ def prepare_materials(meshes, base, copy_textures):
             path = directory / (_safe_path_token(image.name) + '.png')
             image.file_format = 'PNG'
             image.save(filepath=str(path))
-            image.filepath_raw = str(path)
+            image.filepath_raw = bpy.path.relpath(str(path))
             if image.source == 'GENERATED':
                 image.source = 'FILE'
 

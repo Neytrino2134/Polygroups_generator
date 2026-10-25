@@ -93,7 +93,8 @@ def save_textures(obj, directory):
             path = os.path.join(directory, _safe_path_token(image.name) + ".png")
             image.file_format = "PNG"
             image.save(filepath=path)
-            image.filepath_raw = path
+            # Persist against the blend, not the original workstation folder.
+            image.filepath_raw = bpy.path.relpath(path)
             # Prepared pixel copies must reopen from the newly written file,
             # rather than regenerating a blank image after reloading the blend.
             if image.source == 'GENERATED':
