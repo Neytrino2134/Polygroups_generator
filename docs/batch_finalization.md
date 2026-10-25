@@ -74,3 +74,14 @@ are accessible, then saving the updated blend.
 `tests/test_portable_texture_paths_blender.py` saves all four pipeline outputs,
 moves the project so the original directory no longer exists, opens the moved
 blend, and reloads the referenced images from their new locations.
+
+### Recover missing textures
+
+Find Missing Files is available under Save Cleanup and under Restore and
+Processing / Manual Cleanup. It starts Blender's native recursive missing-file
+search in the current saved blend directory, with no folder picker. Recovered
+local texture paths are converted to blend-relative references and reloaded.
+The shared status reports Relinked / Missing / Errors. Save the blend afterwards
+to keep the repaired references. An unsaved blend must be saved first; missing
+images absent from the project directory remain unresolved. As with Blender's
+native search, matching uses filenames; review duplicates with identical names.

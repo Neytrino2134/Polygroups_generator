@@ -1,6 +1,7 @@
 """Explicit scan and cleanup of numbered Blender backup saves."""
 import os
 import re
+import glob
 from pathlib import Path
 import bpy
 
@@ -21,6 +22,7 @@ class AIRETOPO_PG_save_cleanup(bpy.types.PropertyGroup):
     file_count: bpy.props.IntProperty(default=0)
     total_bytes: bpy.props.FloatProperty(default=0)
     status: bpy.props.StringProperty(default='Scan required')
+    missing_status: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
 
 def _root(settings):
@@ -136,6 +138,64 @@ class AIRETOPO_OT_clean_backup_saves(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def image_file_exists(image):
+    path = bpy.path.abspath(image.filepath, library=image.library)
+    if '<UDIM>' in path or '<UVTILE>' in path:
+        return bool(glob.glob(path.replace('<UDIM>', '[0-9][0-9][0-9][0-9]').replace('<UVTILE>', 'u*_v*')))
+    return os.path.isfile(path)
+
+
+class AIRETOPO_OT_find_missing_project_files(bpy.types.Operator):
+    bl_idname = 'wm.airetopo_find_missing_project_files'
+    bl_label = 'Find Missing Files'
+    bl_description = 'Recursively search the current blend folder for missing textures and store recovered paths relative to the blend'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        settings = context.window_manager.airetopo_save_cleanup
+        if not bpy.data.filepath:
+            settings.missing_status = 'Save the blend file before searching for missing textures'
+            self.report({'WARNING'}, settings.missing_status)
+            return {'CANCELLED'}
+        missing = [image for image in bpy.data.images if image.source in {'FILE', 'TILED', 'SEQUENCE'}
+                   and image.filepath and not image.packed_file and not image_file_exists(image)]
+        if not missing:
+            settings.missing_status = 'Relinked 0 | Missing 0 | Errors 0'
+            self.report({'INFO'}, settings.missing_status)
+            return {'FINISHED'}
+        try:
+            result = bpy.ops.file.find_missing_files('EXEC_DEFAULT',
+                directory=str(Path(bpy.data.filepath).parent), find_all=False)
+            if 'FINISHED' not in result:
+                raise RuntimeError('Find Missing Files did not finish')
+        except Exception as error:
+            settings.missing_status = 'Search failed: ' + str(error)
+            self.report({'WARNING'}, settings.missing_status)
+            return {'CANCELLED'}
+        found = remaining = errors = 0
+        for image in missing:
+            if not image_file_exists(image):
+                remaining += 1
+                continue
+            try:
+                if image.library is None:
+                    image.filepath = bpy.path.relpath(bpy.path.abspath(image.filepath))
+                image.reload()
+                found += 1
+            except Exception:
+                errors += 1
+        settings.missing_status = f'Relinked {found} | Missing {remaining} | Errors {errors}'
+        self.report({'WARNING'} if remaining or errors else {'INFO'}, settings.missing_status)
+        return {'FINISHED'}
+
+
+def draw_missing_files(layout, context):
+    layout.operator('wm.airetopo_find_missing_project_files', icon='FILE_REFRESH')
+    status = context.window_manager.airetopo_save_cleanup.missing_status
+    if status:
+        layout.label(text=status, icon='INFO')
+
+
 def draw_cleanup(layout, context):
     settings = context.window_manager.airetopo_save_cleanup
     layout.prop(settings, 'directory')
@@ -146,9 +206,11 @@ def draw_cleanup(layout, context):
     row = layout.row()
     row.enabled = _SCAN is not None and settings.file_count > 0
     row.operator('wm.airetopo_clean_backup_saves', icon='TRASH')
+    layout.separator()
+    draw_missing_files(layout, context)
 
 
-CLASSES = (AIRETOPO_PG_save_cleanup, AIRETOPO_OT_scan_save_cleanup, AIRETOPO_OT_scan_current_save_folder, AIRETOPO_OT_clean_backup_saves)
+CLASSES = (AIRETOPO_PG_save_cleanup, AIRETOPO_OT_scan_save_cleanup, AIRETOPO_OT_scan_current_save_folder, AIRETOPO_OT_clean_backup_saves, AIRETOPO_OT_find_missing_project_files)
 
 
 def register():
