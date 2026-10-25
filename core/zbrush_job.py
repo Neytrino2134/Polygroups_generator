@@ -37,7 +37,7 @@ class Job:
             handle.write(line + '\n')
 
     def write_result(self, finished=False):
-        data = {'finished': finished, 'build': self.manifest.get('build'), 'assets': self.results,
+        data = {'job_id': self.manifest.get('job_id'), 'finished': finished, 'build': self.manifest.get('build'), 'assets': self.results,
                 'seconds': round(time.time() - self.started, 1)}
         temp = os.path.join(self.root, RESULT_NAME + '.tmp')
         with open(temp, 'w', encoding='utf-8') as handle:
@@ -198,7 +198,8 @@ def main():
         print(error)
         if root:
             with open(os.path.join(root, RESULT_NAME), 'w', encoding='utf-8') as handle:
-                json.dump({'finished': True, 'assets': [{'name': '(job)', 'ok': False, 'error': error}]}, handle, indent=1)
+                json.dump({'job_id': manifest.get('job_id') if 'manifest' in locals() else None,
+                           'finished': True, 'assets': [{'name': '(job)', 'ok': False, 'error': error}]}, handle, indent=1)
     # A command-line start exits ZBrush cleanly (a kill would show the abnormal-termination note next time).
     if '-script' in sys.argv:
         sys.exit(0)

@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 ZBRUSH_FOLDER = '!ZBrush'
@@ -86,6 +87,7 @@ def asset_record(stem, object_name, levels, groups, bounds=None):
 
 def write_manifest(root, assets, build='AUTO', source_blend=''):
     manifest = {
+        'job_id': uuid.uuid4().hex,
         'version': MANIFEST_VERSION,
         'build': build if build in BUILD_MODES else 'AUTO',
         'source_blend': str(source_blend),

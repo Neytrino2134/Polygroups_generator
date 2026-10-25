@@ -212,6 +212,9 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Folder with Generated.N.blend files for the batch export. Empty: the folder of the current blend")
     phase2_zbrush_launch: bpy.props.BoolProperty(
         name="Launch ZBrush", default=True, description="Start ZBrush and build the ZTL files after the export")
+    phase2_zbrush_cleanup_on_success: bpy.props.BoolProperty(
+        name="Return to Blender and Cleanup after ZBrush", default=False,
+        description="After Export All succeeds in ZBrush, delete exported Generated.N collections and temporary OBJ files; keep ZTL files")
     phase2_zbrush_status: bpy.props.StringProperty(default="Not exported")
     phase2_final_is_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})

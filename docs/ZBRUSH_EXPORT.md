@@ -15,6 +15,21 @@ polygroups (Blender sculpt face sets, one OBJ group each).
   Blender (modal, Esc cancels), merged into one job.
 - **Launch ZBrush**: starts ZBrush with the job. A running ZBrush refuses a second instance, so close it first
   (or run `zbrush_job.py` through ZScript > Python Scripting > Load).
+- **Delete All Generated.N Collections + Meshes**: removes the current scene's Generated.N
+  collections, their child collections and all objects inside. Blender Undo is supported.
+- **Delete Temporary OBJ Files**: removes OBJ files recursively under the selected export
+  folder's `Mesh/` directory. ZTL files and other file types are retained.
+
+**Return to Blender and Cleanup after ZBrush** is off by default. Enable it before
+Export All Generated.N to watch that exact job while Blender stays open. The watcher
+also works when ZBrush is launched later using Launch ZBrush. Cleanup requires a finished
+result with the same job ID, success for every exported asset and nonempty ZTL files.
+It deletes only the exported collections and that job's OBJ files, then asks Windows
+to bring Blender forward (Windows can restrict foreground activation). Unrelated
+collections and OBJ files are retained. If collection contents changed, a job failed,
+or a ZTL is missing, cleanup is cancelled. Disable the option to cancel waiting.
+Loading another file or restarting Blender cancels automatic cleanup; it is not resumed.
+The blend file is not saved automatically after cleanup.
 
 ZBrush.exe is set in Preferences > Add-ons > External Programs (default
 `C:\Program Files\Maxon ZBrush 2027\ZBrush.exe`).

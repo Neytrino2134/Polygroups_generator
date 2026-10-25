@@ -221,7 +221,8 @@ class OBJECT_OT_polygroups_phase2_export_zbrush(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'OBJECT' and available(context)
+        from .zbrush_cleanup import cleanup_pending
+        return context.mode == 'OBJECT' and available(context) and not cleanup_pending()
 
     def execute(self, context):
         p = context.scene.polygroups_model_preparation_settings
@@ -240,6 +241,9 @@ class OBJECT_OT_polygroups_phase2_export_zbrush(bpy.types.Operator):
             assets = export_candidates(context, candidates, root,
                                        report=lambda text: setattr(p, 'phase2_zbrush_status', text))
             write_job(root, assets, p.phase2_zbrush_build, bpy.data.filepath)
+            if self.scope == 'ALL' and p.phase2_zbrush_cleanup_on_success:
+                from .zbrush_cleanup import watch_success
+                watch_success(context, root, assets)
         except (RuntimeError, ValueError, OSError) as error:
             p.phase2_zbrush_status = f'Export failed: {error}'
             self.report({'ERROR'}, p.phase2_zbrush_status)

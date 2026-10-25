@@ -234,12 +234,14 @@ from .relocate_project import WM_OT_airetopo_relocate_project, WM_OT_airetopo_re
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 from .phase2_blend_export import OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder
+from .zbrush_cleanup import OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj
 from .phase2_zbrush_export import (
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
     OBJECT_OT_polygroups_phase2_open_zbrush_folder, OBJECT_OT_polygroups_phase2_export_zbrush_folder,
 )
 
 CLASSES = (
+    OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj,
     OBJECT_OT_polygroups_phase2_export,
     OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder,
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
