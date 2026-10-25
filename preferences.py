@@ -21,6 +21,7 @@ from .services.asset_translation import TEXT_TASK_MODELS
 
 
 ADDON_AUTHOR = "Meowmaster"
+DEFAULT_ZBRUSH_EXE = r"C:\Program Files\Maxon ZBrush 2027\ZBrush.exe"
 
 
 def _update_custom_interface(self, context):
@@ -482,6 +483,10 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
     show_preferences_autosave: bpy.props.BoolProperty(default=False)
     show_preferences_remesh: bpy.props.BoolProperty(default=False)
     show_preferences_api: bpy.props.BoolProperty(default=False)
+    show_preferences_external: bpy.props.BoolProperty(default=True)
+    zbrush_exe: bpy.props.StringProperty(
+        name='ZBrush', subtype='FILE_PATH', default=DEFAULT_ZBRUSH_EXE,
+        description='ZBrush.exe started by Phase 2 > Export ZBrush')
     show_preferences_hotkeys: bpy.props.BoolProperty(default=True)
     show_preferences_pie_menu: bpy.props.BoolProperty(default=False)
     show_preferences_windows: bpy.props.BoolProperty(default=False)
@@ -874,6 +879,7 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
             ("show_preferences_icons", "Custom Icons", self.draw_icons),
             ("show_preferences_remesh", t(context, "preferences_remesh"), self.draw_remesh),
             ("show_preferences_api", t(context, "preferences_api"), self.draw_api),
+            ("show_preferences_external", t(context, "preferences_external"), self.draw_external),
             ("show_preferences_updates", t(context, "updates"), self.draw_updates),
             ("show_preferences_info", t(context, "preferences_info"), self.draw_info),
         ]
@@ -977,6 +983,14 @@ class AIRETOPO_Preferences(bpy.types.AddonPreferences):
         column.separator()
         column.prop(self, "use_env_gemini_api_key", text=t(context, "use_env_gemini_api_key"))
         column.prop(self, "gemini_api_key", text=t(context, "gemini_api_key"))
+
+    def draw_external(self, context, layout):
+        column = layout.column(align=True)
+        column.prop(self, "zbrush_exe", text=t(context, "external_zbrush"))
+        if not os.path.isfile(bpy.path.abspath(self.zbrush_exe)):
+            warning = column.row()
+            warning.alert = True
+            warning.label(text=t(context, "external_zbrush_missing"), icon="ERROR")
 
     def draw_hotkeys(self, context, layout):
         section_box = layout.box()

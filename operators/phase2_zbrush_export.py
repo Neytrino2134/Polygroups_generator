@@ -205,11 +205,17 @@ class OBJECT_OT_polygroups_phase2_export_zbrush(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def configured_exe():
+    """ZBrush.exe from Preferences > External Programs ('' when the add-on preferences are unavailable)."""
+    addon = bpy.context.preferences.addons.get(__package__.split('.')[0])
+    return bpy.path.abspath(addon.preferences.zbrush_exe) if addon else ''
+
+
 def launch_zbrush(settings, root):
     """Start ZBrush with the job script; returns a status text."""
-    exe = zb.find_zbrush_exe(bpy.path.abspath(settings.phase2_zbrush_exe))
+    exe = zb.find_zbrush_exe(configured_exe())
     if not exe:
-        return 'ZBrush.exe not found (set the path)'
+        return 'ZBrush.exe not found: set it in Preferences > Add-ons > External Programs'
     if zb.zbrush_running():
         return (f'ZBrush is running: close it and press Launch, or run {zb.JOB_SCRIPT_NAME} '
                 'via ZScript > Python Scripting > Load')

@@ -9,7 +9,6 @@ import tempfile
 from pathlib import Path
 
 ZBRUSH_FOLDER = '!ZBrush'
-BLEND_FOLDER = '!Blend'
 MANIFEST_NAME = 'job.json'
 JOB_SCRIPT_NAME = 'zbrush_job.py'
 POINTER_NAME = 'manifest_path.txt'
@@ -27,14 +26,10 @@ def safe_name(text, fallback='Asset'):
 
 
 def output_root(blend_filepath, custom_directory=''):
-    """Folder that receives Mesh/, ZTL/, job.json and the ZBrush job script."""
+    """Folder that receives Mesh/, ZTL/, job.json and the ZBrush job script: a !ZBrush folder beside the blend file."""
     if custom_directory:
         return Path(custom_directory)
-    base = Path(blend_filepath).parent
-    # Working files live inside !Blend, the pack root is its parent.
-    if base.name.casefold() == BLEND_FOLDER.casefold():
-        base = base.parent
-    return base / ZBRUSH_FOLDER
+    return Path(blend_filepath).parent / ZBRUSH_FOLDER
 
 
 def unique_stems(names):

@@ -572,7 +572,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     controls = zbrush_export.column(align=True)
                     controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     controls.prop(settings, 'phase2_zbrush_directory')
-                    controls.prop(settings, 'phase2_zbrush_exe')
+                    if not settings.phase2_zbrush_directory:
+                        controls.label(text='Default: !ZBrush beside the blend file', icon='INFO')
                     controls.prop(settings, 'phase2_zbrush_build', expand=True)
                     controls.prop(settings, 'phase2_zbrush_launch')
                     controls.label(text='Multires levels -> ZBrush subdiv levels | polygroups | one ZTL per mesh', icon='INFO')

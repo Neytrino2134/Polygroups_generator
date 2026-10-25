@@ -11,7 +11,10 @@ polygroups (Blender sculpt face sets, one OBJ group each).
 - **Launch ZBrush**: starts ZBrush with the job. A running ZBrush refuses a second instance, so close it first
   (or run `zbrush_job.py` through ZScript > Python Scripting > Load).
 
-## Output (`!ZBrush` beside the pack root, or the Output folder)
+ZBrush.exe is set in Preferences > Add-ons > External Programs (default
+`C:\Program Files\Maxon ZBrush 2027\ZBrush.exe`).
+
+## Output (`!ZBrush` beside the saved blend file, or the Output folder)
 ```
 Mesh/<name>/<name>_L0..Ln.obj   OBJ per multires level (kept for other tools)
 ZTL/<name>.ztl                  result, saved at the second level

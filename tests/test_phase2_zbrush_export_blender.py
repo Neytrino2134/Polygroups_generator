@@ -59,7 +59,11 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_zbrush_export_') as dire
     p.phase2_zbrush_launch = False
     p.phase2_zbrush_build = 'PROJECT'
     assert bpy.ops.object.polygroups_phase2_export_zbrush(scope='ALL') == {'FINISHED'}, p.phase2_zbrush_status
-    out = base / '!ZBrush'   # working file lives in !Blend, so the pack root is its parent
+    out = base / '!Blend' / '!ZBrush'   # default output: !ZBrush beside the saved blend file
+    from polygroups_generator.preferences import AIRETOPO_Preferences
+    prefs_props = AIRETOPO_Preferences.bl_rna.properties
+    assert prefs_props['zbrush_exe'].default == r'C:\Program Files\Maxon ZBrush 2027\ZBrush.exe'
+    assert 'show_preferences_external' in prefs_props and 'phase2_zbrush_exe' not in p.bl_rna.properties
     assert out.is_dir(), list(base.iterdir())
     manifest = json.loads((out / 'job.json').read_text(encoding='utf-8'))
     assert manifest['build'] == 'PROJECT' and len(manifest['assets']) == 1
