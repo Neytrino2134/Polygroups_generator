@@ -236,14 +236,14 @@ from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_w
 from .phase2_blend_export import OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder
 from .phase2_zbrush_export import (
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
-    OBJECT_OT_polygroups_phase2_open_zbrush_folder,
+    OBJECT_OT_polygroups_phase2_open_zbrush_folder, OBJECT_OT_polygroups_phase2_export_zbrush_folder,
 )
 
 CLASSES = (
     OBJECT_OT_polygroups_phase2_export,
     OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder,
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
-    OBJECT_OT_polygroups_phase2_open_zbrush_folder,
+    OBJECT_OT_polygroups_phase2_open_zbrush_folder, OBJECT_OT_polygroups_phase2_export_zbrush_folder,
     OBJECT_OT_polygroups_stop_lod_job, OBJECT_OT_polygroups_batch_finalization,
     OBJECT_OT_polygroups_phase2_auto_render,
     *PHASE2_CLASSES,

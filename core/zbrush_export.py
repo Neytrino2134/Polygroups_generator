@@ -11,6 +11,8 @@ BLEND_FOLDER = '!Blend'
 MANIFEST_NAME = 'job.json'
 JOB_SCRIPT_NAME = 'zbrush_job.py'
 RESULT_NAME = 'job_result.json'
+LOG_NAME = 'job_log.txt'
+GENERATED_BLEND = re.compile(r'^Generated\.\d+\.blend$', re.IGNORECASE)
 MANIFEST_VERSION = 1
 BUILD_MODES = ('AUTO', 'RECONSTRUCT', 'PROJECT')
 

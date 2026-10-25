@@ -91,4 +91,18 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_zbrush_export_') as dire
     p.phase2_zbrush_directory = str(base / 'Custom')
     assert bpy.ops.object.polygroups_phase2_export_zbrush(scope='ACTIVE') == {'FINISHED'}
     assert (base / 'Custom' / 'job.json').is_file()
-print('zbrush export ok')
+    # Folder batch: every Generated.N.blend is exported in its own background Blender into one job.
+    collection.name = 'Generated.002'
+    bpy.ops.wm.save_as_mainfile(filepath=str(base / '!Blend' / 'Generated.002.blend'), copy=True)
+    collection.name = 'Generated.001'
+    (base / '!Blend' / 'Other.blend').write_bytes(b'not a generated file')
+    p.phase2_zbrush_directory = str(base / 'Batch')
+    p.phase2_zbrush_blend_folder = str(base / '!Blend')
+    p.phase2_zbrush_build = 'AUTO'
+    assert bpy.ops.object.polygroups_phase2_export_zbrush_folder('EXEC_DEFAULT') == {'FINISHED'}, p.phase2_zbrush_status
+    batch = json.loads((base / 'Batch' / 'job.json').read_text(encoding='utf-8'))
+    assert batch['build'] == 'AUTO' and [a['name'] for a in batch['assets']] == ['Generated.001', 'Generated.002'], batch
+    for item in batch['assets']:
+        assert all((base / 'Batch' / level['obj']).is_file() for level in item['levels']), item
+    assert not (base / 'Batch' / '_parts').exists()
+    print('zbrush export ok')

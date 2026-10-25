@@ -579,6 +579,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_export_zbrush', text='Export Active Mesh', icon='EXPORT').scope = 'ACTIVE'
                     row.operator('object.polygroups_phase2_export_zbrush', text='Export All Generated.N', icon='EXPORT').scope = 'ALL'
+                    controls.separator(type='LINE')
+                    controls.prop(settings, 'phase2_zbrush_blend_folder')
+                    controls.operator('object.polygroups_phase2_export_zbrush_folder', text='Export Folder of Generated.N.blend', icon='FILE_FOLDER')
+                    controls.separator(type='LINE')
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_launch_zbrush', text='Launch ZBrush', icon='PLAY')
                     row.operator('object.polygroups_phase2_open_zbrush_folder', text='', icon='FILE_FOLDER')

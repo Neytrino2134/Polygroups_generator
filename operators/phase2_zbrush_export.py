@@ -1,4 +1,5 @@
 """Export multires Resculpting meshes as per-level OBJ files and a manifest for the ZBrush job script."""
+import json
 import os
 import shutil
 import subprocess
@@ -143,18 +144,24 @@ def export_object_levels(context, obj, stem, root):
     return zb.asset_record(stem, obj.name, levels, groups, {'dimensions': dims})
 
 
-def export_candidates(context, candidates, root, build, report=None):
-    """Export every candidate into ``root`` and write the manifest; returns the asset records."""
+def export_candidates(context, candidates, root, report=None):
+    """Export every candidate's levels into ``root``; returns the asset records."""
     stems = zb.unique_stems([stem for stem, _obj in candidates])
     assets = []
     for number, (stem, (_stem, obj)) in enumerate(zip(stems, candidates), 1):
         if report:
             report(f'Exporting {number}/{len(candidates)}: {stem}')
         assets.append(export_object_levels(context, obj, stem, root))
+    return assets
+
+
+def write_job(root, assets, build, source_blend):
+    """Create ZTL/, copy the ZBrush job script and write the manifest."""
     (Path(root) / 'ZTL').mkdir(parents=True, exist_ok=True)
     shutil.copyfile(JOB_SOURCE, Path(root) / zb.JOB_SCRIPT_NAME)
-    zb.write_manifest(root, assets, build, bpy.data.filepath)
-    return assets
+    for stale in (zb.RESULT_NAME, zb.LOG_NAME):
+        (Path(root) / stale).unlink(missing_ok=True)
+    return zb.write_manifest(root, assets, build, source_blend)
 
 
 class OBJECT_OT_polygroups_phase2_export_zbrush(bpy.types.Operator):
@@ -184,8 +191,9 @@ class OBJECT_OT_polygroups_phase2_export_zbrush(bpy.types.Operator):
         root = zb.output_root(bpy.data.filepath, bpy.path.abspath(p.phase2_zbrush_directory))
         try:
             root.mkdir(parents=True, exist_ok=True)
-            assets = export_candidates(context, candidates, root, p.phase2_zbrush_build,
+            assets = export_candidates(context, candidates, root,
                                        report=lambda text: setattr(p, 'phase2_zbrush_status', text))
+            write_job(root, assets, p.phase2_zbrush_build, bpy.data.filepath)
         except (RuntimeError, ValueError, OSError) as error:
             p.phase2_zbrush_status = f'Export failed: {error}'
             self.report({'ERROR'}, p.phase2_zbrush_status)
@@ -248,3 +256,140 @@ class OBJECT_OT_polygroups_phase2_open_zbrush_folder(bpy.types.Operator):
         folder = str(zb.output_root(bpy.data.filepath, bpy.path.abspath(p.phase2_zbrush_directory)))
         os.startfile(folder) if os.name == 'nt' else bpy.ops.wm.path_open(filepath=folder)
         return {'FINISHED'}
+
+
+WORKER_SOURCE = Path(__file__).resolve().parents[1] / 'core' / 'zbrush_batch_worker.py'
+
+
+def blend_folder_files(settings):
+    """Generated.N.blend files of the configured folder (default: the folder of the current blend)."""
+    custom = bpy.path.abspath(settings.phase2_zbrush_blend_folder)
+    folder = Path(custom) if custom else Path(bpy.data.filepath).parent if bpy.data.filepath else None
+    if folder is None or not folder.is_dir():
+        return []
+    return sorted((item for item in folder.iterdir() if item.is_file() and zb.GENERATED_BLEND.match(item.name)),
+                  key=lambda item: item.name.casefold())
+
+
+def start_worker(blend_file, root, part):
+    """Export one blend file in a background Blender; returns the process."""
+    addon = __package__.split('.')[0]
+    command = [bpy.app.binary_path, '-b', '--factory-startup', str(blend_file), '--python', str(WORKER_SOURCE),
+               '--', addon, str(Path(__file__).resolve().parents[2]), str(root), str(part)]
+    log = open(str(part) + '.log', 'w', encoding='utf-8')
+    return subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL), log
+
+
+def collect_part(part):
+    try:
+        return json.loads(Path(part).read_text(encoding='utf-8'))['assets']
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+class OBJECT_OT_polygroups_phase2_export_zbrush_folder(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_export_zbrush_folder'
+    bl_label = 'Export Folder to ZBrush'
+    bl_description = ('Export every Generated.N.blend of the folder (each opened in a background Blender) into one '
+                      'job, then build the ZTL files in ZBrush')
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT' and not _FOLDER_JOB
+
+    def _prepare(self, context):
+        p = context.scene.polygroups_model_preparation_settings
+        files = blend_folder_files(p)
+        if not files:
+            p.phase2_zbrush_status = 'No Generated.N.blend files found'
+            self.report({'WARNING'}, p.phase2_zbrush_status)
+            return None
+        root = zb.output_root(str(files[0]), bpy.path.abspath(p.phase2_zbrush_directory))
+        parts = root / '_parts'
+        parts.mkdir(parents=True, exist_ok=True)
+        return p, files, root, parts
+
+    def _finish(self, p, files, root, assets, failed):
+        names = [asset['name'].casefold() for asset in assets]
+        if len(set(names)) != len(names):
+            p.phase2_zbrush_status = 'Export failed: duplicate asset names across the blend files'
+            self.report({'ERROR'}, p.phase2_zbrush_status)
+            return {'CANCELLED'}
+        write_job(root, assets, p.phase2_zbrush_build, str(files[0].parent))
+        shutil.rmtree(root / '_parts', ignore_errors=True)
+        p.phase2_zbrush_status = f'Exported {len(assets)} mesh(es) from {len(files)} blend(s)' + (
+            f' | {failed} failed (see _parts)' if failed else '')
+        if p.phase2_zbrush_launch and assets:
+            p.phase2_zbrush_status += ' | ' + launch_zbrush(p, root)
+        self.report({'INFO'}, p.phase2_zbrush_status)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        """Blocking run (scripts, tests)."""
+        prepared = self._prepare(context)
+        if prepared is None:
+            return {'CANCELLED'}
+        p, files, root, parts = prepared
+        assets, failed = [], 0
+        for number, blend_file in enumerate(files, 1):
+            p.phase2_zbrush_status = f'Exporting {number}/{len(files)}: {blend_file.stem}'
+            part = parts / f'{blend_file.stem}.json'
+            process, log = start_worker(blend_file, root, part)
+            process.wait()
+            log.close()
+            found = collect_part(part)
+            if found is None:
+                failed += 1
+            else:
+                assets += found
+        return self._finish(p, files, root, assets, failed)
+
+    def invoke(self, context, event):
+        prepared = self._prepare(context)
+        if prepared is None:
+            return {'CANCELLED'}
+        self._p, self._files, self._root, self._parts = prepared
+        self._assets, self._failed, self._index, self._running = [], 0, 0, None
+        _FOLDER_JOB.append(self)
+        self._timer = context.window_manager.event_timer_add(0.5, window=context.window)
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def _stop(self, context):
+        context.window_manager.event_timer_remove(self._timer)
+        if self._running:
+            self._running[0].kill()
+            self._running[1].close()
+        _FOLDER_JOB.clear()
+
+    def modal(self, context, event):
+        if event.type == 'ESC':
+            self._stop(context)
+            self._p.phase2_zbrush_status = 'Batch export cancelled'
+            return {'CANCELLED'}
+        if event.type != 'TIMER':
+            return {'PASS_THROUGH'}
+        if self._running and self._running[0].poll() is None:
+            return {'RUNNING_MODAL'}
+        if self._running:
+            self._running[1].close()
+            found = collect_part(self._running[2])
+            if found is None:
+                self._failed += 1
+            else:
+                self._assets += found
+            self._running = None
+        if self._index >= len(self._files):
+            self._stop(context)
+            return self._finish(self._p, self._files, self._root, self._assets, self._failed)
+        blend_file = self._files[self._index]
+        self._index += 1
+        self._p.phase2_zbrush_status = f'Exporting {self._index}/{len(self._files)}: {blend_file.stem} (Esc cancels)'
+        part = self._parts / f'{blend_file.stem}.json'
+        process, log = start_worker(blend_file, self._root, part)
+        self._running = (process, log, part)
+        return {'RUNNING_MODAL'}
+
+
+_FOLDER_JOB = []
+

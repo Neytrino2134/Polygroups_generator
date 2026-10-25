@@ -205,9 +205,14 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Empty: the newest ZBrush found in Program Files")
     phase2_zbrush_build: bpy.props.EnumProperty(
         name="Levels", default='AUTO',
-        items=(('AUTO', 'Auto', 'Reconstruct Subdiv with a point-count check, falling back to Project All'),
-               ('RECONSTRUCT', 'Reconstruct', 'Rebuild lower levels from the top level (needs regular quad subdivision)'),
-               ('PROJECT', 'Project All', 'Divide the base mesh and project the top level onto it (works with triangles)')))
+        items=(('AUTO', 'Auto', 'Reconstruct Subdiv with a point/face-count check, falling back to Project All'),
+               ('RECONSTRUCT', 'Reconstruct',
+                'Import the top level and rebuild the lower levels. Fast, top level is exact, base differs ~0.2 mm'),
+               ('PROJECT', 'Project All',
+                'Import the base, Divide and project each level onto it. Slow (~100 s per mesh), ~0.5 mm error')))
+    phase2_zbrush_blend_folder: bpy.props.StringProperty(
+        name="Blends Folder", subtype='DIR_PATH', default="",
+        description="Folder with Generated.N.blend files for the batch export. Empty: the folder of the current blend")
     phase2_zbrush_launch: bpy.props.BoolProperty(
         name="Launch ZBrush", default=True, description="Start ZBrush and build the ZTL files after the export")
     phase2_zbrush_status: bpy.props.StringProperty(default="Not exported")
