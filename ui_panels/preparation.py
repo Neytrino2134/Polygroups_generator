@@ -582,14 +582,22 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     controls.prop(settings, 'phase2_zbrush_launch')
                     controls.prop(settings, 'phase2_zbrush_cleanup_on_success')
                     controls.label(text='Multires levels -> ZBrush subdiv levels | polygroups | one ZTL per mesh', icon='INFO')
+                    controls.separator(type='LINE')
+                    heading = controls.row()
+                    heading.alignment = 'CENTER'
+                    heading.label(text='--  Export  --')
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_export_zbrush', text='Export Active Mesh', icon='EXPORT').scope = 'ACTIVE'
                     row.operator('object.polygroups_phase2_export_zbrush', text='Export All Generated.N', icon='EXPORT').scope = 'ALL'
-                    controls.operator('object.polygroups_zbrush_delete_generated', text='Delete All Generated.N Collections + Meshes', icon='TRASH')
-                    controls.operator('object.polygroups_zbrush_clear_obj', text='Delete Temporary OBJ Files', icon='TRASH')
                     controls.separator(type='LINE')
                     controls.prop(settings, 'phase2_zbrush_blend_folder')
                     controls.operator('object.polygroups_phase2_export_zbrush_folder', text='Export Folder of Generated.N.blend', icon='FILE_FOLDER')
+                    controls.separator(type='LINE')
+                    heading = controls.row()
+                    heading.alignment = 'CENTER'
+                    heading.label(text='--  Delete  --')
+                    controls.operator('object.polygroups_zbrush_delete_generated', text='Delete All Generated.N Collections + Meshes', icon='TRASH')
+                    controls.operator('object.polygroups_zbrush_clear_obj', text='Delete Temporary OBJ Files', icon='TRASH')
                     controls.separator(type='LINE')
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_launch_zbrush', text='Launch ZBrush', icon='PLAY')
