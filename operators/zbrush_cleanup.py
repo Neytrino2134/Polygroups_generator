@@ -1,6 +1,7 @@
 """Explicit cleanup and success-only completion of the current ZBrush export."""
 import json
 import os
+import shutil
 from pathlib import Path
 
 import bpy
@@ -54,6 +55,27 @@ def clear_obj(root, assets=None):
         path.unlink()
         count += 1
     return count
+
+
+def clear_mesh_folder(root):
+    """Remove the dedicated Mesh directory, counting files and folders (root included)."""
+    export_root = Path(root).resolve()
+    mesh = export_root / 'Mesh'
+    if not mesh.exists():
+        return 0, 0
+    if not mesh.is_dir() or mesh.is_symlink() or mesh.resolve().parent != export_root:
+        raise OSError(f'Unsafe Mesh directory: {mesh}')
+    boundary = mesh.resolve()
+    files, folders = 0, 1
+    for directory, dirs, names in os.walk(mesh, followlinks=False):
+        for name in dirs + names:
+            path = Path(directory) / name
+            if path.is_symlink() or not path.resolve().is_relative_to(boundary) or getattr(os.path, 'isjunction', lambda p: False)(path):
+                raise OSError(f'Linked path inside Mesh directory: {path}')
+        files += len(names)
+        folders += len(dirs)
+    shutil.rmtree(mesh)
+    return files, folders
 
 
 def focus_blender():
@@ -162,7 +184,7 @@ class OBJECT_OT_polygroups_zbrush_delete_generated(bpy.types.Operator):
 class OBJECT_OT_polygroups_zbrush_clear_obj(bpy.types.Operator):
     bl_idname = 'object.polygroups_zbrush_clear_obj'
     bl_label = 'Delete Temporary ZBrush OBJ Files'
-    bl_description = 'Delete OBJ files under the export folder Mesh directory; keep ZTL files and other files'
+    bl_description = 'Delete the entire temporary Mesh folder and its contents; keep ZTL files outside Mesh'
 
     @classmethod
     def poll(cls, context):
@@ -171,9 +193,10 @@ class OBJECT_OT_polygroups_zbrush_clear_obj(bpy.types.Operator):
     def execute(self, context):
         p = context.scene.polygroups_model_preparation_settings
         try:
-            count = clear_obj(zb.output_root(bpy.data.filepath, bpy.path.abspath(p.phase2_zbrush_directory)))
+            files, folders = clear_mesh_folder(zb.output_root(bpy.data.filepath, bpy.path.abspath(p.phase2_zbrush_directory)))
         except OSError as error:
             self.report({'ERROR'}, str(error))
             return {'CANCELLED'}
-        p.phase2_zbrush_status = f'Deleted {count} temporary OBJ files'
+        p.phase2_zbrush_status = f'Successfully deleted {files} files / {folders} folders (including Mesh)'
+        self.report({'INFO'}, p.phase2_zbrush_status)
         return {'FINISHED'}

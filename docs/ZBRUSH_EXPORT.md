@@ -17,8 +17,9 @@ polygroups (Blender sculpt face sets, one OBJ group each).
   (or run `zbrush_job.py` through ZScript > Python Scripting > Load).
 - **Delete All Generated.N Collections + Meshes**: removes the current scene's Generated.N
   collections, their child collections and all objects inside. Blender Undo is supported.
-- **Delete Temporary OBJ Files**: removes OBJ files recursively under the selected export
-  folder's `Mesh/` directory. ZTL files and other file types are retained.
+- **Delete Temporary OBJ Files**: removes the entire `Mesh/` directory and all its
+  contents, reporting deleted files / folders (including the root Mesh folder).
+  ZTL files outside Mesh are retained.
 
 **Return to Blender and Cleanup after ZBrush** is off by default. Enable it before
 Export All Generated.N to watch that exact job while Blender stays open. The watcher

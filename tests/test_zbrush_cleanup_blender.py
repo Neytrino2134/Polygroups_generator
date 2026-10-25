@@ -77,7 +77,9 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_zb_cleanup_') as directo
     assert bpy.ops.object.polygroups_zbrush_clear_obj() == {'FINISHED'}  # Default root: no Mesh folder.
     p.phase2_zbrush_directory = str(root)
     assert bpy.ops.object.polygroups_zbrush_clear_obj() == {'FINISHED'}
-    assert not unrelated.exists() and ztl.is_file() and keep.is_file()
+    assert not (root / 'Mesh').exists() and ztl.is_file()
+    assert p.phase2_zbrush_status == 'Successfully deleted 2 files / 2 folders (including Mesh)'
+    assert cleanup.clear_mesh_folder(root) == (0, 0)
     col, obj, asset = fixture()
     empty = bpy.data.collections.new('Generated.002'); ctx.scene.collection.children.link(empty)
     assert bpy.ops.object.polygroups_zbrush_delete_generated() == {'FINISHED'}
