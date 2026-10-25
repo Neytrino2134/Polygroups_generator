@@ -23,6 +23,7 @@ class AIRETOPO_PG_save_cleanup(bpy.types.PropertyGroup):
     total_bytes: bpy.props.FloatProperty(default=0)
     status: bpy.props.StringProperty(default='Scan required')
     missing_status: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    relative_status: bpy.props.StringProperty(options={'SKIP_SAVE'})
 
 
 def _root(settings):
@@ -189,9 +190,49 @@ class AIRETOPO_OT_find_missing_project_files(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class AIRETOPO_OT_make_texture_paths_relative(bpy.types.Operator):
+    bl_idname = 'wm.airetopo_make_texture_paths_relative'
+    bl_label = 'Make All Textures Relative'
+    bl_description = 'Make all local image paths relative to the current saved blend, including missing and packed textures'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        settings = context.window_manager.airetopo_save_cleanup
+        if not bpy.data.filepath:
+            settings.relative_status = 'Save the blend file before making texture paths relative'
+            self.report({'WARNING'}, settings.relative_status)
+            return {'CANCELLED'}
+        converted = unchanged = skipped = errors = 0
+        for image in bpy.data.images:
+            if not image.filepath or image.source == 'VIEWER':
+                continue
+            if image.library is not None:
+                skipped += 1
+                continue
+            if image.filepath.startswith('//'):
+                unchanged += 1
+                continue
+            try:
+                relative = bpy.path.relpath(bpy.path.abspath(image.filepath))
+                if not relative.startswith('//'):
+                    raise ValueError('Cannot express this path relative to the blend')
+                image.filepath = relative
+                converted += 1
+            except Exception:
+                errors += 1
+        settings.relative_status = (f'Relative: {converted} | Already relative: {unchanged}'
+                                    f' | Linked skipped: {skipped} | Errors: {errors}')
+        self.report({'WARNING'} if errors else {'INFO'}, settings.relative_status)
+        return {'FINISHED'}
+
+
 def draw_missing_files(layout, context):
     layout.operator('wm.airetopo_find_missing_project_files', icon='FILE_REFRESH')
     status = context.window_manager.airetopo_save_cleanup.missing_status
+    if status:
+        layout.label(text=status, icon='INFO')
+    layout.operator('wm.airetopo_make_texture_paths_relative', icon='FILE_PARENT')
+    status = context.window_manager.airetopo_save_cleanup.relative_status
     if status:
         layout.label(text=status, icon='INFO')
 
@@ -210,7 +251,7 @@ def draw_cleanup(layout, context):
     draw_missing_files(layout, context)
 
 
-CLASSES = (AIRETOPO_PG_save_cleanup, AIRETOPO_OT_scan_save_cleanup, AIRETOPO_OT_scan_current_save_folder, AIRETOPO_OT_clean_backup_saves, AIRETOPO_OT_find_missing_project_files)
+CLASSES = (AIRETOPO_PG_save_cleanup, AIRETOPO_OT_scan_save_cleanup, AIRETOPO_OT_scan_current_save_folder, AIRETOPO_OT_clean_backup_saves, AIRETOPO_OT_find_missing_project_files, AIRETOPO_OT_make_texture_paths_relative)
 
 
 def register():

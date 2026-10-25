@@ -85,3 +85,9 @@ The shared status reports Relinked / Missing / Errors. Save the blend afterwards
 to keep the repaired references. An unsaved blend must be saved first; missing
 images absent from the project directory remain unresolved. As with Blender's
 native search, matching uses filenames; review duplicates with identical names.
+
+Make All Textures Relative is beside Find Missing Files in both cleanup panels.
+It converts paths of all local images, including missing and packed images,
+without moving files. Existing relative paths are retained; images from linked
+libraries are skipped. The shared status counts converted, already relative,
+linked and failed paths. Save the blend afterwards to persist these changes.
