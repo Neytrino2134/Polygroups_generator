@@ -3,13 +3,16 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 ZBRUSH_FOLDER = '!ZBrush'
 BLEND_FOLDER = '!Blend'
 MANIFEST_NAME = 'job.json'
 JOB_SCRIPT_NAME = 'zbrush_job.py'
+POINTER_NAME = 'manifest_path.txt'
 RESULT_NAME = 'job_result.json'
 LOG_NAME = 'job_log.txt'
 GENERATED_BLEND = re.compile(r'^Generated\.\d+\.blend$', re.IGNORECASE)
@@ -98,5 +101,27 @@ def write_manifest(root, assets, build='AUTO', source_blend=''):
     return path
 
 
-def launch_command(exe, job_script, manifest):
-    return [exe, '-script', str(job_script), str(manifest)]
+def ascii_directory():
+    """A writable folder whose path is pure ASCII: ZBrush cannot read non-ASCII paths from its command line."""
+    candidates = [tempfile.gettempdir(), os.environ.get('PUBLIC', ''), (os.environ.get('SystemDrive') or 'C:') + '\\']
+    for base in candidates:
+        if base and base.isascii() and os.path.isdir(base):
+            folder = Path(base) / 'polygroups_zbrush_job'
+            try:
+                folder.mkdir(exist_ok=True)
+                return folder
+            except OSError:
+                continue
+    raise OSError('no ASCII-only writable folder for the ZBrush job script')
+
+
+def prepare_launcher(root, job_source):
+    """Copy the job script to an ASCII folder and store the real manifest path (UTF-8) beside it."""
+    folder = ascii_directory()
+    shutil.copyfile(job_source, folder / JOB_SCRIPT_NAME)
+    (folder / POINTER_NAME).write_text(str(Path(root) / MANIFEST_NAME), encoding='utf-8')
+    return folder / JOB_SCRIPT_NAME
+
+
+def launch_command(exe, job_script):
+    return [exe, '-script', str(job_script)]

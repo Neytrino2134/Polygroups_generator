@@ -107,4 +107,11 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_zbrush_export_') as dire
     assert not (base / 'Batch' / '_parts').exists()
     from polygroups_generator.core import zbrush_export as zb_core
     assert isinstance(zb_core.zbrush_running(), bool)  # tasklist output is OEM-encoded on localized Windows
+    # ZBrush cannot read non-ASCII command-line paths: the launcher script lives in an ASCII folder and points to the manifest.
+    cyrillic = base / 'Каменные арки'; cyrillic.mkdir()
+    (cyrillic / 'job.json').write_text('{}', encoding='utf-8')
+    launcher = zb_core.prepare_launcher(cyrillic, ROOT / 'core' / 'zbrush_job.py')
+    assert str(launcher).isascii() and launcher.name == 'zbrush_job.py', launcher
+    assert (launcher.parent / 'manifest_path.txt').read_text(encoding='utf-8') == str(cyrillic / 'job.json')
+    assert zb_core.launch_command('ZBrush.exe', launcher) == ['ZBrush.exe', '-script', str(launcher)]
     print('zbrush export ok')

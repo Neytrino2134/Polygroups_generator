@@ -162,15 +162,26 @@ class Job:
         self.write_result(finished=True)
 
 
+POINTER_NAME = 'manifest_path.txt'
+
+
 def manifest_path():
+    """job.json location: a command-line argument, else the path stored in manifest_path.txt beside this script
+    (ZBrush cannot read non-ASCII paths from its command line, so the launcher keeps the script in an ASCII
+    folder and the real path in that file), else job.json beside this script."""
     if '-script' in sys.argv:
         for argument in sys.argv[sys.argv.index('-script') + 2:]:
             if os.path.isfile(argument) and argument.lower().endswith('.json'):
                 return argument
     try:
-        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'job.json')
+        here = os.path.dirname(os.path.abspath(__file__))
     except NameError:
         raise JobError('job.json not found: pass it after the script path or keep it beside zbrush_job.py')
+    pointer = os.path.join(here, POINTER_NAME)
+    if os.path.isfile(pointer):
+        with open(pointer, encoding='utf-8-sig') as handle:
+            return handle.read().strip()
+    return os.path.join(here, 'job.json')
 
 
 def main():

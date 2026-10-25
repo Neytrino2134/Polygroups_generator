@@ -213,8 +213,8 @@ def launch_zbrush(settings, root):
     if zb.zbrush_running():
         return (f'ZBrush is running: close it and press Launch, or run {zb.JOB_SCRIPT_NAME} '
                 'via ZScript > Python Scripting > Load')
-    command = zb.launch_command(exe, Path(root) / zb.JOB_SCRIPT_NAME, Path(root) / zb.MANIFEST_NAME)
     try:
+        command = zb.launch_command(exe, zb.prepare_launcher(root, JOB_SOURCE))
         subprocess.Popen(command, cwd=os.path.dirname(exe), close_fds=True)
     except OSError as error:
         return f'ZBrush launch failed: {error}'
