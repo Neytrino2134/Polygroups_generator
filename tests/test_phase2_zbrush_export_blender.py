@@ -95,10 +95,68 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_zbrush_export_') as dire
     p.phase2_zbrush_directory = str(base / 'Custom')
     assert bpy.ops.object.polygroups_phase2_export_zbrush(scope='ACTIVE') == {'FINISHED'}
     assert (base / 'Custom' / 'job.json').is_file()
+    # Disabled collections/objects and Multires: export the exact source and
+    # restore restrictions on success and failure, including nested paths.
+    from unittest.mock import patch
+    from polygroups_generator.operators import phase2_zbrush_export as exporter
+    other.modifiers.new('Unrelated Multires', 'MULTIRES')
+    assert exporter.batch_candidates(ctx.scene) == [('Generated.001', obj)]
+    parent = bpy.data.collections.new('Hidden export parent')
+    ctx.scene.collection.children.link(parent)
+    ctx.scene.collection.children.unlink(collection)
+    parent.children.link(collection)
+    ctx.view_layer.update()
+    parent_layer = next(l for l in ctx.view_layer.layer_collection.children if l.collection == parent)
+    child_layer = next(l for l in parent_layer.children if l.collection == collection)
+    obj.hide_set(True); obj.hide_viewport = obj.hide_render = obj.hide_select = True
+    collection.hide_viewport = collection.hide_render = collection.hide_select = True
+    parent.hide_viewport = parent.hide_render = True
+    child_layer.hide_viewport = True
+    parent_layer.exclude = True
+    ctx.view_layer.update()
+    def restrictions():
+        return (obj.hide_viewport, obj.hide_render, obj.hide_select,
+                collection.hide_viewport, collection.hide_render, collection.hide_select,
+                parent.hide_viewport, parent.hide_render, parent_layer.exclude, child_layer.hide_viewport)
+    before = restrictions()
+    assert bpy.ops.object.polygroups_phase2_export_zbrush(scope='ALL') == {'FINISHED'}, p.phase2_zbrush_status
+    assert restrictions() == before, (restrictions(), before)
+    hidden_asset = json.loads((base / 'Custom' / 'job.json').read_text(encoding='utf-8'))['assets'][0]
+    assert hidden_asset['levels'] == asset['levels']
+    for item in hidden_asset['levels']:
+        assert obj_stats(base / 'Custom' / item['obj'])[0] == item['faces']
+    objects_before = set(bpy.data.objects)
+    meshes_before = set(bpy.data.meshes)
+    def fail_export(context, copy, filepath):
+        assert not obj.hide_viewport and not obj.hide_render and not obj.hide_get()
+        assert not parent_layer.exclude and not child_layer.hide_viewport
+        assert not copy.hide_viewport and not copy.hide_render and copy.visible_get()
+        raise RuntimeError('Injected OBJ failure')
+    with patch.object(exporter, '_export_obj', side_effect=fail_export):
+        try:
+            exporter.export_candidates(ctx, exporter.batch_candidates(ctx.scene), base / 'Failure')
+        except RuntimeError as error:
+            assert str(error) == 'Injected OBJ failure'
+        else:
+            raise AssertionError('Failure was not propagated')
+    assert restrictions() == before, (restrictions(), before)
+    assert set(bpy.data.objects) == objects_before and set(bpy.data.meshes) == meshes_before
+    parent_layer.exclude = False; child_layer.hide_viewport = False
+    collection.hide_viewport = collection.hide_render = collection.hide_select = False
+    parent.hide_viewport = parent.hide_render = False
+    obj.hide_viewport = obj.hide_render = obj.hide_select = False
+    ctx.view_layer.update()
+    obj.hide_set(True)
+    exporter.export_candidates(ctx, exporter.batch_candidates(ctx.scene), base / 'EyeHidden')
+    assert obj.hide_get()
+    obj.hide_set(False)
+    other.modifiers.clear()
     # Folder batch: every Generated.N.blend is exported in its own background Blender into one job.
     collection.name = 'Generated.002'
+    obj.name = 'Resculpting_01_Highpoly_Generated.002'
     bpy.ops.wm.save_as_mainfile(filepath=str(base / '!Blend' / 'Generated.002.blend'), copy=True)
     collection.name = 'Generated.001'
+    obj.name = 'Resculpting_01_Highpoly_Generated.001'
     (base / '!Blend' / 'Other.blend').write_bytes(b'not a generated file')
     p.phase2_zbrush_directory = str(base / 'Batch')
     p.phase2_zbrush_blend_folder = str(base / '!Blend')

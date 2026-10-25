@@ -6,6 +6,11 @@ polygroups (Blender sculpt face sets, one OBJ group each).
 
 ## Buttons
 - **Export Active Mesh / Export All Generated.N**: current blend file, scene-level.
+  Export All uses exactly `Resculpting_01_Highpoly_Generated.N` with Multires
+  from each `Generated.N` collection; unrelated Multires meshes are skipped.
+  The source and its collection paths are temporarily enabled, including excluded
+  View Layer collections. Viewport/render/select restrictions and eye visibility
+  are restored after export and on failure. Temporary copies are always enabled.
 - **Export Folder of Generated.N.blend**: every `Generated.N.blend` of the folder, each opened in a background
   Blender (modal, Esc cancels), merged into one job.
 - **Launch ZBrush**: starts ZBrush with the job. A running ZBrush refuses a second instance, so close it first

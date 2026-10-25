@@ -25,14 +25,13 @@ def multires_modifier(obj):
 
 
 def batch_candidates(scene):
-    """(stem, object) for every multires mesh inside the scene's Generated.N collections."""
+    """One Resculpting_01 source per Generated.N collection in the open scene."""
     found = []
     for collection in generated_collections(scene):
-        meshes = sorted((obj for obj in collection.all_objects if obj.type == 'MESH' and multires_modifier(obj)),
-                        key=lambda obj: obj.name.casefold())
-        for obj in meshes:
-            stem = collection.name if len(meshes) == 1 else f'{collection.name}_{obj.name}'
-            found.append((stem, obj))
+        name = f'Resculpting_01_Highpoly_{collection.name}'
+        obj = collection.all_objects.get(name)
+        if obj is not None and obj.type == 'MESH' and multires_modifier(obj):
+            found.append((collection.name, obj))
     return found
 
 
@@ -57,6 +56,49 @@ def preserved_selection(context):
         for obj in layer.objects:
             obj.select_set(obj in selected, view_layer=layer)
         layer.objects.active = active
+
+
+@contextmanager
+def export_visibility(context, obj):
+    """Reveal only the source's collection paths, then restore all restrictions."""
+    from .rename_objects import layer_collection_paths
+    layers, collections = {}, {}
+    def snapshot(layer):
+        layers[layer] = (layer.exclude, layer.hide_viewport)
+        for child in layer.children:
+            snapshot(child)
+    snapshot(context.view_layer.layer_collection)
+    flags = (obj.hide_viewport, obj.hide_render, obj.hide_select)
+    eye = None
+    try:
+        for collection in obj.users_collection:
+            for path in layer_collection_paths(context.view_layer.layer_collection, collection):
+                for layer in path:
+                    col = layer.collection
+                    if col not in collections:
+                        collections[col] = (col.hide_viewport, col.hide_render, col.hide_select)
+                    col.hide_viewport = col.hide_render = col.hide_select = False
+                    if layer.exclude:
+                        layer.exclude = False
+                    layer.hide_viewport = False
+        context.view_layer.update()
+        eye = obj.hide_get(view_layer=context.view_layer)
+        obj.hide_viewport = obj.hide_render = obj.hide_select = False
+        obj.hide_set(False, view_layer=context.view_layer)
+        context.view_layer.update()
+        yield
+    finally:
+        if eye is not None:
+            obj.hide_set(eye, view_layer=context.view_layer)
+        obj.hide_viewport, obj.hide_render, obj.hide_select = flags
+        for col, values in collections.items():
+            col.hide_viewport, col.hide_render, col.hide_select = values
+        # Excluding a parent propagates to its children: restore parent first.
+        for layer, (excluded, hidden) in layers.items():
+            if layer.exclude != excluded:
+                layer.exclude = excluded
+            layer.hide_viewport = hidden
+        context.view_layer.update()
 
 
 def _group_ids(mesh):
@@ -117,7 +159,10 @@ def export_object_levels(context, obj, stem, root):
             copy.modifiers.remove(mod)
     mod = next((item for item in copy.modifiers if item.type == 'MULTIRES'), None)
     total = mod.total_levels if mod else 0
+    copy.hide_viewport = copy.hide_render = copy.hide_select = False
     context.scene.collection.objects.link(copy)
+    copy.hide_set(False)
+    context.view_layer.update()
     groups, materials = _apply_group_materials(copy, mesh)
     levels = []
     try:
@@ -151,7 +196,8 @@ def export_candidates(context, candidates, root, report=None):
     for number, (stem, (_stem, obj)) in enumerate(zip(stems, candidates), 1):
         if report:
             report(f'Exporting {number}/{len(candidates)}: {stem}')
-        assets.append(export_object_levels(context, obj, stem, root))
+        with preserved_selection(context), export_visibility(context, obj):
+            assets.append(export_object_levels(context, obj, stem, root))
     return assets
 
 
@@ -187,7 +233,7 @@ class OBJECT_OT_polygroups_phase2_export_zbrush(bpy.types.Operator):
 
         candidates = batch_candidates(context.scene) if self.scope == 'ALL' else active_candidate(context)
         if not candidates:
-            return fail('No multires meshes found' if self.scope == 'ALL' else 'Select a mesh first')
+            return fail('No Resculpting_01_Highpoly_Generated.N meshes with Multires found' if self.scope == 'ALL' else 'Select a mesh first')
         root = zb.output_root(bpy.data.filepath, bpy.path.abspath(p.phase2_zbrush_directory))
         try:
             root.mkdir(parents=True, exist_ok=True)
