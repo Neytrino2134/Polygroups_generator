@@ -28,6 +28,7 @@ class Job:
         self.results = []
         self.warnings = []
         self.started = time.time()
+        self.paused = self.cancelled = False
 
     # -- bookkeeping -------------------------------------------------------------------------------------------
     def log(self, text):
@@ -37,7 +38,8 @@ class Job:
             handle.write(line + '\n')
 
     def write_result(self, finished=False):
-        data = {'job_id': self.manifest.get('job_id'), 'finished': finished, 'build': self.manifest.get('build'), 'assets': self.results,
+        data = {'job_id': self.manifest.get('job_id'), 'finished': finished,
+                'paused': self.paused, 'cancelled': self.cancelled, 'build': self.manifest.get('build'), 'assets': self.results,
                 'seconds': round(time.time() - self.started, 1)}
         temp = os.path.join(self.root, RESULT_NAME + '.tmp')
         with open(temp, 'w', encoding='utf-8') as handle:
@@ -155,10 +157,38 @@ class Job:
         record['seconds'] = round(time.time() - started, 1)
         self.write_result()
 
+    def wait_control(self):
+        """Blender controls are handled only between complete ZTL assets."""
+        while True:
+            try:
+                with open(os.path.join(self.root, 'job_control.json'), encoding='utf-8') as handle:
+                    control = json.load(handle)
+            except (OSError, ValueError):
+                control = {}
+            action = control.get('action') if control.get('job_id') == self.manifest.get('job_id') else None
+            if action == 'STOP':
+                self.cancelled = True
+                self.paused = False
+                return False
+            if action != 'PAUSE':
+                was_paused = self.paused
+                self.paused = False
+                if was_paused:
+                    self.write_result()
+                return True
+            if not self.paused:
+                self.paused = True
+                self.write_result()
+            time.sleep(.2)
+
     def run(self):
         for number, asset in enumerate(self.manifest['assets'], 1):
+            if not self.wait_control():
+                break
             self.log(f"[{number}/{len(self.manifest['assets'])}] {asset['name']}")
             self.process(asset)
+        if not self.cancelled:
+            self.wait_control()
         self.write_result(finished=True)
 
 

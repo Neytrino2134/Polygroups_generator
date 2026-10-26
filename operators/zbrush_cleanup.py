@@ -137,7 +137,7 @@ def poll_success():
         records = result.get('assets', [])
         expected = {(a['name'], a['ztl']) for a in job['assets']}
         actual = {(a.get('name'), a.get('ztl')) for a in records}
-        valid = len(records) == len(expected) and actual == expected and all(a.get('ok') is True for a in records)
+        valid = not result.get('cancelled') and len(records) == len(expected) and actual == expected and all(a.get('ok') is True for a in records)
         for asset in job['assets']:
             target = job['root'] / asset['ztl']
             valid = valid and target.is_file() and target.stat().st_size > 0

@@ -19,6 +19,7 @@ class PipelineRenderPreview(RenderProgressPreview):
                 result = bpy.ops.render.render(**options)
                 if 'FINISHED' not in result:
                     raise RuntimeError('Render cancelled')
+                self.run.detail(100, f'Render {completed+1}/{total} completed')
                 yield (completed + 1)/max(1, total), f'Auto Render {completed+1}/{total}'
                 continue
             state = dict(done=False, cancelled=False, percent=0)
@@ -47,6 +48,7 @@ class PipelineRenderPreview(RenderProgressPreview):
                     yield (completed + state['percent']/100)/max(1, total), f'Rendering {completed+1}/{total}'
                 if state['cancelled']:
                     raise RuntimeError('Render cancelled; completed files retained')
+                self.run.detail(100, f'Render {completed+1}/{total} completed')
             finally:
                 for handlers, callback in callbacks:
                     if callback in handlers:

@@ -17,6 +17,9 @@ from polygroups_generator.custom_ui.schema import capture, walk
 
 context = bpy.context
 settings = context.scene.polygroups_model_preparation_settings
+# This fixture exercises direct separated-file scanning and baking, not MID remesh.
+settings.phase2_mid_remesh = False
+settings.phase2_scan_subfolders = False
 bake = context.scene.polygroups_baking_settings
 assert settings.phase2_auto_bake and settings.phase2_repair_artifacts
 assert bake.bake_artifact_mask and bake.bake_artifact_autofill

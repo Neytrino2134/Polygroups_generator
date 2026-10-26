@@ -205,7 +205,7 @@ def write_job(root, assets, build, source_blend):
     """Create ZTL/, copy the ZBrush job script and write the manifest."""
     (Path(root) / 'ZTL').mkdir(parents=True, exist_ok=True)
     shutil.copyfile(JOB_SOURCE, Path(root) / zb.JOB_SCRIPT_NAME)
-    for stale in (zb.RESULT_NAME, zb.LOG_NAME):
+    for stale in (zb.RESULT_NAME, zb.LOG_NAME, "job_control.json"):
         (Path(root) / stale).unlink(missing_ok=True)
     return zb.write_manifest(root, assets, build, source_blend)
 
@@ -284,7 +284,7 @@ class OBJECT_OT_polygroups_phase2_launch_zbrush(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return bool(bpy.data.filepath)
+        return bool(bpy.data.filepath) and not context.scene.polygroups_model_preparation_settings.phase2_pipeline_running
 
     def execute(self, context):
         p = context.scene.polygroups_model_preparation_settings
@@ -351,7 +351,7 @@ class OBJECT_OT_polygroups_phase2_export_zbrush_folder(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'OBJECT' and not _FOLDER_JOB
+        return context.mode == 'OBJECT' and not _FOLDER_JOB and not context.scene.polygroups_model_preparation_settings.phase2_pipeline_running
 
     def _prepare(self, context):
         p = context.scene.polygroups_model_preparation_settings

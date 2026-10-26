@@ -24,19 +24,22 @@ def restore(run, context):
     queue = phase.Phase2Queue(context, entries, mode != 'IMPORT', p.phase2_repair_artifacts, run.report)
     phase.ACTIVE_PHASE2 = queue
     queue.begin()
-    started = time.monotonic()
+    started = None
     timings = []
     try:
         while not queue.finished:
             previous = queue.index
+            if started is None and queue.index < len(entries):
+                started = time.monotonic()
             queue.step(context)
             boundary = queue.index != previous
             now = time.monotonic()
-            p.phase2_pipeline_collection_seconds = now - started
+            if started is not None:
+                p.phase2_pipeline_collection_seconds = now - started
             if boundary:
                 timings.append(dict(collection=entries[previous][1], seconds=round(now-started, 2)))
                 p.phase2_pipeline_collection_times = json.dumps(timings)
-                started = now
+                started = None
             if queue.results and queue.results[-1][1]:
                 raise RuntimeError(queue.results[-1][1])
             bake = context.scene.polygroups_baking_settings
@@ -62,7 +65,7 @@ def prepare(run, context):
     from ..core.asset_names import asset_name
     p, s = run.settings, context.scene.polygroups_mesh_finalization_settings
     for name, value in dict(phase2_final_lods=True, phase2_final_rename=True,
-            phase2_final_lod_engine=p.phase2_run_engine, phase2_final_rename_engine=p.phase2_run_engine,
+            phase2_final_lod_engine="UNITY" if p.phase2_run_engine == "UNITY" else "UNREAL", phase2_final_rename_engine=p.phase2_run_engine,
             phase2_final_cleanup_generated=False).items():
         run.override(p, name, value)
     unity = p.phase2_run_engine == 'UNITY'
@@ -126,6 +129,7 @@ def zbrush(run, context):
         yield .4*(i+1)/len(candidates), f'Exported OBJ {i+1}/{len(candidates)}', True
     export.write_job(root, assets, p.phase2_zbrush_build, bpy.data.filepath)
     manifest = json.loads((root / zb.MANIFEST_NAME).read_text(encoding='utf-8'))
+    run.zbrush_job = (root, manifest['job_id'])
     status = export.launch_zbrush(p, root)
     p.phase2_zbrush_status = status
     if status != 'ZBrush started':
@@ -139,6 +143,12 @@ def zbrush(run, context):
             pass
         if result and result.get('job_id') == manifest['job_id']:
             records = result.get('assets', [])
+            if result.get('cancelled'):
+                raise RuntimeError('ZBrush job stopped; inputs retained')
+            if result.get('paused'):
+                done = sum(item.get('ok') is True for item in records)
+                yield .4 + .6*done/len(assets), f'ZBrush paused after {done}/{len(assets)} assets', True
+                continue
             if any(item.get('ok') is False for item in records):
                 raise RuntimeError('ZBrush failed: ' + '; '.join(item.get('error', item.get('name', '')) for item in records if not item.get('ok')))
             if result.get('finished'):
@@ -151,6 +161,7 @@ def zbrush(run, context):
                     if not target.is_file() or not target.stat().st_size:
                         raise RuntimeError('Missing ZTL: ' + asset['ztl'])
                 run.zbrush_root = root
+                run.zbrush_job = None
                 yield 1, 'ZBrush: all ZTL files verified', True
                 return
             done = sum(item.get('ok') is True for item in records)

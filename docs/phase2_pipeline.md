@@ -25,3 +25,29 @@ can still block ZBrush; the coordinator never treats a blocked process as succes
 Blender must stay open. Loading a file, Undo, Redo or disabling the addon terminates
 the coordinator. Work is not resumed automatically after restart. Phase 1 integration
 uses the common queue display; Start Import chaining is reserved for a later change.
+
+Overall progress gives each enabled pass one equal share; it is a completion metric,
+not an estimated remaining time. Restore collection timing starts when that collection
+begins processing, excluding a pause before its admission. Total/pass timers are wall
+clock time, including pauses. All completed collection durations remain in runtime
+queue state; the panel displays the most recent four.
+
+Native file export, mesh preparation and auxiliary texture/freestyle image operations
+are synchronous Blender calls; progress advances when those calls return. Main scene
+renders run asynchronously in the GUI, with per-image progress and sample statistics
+when supplied by the render engine. Output settings and original visibility are
+restored through the existing stage implementations. The coordinator does not save
+or overwrite the working blend automatically on completion.
+
+Validation: native two-collection restore -> LOD/rename -> GLB + FBX + Blend + OBJ ->
+verified synthetic ZBrush result -> cleanup -> transparent/scene PNG chain, controls,
+wrong/incomplete/failed ZBrush result rejection. A separate GUI Blender test exercises
+real asynchronous rendering, pause after the current image and resume. Full ZBrush
+execution itself is not part of the automated coordinator tests.
+
+Pause/Resume/Stop are also written to a job-ID-scoped control file for ZBrush.
+The ZBrush job reads it between complete ZTL assets, so it never interrupts an
+in-progress import/projection/save. Stop Now ends the Blender coordinator immediately
+when its own host is safe and requests ZBrush to stop after its current asset.
+A modal confirmation already blocking ZBrush still requires manual confirmation;
+control messages do not dismiss dialogs or terminate the application process.

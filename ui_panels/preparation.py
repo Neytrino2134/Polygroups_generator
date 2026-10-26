@@ -445,7 +445,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 t(context, "phase2_restore_processing"), "IMPORT")
             if group is not None:
                 controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                controls.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 controls.separator(type="LINE")
                 controls.operator("object.polygroups_phase2_restore", text=t(context, "phase2_restore"), icon="IMPORT")
                 controls.operator("object.polygroups_phase2_scan", text=t(context, "phase2_scan"), icon="VIEWZOOM")
@@ -453,10 +453,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 group.label(text=t(context, "phase2_scanned_files", value=settings.phase2_scanned_files), icon="INFO")
                 group.label(text=t(context, "phase2_scanned_collections", value=settings.phase2_scanned_collections))
                 controls = group.column(align=True)
-                controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                controls.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 controls.separator(type="LINE")
                 presets = group.column(align=True)
-                presets.enabled = not (settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
+                presets.enabled = not (settings.phase2_pipeline_running or settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
                 modes = presets.row(align=True)
                 modes.operator('object.polygroups_phase2_processing_preset', text=t(context, 'phase2_preset_import'),
                     icon='IMPORT', depress=not any((settings.phase2_auto_bake, settings.phase2_mesh_auto_repair, settings.phase2_mid_remesh, settings.phase2_repack_after_repair))).preset = 'IMPORT'
@@ -503,7 +503,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 manual = draw_collapsible_box(group, settings, 'phase2_show_manual_cleanup', 'Manual Cleanup', 'TRASH')
                 if manual is not None:
                     buttons = manual.column(align=True)
-                    buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    buttons.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     buttons.prop(settings, 'phase2_keep_retopo01')
                     buttons.operator('object.polygroups_phase2_rename_retopo01', icon='SORTALPHA')
                     for family, label in (('RETOPO', 'Retopo_'), ('RESCULPTING', 'Resculpting_')):
@@ -526,7 +526,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 preparation = draw_collapsible_box(final, settings, 'phase2_show_lods_rename', 'Prepare LODs / Rename', 'MOD_DECIM')
                 if preparation is not None:
                     config = preparation.column(align=True)
-                    config.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    config.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     config.prop(settings, "phase2_final_lods")
                     engine = config.row()
                     engine.enabled = settings.phase2_final_lods
@@ -544,7 +544,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 export = draw_collapsible_box(final, settings, 'phase2_show_export', 'Export Prepared Models', 'EXPORT')
                 if export is not None:
                     controls = export.column(align=True)
-                    controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    controls.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     controls.prop(settings, 'phase2_export_engine', expand=True)
                     row = controls.row(align=True)
                     for name in ('phase2_export_glb', 'phase2_export_gltf', 'phase2_export_fbx'):
@@ -566,7 +566,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 blend_export = draw_collapsible_box(final, settings, 'phase2_show_export_blend', 'Export Blend Files', 'FILE_BLEND')
                 if blend_export is not None:
                     controls = blend_export.column(align=True)
-                    controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    controls.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     controls.prop(settings, 'phase2_blend_export_pack')
                     controls.prop(settings, 'phase2_blend_export_reset_y')
                     controls.prop(settings, 'phase2_blend_export_generated')
@@ -578,7 +578,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 zbrush_export = draw_collapsible_box(final, settings, 'phase2_show_export_zbrush', 'Export ZBrush', 'MOD_MULTIRES')
                 if zbrush_export is not None:
                     controls = zbrush_export.column(align=True)
-                    controls.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                    controls.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                     controls.prop(settings, 'phase2_zbrush_directory')
                     if not settings.phase2_zbrush_directory:
                         controls.label(text='Default: !ZBrush beside the blend file', icon='INFO')
@@ -614,7 +614,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
             auto = draw_collapsible_box(content, settings, "phase2_show_auto_render", "Auto Render", "RENDER_STILL")
             if auto is not None:
                 config = auto.column(align=True)
-                config.enabled = not (settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
+                config.enabled = not (settings.phase2_pipeline_running or settings.phase2_is_running or settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.batch_is_running)
                 config.label(text="Quality and Output: 16:9 | 2K", icon="INFO")
                 config.label(text="2048 x 1152 | Eevee")
                 config.prop(context.scene.polygroups_render_settings, "output_directory")
@@ -677,7 +677,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 t(context, "phase2_file_manager"), "FILE_BLEND")
             if manager is not None:
                 buttons = manager.column(align=True)
-                buttons.enabled = not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
+                buttons.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
                 buttons.operator("object.polygroups_phase2_files_scan", icon="VIEWZOOM")
                 buttons.prop(settings, "phase2_files_cleanup")
                 move = buttons.row()

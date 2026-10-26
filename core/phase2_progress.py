@@ -50,7 +50,8 @@ def draw_start(layout, context, p):
     options.prop(p, 'phase2_run_restore')
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_restore
-    sub.prop(p, 'phase2_run_mode', text='Mode')
+    sub.label(text='Restore Mode')
+    sub.prop(p, 'phase2_run_mode', expand=True)
     sub.prop(p, 'phase2_run_mid')
     options.separator(type='LINE')
     options.prop(p, 'phase2_run_prepare')

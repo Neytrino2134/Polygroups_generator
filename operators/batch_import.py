@@ -400,7 +400,7 @@ class OBJECT_OT_polygroups_append_generated_blends(bpy.types.Operator):
     def poll(cls, context):
         settings = getattr(context.scene, "polygroups_model_preparation_settings", None)
         return bool(settings and settings.batch_import_format == "BLEND" and not settings.batch_is_running
-                    and not settings.phase2_is_running)
+                    and not settings.phase2_is_running and not settings.phase2_pipeline_running)
 
     def execute(self, context):
         settings = context.scene.polygroups_model_preparation_settings

@@ -30,6 +30,7 @@ class Phase2Pipeline:
         self.paused = False
         self.saved = []
         self.zbrush_root = None
+        self.zbrush_job = None
         self.started = self.stage_started = time.monotonic()
         self.fraction = 0
         self.overlay = None
@@ -71,27 +72,43 @@ class Phase2Pipeline:
         p.phase2_pipeline_done = self.index
         p.phase2_pipeline_progress = 100*(self.index + self.fraction)/len(self.plan)
         p.phase2_pipeline_stage_progress = 100*self.fraction
-        if self.index < len(self.rows):
+        if self.index < len(self.rows) and self.rows[self.index]['state'] != 'PENDING':
             row = self.rows[self.index]
             row.update(progress=100*self.fraction, seconds=round(now-self.stage_started, 1))
         p.phase2_pipeline_queue = json.dumps(self.rows)
         from .import_queue import redraw
         redraw(context)
 
+    def signal_zbrush(self, action):
+        if self.zbrush_job is None:
+            return
+        root, job_id = self.zbrush_job
+        try:
+            target = root / 'job_control.json'
+            temp = target.with_suffix('.tmp')
+            temp.write_text(json.dumps(dict(job_id=job_id, action=action)), encoding='utf-8')
+            temp.replace(target)
+        except OSError as error:
+            self.report({'WARNING'}, f'Cannot send ZBrush control: {error}')
+
     def control(self, action):
         p = self.settings
         if action == 'PAUSE':
+            self.signal_zbrush('PAUSE')
             self.pause_requested = True
             p.phase2_pipeline_status = 'Pause requested: finishing current collection / file / image'
         elif action == 'RESUME':
+            self.signal_zbrush('RESUME')
             self.pause_requested = self.paused = False
             p.phase2_pipeline_state = 'RUNNING'
             p.phase2_pipeline_status = 'Resuming Phase 2'
         elif action == 'STOP_STAGE':
+            self.signal_zbrush('RESUME')
             self.stop_after_stage = True
             self.paused = self.pause_requested = False
             p.phase2_pipeline_status = 'Stop requested: finishing current pass'
         elif action == 'STOP_NOW':
+            self.signal_zbrush('STOP')
             self.stop_requested = True
             self.paused = self.pause_requested = False
             p.phase2_pipeline_status = 'Stopping permanently at the next safe host boundary'
@@ -162,6 +179,8 @@ class Phase2Pipeline:
         if self.finished:
             return
         self.finished = True
+        if state in {"STOPPED", "FAILED"}:
+            self.signal_zbrush("STOP")
         DISPATCHING = True
         try:
             if self.iterator is not None:
@@ -175,9 +194,10 @@ class Phase2Pipeline:
                 setattr(settings, name, value) if was_set else settings.property_unset(name)
             self.saved.clear()
             if self.index < len(self.rows):
-                self.rows[self.index]['state'] = state
+                self.rows[self.index]['state'] = 'SKIPPED' if self.rows[self.index]['state'] == 'PENDING' else state
             for row in self.rows[self.index+1:]:
                 row['state'] = 'SKIPPED'
+            self.paused = self.pause_requested = False
             self.settings.phase2_pipeline_running = False
             self.settings.phase2_pipeline_paused = False
             self.settings.phase2_pipeline_state = state
@@ -217,6 +237,8 @@ class OBJECT_OT_polygroups_start_phase2(bpy.types.Operator):
             run = Phase2Pipeline(context, self.report)
             run.begin(context)
         except Exception as error:
+            if ACTIVE_PIPELINE is not None:
+                ACTIVE_PIPELINE.finish(context, 'FAILED', str(error))
             self.report({'ERROR'}, str(error))
             return {'CANCELLED'}
         self.run = run

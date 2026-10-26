@@ -1139,6 +1139,11 @@ class OBJECT_OT_polygroups_reset_import_state(bpy.types.Operator):
     def execute(self, context):
         global ACTIVE_QUEUE
 
+        from .phase2_pipeline import ACTIVE_PIPELINE
+        if ACTIVE_PIPELINE is not None:
+            ACTIVE_PIPELINE.control('STOP_NOW')
+            self.report({'INFO'}, 'Phase 2 is stopping at the next safe host boundary')
+            return {'FINISHED'}
         from .phase2_processing import ACTIVE_PHASE2
         if ACTIVE_PHASE2 is not None:
             ACTIVE_PHASE2.stop_requested = True
