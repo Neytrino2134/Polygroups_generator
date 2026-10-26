@@ -518,7 +518,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         from .remesh_progress import ACTIVE_REMESH
 
         settings = context.scene.polygroups_model_preparation_settings
-        if settings.phase2_is_running:
+        if settings.phase2_is_running or settings.phase2_pipeline_running:
             self.report({"WARNING"}, "Phase 2 processing is running")
             return {"CANCELLED"}
         if settings.batch_import_format == "BLEND" and not (self.do_selected or self.redo_collection_name):

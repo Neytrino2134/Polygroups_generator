@@ -437,6 +437,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         content = draw_topic(layout, context, "batch_5", t(context, "phase2_title"), "RECOVER_LAST")
         if content is not None:
+            start = draw_collapsible_box(content, settings, "phase2_show_start", "Start Phase 2", "PLAY")
+            if start is not None:
+                from ..core.phase2_progress import draw_start
+                draw_start(start, context, settings)
             group = draw_collapsible_box(content, settings, "phase2_show_restore",
                 t(context, "phase2_restore_processing"), "IMPORT")
             if group is not None:

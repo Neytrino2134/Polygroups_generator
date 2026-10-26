@@ -735,6 +735,10 @@ def draw_batch_stage_heading(layout, title, settings, stage_number, property_nam
 
 
 def draw_import_progress(layout, context, settings):
+    if settings.phase2_pipeline_state and not settings.batch_is_running:
+        from ..core.phase2_progress import draw_pipeline_progress
+        draw_pipeline_progress(layout, context, settings)
+        return
     from ..operators.import_queue import redo_collections, selected_redo_collection
 
     box = layout.box()

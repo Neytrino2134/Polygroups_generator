@@ -234,6 +234,7 @@ from .relocate_project import WM_OT_airetopo_relocate_project, WM_OT_airetopo_re
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 from .phase2_blend_export import OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder
+from .phase2_pipeline import OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control
 from .zbrush_cleanup import OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj
 from .phase2_zbrush_export import (
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
@@ -241,6 +242,7 @@ from .phase2_zbrush_export import (
 )
 
 CLASSES = (
+    OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control,
     OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj,
     OBJECT_OT_polygroups_phase2_export,
     OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder,
@@ -485,6 +487,11 @@ CLASSES = (
 
 
 def register():
+    import bpy
+    from .phase2_pipeline import stop_pipeline
+    for handlers in (bpy.app.handlers.load_pre, bpy.app.handlers.undo_pre, bpy.app.handlers.redo_pre):
+        if stop_pipeline not in handlers:
+            handlers.append(stop_pipeline)
     from . import ai_text
     ai_text.register()
     import bpy
@@ -520,6 +527,12 @@ def register():
 
 
 def unregister():
+    import bpy
+    from .phase2_pipeline import stop_pipeline
+    stop_pipeline()
+    for handlers in (bpy.app.handlers.load_pre, bpy.app.handlers.undo_pre, bpy.app.handlers.redo_pre):
+        if stop_pipeline in handlers:
+            handlers.remove(stop_pipeline)
     from . import ai_text
     ai_text.unregister()
     import bpy

@@ -62,7 +62,10 @@ class Phase2MidRemesh:
         self.job = RemeshJob(backend,self.report)
         self.job.start(context)
 
-    def poll(self):return self.job.poll()
+    def poll(self):
+        done, progress = self.job.poll()
+        self.job.pipeline_progress = progress
+        return done, progress
 
     def finish(self, context):
         objects=self.job.finish(context)

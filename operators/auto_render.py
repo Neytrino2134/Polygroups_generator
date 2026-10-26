@@ -149,7 +149,10 @@ def render_asset_job(context, job, completed, total, preview, asset_label):
         preview.show(completed, total, asset_label)
         # Leave the prepared objects visible for a UI frame before rendering.
         yield completed/max(1, total), f'Rendering {completed+1}/{total} | {asset_label}'
-        rq._render_current_job(context, settings, job)
+        if hasattr(preview, "render_steps"):
+            yield from preview.render_steps(context, settings, job, completed, total)
+        else:
+            rq._render_current_job(context, settings, job)
         settings.queue_index = completed + 1
         rq._sync_progress(settings)
         preview.show(completed+1, total, asset_label)

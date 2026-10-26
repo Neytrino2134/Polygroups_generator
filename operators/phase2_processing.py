@@ -535,6 +535,9 @@ def stop_phase2(*_args):
 
 
 def available(context):
+    from .phase2_pipeline import ACTIVE_PIPELINE, DISPATCHING
+    if ACTIVE_PIPELINE is not None and not DISPATCHING:
+        return False
     from .import_queue import ACTIVE_QUEUE
     from .remesh_progress import ACTIVE_REMESH
     from .sequential_jobs import ACTIVE_JOB
