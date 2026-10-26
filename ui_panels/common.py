@@ -646,19 +646,23 @@ def draw_seam_gap_controls(layout, context, settings):
     gap_box.label(text=t(context, "seam_gap_status", value=settings.seam_gap_status), icon="INFO")
 
 
-def draw_import_remesh_options(layout, context, settings, prefix):
+def draw_import_remesh_options(layout, context, settings, prefix, stacked_labels=False):
     column = layout.column(align=True)
     column.enabled = not settings.batch_is_running or settings.batch_stage == "PAUSED"
     column.prop(settings, prefix + "_auto_remesh", text="Auto Remesh")
     enabled = getattr(settings, prefix + "_auto_remesh")
+    if stacked_labels:
+        column.label(text=settings.bl_rna.properties[prefix + "_remesh_method"].name)
     method_row = column.row(align=True)
     method_row.enabled = enabled
-    method_row.prop(settings, prefix + "_remesh_method", expand=True)
+    method_row.prop(settings, prefix + "_remesh_method", expand=True, **({"text": ""} if stacked_labels else {}))
     if enabled:
         method = getattr(settings, prefix + "_remesh_method")
         if method == "QUAD":
+            if stacked_labels:
+                column.label(text=settings.bl_rna.properties[prefix + "_remesh_preset"].name)
             presets = column.row(align=True)
-            presets.prop(settings, prefix + "_remesh_preset", expand=True)
+            presets.prop(settings, prefix + "_remesh_preset", expand=True, **({"text": ""} if stacked_labels else {}))
             count = dict(get_remesh_preset_counts(context))[
                 getattr(settings, prefix + "_remesh_preset")
             ]
@@ -693,12 +697,14 @@ def draw_import_remesh_options(layout, context, settings, prefix):
             prefix + "_auto_smart_uv_project",
             text=t(context, "auto_smart_uv_project"),
         )
+        if stacked_labels:
+            column.label(text=t(context, "import_unwrap_method"))
         unwrap_method_row = column.row(align=True)
         unwrap_method_row.enabled = getattr(settings, prefix + "_auto_smart_uv_project")
         unwrap_method_row.prop(
             settings,
             prefix + "_auto_unwrap_method",
-            text=t(context, "import_unwrap_method"),
+            text="" if stacked_labels else t(context, "import_unwrap_method"),
             expand=True,
         )
         if getattr(settings, prefix + "_auto_unwrap_method") == "SMART":

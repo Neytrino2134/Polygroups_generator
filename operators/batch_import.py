@@ -497,10 +497,11 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
 
         layout = self.layout
         settings = context.scene.polygroups_model_preparation_settings
-        layout.use_property_split = True
+        layout.use_property_split = False
         layout.use_property_decorate = False
+        layout.label(text=t(context, "import_group_processing"), icon="MODIFIER")
         layout.prop(settings, "file_import_automatic_processing",
-                    text=t(context, "import_automatic_processing"))
+                    text=t(context, "import_use_automatic_processing"))
         if settings.file_import_automatic_processing:
             layout.label(text=t(context, "import_automatic_uses_batch_settings"), icon="MODIFIER")
         else:
@@ -510,7 +511,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
             layout.prop(settings, "file_import_apply_weld", text=t(context, "apply_weld"))
             layout.prop(settings, "file_import_disable_view_assist",
                         text=t(context, "disable_view_assist"))
-            draw_import_remesh_options(layout, context, settings, "file_import")
+            draw_import_remesh_options(layout, context, settings, "file_import", stacked_labels=True)
 
     def execute(self, context):
         from . import import_queue
