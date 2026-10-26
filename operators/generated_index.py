@@ -24,13 +24,14 @@ class OBJECT_OT_polygroups_move_to_new_generated_collection(bpy.types.Operator):
     def execute(self, context):
         from .batch_import import _next_generated_collection_index
 
-        meshes = [obj for obj in context.selected_editable_objects if obj.type == "MESH"]
+        meshes = sorted((obj for obj in context.selected_editable_objects if obj.type == "MESH"),
+                        key=lambda obj: obj.name.casefold())
         if not meshes:
             return {"CANCELLED"}
         index = _next_generated_collection_index()
         collection = bpy.data.collections.new(f"Generated.{index:03d}")
         context.scene.collection.children.link(collection)
-        for obj in meshes:
+        for ordinal, obj in enumerate(meshes, 1):
             previous_collections = tuple(obj.users_collection)
             collection.objects.link(obj)
             for previous in previous_collections:
@@ -38,6 +39,8 @@ class OBJECT_OT_polygroups_move_to_new_generated_collection(bpy.types.Operator):
             base, separator, suffix = obj.name.rpartition(".")
             if separator and base.lower().endswith("generated") and suffix.isdigit():
                 fix_object_generated_index(obj)
+            elif len(meshes) > 1:
+                obj.name = f"Mesh_{ordinal:02d}_{collection.name}"
         self.report({"INFO"}, f"Moved {len(meshes)} mesh(es) to {collection.name}")
         return {"FINISHED"}
 
