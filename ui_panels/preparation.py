@@ -522,6 +522,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     buttons.operator("object.polygroups_phase2_clear_lower_retopo", icon="TRASH")
                     buttons.operator("object.polygroups_phase2_clear_highpoly", icon="TRASH")
                     buttons.operator("object.polygroups_phase2_clear_backups", icon="TRASH")
+                    buttons.operator('object.polygroups_phase2_clear_resculpting', icon='TRASH')
+                    buttons.operator('object.polygroups_phase2_clear_generated', icon='TRASH')
                     from ..save_cleanup import draw_missing_files
                     draw_missing_files(buttons, context)
             final = draw_collapsible_box(content, settings, "phase2_show_finalization", "Batch Finalization", "MOD_DECIM")

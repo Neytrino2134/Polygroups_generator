@@ -683,11 +683,15 @@ class OBJECT_OT_polygroups_phase2_clear_backups(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         from .sequential_jobs import ACTIVE_JOB
+        from .phase2_pipeline import ACTIVE_PIPELINE
         settings = context.scene.polygroups_model_preparation_settings
-        return (context.mode == 'OBJECT' and ACTIVE_PHASE2 is None and ACTIVE_JOB is None
+        return (context.mode == 'OBJECT' and ACTIVE_PHASE2 is None and ACTIVE_JOB is None and ACTIVE_PIPELINE is None
             and not settings.phase2_is_running and not settings.batch_is_running
+            and not settings.phase2_pipeline_running and not settings.phase2_final_is_running
+            and not settings.phase2_auto_render_running and not settings.phase2_rebake_queue_running
             and not context.scene.polygroups_baking_settings.bake_task_is_running
-            and not bpy.app.is_job_running('OBJECT_BAKE'))
+            and not context.scene.polygroups_render_settings.is_running
+            and not bpy.app.is_job_running('OBJECT_BAKE') and not bpy.app.is_job_running('RENDER'))
 
     def execute(self, context):
         count = remove_mesh_objects(obj for obj in bpy.data.objects
@@ -750,6 +754,54 @@ class OBJECT_OT_polygroups_phase2_clear_highpoly(bpy.types.Operator):
         context.scene.polygroups_model_preparation_settings.phase2_final_progress = 0
         context.scene.polygroups_model_preparation_settings.phase2_total_count = 0
         self.report({'INFO'}, f'Deleted {count} Highpoly_Generated objects')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_phase2_clear_resculpting(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_clear_resculpting'
+    bl_label = 'Delete All Resculpting_ Meshes'
+    bl_description = 'Delete all local mesh objects whose names start with Resculpting_, including hidden objects'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return OBJECT_OT_polygroups_phase2_clear_backups.poll(context)
+
+    def execute(self, context):
+        count = remove_mesh_objects(obj for obj in bpy.data.objects
+            if obj.type == 'MESH' and obj.name.lower().startswith('resculpting_'))
+        p = context.scene.polygroups_model_preparation_settings
+        p.phase2_status = f'Deleted {count} Resculpting_ meshes'
+        p.phase2_final_progress = p.phase2_total_count = 0
+        self.report({'INFO'}, p.phase2_status)
+        return {'FINISHED'}
+
+
+class OBJECT_OT_polygroups_phase2_clear_generated(bpy.types.Operator):
+    bl_idname = 'object.polygroups_phase2_clear_generated'
+    bl_label = 'Delete All Generated.N Collections'
+    bl_description = 'Delete numbered Generated collections and their exclusively owned contents in the current scene; preserve objects linked outside them'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return OBJECT_OT_polygroups_phase2_clear_backups.poll(context)
+
+    def execute(self, context):
+        candidates = {col for col in context.scene.collection.children_recursive if NUMBERED.fullmatch(col.name)}
+        elsewhere = {col for scene in bpy.data.scenes if scene != context.scene
+                     for col in scene.collection.children_recursive}
+        unsafe = [col.name for col in candidates if col.library or col in elsewhere]
+        if unsafe:
+            self.report({'ERROR'}, 'Generated collections are linked or shared by another scene: ' + ', '.join(sorted(unsafe)))
+            return {'CANCELLED'}
+        collections_before, objects_before = len(bpy.data.collections), len(bpy.data.objects)
+        clear_generated_collections(context.scene)
+        cols, objects = collections_before-len(bpy.data.collections), objects_before-len(bpy.data.objects)
+        p = context.scene.polygroups_model_preparation_settings
+        p.phase2_status = f'Deleted {cols} Generated collections / nested collections and {objects} objects'
+        p.phase2_final_progress = p.phase2_total_count = 0
+        self.report({'INFO'}, p.phase2_status)
         return {'FINISHED'}
 
 
@@ -1020,6 +1072,7 @@ class OBJECT_OT_polygroups_phase2_rename_retopo01(bpy.types.Operator):
 
 CLASSES = (OBJECT_OT_polygroups_phase2_multires_visibility, OBJECT_OT_polygroups_phase2_mesh_visibility, OBJECT_OT_polygroups_phase2_rename_retopo01, OBJECT_OT_polygroups_phase2_processing_preset,
            OBJECT_OT_polygroups_phase2_clear_lower_retopo, OBJECT_OT_polygroups_phase2_clear_highpoly,
+           OBJECT_OT_polygroups_phase2_clear_resculpting, OBJECT_OT_polygroups_phase2_clear_generated,
            OBJECT_OT_polygroups_phase2_clear_backups, OBJECT_OT_polygroups_phase2_files_scan, OBJECT_OT_polygroups_phase2_files_move,
            OBJECT_OT_polygroups_phase2_scan, OBJECT_OT_polygroups_phase2_restore,
            OBJECT_OT_polygroups_phase2_stop)
