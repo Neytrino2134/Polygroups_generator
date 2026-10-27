@@ -51,3 +51,16 @@ in-progress import/projection/save. Stop Now ends the Blender coordinator immedi
 when its own host is safe and requests ZBrush to stop after its current asset.
 A modal confirmation already blocking ZBrush still requires manual confirmation;
 control messages do not dismiss dialogs or terminate the application process.
+
+Start Phase 2 process settings include **Load from File**, using the same filename
+parser as Unity Rename. It fills Asset Name, Name Index and Version Index for
+the selected FAB/Unity pipeline. Existing Unity Rename buttons retain their
+original Unity-only behavior.
+
+**Export ZBrush ZTL → Run at End** (RU: **Делать в конце**) defaults off.
+When enabled, the queue runs rendering before ZBrush, then performs cleanup.
+Cleanup is deferred because it deletes Generated collections needed for ZBrush.
+With rendering disabled, ZBrush follows the other enabled passes. With ZBrush
+disabled, the option does not change queue ordering. The queue order is fixed
+when the process starts. Automated validation includes actual rendering before
+the simulated ZBrush launch, with Generated sources retained until cleanup.

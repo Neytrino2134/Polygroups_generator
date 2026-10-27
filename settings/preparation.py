@@ -231,6 +231,8 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_run_export: bpy.props.BoolProperty(name="Export Prepared GLB / FBX", default=True)
     phase2_run_blend: bpy.props.BoolProperty(name="Export Blend", default=True)
     phase2_run_zbrush: bpy.props.BoolProperty(name="Export ZBrush ZTL", default=True)
+    phase2_run_zbrush_at_end: bpy.props.BoolProperty(name='Run at End', default=False,
+        description='Run ZBrush export after rendering; defer temporary collection cleanup until ZBrush finishes')
     phase2_run_cleanup: bpy.props.BoolProperty(name="Return to Blender and Cleanup", default=True)
     phase2_run_render: bpy.props.BoolProperty(name="Auto Render", default=True)
     phase2_run_transparent: bpy.props.BoolProperty(name="Render Transparent", default=True)

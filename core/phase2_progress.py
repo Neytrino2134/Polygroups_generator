@@ -110,6 +110,7 @@ def draw_process_settings(options, context, p):
     sub.prop(s, 'unity_asset_name' if unity else 'unreal_lod_asset_name', text='Asset Name')
     sub.prop(s, 'unity_name_index' if unity else 'unreal_lod_name_index', text='Name Index')
     sub.prop(s, 'unity_asset_index' if unity else 'unreal_lod_version_index', text='Version Index')
+    sub.operator('object.polygroups_unity_load_from_file', text='Load from File', icon='FILE_BLEND').target = 'PHASE2'
     options.prop(p, 'phase2_run_export')
     sub = options.row(align=True)
     sub.enabled = p.phase2_run_export
@@ -120,6 +121,10 @@ def draw_process_settings(options, context, p):
     sub.enabled = p.phase2_run_blend
     sub.prop(p, 'phase2_blend_export_generated')
     options.prop(p, 'phase2_run_zbrush')
+    from ..localization import t
+    zbrush = options.column(align=True)
+    zbrush.enabled = p.phase2_run_zbrush
+    zbrush.prop(p, 'phase2_run_zbrush_at_end', text=t(context, 'phase2_zbrush_at_end'))
     options.prop(p, 'phase2_run_cleanup')
     options.separator(type='LINE')
     options.prop(p, 'phase2_run_render')

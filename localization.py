@@ -1923,6 +1923,7 @@ TEXT = {
 
 TEXT['EN'].update({
     'phase2_process_settings': 'Process Settings',
+    'phase2_zbrush_at_end': 'Run at End',
     'phase2_preset_import': 'Import Only', 'phase2_preset_rebake': 'Import + Rebake',
     'phase2_preset_resculpt': 'Retopo_01 Resculpting',
     'text_generation': 'Text Generation', 'text_target_language': 'Target Language',
@@ -1934,6 +1935,7 @@ TEXT['EN'].update({
 })
 TEXT['RU'].update({
     'phase2_process_settings': 'Настройки процесса',
+    'phase2_zbrush_at_end': 'Делать в конце',
     'phase2_preset_import': 'Только импорт', 'phase2_preset_rebake': 'Импорт + перезапечка',
     'phase2_preset_resculpt': 'Рескульптинг Retopo_01',
     'text_generation': 'Text Generation / Генерация текста', 'text_target_language': 'Язык перевода',

@@ -16,6 +16,10 @@ class Phase2Pipeline:
         self.settings = self.scene.polygroups_model_preparation_settings
         self.report = report
         self.plan = [entry for entry in STAGES if getattr(self.settings, entry[2])]
+        if self.settings.phase2_run_zbrush and self.settings.phase2_run_zbrush_at_end:
+            # Cleanup deletes ZBrush sources, so keep it after the deferred job.
+            tail = [entry for key in ('ZBRUSH', 'CLEANUP') for entry in self.plan if entry[0] == key]
+            self.plan = [entry for entry in self.plan if entry[0] not in {'ZBRUSH', 'CLEANUP'}] + tail
         if not self.plan:
             raise ValueError('Select at least one Phase 2 pass')
         if self.settings.phase2_run_export and not any((self.settings.phase2_export_glb,

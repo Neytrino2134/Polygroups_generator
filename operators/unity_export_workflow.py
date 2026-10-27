@@ -65,6 +65,8 @@ class OBJECT_OT_polygroups_unity_load_from_file(bpy.types.Operator):
     bl_label = 'Load from File'
     bl_description = 'Load the asset name, Name Index and Version Index from the current blend filename'
     bl_options = {'UNDO', 'INTERNAL'}
+    target: bpy.props.EnumProperty(items=(('UNITY', 'Unity', ''), ('PHASE2', 'Phase 2 Pipeline', '')),
+                                   default='UNITY', options={'SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -72,7 +74,13 @@ class OBJECT_OT_polygroups_unity_load_from_file(bpy.types.Operator):
 
     def execute(self, context):
         settings = context.scene.polygroups_mesh_finalization_settings
-        settings.unity_asset_name, settings.unity_name_index, settings.unity_asset_index = unity_name_from_filepath(bpy.data.filepath)
+        values = unity_name_from_filepath(bpy.data.filepath)
+        phase2 = context.scene.polygroups_model_preparation_settings
+        fields = (('unreal_lod_asset_name', 'unreal_lod_name_index', 'unreal_lod_version_index')
+                  if self.target == 'PHASE2' and phase2.phase2_run_engine == 'FAB' else
+                  ('unity_asset_name', 'unity_name_index', 'unity_asset_index'))
+        for name, value in zip(fields, values):
+            setattr(settings, name, value)
         return {'FINISHED'}
 
 

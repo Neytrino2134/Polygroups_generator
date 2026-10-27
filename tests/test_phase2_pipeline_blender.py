@@ -35,6 +35,16 @@ def drive(run, limit=150):
 with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_pipeline_') as directory:
     root = Path(directory)
     bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Working.blend'))
+    assert not p.phase2_run_zbrush_at_end
+    assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-3:] == ['ZBRUSH', 'CLEANUP', 'RENDER']
+    p.phase2_run_zbrush_at_end = True
+    assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-3:] == ['RENDER', 'ZBRUSH', 'CLEANUP']
+    p.phase2_run_render = False
+    assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-2:] == ['ZBRUSH', 'CLEANUP']
+    p.phase2_run_zbrush = False
+    assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-1] == 'CLEANUP'
+    p.phase2_run_render = p.phase2_run_zbrush = True
+    p.phase2_run_zbrush_at_end = False
     events = []
     def first(run, context):
         try:
@@ -162,6 +172,7 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_pipeline_') as directory
         bpy.data.collections.remove(col)
     bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Working.blend'))
     p.phase2_run_mode = 'IMPORT'; p.phase2_run_mid = False
+    p.phase2_run_zbrush_at_end = True
     p.phase2_blend_export_generated = True
     p.phase2_export_glb = p.phase2_export_fbx = True
     p.phase2_auto_textures = p.phase2_auto_multiview = p.phase2_auto_freestyle = False
@@ -182,6 +193,7 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_pipeline_') as directory
         context.scene.render.resolution_percentage = 100
         context.scene.cycles.samples = 1
     def fake_zbrush(settings, folder):
+        assert list((root / 'Renders').rglob('*.png')), 'ZBrush must start after rendering'
         manifest = json.loads((folder / zb.MANIFEST_NAME).read_text())
         assert all(bpy.data.collections.get(a['name']) for a in manifest['assets'])
         assert len(list((root / '!Blend').glob('Generated.*.blend'))) == 2
@@ -198,6 +210,7 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_pipeline_') as directory
         assert bpy.ops.object.polygroups_start_phase2() == {'FINISHED'}, p.phase2_pipeline_status
     assert p.phase2_pipeline_state == 'COMPLETED', p.phase2_pipeline_status
     assert p.phase2_pipeline_done == p.phase2_pipeline_total == 7
+    assert [row['key'] for row in json.loads(p.phase2_pipeline_queue)][-3:] == ['RENDER', 'ZBRUSH', 'CLEANUP']
     assert all(row['state'] == 'DONE' for row in json.loads(p.phase2_pipeline_queue))
     assert len(json.loads(p.phase2_pipeline_collection_times)) == 2
     assert not any(col.name.startswith('Generated.') for col in ctx.scene.collection.children_recursive)
