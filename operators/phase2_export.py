@@ -23,6 +23,9 @@ class OBJECT_OT_polygroups_phase2_export(bpy.types.Operator):
     bl_label = 'Export Prepared Models'
     bl_description = 'Select prepared MID/HIGH/LOD meshes in all scene _Collection assets and use section 12 export'
 
+    selected_only: bpy.props.BoolProperty(name='Selected Meshes Only', default=False,
+        options={'SKIP_SAVE'}, description='Export only selected meshes and replace their existing export files')
+
     @classmethod
     def poll(cls, context):
         return context.mode == 'OBJECT' and available(context)
@@ -33,12 +36,15 @@ class OBJECT_OT_polygroups_phase2_export(bpy.types.Operator):
         if not any((p.phase2_export_fbx, p.phase2_export_glb, p.phase2_export_gltf)):
             self.report({'WARNING'}, 'Enable FBX, GLB or GLTF')
             return {'CANCELLED'}
-        meshes = prepared_meshes(context)
+        original_selection, original_active = list(context.selected_objects), context.active_object
+        meshes = (sorted((obj for obj in original_selection if obj.type == 'MESH'), key=lambda obj: obj.name.casefold())
+                  if self.selected_only else prepared_meshes(context))
         if not meshes:
-            p.phase2_export_status = 'No prepared meshes in scene _Collection assets'
+            p.phase2_export_status = ('Select at least one mesh' if self.selected_only else
+                                     'No prepared meshes in scene _Collection assets')
             self.report({'WARNING'}, p.phase2_export_status)
             return {'CANCELLED'}
-        for obj in meshes:
+        for obj in meshes if not self.selected_only else ():
             for col in obj.users_collection:
                 if col in context.scene.collection.children_recursive:
                     ensure_collection_visible_in_view_layer(context, col)
@@ -58,6 +64,9 @@ class OBJECT_OT_polygroups_phase2_export(bpy.types.Operator):
             # Autosave before temporary export overrides, preserving section-12
             # settings on disk as well as restoring them in memory afterward.
             fields['unity_export_autosave'] = False
+            if self.selected_only:
+                fields['unity_export_overwrite'] = True
+                fields['unity_export_clear_asset_folder'] = False
         saved = {name: (getattr(s, name), s.is_property_set(name)) for name in fields}
         try:
             if unity and saved['unity_export_autosave'][0]:
@@ -85,3 +94,9 @@ class OBJECT_OT_polygroups_phase2_export(bpy.types.Operator):
         finally:
             for name, (value, was_set) in saved.items():
                 setattr(s, name, value) if was_set else s.property_unset(name)
+            if self.selected_only:
+                bpy.ops.object.select_all(action='DESELECT')
+                for obj in original_selection:
+                    if obj.name in context.view_layer.objects:
+                        obj.select_set(True)
+                context.view_layer.objects.active = original_active

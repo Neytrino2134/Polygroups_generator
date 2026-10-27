@@ -6,6 +6,7 @@ from .safety_checks import is_lowpoly_name
 from .safety_checks import expected_highpoly_name, find_matching_highpoly
 from .safety_checks import auto_select_matching_highpoly, report_missing_matching_highpoly
 from .safety_checks import is_generated_highpoly_name
+from ..core.mesh_ngons import ngon_count, triangulated_ngon_copy
 
 
 MULTIRES_MODIFIER_NAME = "PolyGroups Multires"
@@ -217,6 +218,15 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             self.report({'ERROR'}, 'Resculpting object already exists: ' + target_name)
             return {'CANCELLED'}
 
+        if ngon_count(lowpoly.data):
+            if lowpoly.library or lowpoly.data.library:
+                self.report({'ERROR'}, 'Make the lowpoly mesh local before triangulating n-gons for Resculpting')
+                return {'CANCELLED'}
+            if lowpoly.data.shape_keys or any(
+                    mod.type == 'MULTIRES' and mod.total_levels for mod in lowpoly.modifiers):
+                self.report({'ERROR'}, 'N-gons must be triangulated before creating Multires or shape keys')
+                return {'CANCELLED'}
+
         locked = highpoly.hide_select
         try:
             _set_object_mode(context)
@@ -229,6 +239,12 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             context.view_layer.objects.active = lowpoly
             lowpoly.select_set(True)
             context.view_layer.update()
+            original_mesh = lowpoly.data
+            prepared_mesh = triangulated_ngon_copy(original_mesh)
+            if prepared_mesh is not None:
+                lowpoly.data = prepared_mesh
+                if original_mesh.users == 0 and not original_mesh.library:
+                    bpy.data.meshes.remove(original_mesh)
             add_multires_modifier(context, lowpoly, settings.multires_levels)
             shrinkwrap = add_shrinkwrap_modifier(lowpoly, highpoly, settings.shrinkwrap_limit, settings.shrinkwrap_offset)
             if settings.apply_shrinkwrap:

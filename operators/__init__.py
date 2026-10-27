@@ -44,6 +44,7 @@ from .smart_cage import OBJECT_OT_polygroups_generate_smart_cage, OBJECT_OT_poly
 from .baking import OBJECT_OT_polygroups_clear_bake_temp_images
 from .baking import OBJECT_OT_polygroups_merge_bake_textures
 from .baking import OBJECT_OT_polygroups_prepare_and_bake
+from .rebake_final import OBJECT_OT_polygroups_rebake_final_mesh
 from .baking import OBJECT_OT_polygroups_prepare_highpoly_bake_materials
 from .baking import OBJECT_OT_polygroups_prepare_lowpoly_bake_material
 from .baking import OBJECT_OT_polygroups_save_blend_file
@@ -235,6 +236,7 @@ from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_w
 
 from .phase2_blend_export import OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder
 from .phase2_pipeline import OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control
+from .phase2_reset import OBJECT_OT_polygroups_phase2_reset_state
 from .zbrush_cleanup import OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj
 from .phase2_zbrush_export import (
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
@@ -243,6 +245,7 @@ from .phase2_zbrush_export import (
 
 CLASSES = (
     OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control,
+    OBJECT_OT_polygroups_phase2_reset_state,
     OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj,
     OBJECT_OT_polygroups_phase2_export,
     OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder,
@@ -328,6 +331,7 @@ CLASSES = (
     OBJECT_OT_polygroups_bake_selected_to_active,
     OBJECT_OT_polygroups_bake_task,
     OBJECT_OT_polygroups_prepare_and_bake,
+    OBJECT_OT_polygroups_rebake_final_mesh,
     OBJECT_OT_polygroups_save_blend_file,
     OBJECT_OT_polygroups_save_blend_file_as,
     OBJECT_OT_polygroups_save_bake_textures,

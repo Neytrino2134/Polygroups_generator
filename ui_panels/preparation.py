@@ -485,6 +485,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     controls.prop(settings, "phase2_repair_artifacts", text=t(context, "phase2_repair"))
                     controls.prop(settings, 'phase2_resculpt_retopo01')
                     if settings.phase2_resculpt_retopo01:
+                        controls.prop(settings, 'phase2_high_remesh_before_resculpting')
+                        if settings.phase2_high_remesh_before_resculpting:
+                            controls.label(text='Clear seams + pins | Smart Seams 22 degrees | HIGH', icon='INFO')
                         controls.prop(settings, 'phase2_repair_after_resculpt')
                     controls.prop(settings, 'phase2_autobake_retopo01')
                     controls.prop(settings, "phase2_delete_high_after_bake")
@@ -562,6 +565,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                         if settings.phase2_export_gltf:
                             controls.prop(final_settings, 'unreal_gltf_mode')
                     controls.operator('object.polygroups_phase2_export', text='Export', icon='EXPORT')
+                    controls.operator('object.polygroups_phase2_export', text='Export Selected',
+                                      icon='RESTRICT_SELECT_OFF').selected_only = True
                     controls.label(text=settings.phase2_export_status)
                 blend_export = draw_collapsible_box(final, settings, 'phase2_show_export_blend', 'Export Blend Files', 'FILE_BLEND')
                 if blend_export is not None:
@@ -574,6 +579,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_export_blend', text='Export Blend Files', icon='EXPORT')
                     row.operator('object.polygroups_phase2_open_blend_folder', text='', icon='FILE_FOLDER')
+                    controls.operator('object.polygroups_phase2_export_blend', text='Export Selected Blend',
+                                      icon='RESTRICT_SELECT_OFF').selected_only = True
                     controls.label(text=settings.phase2_blend_export_status)
                 zbrush_export = draw_collapsible_box(final, settings, 'phase2_show_export_zbrush', 'Export ZBrush', 'MOD_MULTIRES')
                 if zbrush_export is not None:

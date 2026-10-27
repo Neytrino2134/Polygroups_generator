@@ -298,6 +298,8 @@ class QueueProcessingMixin:
             result = bpy.ops.mesh.polygroups_repair_mesh_folds(
                 'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
                 fix_degenerate=True, fix_zero_area=True, selected_only=False,
+                fix_stretched_triangles=self.settings.fold_repair_stretched_triangles,
+                stretched_triangle_ratio=self.settings.fold_repair_stretch_ratio,
             )
             if 'FINISHED' not in result:
                 raise RuntimeError(f'Geometry Repair failed after remesh pass {self.pass_number - 1}: {obj.name}')

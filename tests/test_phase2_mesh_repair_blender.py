@@ -19,6 +19,7 @@ context = bpy.context
 settings = context.scene.polygroups_model_preparation_settings
 bake = context.scene.polygroups_baking_settings
 assert settings.phase2_mesh_auto_repair
+settings.phase2_mid_remesh = False
 
 bm = bmesh.new()
 bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1)

@@ -35,7 +35,7 @@ assert not p.phase2_resculpt_retopo01 and not p.phase2_autobake_retopo01
 verify_ui()
 p.phase2_keep_retopo01=False
 switch('RESCULPT')
-assert p.phase2_auto_bake and p.phase2_resculpt_retopo01 and p.phase2_autobake_retopo01 and p.phase2_keep_retopo01
+assert p.phase2_auto_bake and p.phase2_resculpt_retopo01 and p.phase2_autobake_retopo01 and not p.phase2_keep_retopo01
 verify_ui()
 switch('REBAKE');assert p.phase2_resculpt_retopo01
 switch('RESCULPT')

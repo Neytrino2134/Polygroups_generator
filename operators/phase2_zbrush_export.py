@@ -13,6 +13,7 @@ from .phase2_blend_export import generated_collections
 from .phase2_processing import available
 from .resculpting import MULTIRES_MODIFIER_NAME
 from ..core import zbrush_export as zb
+from ..core.mesh_ngons import ngon_count, triangulated_ngon_copy
 
 SCULPT_FACE_SET = '.sculpt_face_set'
 GROUP_MATERIAL_PREFIX = 'ZBG_'
@@ -154,6 +155,16 @@ def export_object_levels(context, obj, stem, root):
     copy = obj.copy()
     copy.data = mesh
     copy.name = stem
+    try:
+        prepared = triangulated_ngon_copy(mesh)
+    except Exception:
+        bpy.data.objects.remove(copy)
+        bpy.data.meshes.remove(mesh)
+        raise
+    if prepared is not None:
+        copy.data = prepared
+        bpy.data.meshes.remove(mesh)
+        mesh = prepared
     for mod in list(copy.modifiers):
         if mod.type != 'MULTIRES':
             copy.modifiers.remove(mod)
@@ -176,9 +187,26 @@ def export_object_levels(context, obj, stem, root):
                 bpy.ops.object.select_all(action='DESELECT')
                 evaluated = copy.evaluated_get(context.evaluated_depsgraph_get())
                 evaluated_mesh = evaluated.to_mesh()
-                counts = {'level': level, 'faces': len(evaluated_mesh.polygons), 'verts': len(evaluated_mesh.vertices)}
-                evaluated.to_mesh_clear()
-                _export_obj(context, copy, str(Path(root) / zb.level_file(stem, level)))
+                export_mesh = None
+                export_copy = None
+                try:
+                    export_mesh = triangulated_ngon_copy(evaluated_mesh)
+                    if export_mesh is not None:
+                        export_copy = bpy.data.objects.new(f'{stem}_Level{level}', export_mesh)
+                        export_copy.matrix_world = copy.matrix_world.copy()
+                        context.scene.collection.objects.link(export_copy)
+                        context.view_layer.update()
+                    exported = export_mesh or evaluated_mesh
+                    counts = {'level': level, 'faces': len(exported.polygons),
+                              'verts': len(exported.vertices)}
+                    _export_obj(context, export_copy or copy,
+                                str(Path(root) / zb.level_file(stem, level)))
+                finally:
+                    if export_copy is not None:
+                        bpy.data.objects.remove(export_copy, do_unlink=True)
+                    if export_mesh is not None:
+                        bpy.data.meshes.remove(export_mesh)
+                    evaluated.to_mesh_clear()
                 levels.append(counts)
             dims = tuple(round(value, 6) for value in obj.dimensions)
     finally:

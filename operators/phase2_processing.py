@@ -282,7 +282,9 @@ class Phase2Queue:
             low.data = low.data.copy()
         result = bpy.ops.mesh.polygroups_repair_mesh_folds(
             'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
-            fix_degenerate=True, fix_zero_area=False, selected_only=False)
+            fix_degenerate=True, fix_zero_area=True, selected_only=False,
+            fix_stretched_triangles=self.settings.fold_repair_stretched_triangles,
+            stretched_triangle_ratio=self.settings.fold_repair_stretch_ratio)
         if 'FINISHED' not in result:
             raise RuntimeError(f'Auto Repair failed for {low.name}; processing skipped')
         if repack:
@@ -381,7 +383,8 @@ class Phase2Queue:
                     if self.settings.phase2_delete_lower_retopo:
                         stage = int(LOW.fullmatch(low.name).group(1))
                         doomed.extend(obj for obj in self.collection.all_objects
-                            if obj.type == 'MESH' and (match := LOW.fullmatch(obj.name))
+                            if obj.type == 'MESH' and obj.name.lower().startswith('retopo_')
+                            and (match := LOW.fullmatch(obj.name))
                             and int(match.group(1)) < stage
                             and not (self.settings.phase2_keep_retopo01 and int(match.group(1)) == 1))
                     # Preserve objects linked outside the completed collection tree.
@@ -480,11 +483,26 @@ class Phase2Queue:
                     raise RuntimeError(f'Auto Bake failed: {bake.bake_task_message}')
                 self.restore_bake_settings()
                 if self.settings.phase2_resculpt_retopo01:
-                    self.stage = 'RETOPO01_RESCULPT'
+                    if self.settings.phase2_high_remesh_before_resculpting:
+                        from .phase2_mid_remesh import Phase2MidRemesh
+                        self.mid_remesh = Phase2MidRemesh(context, self.collection, self.report,
+                            source=self.retopo01, preset='HIGH',
+                            result_name=f'Resculpting_01_Highpoly_{self.collection.name}')
+                        self.mid_remesh.start(context)
+                        self.stage = 'RETOPO01_HIGH_REMESH_WAIT'
+                    else:
+                        self.stage = 'RETOPO01_RESCULPT'
                 elif self.settings.phase2_autobake_retopo01:
                     self.stage = 'RETOPO01_PREPARE'
                 else:
                     self.complete()
+            elif self.stage == 'RETOPO01_HIGH_REMESH_WAIT':
+                done, progress = self.mid_remesh.poll()
+                self.settings.phase2_status = f'{self.index+1}/{len(self.entries)}: {name} / HIGH Remesh {progress*100:.0f}%'
+                if done:
+                    self.retopo01 = self.mid_remesh.finish(context)
+                    self.mid_remesh = None
+                    self.stage = 'RETOPO01_RESCULPT'
             elif self.stage == 'RETOPO01_RESCULPT':
                 if context.object and context.object.mode != 'OBJECT':
                     bpy.ops.object.mode_set(mode='OBJECT')
@@ -702,7 +720,11 @@ class OBJECT_OT_polygroups_phase2_clear_lower_retopo(bpy.types.Operator):
         for entries in groups.values():
             highest = max(stage for stage, obj in entries)
             keep_first = context.scene.polygroups_model_preparation_settings.phase2_keep_retopo01
-            doomed.extend(obj for stage, obj in entries if stage < highest and not (keep_first and stage == 1))
+            has_resculpted_first = any(stage == 1 and obj.name.lower().startswith('resculpting_')
+                                       for stage, obj in entries)
+            doomed.extend(obj for stage, obj in entries if obj.name.lower().startswith('retopo_')
+                          and (stage < highest or (stage == 1 and has_resculpted_first))
+                          and not (keep_first and stage == 1))
         count = remove_mesh_objects(doomed)
         context.scene.polygroups_model_preparation_settings.phase2_status = f'Deleted {count} lower Retopo objects; highest stages kept'
         context.scene.polygroups_model_preparation_settings.phase2_final_progress = 0
@@ -882,7 +904,8 @@ class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
         p = context.scene.polygroups_model_preparation_settings
         if self.preset == 'IMPORT':
             for name in ('phase2_mid_remesh', 'phase2_auto_bake', 'phase2_mesh_auto_repair', 'phase2_repack_after_repair',
-                         'phase2_repair_artifacts', 'phase2_resculpt_retopo01', 'phase2_autobake_retopo01'):
+                         'phase2_repair_artifacts', 'phase2_resculpt_retopo01', 'phase2_autobake_retopo01',
+                         'phase2_high_remesh_before_resculpting'):
                 setattr(p, name, False)
         else:
             enabled = not p.phase2_resculpt_retopo01 if self.preset == 'RESCULPT' else True
@@ -891,8 +914,6 @@ class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
                     setattr(p, name, True)
             if self.preset == 'RESCULPT':
                 p.phase2_resculpt_retopo01 = p.phase2_autobake_retopo01 = enabled
-                if enabled:
-                    p.phase2_keep_retopo01 = True
         return {'FINISHED'}
 
 

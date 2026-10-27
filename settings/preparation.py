@@ -167,11 +167,32 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     show_batch_start_mode: bpy.props.BoolProperty(name="Import Mode", default=True)
     phase2_show_files: bpy.props.BoolProperty(name="Blend File Manager", default=True)
     phase2_show_start: bpy.props.BoolProperty(name="Start Phase 2", default=True)
+    phase2_rebake_create_lods: bpy.props.BoolProperty(name="Create LODs", default=False,
+        description="After manual ReBake Final Mesh, create LODs using the pipeline and asset settings above; not part of Start Phase 2")
+    phase2_rebake_export_selected: bpy.props.BoolProperty(name="Export Selected FBX / Blend", default=False,
+        description="After manual ReBake and Create LODs, select the current asset meshes and replace their FBX and Blend exports")
     phase2_run_restore: bpy.props.BoolProperty(name="Restore from Separated", default=True)
     phase2_run_mode: bpy.props.EnumProperty(name="Restore Mode", items=(
         ('IMPORT', 'Import Only', ''), ('REBAKE', 'Import + Rebake', ''),
-        ('RESCULPT', 'Import + Rebake + Retopo_01 Resculpting', '')), default='RESCULPT')
+        ('RESCULPT', 'Import + Rebake + Retopo_01 Resculpting (Legacy)',
+         'Kept for saved scenes; use the separate Resculpt Retopo_01 option')), default='RESCULPT')
     phase2_run_mid: bpy.props.BoolProperty(name="MID Remesh", default=True)
+    phase2_run_resculpt_retopo01: bpy.props.BoolProperty(
+        name="Resculpt Retopo_01", default=True,
+        description="After the primary bake, run the selected Retopo_01 resculpting steps",
+    )
+    phase2_run_high_remesh: bpy.props.BoolProperty(
+        name="High Remesh Before Resculpting", default=True,
+        description="Remesh Retopo_01 with HIGH and new Smart Seams before Setup Resculpting",
+    )
+    phase2_run_repair_resculpt: bpy.props.BoolProperty(
+        name="Auto Repair After Resculpting", default=True,
+        description="Repair the new Resculpting_01 mesh before its optional bake",
+    )
+    phase2_run_bake_resculpt: bpy.props.BoolProperty(
+        name="Auto Bake Resculpting_01", default=True,
+        description="Bake the new Resculpting_01 mesh after resculpting and optional repair",
+    )
     phase2_run_prepare: bpy.props.BoolProperty(name="Batch Finalization: Prepare LODs / Rename", default=True)
     phase2_run_engine: bpy.props.EnumProperty(name="Pipeline", items=(('FAB', 'Unreal (FAB)', ''), ('UNITY', 'Unity', '')), default='FAB')
     phase2_run_export: bpy.props.BoolProperty(name="Export Prepared GLB / FBX", default=True)
@@ -297,11 +318,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_autosave_status: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
     phase2_resculpt_retopo01: bpy.props.BoolProperty(name="Resculpting Retopo_01", default=False,
         description="Run Setup Resculpting on Retopo_01 after the highest Retopo finishes baking")
+    phase2_high_remesh_before_resculpting: bpy.props.BoolProperty(
+        name="High Remesh Before Resculpting", default=False,
+        description="Clear seams and pins, create Smart Seams at 22 degrees and remesh Retopo_01 with HIGH before Setup Resculpting; use the new Resculpting_01 mesh",
+    )
     phase2_autobake_retopo01: bpy.props.BoolProperty(name="Autobake Retopo_01", default=False,
         description="Repair and rebake Retopo_01 before highpoly cleanup; enabled UV repacking always runs")
     phase2_mesh_auto_repair: bpy.props.BoolProperty(
         name="Auto Repair Mesh", default=True,
-        description="Repair folded pockets and merge coincident vertices only on the highest Retopo stage independently of Auto Bake",
+        description="Repair folded pockets (including backtracking triangles), coincident vertices and zero-area UV seam faces on the highest Retopo stage",
     )
     phase2_repack_after_repair: bpy.props.BoolProperty(
         name="Repack UV", default=False,
@@ -315,8 +340,8 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Delete Lower Retopo Stages After Successful Bake", default=True,
         description="Remove earlier numbered Retopo stages, keeping the target used by the successful bake",
     )
-    phase2_keep_retopo01: bpy.props.BoolProperty(name="Keep Retopo_01 (Resculpted)", default=True,
-        description="Preserve Retopo_01 during automatic and manual lower-stage cleanup")
+    phase2_keep_retopo01: bpy.props.BoolProperty(name="Keep Retopo_01", default=False,
+        description="Preserve the original Retopo_01 during automatic and manual lower-stage cleanup; Resculpting_01 is always preserved")
     phase2_show_manual_cleanup: bpy.props.BoolProperty(name="Manual Cleanup", default=False)
     phase2_repair_artifacts: bpy.props.BoolProperty(
         name="Repair Projection Artifacts", default=True,
@@ -429,6 +454,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Repair zero-length edges even across UV seams; preserve corner UVs and seam/sharp flags")
     fold_repair_selected_only: bpy.props.BoolProperty(name="Selected Area Only", default=False,
         description="Repair defects seeded by selected faces, including their local boundary")
+    fold_repair_stretched_triangles: bpy.props.BoolProperty(name="Merge Stretched Single Triangles", default=True,
+        description="Merge severe singleton triangle UV outliers to the face center when topology stays valid; also used by Batch Import and Phase 2 Auto Repair")
+    fold_repair_stretch_ratio: bpy.props.FloatProperty(name="Triangle Stretch Ratio", default=50, min=2, max=10000,
+        description="Minimum UV anisotropy or linear texel-scale ratio to neighboring faces for a singleton triangle")
     small_loose_part_metric: bpy.props.EnumProperty(
         name="Size Metric",
         description="How disconnected part size is measured",
@@ -525,15 +554,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     batch_first_geometry_repair: bpy.props.BoolProperty(
         name="Geometry Repair", default=True,
-        description="Repair folded pockets, degenerate edges and zero-area seam triangles at the end of the first remesh pass",
+        description="Repair folded pockets (including backtracking triangles), coincident vertices and zero-area UV seam faces after the first remesh pass",
     )
     batch_stage_3_geometry_repair: bpy.props.BoolProperty(
         name="Geometry Repair", default=True,
-        description="Run all three geometry repairs at the end of the second remesh pass",
+        description="Repair folded pockets (including backtracking triangles), coincident vertices and zero-area UV seam faces after the second remesh pass",
     )
     batch_stage_4_geometry_repair: bpy.props.BoolProperty(
         name="Geometry Repair", default=True,
-        description="Run all three geometry repairs after the third pass and before UV packing and baking",
+        description="Repair folded pockets (including backtracking triangles), coincident vertices and zero-area UV seam faces before UV packing and baking",
     )
     batch_first_uv_repair_threshold: bpy.props.FloatProperty(
         name="Critical Stretch Ratio", default=4.0, min=1.1, max=1000.0,

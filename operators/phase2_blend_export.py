@@ -1,6 +1,7 @@
 """Write every prepared *_Collection asset as its own clean blend file in !Blend."""
 import os
 import re
+import tempfile
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
@@ -156,6 +157,56 @@ def prepared_asset_meshes(collection):
             and (PREPARED_NAME.search(obj.name) or obj.get('unity_prepared'))]
 
 
+def selected_asset_packs(context):
+    """Group the exact mesh selection under its owning asset/file name."""
+    assets = asset_collections(context.scene)
+    generated = generated_collections(context.scene)
+    scene_collections = {context.scene.collection, *context.scene.collection.children_recursive}
+    packs = {}
+    for obj in context.selected_objects:
+        if obj.type != 'MESH':
+            continue
+        owners = [col for col in assets if obj.name in col.all_objects]
+        if not owners:
+            owners = [col for col in generated if obj.name in col.all_objects]
+        if not owners:
+            owners = [col for col in obj.users_collection if col in scene_collections]
+        if len(owners) != 1:
+            raise ValueError(f'Select an unambiguous asset collection for {obj.name}')
+        packs.setdefault(owners[0], []).append(obj)
+    return sorted(packs.items(), key=lambda item: item[0].name.casefold())
+
+
+@contextmanager
+def selected_collection_copy(collection, meshes):
+    """Clean export-only object copies; never include unselected collection siblings."""
+    originals = [(obj, obj.name, obj.matrix_world.copy()) for obj in meshes]
+    copies, temporary = {}, None
+    with ExitStack() as holds:
+        name = collection.name
+        holds.enter_context(reserved_name(bpy.data.collections, name))
+        try:
+            temporary = bpy.data.collections.new(name)
+            for obj, name, matrix in originals:
+                holds.enter_context(reserved_name(bpy.data.objects, name))
+                copy = obj.copy()
+                copy.name = name
+                temporary.objects.link(copy)
+                copies[obj] = copy
+            for obj, name, matrix in originals:
+                copy = copies[obj]
+                copy.parent = copies.get(obj.parent)
+                copy.constraints.clear()
+                copy.animation_data_clear()
+                copy.matrix_world = matrix
+            yield temporary
+        finally:
+            for copy in copies.values():
+                bpy.data.objects.remove(copy, do_unlink=True)
+            if temporary is not None:
+                bpy.data.collections.remove(temporary)
+
+
 @contextmanager
 def enabled_for_export(collection):
     """Enable viewport/render on the collection tree and its meshes; restore the working file afterwards."""
@@ -214,11 +265,29 @@ def export_collection_blend(collection, filepath, pack_textures=True, reset_y=Fa
     return len(packed)
 
 
+def export_selected_collection_blend(collection, meshes, destination, pack_textures=True, reset_y=False):
+    """Atomically replace one selected-asset blend, retaining its collection name."""
+    destination = Path(destination)
+    destination.parent.mkdir(exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.selected-', suffix='.blend', dir=destination.parent)
+    os.close(fd)
+    try:
+        with selected_collection_copy(collection, meshes) as subset:
+            export_collection_blend(subset, temporary, pack_textures, reset_y=reset_y)
+        os.replace(temporary, destination)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+
+
 class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
     bl_idname = 'object.polygroups_phase2_export_blend'
     bl_label = 'Export Blend Files'
     bl_description = ('Save each *_Collection asset as a separate clean blend (Scene, Camera, Light and one '
                       'collection with only its own textures packed) to the !Blend folder beside the saved blend')
+
+    selected_only: bpy.props.BoolProperty(name='Selected Meshes Only', default=False,
+        options={'SKIP_SAVE'}, description='Export only selected meshes, grouped by asset, replacing existing blend files')
 
     @classmethod
     def poll(cls, context):
@@ -230,11 +299,22 @@ class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
             p.phase2_blend_export_status = 'Save the working blend file first'
             self.report({'WARNING'}, p.phase2_blend_export_status)
             return {'CANCELLED'}
-        collections = asset_collections(context.scene)
-        if p.phase2_blend_export_generated:
-            collections += generated_collections(context.scene)
+        selected_packs = {}
+        if self.selected_only:
+            try:
+                selected_packs = dict(selected_asset_packs(context))
+            except ValueError as error:
+                p.phase2_blend_export_status = str(error)
+                self.report({'ERROR'}, str(error))
+                return {'CANCELLED'}
+            collections = list(selected_packs)
+        else:
+            collections = asset_collections(context.scene)
+            if p.phase2_blend_export_generated:
+                collections += generated_collections(context.scene)
         if not collections:
-            p.phase2_blend_export_status = 'No *_Collection assets in the scene'
+            p.phase2_blend_export_status = ('Select at least one mesh' if self.selected_only else
+                                           'No *_Collection assets in the scene')
             self.report({'WARNING'}, p.phase2_blend_export_status)
             return {'CANCELLED'}
         folder = Path(bpy.data.filepath).parent / BLEND_FOLDER
@@ -248,8 +328,13 @@ class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
             folder.mkdir(exist_ok=True)
             for collection, name in zip(collections, names):
                 p.phase2_blend_export_status = f'Exporting {done + 1}/{len(collections)}: {name}'
-                export_collection_blend(collection, str(folder / f'{name}.blend'), p.phase2_blend_export_pack,
-                                        reset_y=p.phase2_blend_export_reset_y and collection.name.endswith(COLLECTION_SUFFIX))
+                destination = folder / f'{name}.blend'
+                reset_y = p.phase2_blend_export_reset_y and collection.name.endswith(COLLECTION_SUFFIX)
+                if self.selected_only:
+                    export_selected_collection_blend(collection, selected_packs[collection], destination,
+                                                     p.phase2_blend_export_pack, reset_y=reset_y)
+                else:
+                    export_collection_blend(collection, str(destination), p.phase2_blend_export_pack, reset_y=reset_y)
                 done += 1
         except (RuntimeError, ValueError, OSError) as error:
             p.phase2_blend_export_status = f'Export failed after {done}/{len(collections)}: {error}'

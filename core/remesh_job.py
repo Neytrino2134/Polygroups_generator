@@ -11,6 +11,7 @@ import bpy
 
 from .remesh_cursor import RemeshCursor
 from .material_seams import mark_material_boundary_seams
+from .mesh_ngons import triangulate_result_ngons
 
 
 def next_retopo_name(source_name, result=None):
@@ -162,6 +163,8 @@ class RemeshJob:
                 source.name = first_name
             else:
                 self.state.report({"WARNING"}, f"Source name kept: {first_name} already exists")
+        for obj in meshes:
+            triangulate_result_ngons(obj)
         disable_previous_remesh(self.source)
         if self.cursor is not None:
             self.cursor.close()
@@ -259,6 +262,7 @@ class VoxelRemeshJob:
                 raise RuntimeError(f"Angle Based unwrap failed for {result.name}")
             if "FINISHED" not in bpy.ops.object.polygroups_apply_checker_material():
                 raise RuntimeError(f"Applying checker material failed for {result.name}")
+        triangulate_result_ngons(result)
         disable_previous_remesh(source)
         context.view_layer.update()
         return [result]

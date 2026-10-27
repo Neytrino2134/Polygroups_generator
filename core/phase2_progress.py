@@ -51,8 +51,21 @@ def draw_start(layout, context, p):
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_restore
     sub.label(text='Restore Mode')
-    sub.prop(p, 'phase2_run_mode', expand=True)
+    modes = sub.row(align=True)
+    for value, label in (('IMPORT', 'Import Only'), ('REBAKE', 'Import + Rebake')):
+        mode = modes.operator('wm.context_set_enum', text=label,
+                              depress=(p.phase2_run_mode == 'IMPORT') == (value == 'IMPORT'))
+        mode.data_path = 'scene.polygroups_model_preparation_settings.phase2_run_mode'
+        mode.value = value
     sub.prop(p, 'phase2_run_mid')
+    resculpt = sub.column(align=True)
+    resculpt.enabled = p.phase2_run_mode != 'IMPORT'
+    resculpt.prop(p, 'phase2_run_resculpt_retopo01')
+    steps = resculpt.column(align=True)
+    steps.enabled = p.phase2_run_resculpt_retopo01
+    steps.prop(p, 'phase2_run_high_remesh')
+    steps.prop(p, 'phase2_run_repair_resculpt')
+    steps.prop(p, 'phase2_run_bake_resculpt')
     options.separator(type='LINE')
     options.prop(p, 'phase2_run_prepare')
     options.prop(p, 'phase2_run_engine', expand=True)
@@ -80,8 +93,19 @@ def draw_start(layout, context, p):
     sub.enabled = p.phase2_run_render
     sub.prop(p, 'phase2_run_transparent')
     options.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
+    manual = options.column(align=True)
+    manual.enabled = not context.scene.polygroups_baking_settings.bake_task_is_running
+    rebake = manual.operator('object.polygroups_rebake_final_mesh', text='ReBake Final Mesh', icon='FILE_REFRESH')
+    rebake.create_lods = p.phase2_rebake_create_lods
+    rebake.export_selected = p.phase2_rebake_create_lods and p.phase2_rebake_export_selected
+    manual.prop(p, 'phase2_rebake_create_lods')
+    exports = manual.column(align=True)
+    exports.enabled = p.phase2_rebake_create_lods
+    exports.prop(p, 'phase2_rebake_export_selected')
     if p.phase2_pipeline_state:
         draw_pipeline_progress(layout, context, p)
+    recovery = layout.row()
+    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
 
 
 class PipelineOverlay:

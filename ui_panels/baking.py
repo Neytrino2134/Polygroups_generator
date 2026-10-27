@@ -201,6 +201,11 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 text=t(context, "prepare_and_bake"),
                 icon="RENDER_RESULT",
             )
+            auto_bake_row.operator(
+                "object.polygroups_rebake_final_mesh",
+                text=t(context, "rebake_final_mesh"),
+                icon="FILE_REFRESH",
+            )
 
         content = draw_topic(layout, context, "bake_3", 'Bake Operations', "RENDER_STILL")
         if content is not None:

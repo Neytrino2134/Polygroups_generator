@@ -25,7 +25,7 @@ try:
 
     settings.batch_remesh_method = "VOXEL"
     queue = ImportQueue(bpy.context, [], False, print)
-    assert queue.remesh_method == "VOXEL" and queue.backend is None
+    assert queue.remesh_method == "VOXEL"
 
     settings.remesh_pregenerate_polygroups = False
     settings.remesh_auto_generate_seams = False

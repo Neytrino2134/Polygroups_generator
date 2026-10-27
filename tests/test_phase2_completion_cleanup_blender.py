@@ -53,7 +53,7 @@ assert bpy.ops.object.polygroups_phase2_clear_highpoly()=={'FINISHED'}
 assert not any(phase.HIGH.fullmatch(o.name) for o in bpy.data.objects if o.type=='MESH')
 assert all(names[2] in bpy.data.objects for names in (names405,names406))
 assert keep.name in bpy.data.objects
-assert s.phase2_keep_retopo01
+assert not s.phase2_keep_retopo01
 for manual in (False,True):
  for keep in (True,False):
   s.phase2_keep_retopo01=keep

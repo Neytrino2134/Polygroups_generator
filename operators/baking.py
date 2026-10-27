@@ -111,6 +111,7 @@ from .bake_merge import (
 
 
 _BAKE_CURSOR_HANDLE = None
+_ACTIVE_BAKE_TASK = None
 _BAKE_CURSOR_POSITION = (32, 32)
 
 
@@ -743,12 +744,17 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO", "INTERNAL"}
 
     prepare_materials: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    rebake_final: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    rebake_create_lods: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    rebake_export_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
 
     @classmethod
     def poll(cls, context):
         settings = context.scene.polygroups_baking_settings
         target = _active_mesh(context)
-        return not settings.bake_task_is_running and target is not None and bool(_source_meshes(context, target))
+        from .rebake_final import MID_PATTERN
+        return (not settings.bake_task_is_running and target is not None
+                and (bool(_source_meshes(context, target)) or bool(MID_PATTERN.fullmatch(target.name))))
 
     def _set_status(self, context, stage, progress, message):
         settings = context.scene.polygroups_baking_settings
@@ -759,7 +765,9 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         _redraw_bake_ui(context)
 
     def _finish(self, context, success, message, cancelled=False):
-        global _BAKE_CURSOR_HANDLE
+        global _BAKE_CURSOR_HANDLE, _ACTIVE_BAKE_TASK
+        if getattr(self, '_task_finished', False):
+            return self._task_result
         settings = context.scene.polygroups_baking_settings
         self.artifact_repair = None
         projection = getattr(self, 'projection', None)
@@ -776,6 +784,45 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         self.render_visibility = {}
         if success:
             _disable_highpoly_sources_after_bake(settings, self.sources)
+        session = getattr(self, 'final_rebake_session', None)
+        if session is not None:
+            try:
+                if success:
+                    session.save()
+            except Exception as error:
+                success, cancelled = False, False
+                message = f'Final rebake save failed: {error}'
+            try:
+                session.close(success)
+            except Exception as error:
+                success, cancelled = False, False
+                message = f'Final rebake cleanup failed: {error}'
+            if success and session.lod_job is not None:
+                try:
+                    settings.bake_task_message = 'ReBake complete; creating final LODs'
+                    generated = session.lod_job.run(context, self.report)
+                    message = 'ReBake finished; final LODs created'
+                except Exception as error:
+                    success, cancelled = False, False
+                    message = f'ReBake succeeded; LOD creation failed: {error}'
+            if success and session.export_selected:
+                try:
+                    from .rebake_export import export_rebaked_asset
+                    settings.bake_task_message = 'LODs complete; exporting selected FBX / Blend'
+                    export_rebaked_asset(context, session.target, generated, session.export_collection,
+                                         session.lod_job.engine, self.report)
+                    message = 'ReBake finished; LODs created; FBX and Blend exported'
+                except Exception as error:
+                    success, cancelled = False, False
+                    message = f'ReBake and LODs succeeded; export failed: {error}'
+            try:
+                session.cleanup_import()
+            except Exception as error:
+                success, cancelled = False, False
+                message = f'ReBake source cleanup failed: {error}'
+            self.final_rebake_session = None
+            settings.bake_task_stage = 'DONE' if success else ('CANCELLED' if cancelled else 'FAILED')
+            settings.bake_task_message = message
         if getattr(self, "_timer", None) is not None:
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
@@ -784,8 +831,12 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             _BAKE_CURSOR_HANDLE = None
         context.window_manager.progress_end()
         _redraw_bake_ui(context)
+        self._task_finished = True
+        self._task_result = {"FINISHED" if success else "CANCELLED"}
+        if _ACTIVE_BAKE_TASK is self:
+            _ACTIVE_BAKE_TASK = None
         self.report({"INFO" if success or cancelled else "ERROR"}, message)
-        return {"FINISHED" if success else "CANCELLED"}
+        return self._task_result
 
     def _launch_pass(self, context, node, bake_type):
         _set_active_bake_node(self.target, node)
@@ -905,7 +956,8 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             self.stage = "SAVE"
         elif self.stage == "SAVE":
             self._set_status(context, self.stage, 95, "Saving bake textures")
-            if self.prepare_materials and self.settings.auto_save_textures_after_bake:
+            if (getattr(self, 'final_rebake_session', None) is None
+                    and self.prepare_materials and self.settings.auto_save_textures_after_bake):
                 bpy.ops.object.polygroups_save_bake_textures()
             self.stage = "FINALIZE"
         elif self.stage == "FINALIZE":
@@ -914,18 +966,39 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         return None
 
     def invoke(self, context, event):
-        global _BAKE_CURSOR_HANDLE, _BAKE_CURSOR_POSITION
+        global _BAKE_CURSOR_HANDLE, _BAKE_CURSOR_POSITION, _ACTIVE_BAKE_TASK
         self.settings = context.scene.polygroups_baking_settings
         if not self.settings.bake_base_color and not self.settings.bake_normal:
             self.report({"WARNING"}, "Enable at least one bake pass")
             return {"CANCELLED"}
+        self.final_rebake_session = None
+        if self.rebake_final:
+            from .rebake_final import FinalRebakeSession
+            try:
+                session = FinalRebakeSession(context, _active_mesh(context), self.settings,
+                                            create_lods=self.rebake_create_lods,
+                                            export_selected=self.rebake_export_selected)
+                self.final_rebake_session = session
+                session.begin()
+            except Exception as error:
+                if self.final_rebake_session is not None:
+                    self.final_rebake_session.close(False)
+                    self.final_rebake_session.cleanup_import()
+                    self.final_rebake_session = None
+                self.report({'ERROR'}, f'ReBake Final Mesh: {error}')
+                return {'CANCELLED'}
         self.target = _active_mesh(context)
         self.sources = _source_meshes(context, self.target)
+        if not self.sources:
+            self.report({'ERROR'}, 'Select a Highpoly source for baking')
+            return {'CANCELLED'}
         self.render_visibility = _isolate_bake_render_objects(self.target, self.sources)
         self.stage = "FIX_INDEX"
         self.wait_ticks = 0
         self.artifact_repair = None
         self.cancel_requested = False
+        self._task_finished = False
+        _ACTIVE_BAKE_TASK = self
         self.settings.bake_task_is_running = True
         self.settings.bake_task_stage = "STARTING"
         self.settings.bake_task_progress = 1.0

@@ -296,10 +296,14 @@ def draw_mesh_editing(layout, context, prefix, loose_parts=False):
     auto = draw_topic(layout, context, prefix + "_auto", "mesh_edit_auto", "MODIFIER")
     if auto is not None:
         column = auto.column(align=True)
-        for prop in ("fold_repair_folds", "fold_repair_degenerate", "fold_repair_zero_area", "fold_repair_selected_only"):
+        for prop in ("fold_repair_folds", "fold_repair_degenerate", "fold_repair_zero_area", "fold_repair_stretched_triangles"):
             column.prop(settings, prop, text=t(context, prop))
+        if settings.fold_repair_stretched_triangles:
+            column.prop(settings, 'fold_repair_stretch_ratio', text=t(context, 'fold_repair_stretch_ratio'))
+        column.prop(settings, 'fold_repair_selected_only', text=t(context, 'fold_repair_selected_only'))
         row = column.row(align=True)
-        row.enabled = settings.fold_repair_folds or settings.fold_repair_degenerate or settings.fold_repair_zero_area
+        row.enabled = (settings.fold_repair_folds or settings.fold_repair_degenerate or settings.fold_repair_zero_area
+                       or settings.fold_repair_stretched_triangles)
         for action, label, icon in (("SELECT", "fold_repair_find", "VIEWZOOM"),
                                     ("REPAIR", "fold_repair_apply", "MOD_TRIANGULATE")):
             op = row.operator("mesh.polygroups_repair_mesh_folds", text=t(context, label), icon=icon)
@@ -307,6 +311,8 @@ def draw_mesh_editing(layout, context, prefix, loose_parts=False):
             op.fix_folds = settings.fold_repair_folds
             op.fix_degenerate = settings.fold_repair_degenerate
             op.fix_zero_area = settings.fold_repair_zero_area
+            op.fix_stretched_triangles = settings.fold_repair_stretched_triangles
+            op.stretched_triangle_ratio = settings.fold_repair_stretch_ratio
             op.selected_only = settings.fold_repair_selected_only
         quality = column.operator("mesh.polygroups_repair_mesh_folds",
                                   text=t(context, "fold_repair_quality"), icon="UV")

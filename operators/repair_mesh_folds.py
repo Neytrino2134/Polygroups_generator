@@ -1,4 +1,4 @@
-"""Inspect or repair local folded pockets and collapsed edges transactionally."""
+"""Inspect or repair folds, collapsed edges and singleton UV outliers transactionally."""
 import bmesh
 import bpy
 
@@ -9,8 +9,8 @@ from ..localization import t
 class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
     bl_idname = 'mesh.polygroups_repair_mesh_folds'
     bl_label = 'Repair Mesh Folds'
-    bl_description = ('Repair local folded pockets and zero-length edges while preserving '
-                      'the surrounding mesh, UV islands and seams')
+    bl_description = ('Repair local folds, zero-length edges and enabled singleton triangle '
+                      'UV outliers while preserving surrounding topology and UV seams')
     bl_options = {'REGISTER', 'UNDO'}
 
     action: bpy.props.EnumProperty(items=(
@@ -18,13 +18,18 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
         ('SELECT_QUALITY', 'Find Thin / UV', 'Inspect thin triangles and distorted UV without changing them'),
         ('SELECT', 'Find Problems', 'Select repairable patches without changing geometry')),
         default='REPAIR')
-    fix_folds: bpy.props.BoolProperty(name='Repair Folded Pockets', default=True)
+    fix_folds: bpy.props.BoolProperty(name='Repair Folded Pockets', default=True,
+        description='Repair folded pockets and merge flat, twisted or crossed-quad tips without moving neighboring vertices')
     fix_degenerate: bpy.props.BoolProperty(name='Merge Coincident Vertices', default=True,
         description='Collapse only near-zero edges belonging to degenerate triangles')
     fix_zero_area: bpy.props.BoolProperty(name='Repair Zero Area at UV Seams', default=False,
         description='Merge identical endpoints of zero-area faces; preserve corner UVs and union seam/sharp flags')
     selected_only: bpy.props.BoolProperty(name='Selected Area Only', default=False,
         description='Use selected defect faces as seeds; include the minimal surrounding patch')
+    fix_stretched_triangles: bpy.props.BoolProperty(name='Merge Stretched Single Triangles', default=True,
+        description='Find single-face triangle UV islands with extreme scale/stretch and weld their vertices to the face center when the surrounding surface stays valid')
+    stretched_triangle_ratio: bpy.props.FloatProperty(name='Triangle Stretch Ratio', default=50, min=2, max=10000,
+        description='Minimum UV anisotropy or linear texel-scale ratio to neighboring faces for a singleton triangle')
     thin_quality: bpy.props.FloatProperty(name='Thin Triangle Quality', default=.01, min=.000001, max=.5,
         description='Scale-independent quality: 1 is equilateral, 0 is degenerate')
     uv_stretch: bpy.props.FloatProperty(name='UV Stretch Ratio', default=50, min=1.1, max=10000,
@@ -56,7 +61,9 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
                 result = dict(affected=affected, folds=0, collapsed=0, remaining_degenerate=0)
             else:
                 result = repair_local_folds(work, self.fix_folds, self.fix_degenerate,
-                                            self.selected_only, fix_zero_area=self.fix_zero_area)
+                    self.selected_only, fix_zero_area=self.fix_zero_area,
+                    fix_stretched_triangles=self.fix_stretched_triangles,
+                    stretched_triangle_ratio=self.stretched_triangle_ratio)
             if self.action in {'SELECT', 'SELECT_QUALITY'}:
                 source.select_mode = {'FACE'}
                 context.tool_settings.mesh_select_mode = (False, False, True)
@@ -73,7 +80,7 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
                 else:
                     source.to_mesh(obj.data)
                     bpy.ops.object.mode_set(mode='EDIT')
-            elif result['folds'] or result['collapsed']:
+            elif result['folds'] or result['collapsed'] or result.get('stretched'):
                 # Only the validated working mesh reaches the user's datablock.
                 if edit:
                     bpy.ops.object.mode_set(mode='OBJECT')
@@ -86,6 +93,7 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
             else:
                 self.report({'INFO'}, t(context, 'fold_repair_result',
                     folds=result['folds'], collapsed=result['collapsed'],
+                    stretched=result.get('stretched', 0),
                     zero=result.get('remaining_zero_triangles', 0),
                     remaining=max(0, result['remaining_degenerate'] - result.get('remaining_zero_triangles', 0)),
                     action=t(context, 'fold_repair_found' if self.action == 'SELECT' else 'fold_repair_fixed')))

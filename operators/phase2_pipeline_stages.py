@@ -11,9 +11,16 @@ def restore(run, context):
     from . import phase2_processing as phase
     p = run.settings
     mode = p.phase2_run_mode
-    for name, value in dict(phase2_auto_bake=mode != 'IMPORT',
-            phase2_mesh_auto_repair=mode != 'IMPORT', phase2_repack_after_repair=mode != 'IMPORT',
-            phase2_resculpt_retopo01=mode == 'RESCULPT', phase2_autobake_retopo01=mode == 'RESCULPT',
+    # Old scenes can still store the former RESCULPT restore mode. The new
+    # switch controls resculpting independently of that saved enum value.
+    rebake = mode != 'IMPORT'
+    resculpt = rebake and p.phase2_run_resculpt_retopo01
+    for name, value in dict(phase2_auto_bake=rebake,
+            phase2_mesh_auto_repair=rebake, phase2_repack_after_repair=rebake,
+            phase2_resculpt_retopo01=resculpt,
+            phase2_high_remesh_before_resculpting=resculpt and p.phase2_run_high_remesh,
+            phase2_repair_after_resculpt=resculpt and p.phase2_run_repair_resculpt,
+            phase2_autobake_retopo01=resculpt and p.phase2_run_bake_resculpt,
             phase2_mid_remesh=p.phase2_run_mid).items():
         run.override(p, name, value)
     entries = phase.scan(context, run.report)
@@ -21,7 +28,7 @@ def restore(run, context):
         raise ValueError('No separated Generated collections found')
     if p.phase2_clear_generated:
         phase.clear_generated_collections(context.scene)
-    queue = phase.Phase2Queue(context, entries, mode != 'IMPORT', p.phase2_repair_artifacts, run.report)
+    queue = phase.Phase2Queue(context, entries, rebake, p.phase2_repair_artifacts, run.report)
     phase.ACTIVE_PHASE2 = queue
     queue.begin()
     started = None
@@ -45,10 +52,11 @@ def restore(run, context):
             bake = context.scene.polygroups_baking_settings
             progress = bake.bake_task_progress if 'BAKE' in queue.stage and bake.bake_task_is_running else 0
             detail = queue.stage
-            if queue.stage == 'MID_REMESH_WAIT':
+            if queue.stage in {'MID_REMESH_WAIT', 'RETOPO01_HIGH_REMESH_WAIT'}:
                 detail = p.phase2_status
                 progress = getattr(queue.mid_remesh.job, 'pipeline_progress', 0) * 100
             stage_order = ['RESTORE', 'MID_REMESH_WAIT', 'BAKE_START', 'BAKE_WAIT',
+                           'RETOPO01_HIGH_REMESH_WAIT',
                            'RETOPO01_RESCULPT', 'RETOPO01_PREPARE', 'RETOPO01_BAKE_START', 'RETOPO01_BAKE_WAIT']
             within = (stage_order.index(queue.stage) + progress/100)/len(stage_order) if queue.stage in stage_order else 0
             run.detail(progress, detail)

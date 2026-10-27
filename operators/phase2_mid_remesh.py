@@ -5,6 +5,7 @@ import bpy
 from ..core.remesh_job import RemeshJob, remesh_backend
 from ..core.remesh_defaults import get_remesh_preset_counts
 from ..pin_edges import pin_layer
+from ..core.mesh_ngons import ngon_count, triangulated_ngon_copy
 
 
 def smart_seams_22(context, obj):
@@ -42,21 +43,37 @@ def smart_seams_22(context, obj):
 
 
 class Phase2MidRemesh:
-    def __init__(self, context, collection, report):
+    def __init__(self, context, collection, report, source=None, preset='MID', result_name=None):
         from .phase2_processing import LOW
         candidates = [(int(m[1]), obj) for obj in collection.all_objects if obj.type=='MESH'
                       and obj.name.lower().startswith('retopo_') and (m := LOW.fullmatch(obj.name))]
         if not candidates:raise ValueError('MID Remesh requires a numbered Retopo mesh')
-        self.source = max(candidates,key=lambda item:item[0])[1]
+        self.source = source or max(candidates,key=lambda item:item[0])[1]
+        if self.source.type != 'MESH' or not any(obj == self.source for obj in collection.all_objects):
+            raise ValueError('Remesh source must be a mesh in the Generated collection')
+        if preset not in {'MID', 'HIGH'}:
+            raise ValueError(f'Unsupported remesh preset: {preset}')
+        if result_name and bpy.data.objects.get(result_name) is not None:
+            raise ValueError(f'Remesh output already exists: {result_name}')
+        self.preset, self.result_name = preset, result_name
         self.source_visibility = self.source.hide_viewport,self.source.hide_render,self.source.hide_get()
         self.job = None;self.saved = [];self.finished = False
         self.report = report
 
     def start(self, context):
         backend = remesh_backend(context)
+        if self.preset == 'HIGH' and ngon_count(self.source.data):
+            if self.source.library or self.source.data.library or any(
+                    mod.type == 'MULTIRES' and mod.total_levels for mod in self.source.modifiers):
+                raise RuntimeError('HIGH Remesh requires local Retopo_01 n-gons without existing Multires levels')
+            original_mesh = self.source.data
+            prepared_mesh = triangulated_ngon_copy(original_mesh)
+            self.source.data = prepared_mesh
+            if original_mesh.users == 0 and not original_mesh.library:
+                bpy.data.meshes.remove(original_mesh)
         smart_seams_22(context,self.source)
         p=context.scene.polygroups_model_preparation_settings;q=context.scene.qremesher
-        for settings,name,value in ((q,'target_count',dict(get_remesh_preset_counts(context))['MID']),
+        for settings,name,value in ((q,'target_count',dict(get_remesh_preset_counts(context))[self.preset]),
                                     (q,'autodetect_hard_edges',False),(p,'remesh_auto_unwrap_checker',False)):
             self.saved.append((settings,name,getattr(settings,name)));setattr(settings,name,value)
         self.job = RemeshJob(backend,self.report)
@@ -70,11 +87,15 @@ class Phase2MidRemesh:
     def finish(self, context):
         objects=self.job.finish(context)
         meshes=[obj for obj in objects if obj.type=='MESH']
-        if len(meshes)!=1:raise RuntimeError('MID Remesh must produce one Retopo mesh')
+        if len(meshes)!=1:raise RuntimeError(f'{self.preset} Remesh must produce one mesh')
         result=meshes[0]
         smart_seams_22(context,result)
         if 'FINISHED' not in bpy.ops.object.polygroups_unwrap_angle_based('EXEC_DEFAULT'):
-            raise RuntimeError('MID Remesh UV unwrap failed')
+            raise RuntimeError(f'{self.preset} Remesh UV unwrap failed')
+        if self.result_name:
+            result.name = self.result_name
+            if result.name != self.result_name:
+                raise RuntimeError(f'Remesh output name is occupied: {self.result_name}')
         self.finished=True
         self.restore()
         return result
