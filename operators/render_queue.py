@@ -924,8 +924,8 @@ def _set_collection_enabled(collection, enabled):
         layer_collection.hide_viewport = not enabled
 
 
-def _prepare_transparent_background(settings):
-    if not settings.transparent_background:
+def _prepare_transparent_background(settings, force=False):
+    if not settings.transparent_background and not force:
         return
 
     bpy.context.scene.render.film_transparent = True
@@ -1331,14 +1331,31 @@ def _render_current_job(context, settings, job):
         bpy.ops.render.render(**options)
 
 
+def job_output_paths(settings, job):
+    if job.get('texture_kind'):
+        return [job['output_path']]
+    paths = []
+    if not job.get('skip_scene_render'):
+        paths.append(job['output_path'])
+    if settings.transparent_background or job.get('skip_scene_render'):
+        paths.append(job.get('transparent_output_path') or _transparent_output_path(job['output_path']))
+    if settings.freestyle_edges and settings.freestyle_as_render_pass:
+        paths = [item for path in paths for item in (path,
+                 (job.get('freestyle_output_path') if path == job['output_path'] else None) or _freestyle_pass_path(path),
+                 (job.get('freestyle_overlay_path') if path == job['output_path'] else None) or _freestyle_overlay_path(path))]
+    return paths
+
+
 def _render_current_job_steps(context, settings, job):
-    """Render the scene image, then an isolated transparent companion image."""
+    """Render enabled scene/transparent variants, or only the transparent image."""
     if job.get("texture_kind"):
         _render_texture_job(context, settings, job)
         return
-    context.scene.render.film_transparent = False
-    yield from _render_single_job_steps(context, settings, job)
-    if not settings.transparent_background:
+    skip_scene = bool(job.get('skip_scene_render'))
+    if not skip_scene:
+        context.scene.render.film_transparent = False
+        yield from _render_single_job_steps(context, settings, job)
+    if not settings.transparent_background and not skip_scene:
         return
 
     snapshot = _snapshot_visibility()
@@ -1350,7 +1367,7 @@ def _render_current_job_steps(context, settings, job):
         "freestyle_overlay_path": _freestyle_overlay_path(transparent_path),
     }
     try:
-        _prepare_transparent_background(settings)
+        _prepare_transparent_background(settings, force=skip_scene)
         yield from _render_single_job_steps(context, settings, transparent_job)
     finally:
         _restore_visibility(snapshot)
@@ -1587,11 +1604,8 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
             return {"FINISHED"}
 
         job = queue[settings.queue_index]
-        output_exists = os.path.exists(job.get("output_path", ""))
-        transparent_exists = bool(job.get("texture_kind")) or not settings.transparent_background or os.path.exists(
-            job.get("transparent_output_path") or _transparent_output_path(job.get("output_path", ""))
-        )
-        if settings.skip_existing and not settings.overwrite_existing and output_exists and transparent_exists:
+        outputs = job_output_paths(settings, job)
+        if settings.skip_existing and not settings.overwrite_existing and all(os.path.exists(path) for path in outputs):
             settings.queue_index += 1
             _sync_progress(settings)
             return {"RUNNING_MODAL"}
@@ -1604,7 +1618,7 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
 
         settings.current_collection = job.get("collection", "")
         settings.current_object = job.get("object", "")
-        settings.last_output_path = job.get("output_path", "")
+        settings.last_output_path = outputs[0]
         settings.status = f"Rendering {settings.current_object}"
         try:
             with prepared_queue_job(context, settings, job):

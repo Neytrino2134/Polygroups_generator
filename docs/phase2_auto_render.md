@@ -7,6 +7,8 @@ recursively. Default selection is *_MID and *_LOD0; LOD0 renders use LOW filenam
 ## Defaults
 
 - Quality and Output: 16:9, 2K = 2048 x 1152, 100%, Eevee, PNG.
+- Render Transparent PNG (Without Scene): on.
+- Skip Renders with Scene: off; enable to produce only the transparent mesh images.
 - Scene and Camera Setup: on; Auto Frame Camera: on, target 7.5% silhouette margins.
 - Mesh Selection MID + LOD0: on.
 - Freestyle: on; As Render Pass: on; color #E8E8E8FF (stored scene-linear).
@@ -19,6 +21,19 @@ are respected; transparent companions use the Auto Render checkbox and prefix. T
 uses the current section 13 mesh filter. Texture output requires linked Base
 Color and Normal images; unsupported/missing pairs are skipped by the existing
 Prepare Textures operator.
+
+`Skip Renders with Scene` is available in Auto Render and beside Render
+Transparent in Start Phase 2. Enabling it enables transparency in both sections
+and disables the redundant transparency toggle while transparent-only mode is
+active. Runtime also enforces this for inconsistent saved flags. Scene/camera
+setup still runs when enabled; only the opaque render pass is skipped.
+
+Auto Render marks its queue jobs with `skip_scene_render`; the common backend
+then directly renders the existing `_transparent.png` variant. Hero, Multiview
+and transparent Freestyle pass/overlay output retain their settings. Texture
+previews retain their existing transparent behavior. Skip Existing checks only
+the outputs enabled for that job, without requiring an omitted scene image.
+Manual section-13 jobs without this flag retain their existing behavior.
 
 ## Scene and camera
 
@@ -63,6 +78,11 @@ stop, error, file load, Undo/Redo or add-on unregister. Prepared texture planes
 and the configured studio remain available for use in section 13.
 
 ## Validation
+
+- `test_auto_render_transparent_only_blender.py`: actual PNGs with/without the
+  scene pass and alpha-channel checks, default transparency, skip-existing
+  without an opaque counterpart, Freestyle/texture output planning, UI, and the
+  same transparent-only path through Start Phase 2. Verified in Blender 5.2 LTS.
 
 Blender 5.2.2:
 - test_phase2_auto_render_blender.py: real render of two differently sized assets,

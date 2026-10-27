@@ -165,6 +165,7 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_pipeline_') as directory
     p.phase2_blend_export_generated = True
     p.phase2_export_glb = p.phase2_export_fbx = True
     p.phase2_auto_textures = p.phase2_auto_multiview = p.phase2_auto_freestyle = False
+    p.phase2_auto_transparent = False  # Verify restoration of a user override after the pipeline.
     p.phase2_auto_mv_hero = False
     s.smart_lods_count = 2
     s.smart_lods_target_1 = 60; s.smart_lods_target_2 = 30

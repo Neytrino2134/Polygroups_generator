@@ -23,7 +23,7 @@ def configure_auto_render(context):
     s.render_engine = 'EEVEE'
     s.image_format = 'PNG'
     s.texture_render_mode = 'COMBINED'
-    s.transparent_background = p.phase2_auto_transparent
+    s.transparent_background = p.phase2_auto_transparent or p.phase2_auto_skip_scene
     s.scene_collection_prefix = p.phase2_auto_scene_prefix.strip() or 'Scene'
     if p.phase2_auto_selection:
         s.render_low = False
@@ -136,7 +136,8 @@ def scan_jobs(context, collections, include_textures):
         result = bpy.ops.object.polygroups_scan_render_queue('EXEC_DEFAULT')
         if 'FINISHED' not in result:
             raise RuntimeError('Scan Queue failed')
-        return [job for job in rq._load_queue(settings) if job['collection'] in names
+        return [{**job, 'skip_scene_render': context.scene.polygroups_model_preparation_settings.phase2_auto_skip_scene
+                 and not job.get('texture_kind')} for job in rq._load_queue(settings) if job['collection'] in names
                 and (include_textures or not job.get('texture_kind'))]
     finally:
         settings.is_running = True
@@ -281,16 +282,9 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                         self.stop_requested = True
                         return
                     s.current_collection, s.current_object = col.name, job['object']
-                    s.last_output_path = job['output_path']
+                    outputs = rq.job_output_paths(s, job)
+                    s.last_output_path = outputs[0]
                     s.status = f'Rendering {job["object"]} / {job.get("view_mode") or job.get("texture_kind") or "Single"}'
-                    outputs = [job['output_path']]
-                    if s.freestyle_edges and s.freestyle_as_render_pass and not job.get('texture_kind'):
-                        outputs += [job['freestyle_output_path'], job['freestyle_overlay_path']]
-                    if s.transparent_background and not job.get('texture_kind'):
-                        transparent = job.get('transparent_output_path') or rq._transparent_output_path(job['output_path'])
-                        outputs.append(transparent)
-                        if s.freestyle_edges and s.freestyle_as_render_pass:
-                            outputs += [rq._freestyle_pass_path(transparent), rq._freestyle_overlay_path(transparent)]
                     skip = s.skip_existing and not s.overwrite_existing and all(os.path.exists(path) for path in outputs)
                     if not skip:
                         label = f'Asset {ordinal+1}/{len(assets)} | {col.name} | {job.get("view_mode") or job.get("texture_kind") or "Single"}'

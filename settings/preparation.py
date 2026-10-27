@@ -15,6 +15,11 @@ from .callbacks import (
 )
 
 
+def _auto_skip_scene_update(self, context):
+    if self.phase2_auto_skip_scene:
+        self.phase2_auto_transparent = self.phase2_run_transparent = True
+
+
 class POLYGROUPS_PG_rebake_queue_item(bpy.types.PropertyGroup):
     target: bpy.props.PointerProperty(type=bpy.types.Object)
     state: bpy.props.StringProperty(default='PENDING', options={'SKIP_SAVE'})
@@ -289,7 +294,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
     phase2_show_auto_render: bpy.props.BoolProperty(name="Auto Render", default=True)
     phase2_auto_render_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
-    phase2_auto_transparent: bpy.props.BoolProperty(name="Render Transparent PNG (Without Scene)", default=False)
+    phase2_auto_transparent: bpy.props.BoolProperty(name="Render Transparent PNG (Without Scene)", default=True)
+    phase2_auto_skip_scene: bpy.props.BoolProperty(name="Skip Renders with Scene", default=False,
+        description="Render only transparent mesh images; skip the scene/background pass",
+        update=_auto_skip_scene_update)
     phase2_auto_scene_prefix: bpy.props.StringProperty(name="Prefix Scene", default="Scene",
         description="Studio collection prefix hidden for the additional transparent PNG")
     phase2_auto_scene: bpy.props.BoolProperty(name="Scene and Camera Setup", default=True)

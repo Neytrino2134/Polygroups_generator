@@ -91,7 +91,10 @@ def draw_start(layout, context, p):
     options.prop(p, 'phase2_run_render')
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_render
-    sub.prop(p, 'phase2_run_transparent')
+    mode = sub.row()
+    mode.enabled = not p.phase2_auto_skip_scene
+    mode.prop(p, 'phase2_run_transparent')
+    sub.prop(p, 'phase2_auto_skip_scene')
     options.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
     manual = options.column(align=True)
     manual.enabled = not context.scene.polygroups_baking_settings.bake_task_is_running
