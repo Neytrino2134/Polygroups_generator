@@ -96,8 +96,10 @@ def draw_start(layout, context, p):
     mode.prop(p, 'phase2_run_transparent')
     sub.prop(p, 'phase2_auto_skip_scene')
     options.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
+    recovery = layout.row()
+    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
     from ..ui_panels.common import draw_collapsible_box
-    rebake = draw_collapsible_box(layout, p, 'phase2_show_rebake', 'ReBake', 'FILE_REFRESH')
+    rebake = draw_collapsible_box(layout, p, 'phase2_show_rebake', 'Rebake Final Mesh', 'FILE_REFRESH')
     if rebake is not None:
         draw_rebake(rebake, context, p)
     rename = draw_collapsible_box(layout, p, 'phase2_show_rename_final', 'Rename Final Mesh', 'SORTALPHA')
@@ -115,8 +117,6 @@ def draw_start(layout, context, p):
         rename.label(text=p.phase2_rename_status)
     if p.phase2_pipeline_state:
         draw_pipeline_progress(layout, context, p)
-    recovery = layout.row()
-    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
 
 
 def draw_rebake(layout, context, p):
