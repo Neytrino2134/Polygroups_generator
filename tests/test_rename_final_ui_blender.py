@@ -39,6 +39,7 @@ def advance():
         bpy.ops.wm.quit_blender()
         return
     phase += 1
+    p.phase2_show_process_settings = phase in {2, 3}
     p.phase2_show_rebake = phase in {2, 3}
     p.phase2_show_rename_final = phase == 3
     for area in bpy.context.screen.areas:

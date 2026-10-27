@@ -178,6 +178,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     show_batch_start_mode: bpy.props.BoolProperty(name="Phase 1 - Import", default=True)
     phase2_show_files: bpy.props.BoolProperty(name="Blend File Manager", default=True)
     phase2_show_start: bpy.props.BoolProperty(name="Start Phase 2", default=True)
+    phase2_show_process_settings: bpy.props.BoolProperty(name='Process Settings', default=False)
     phase2_show_rebake: bpy.props.BoolProperty(name='Rebake Final Mesh', default=False)
     phase2_show_rename_final: bpy.props.BoolProperty(name='Rename Final Mesh', default=False)
     phase2_rename_asset: bpy.props.StringProperty(name='Asset Name', default='Asset')

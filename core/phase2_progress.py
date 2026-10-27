@@ -44,9 +44,43 @@ def draw_pipeline_progress(layout, context, p):
 
 
 def draw_start(layout, context, p):
-    options = layout.column(align=True)
-    options.enabled = not (p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
+    controls_enabled = not (p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
                            or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running)
+    start = layout.column(align=True)
+    start.enabled = controls_enabled
+    start.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
+    recovery = layout.row()
+    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
+    from ..ui_panels.common import draw_collapsible_box
+    from ..localization import t
+    process = draw_collapsible_box(layout, p, 'phase2_show_process_settings',
+                                   t(context, 'phase2_process_settings'), 'PREFERENCES')
+    if process is not None:
+        controls = process.column(align=True)
+        controls.enabled = controls_enabled
+        draw_process_settings(controls, context, p)
+    unity = p.phase2_run_engine == 'UNITY'
+    rebake = draw_collapsible_box(layout, p, 'phase2_show_rebake', 'Rebake Final Mesh', 'FILE_REFRESH')
+    if rebake is not None:
+        draw_rebake(rebake, context, p)
+    rename = draw_collapsible_box(layout, p, 'phase2_show_rename_final', 'Rename Final Mesh', 'SORTALPHA')
+    if rename is not None:
+        controls = rename.column(align=True)
+        controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
+        for name in ('phase2_rename_asset', 'phase2_rename_name_index', 'phase2_rename_version_index'):
+            controls.prop(p, name)
+        rename.label(text='All prepared asset collections in this scene', icon='INFO')
+        controls.prop(p, 'phase2_rename_fbx')
+        controls.prop(p, 'phase2_rename_blend')
+        controls.prop(p, 'phase2_rename_json')
+        rename.label(text='Export pipeline: ' + ('Unity' if unity else 'Unreal / FAB'))
+        controls.operator('object.polygroups_rename_final_meshes', text='Rename Final Meshes', icon='SORTALPHA')
+        rename.label(text=p.phase2_rename_status)
+    if p.phase2_pipeline_state:
+        draw_pipeline_progress(layout, context, p)
+
+
+def draw_process_settings(options, context, p):
     options.prop(p, 'phase2_run_restore')
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_restore
@@ -95,28 +129,6 @@ def draw_start(layout, context, p):
     mode.enabled = not p.phase2_auto_skip_scene
     mode.prop(p, 'phase2_run_transparent')
     sub.prop(p, 'phase2_auto_skip_scene')
-    options.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
-    recovery = layout.row()
-    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
-    from ..ui_panels.common import draw_collapsible_box
-    rebake = draw_collapsible_box(layout, p, 'phase2_show_rebake', 'Rebake Final Mesh', 'FILE_REFRESH')
-    if rebake is not None:
-        draw_rebake(rebake, context, p)
-    rename = draw_collapsible_box(layout, p, 'phase2_show_rename_final', 'Rename Final Mesh', 'SORTALPHA')
-    if rename is not None:
-        controls = rename.column(align=True)
-        controls.enabled = options.enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
-        for name in ('phase2_rename_asset', 'phase2_rename_name_index', 'phase2_rename_version_index'):
-            controls.prop(p, name)
-        rename.label(text='All prepared asset collections in this scene', icon='INFO')
-        controls.prop(p, 'phase2_rename_fbx')
-        controls.prop(p, 'phase2_rename_blend')
-        controls.prop(p, 'phase2_rename_json')
-        rename.label(text='Export pipeline: ' + ('Unity' if unity else 'Unreal / FAB'))
-        controls.operator('object.polygroups_rename_final_meshes', text='Rename Final Meshes', icon='SORTALPHA')
-        rename.label(text=p.phase2_rename_status)
-    if p.phase2_pipeline_state:
-        draw_pipeline_progress(layout, context, p)
 
 
 def draw_rebake(layout, context, p):
