@@ -109,9 +109,11 @@ def final_texture_outputs(target, settings):
 
 
 class FinalRebakeSession:
-    def __init__(self, context, target, settings, create_lods=False, export_selected=False, repair_mesh=False):
+    def __init__(self, context, target, settings, create_lods=False, export_selected=False, repair_mesh=False,
+                 delete_current_lods=False):
         self.context, self.target, self.settings = context, target, settings
         self.repair_mesh = repair_mesh
+        self.delete_lods_before_bake = delete_current_lods
         self.source_import = None
         self.source = None
         try:
@@ -124,6 +126,9 @@ class FinalRebakeSession:
         if repair_mesh and target.data.shape_keys:
             raise ValueError('ReBake Repair Mesh requires a mesh without shape keys')
         self.outputs, self.resolution = final_texture_outputs(target, settings)
+        if delete_current_lods:
+            from .rebake_lods import current_asset_lods
+            current_asset_lods(context, target)  # Read-only ownership preflight.
         from .rebake_lods import FinalRebakeLODs
         self.lod_job = FinalRebakeLODs(context, target) if create_lods else None
         self.export_selected = export_selected
@@ -163,6 +168,12 @@ class FinalRebakeSession:
     def set_attribute(self, owner, name, value):
         self.attributes.append((owner, name, getattr(owner, name)))
         setattr(owner, name, value)
+
+    def delete_current_lods(self):
+        if not self.delete_lods_before_bake:
+            return 0
+        from .rebake_lods import delete_current_asset_lods
+        return delete_current_asset_lods(self.context, self.target)
 
     def repair_target(self):
         if not self.repair_mesh:
@@ -442,6 +453,7 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
     export_selected: bpy.props.BoolProperty(name='Export Selected FBX / Blend', default=False, options={'SKIP_SAVE'},
         description='After Create LODs, select current asset meshes and replace their FBX and Blend exports')
     repair_mesh: bpy.props.BoolProperty(name='Repair Mesh', default=False, options={'SKIP_SAVE'})
+    delete_current_lods: bpy.props.BoolProperty(name='Delete Current LODs Before ReBake', default=False, options={'SKIP_SAVE'})
     use_queue: bpy.props.BoolProperty(default=False, options={'HIDDEN','SKIP_SAVE'})
 
     @classmethod
@@ -462,10 +474,12 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
         try:
             if self.use_queue and len(context.scene.polygroups_model_preparation_settings.phase2_rebake_queue):
                 return bpy.ops.object.polygroups_rebake_queue_run('EXEC_DEFAULT',
-                    repair_mesh=self.repair_mesh, create_lods=self.create_lods, export_selected=self.export_selected)
+                    repair_mesh=self.repair_mesh, create_lods=self.create_lods, export_selected=self.export_selected,
+                    delete_current_lods=self.delete_current_lods)
             return bpy.ops.object.polygroups_bake_task('INVOKE_DEFAULT', prepare_materials=True,
                         rebake_final=True, rebake_create_lods=self.create_lods,
-                        rebake_export_selected=self.export_selected, rebake_repair_mesh=self.repair_mesh)
+                        rebake_export_selected=self.export_selected, rebake_repair_mesh=self.repair_mesh,
+                        rebake_delete_current_lods=self.delete_current_lods)
         except RuntimeError as error:
             self.report({'ERROR'}, str(error))
             return {'CANCELLED'}

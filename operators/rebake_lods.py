@@ -154,6 +154,30 @@ class FinalRebakeLODs:
         return generated
 
 
+def current_asset_lods(context, target):
+    """Exact SM_<asset>_LOD<number> siblings, including hidden collections."""
+    if not re.fullmatch(r'SM_.+_MID', target.name, re.IGNORECASE):
+        raise ValueError('Delete Current LODs requires a final SM_..._MID mesh')
+    pattern = re.compile(re.escape(target.name[:-3]) + r'LOD\d+', re.IGNORECASE)
+    meshes = {obj for obj in context.scene.objects
+              if obj.type == 'MESH' and pattern.fullmatch(obj.name)}
+    replacement = LODReplacement(context, meshes)
+    for obj in replacement.objects:
+        if obj.library or any(scene != context.scene for scene in obj.users_scene):
+            raise ValueError('Delete Current LODs: object is linked or shared by another scene: ' + obj.name)
+        if any(child not in replacement.objects for child in obj.children):
+            raise ValueError('Delete Current LODs: object has an unrelated child: ' + obj.name)
+    return meshes
+
+
+def delete_current_asset_lods(context, target):
+    meshes = current_asset_lods(context, target)
+    replacement = LODReplacement(context, meshes)
+    replacement.stash()
+    replacement.finish(True)
+    return len(meshes)
+
+
 class LODReplacement:
     """Keep old LODs recoverable until every replacement has been prepared."""
     def __init__(self, context, meshes):

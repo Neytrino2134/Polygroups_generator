@@ -100,6 +100,7 @@ def draw_start(layout, context, p):
     rebake.export_selected = p.phase2_rebake_create_lods and p.phase2_rebake_export_selected
     rebake.repair_mesh = p.phase2_rebake_repair_mesh
     rebake.use_queue = True
+    rebake.delete_current_lods = p.phase2_rebake_delete_current_lods
     manual.prop(p, 'phase2_rebake_repair_mesh')
     if p.phase2_rebake_repair_mesh:
         repair = manual.column(align=True)
@@ -109,6 +110,7 @@ def draw_start(layout, context, p):
         if p.phase2_rebake_repair_stretched:
             repair.prop(p,'fold_repair_stretch_ratio')
         repair.prop(p,'phase2_rebake_repack_uv')
+    manual.prop(p, 'phase2_rebake_delete_current_lods')
     manual.prop(p, 'phase2_rebake_create_lods')
     exports = manual.column(align=True)
     exports.enabled = p.phase2_rebake_create_lods

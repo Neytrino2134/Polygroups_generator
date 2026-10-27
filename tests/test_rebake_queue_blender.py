@@ -67,6 +67,14 @@ def fixture(index,folder):
 with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_rebake_queue_') as directory:
     root=Path(directory);bpy.ops.wm.save_as_mainfile(filepath=str(root/'Working.blend'))
     targets=[fixture(index,root) for index in (1,2)]
+    old_lod_names={}
+    for target,_,_,_ in targets:
+        names=[]
+        for level in (0,7):
+            name=target.name[:-3]+f'LOD{level}'
+            old=bpy.data.objects.new(name,target.data.copy());scene.collection.objects.link(old)
+            names.append(name)
+        old_lod_names[target.name]=names
     bpy.ops.object.select_all(action='DESELECT')
     for target,_,_,_ in targets:target.select_set(True)
     context.view_layer.objects.active=targets[0][0]
@@ -76,12 +84,14 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_rebake_queue_') as direct
     assert bpy.ops.object.polygroups_rebake_queue_edit(action='REMOVE',index=1)=={'FINISHED'}
     assert len(p.phase2_rebake_queue)==1
     assert bpy.ops.object.polygroups_rebake_queue_edit(action='ADD')=={'FINISHED'}
+    assert not p.phase2_rebake_delete_current_lods
+    p.phase2_rebake_delete_current_lods=True
     panel=capture(context,1);assert not panel.errors,panel.errors
     props={binding[2] for binding in panel.bindings.values() if binding[0]=='property'}
     assert {'phase2_rebake_repair_mesh','phase2_rebake_repair_zero_area','phase2_rebake_repack_uv'}<=props
     rebake_button=next(binding[2] for binding in panel.bindings.values()
                        if binding[0]=='operator' and binding[1]=='object.polygroups_rebake_final_mesh')
-    assert rebake_button.use_queue and rebake_button.repair_mesh
+    assert rebake_button.use_queue and rebake_button.repair_mesh and rebake_button.delete_current_lods
     edits=[binding[2] for binding in panel.bindings.values()
            if binding[0]=='operator' and binding[1]=='object.polygroups_rebake_queue_edit']
     assert {edit.index for edit in edits if edit.action=='REMOVE'}=={0,1}
@@ -94,6 +104,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_rebake_queue_') as direct
         return real_pack(operator,ctx)
     def launched(task,ctx,*args):
         assert not task.target.get('polygroups_rebake_uv_needs_pack')
+        assert all(name not in bpy.data.objects for name in old_lod_names[task.target.name])
         assert not bpy.ops.object.polygroups_rebake_queue_edit.poll()
         launch_order.append(task.target.name)
         return real_launch(task,ctx,*args)
@@ -101,7 +112,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_rebake_queue_') as direct
     with patch.object(OBJECT_OT_polygroups_uvpackmaster_pack,'execute',packed), \
          patch.object(baking.OBJECT_OT_polygroups_bake_task,'_launch_pass',launched):
         assert bpy.ops.object.polygroups_rebake_final_mesh(use_queue=True,repair_mesh=True,
-            create_lods=True,export_selected=True)=={'FINISHED'}
+            create_lods=True,export_selected=True,delete_current_lods=True)=={'FINISHED'}
     assert launch_order==pack_calls==[target.name for target,_,_,_ in targets],(launch_order,pack_calls)
     assert all(entry.state=='DONE' for entry in p.phase2_rebake_queue)
     assert not p.phase2_rebake_queue_running and p.phase2_rebake_queue_progress==100
@@ -146,8 +157,10 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_rebake_queue_') as direct
     assert not len(p.phase2_rebake_queue)
     bpy.ops.object.select_all(action='DESELECT');targets[0][0].select_set(True);context.view_layer.objects.active=targets[0][0]
     with patch.object(rebake_queue.OBJECT_OT_polygroups_rebake_queue_run,'execute') as no_queue:
-        assert bpy.ops.object.polygroups_rebake_final_mesh(use_queue=True,repair_mesh=True)=={'FINISHED'}
+        assert bpy.ops.object.polygroups_rebake_final_mesh(use_queue=True,repair_mesh=True,delete_current_lods=True)=={'FINISHED'}
         assert not no_queue.called
+    assert targets[0][0].name[:-3]+'LOD0' not in bpy.data.objects
+    assert targets[1][0].name[:-3]+'LOD0' in bpy.data.objects
     # Packing failure leaves a dirty marker so a retry still packs even if the
     # already-applied repair no longer changes UV on the second attempt.
     target=targets[0][0]

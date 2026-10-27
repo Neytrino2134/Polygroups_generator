@@ -746,6 +746,7 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
     prepare_materials: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_final: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_repair_mesh: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    rebake_delete_current_lods: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_create_lods: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_export_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
 
@@ -983,8 +984,12 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
                 session = FinalRebakeSession(context, _active_mesh(context), self.settings,
                                             create_lods=self.rebake_create_lods,
                                             export_selected=self.rebake_export_selected,
-                                            repair_mesh=self.rebake_repair_mesh)
+                                            repair_mesh=self.rebake_repair_mesh,
+                                            delete_current_lods=self.rebake_delete_current_lods)
                 self.final_rebake_session = session
+                removed_lods = session.delete_current_lods()
+                if removed_lods:
+                    self.report({'INFO'}, f'ReBake Final Mesh: deleted {removed_lods} current LODs before baking')
                 session.repair_target()
                 session.begin()
             except Exception as error:

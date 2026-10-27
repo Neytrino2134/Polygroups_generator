@@ -120,6 +120,24 @@ the previous repair is already applied. The marker clears after successful packi
 
 ### Manual model queue
 
+**Delete Current LODs Before ReBake** is an independent, off-by-default option.
+After read-only preflight, before Repair Mesh and baking, it removes the current
+scene's exact `SM_<asset>_LOD<number>` meshes for the selected MID. For example,
+`SM_Asset_00_12_MID` matches `SM_Asset_00_12_LOD0` and `SM_Asset_00_12_LOD7`, including
+hidden objects outside the MID's collection, but not asset 13, asset 120 or
+`SM_Asset_00_12_MID_LOD0`. Associated LOD text labels are removed as well.
+
+This works without Create LODs and is forwarded separately to every queued item.
+Matched linked objects, objects shared with another scene, or unrelated children
+are rejected during preflight before deletion. In contrast to the replacement
+transaction after a successful bake, explicit pre-bake deletion is retained if
+a later repair/packing/baking stage fails. Completed exports are not deleted.
+
+`test_rebake_delete_lods_blender.py` verifies exact family matching, hidden
+collections, labels and ownership guards. The queue integration test confirms
+old LODs are already absent at each bake launch, recreated only when Create LODs
+is enabled, and single-object deletion leaves other assets' LODs intact.
+
 **Add to Queue** adds selected final MID objects, without duplicates, in name
 order. Object pointers keep the list associated with renamed objects. Each row
 has a remove button; **Clear List** clears it. The list is saved with the scene.

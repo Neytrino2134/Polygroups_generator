@@ -77,6 +77,7 @@ class OBJECT_OT_polygroups_rebake_queue_run(SequentialJob,bpy.types.Operator):
     _is_rebake_queue = True
     _rebake_dispatching = False
     repair_mesh: bpy.props.BoolProperty(default=True,options={'SKIP_SAVE'})
+    delete_current_lods: bpy.props.BoolProperty(default=False,options={'SKIP_SAVE'})
     create_lods: bpy.props.BoolProperty(default=False,options={'SKIP_SAVE'})
     export_selected: bpy.props.BoolProperty(default=False,options={'SKIP_SAVE'})
 
@@ -95,7 +96,8 @@ class OBJECT_OT_polygroups_rebake_queue_run(SequentialJob,bpy.types.Operator):
                 if entry.target is None or entry.target.name not in context.scene.objects:
                     raise ValueError('Queued mesh is missing from the current scene')
                 FinalRebakeSession(context,entry.target,context.scene.polygroups_baking_settings,
-                    create_lods=self.create_lods,export_selected=self.export_selected,repair_mesh=self.repair_mesh)
+                    create_lods=self.create_lods,export_selected=self.export_selected,repair_mesh=self.repair_mesh,
+                    delete_current_lods=self.delete_current_lods)
             for entry in self.entries:
                 entry.state,entry.message = 'PENDING',''
             self.current = None
@@ -141,6 +143,7 @@ class OBJECT_OT_polygroups_rebake_queue_run(SequentialJob,bpy.types.Operator):
                     with child_dispatch():
                         result = bpy.ops.object.polygroups_bake_task('INVOKE_DEFAULT',prepare_materials=True,
                             rebake_final=True,rebake_repair_mesh=self.repair_mesh,
+                            rebake_delete_current_lods=self.delete_current_lods,
                             rebake_create_lods=self.create_lods,rebake_export_selected=self.export_selected)
                     if not {'FINISHED','RUNNING_MODAL'} & result:
                         raise RuntimeError(bake.bake_task_message or 'ReBake could not start')
