@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 OPENAI_MODELS = (
     ('gpt-6-luna', 'GPT-6 Luna | Light / Translation', 'Efficient current model for simple text and translation'),
+    ('gpt-6.1-terra', 'GPT-6.1 Terra | Fast / Efficient', 'Fast, efficient model for clear, natural writing'),
     ('gpt-6.1-sol', 'GPT-6.1 Sol | Balanced', 'Current balanced general-purpose model'),
     ('gpt-6-astra', 'GPT-6 Astra | Flagship', 'Current flagship for demanding reasoning and writing'),
     ('gpt-5.4-mini', 'GPT-5.4 Mini | Previous generation', 'Previous-generation small general-purpose model'),

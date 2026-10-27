@@ -5,7 +5,7 @@ from .ai_text import OPENAI_MODELS, GOOGLE_MODELS, generate_text, TextGeneration
 from ..core.asset_names import asset_name
 
 TEXT_TASK_MODELS = tuple((key, 'OpenAI | ' + label, hint) for key, label, hint in OPENAI_MODELS
-    if key in {'gpt-6-luna', 'gpt-6.1-sol', 'gpt-5.4-mini'}) + tuple(
+    if key in {'gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-5.4-mini'}) + tuple(
     (key, 'Google | ' + label, hint) for key, label, hint in GOOGLE_MODELS
     if 'flash' in key and 'pro' not in key)
 SCHEMA = {'type': 'object', 'properties': {'asset_name': {'type': 'string'}},
