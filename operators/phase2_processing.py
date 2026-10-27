@@ -561,7 +561,7 @@ def available(context):
     from .sequential_jobs import ACTIVE_JOB
     settings = context.scene.polygroups_model_preparation_settings
     return bool(bpy.data.filepath and ACTIVE_PHASE2 is None and ACTIVE_QUEUE is None
-                and ACTIVE_REMESH is None and ACTIVE_JOB is None and not settings.batch_is_running
+                and ACTIVE_REMESH is None and (ACTIVE_JOB is None or getattr(ACTIVE_JOB,'_rebake_dispatching',False)) and not settings.batch_is_running
                 and not bpy.app.is_job_running('OBJECT_BAKE')
                 and not context.scene.polygroups_baking_settings.bake_task_is_running
                 and not context.scene.polygroups_render_settings.is_running)
@@ -897,7 +897,7 @@ class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
             return False
         p = context.scene.polygroups_model_preparation_settings
         return not (p.phase2_is_running or p.phase2_final_is_running or p.phase2_auto_render_running
-                    or p.batch_is_running or context.scene.polygroups_baking_settings.bake_task_is_running
+                    or p.batch_is_running or p.phase2_rebake_queue_running or context.scene.polygroups_baking_settings.bake_task_is_running
                     or context.scene.polygroups_render_settings.is_running)
 
     def execute(self, context):

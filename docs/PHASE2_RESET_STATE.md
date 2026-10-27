@@ -9,6 +9,8 @@ settings, aborts an owned pending remesh, cancels an idle bake coordinator,
 releases timers/overlays and clears queue/progress/time/counter state to Ready.
 The old modal owners are marked finished so queued events cannot resume them.
 Recovery continues through individual cleanup errors and reports those errors.
+The manual ReBake queue also closes on Reset; its model list is retained and
+its per-item statuses return to pending.
 
 Pending ZBrush success-cleanup is disarmed and receives a matching STOP control
 file. Late completion must not delete source collections after a reset. Completed

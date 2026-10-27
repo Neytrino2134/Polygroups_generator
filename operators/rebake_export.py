@@ -7,6 +7,7 @@ import bpy
 from .phase2_blend_export import (asset_collections, blend_file_stem, BLEND_FOLDER,
     COLLECTION_SUFFIX, export_selected_collection_blend)
 from .rename_objects import ensure_collection_visible_in_view_layer
+from .rebake_queue import child_dispatch
 
 
 def rebake_asset_collection(context, target):
@@ -61,8 +62,9 @@ def export_rebaked_asset(context, target, generated, collection, engine, report)
             setattr(p, name, value)
         # Do not save the working scene with temporary FBX-only overrides.
         s.unity_export_autosave = False
-        if 'FINISHED' not in bpy.ops.object.polygroups_phase2_export('EXEC_DEFAULT', selected_only=True):
-            raise RuntimeError(p.phase2_export_status)
+        with child_dispatch():
+            if 'FINISHED' not in bpy.ops.object.polygroups_phase2_export('EXEC_DEFAULT', selected_only=True):
+                raise RuntimeError(p.phase2_export_status)
     finally:
         for name, (value, was_set) in saved.items():
             setattr(p, name, value) if was_set else p.property_unset(name)

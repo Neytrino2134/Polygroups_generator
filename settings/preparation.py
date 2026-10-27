@@ -15,6 +15,12 @@ from .callbacks import (
 )
 
 
+class POLYGROUPS_PG_rebake_queue_item(bpy.types.PropertyGroup):
+    target: bpy.props.PointerProperty(type=bpy.types.Object)
+    state: bpy.props.StringProperty(default='PENDING', options={'SKIP_SAVE'})
+    message: bpy.props.StringProperty(default='', options={'SKIP_SAVE'})
+
+
 class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     weld_distance: bpy.props.FloatProperty(
         name="Weld Distance",
@@ -169,6 +175,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_show_start: bpy.props.BoolProperty(name="Start Phase 2", default=True)
     phase2_rebake_create_lods: bpy.props.BoolProperty(name="Create LODs", default=False,
         description="After manual ReBake Final Mesh, create LODs using the pipeline and asset settings above; not part of Start Phase 2")
+    phase2_rebake_repair_mesh: bpy.props.BoolProperty(name="Repair Mesh", default=True)
+    phase2_rebake_repack_uv: bpy.props.BoolProperty(name="Repack UV If Repair Changed UV", default=True)
+    phase2_rebake_repair_folds: bpy.props.BoolProperty(name="Repair Folded Pockets", default=True)
+    phase2_rebake_repair_coincident: bpy.props.BoolProperty(name="Merge Coincident Vertices", default=True)
+    phase2_rebake_repair_zero_area: bpy.props.BoolProperty(name="Repair Zero Area / Preserve UV Seams", default=True)
+    phase2_rebake_repair_stretched: bpy.props.BoolProperty(name="Merge Stretched Single Triangles", default=True)
+    phase2_rebake_queue: bpy.props.CollectionProperty(type=POLYGROUPS_PG_rebake_queue_item)
+    phase2_rebake_queue_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    phase2_rebake_queue_status: bpy.props.StringProperty(default='Ready', options={'SKIP_SAVE'})
+    phase2_rebake_queue_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
     phase2_rebake_export_selected: bpy.props.BoolProperty(name="Export Selected FBX / Blend", default=False,
         description="After manual ReBake and Create LODs, select the current asset meshes and replace their FBX and Blend exports")
     phase2_run_restore: bpy.props.BoolProperty(name="Restore from Separated", default=True)

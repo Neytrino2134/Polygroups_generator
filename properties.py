@@ -53,6 +53,7 @@ from .settings.callbacks import (
 )
 
 from .settings.preparation import (
+    POLYGROUPS_PG_rebake_queue_item,
     POLYGROUPS_PG_model_preparation_settings,
     POLYGROUPS_PG_remesh_status,
     AIRETOPO_PG_panel_visibility_settings,
@@ -90,6 +91,7 @@ from .settings.ai import (
 
 
 CLASSES = (
+    POLYGROUPS_PG_rebake_queue_item,
     AIRETOPO_PG_openai_text_settings,
     AIRETOPO_PG_google_text_settings,
     *PALETTE_PROPERTY_CLASSES,

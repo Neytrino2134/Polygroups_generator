@@ -142,6 +142,10 @@ def reset_phase2_state(context):
                  'phase2_done_count', 'phase2_failed_count', 'phase2_total_count',
                  'phase2_final_progress', 'phase2_autosave_status'):
         p.property_unset(name)
+    for name in ('phase2_rebake_queue_running','phase2_rebake_queue_progress','phase2_rebake_queue_status'):
+        p.property_unset(name)
+    for entry in p.phase2_rebake_queue:
+        entry.state,entry.message='PENDING',''
     p.phase2_status = 'Ready'
     # No Import owner is running (checked above); clear only its stale blocker.
     p.batch_is_running = False

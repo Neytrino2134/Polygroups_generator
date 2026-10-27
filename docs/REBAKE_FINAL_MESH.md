@@ -18,7 +18,7 @@ The operator runs the existing staged Bake Task (Base Color, tangent Normal,
 configured AutoCage/Smart Cage, projection diagnostics and artifact autofill).
 Enabled passes, margins and cage options come from the usual Bake Settings.
 It forces selected-to-active, uses existing final texture resolution, retains
-final UVs (no automatic repack), and suppresses Generated renaming and the
+final UVs by default (the Phase 2 Repair Mesh option can conditionally repack changed UVs), and suppresses Generated renaming and the
 ordinary temporary Bake texture save path.
 
 ## Scene preparation and completion
@@ -96,6 +96,56 @@ A second ReBake Final Mesh button is directly below **Start Phase 2 Process**.
 Its **Create LODs** checkbox is off by default. This is a separate manual action:
 it is not a stage of the automatic Phase 2 run and does not change its queue.
 The Baking-section ReBake button retains its bake-only default.
+
+### Repair Mesh and conditional UV repacking
+
+The Phase 2 manual button now enables **Repair Mesh** by default. Its four
+suboptions are all enabled by default: folded pockets, coincident vertices,
+zero-area faces with UV-seam preservation, and stretched singleton triangles.
+These settings are specific to final rebaking rather than the separate manual
+Auto Repair toggles. The existing triangle stretch threshold is shared.
+
+Read-only texture/source/LOD preflight finishes before any repair. Repair then
+runs on the final MID before the temporary bake material is created. Material
+slots and polygon assignments are therefore snapshotted after repaired topology.
+The repaired geometry is retained if a later packing or baking stage fails.
+
+**Repack UV If Repair Changed UV** is enabled by default. UV layer coordinates
+and loop counts are compared before/after repair. UVPackmaster PACK runs only
+when those UV data changed, before the bake uses the new layout. A geometry-only
+change skips packing. Packing uses the installed UVPackmaster settings and only
+the current target is selected. A failed pack stops before baking and retains
+`polygroups_rebake_uv_needs_pack` on the target; a retry still packs even though
+the previous repair is already applied. The marker clears after successful packing.
+
+### Manual model queue
+
+**Add to Queue** adds selected final MID objects, without duplicates, in name
+order. Object pointers keep the list associated with renamed objects. Each row
+has a remove button; **Clear List** clears it. The list is saved with the scene.
+
+The Phase 2 ReBake button processes a populated list in order. Each model finishes
+Repair → conditional PACK → ReBake → optional LOD replacement → optional FBX/Blend
+before the next model starts. With an empty list it processes the active MID.
+The Baking-section button remains a single-object operation.
+
+Every list entry is preflighted before starting any bake. Entries show pending,
+running, completed or failed status. A runtime failure stops at that item,
+retaining earlier outputs and the rest of the list. Starting again processes
+the retained list from the beginning. **Stop after Current Mesh** completes the
+current child bake and its configured follow-ups before stopping. Queue editing
+and unrelated Phase 2/import operations are blocked during the run.
+
+Reset State cancels an idle child task, closes the queue and resets its statuses
+while retaining the list. The actual Blender bake/render guard still applies.
+This remains a manual queue; it is not inserted into Start Phase 2's stage plan.
+
+Validation: `test_rebake_queue_blender.py` covers two real Cycles bakes, all repair
+defaults, actual UVPackmaster packing, unchanged-UV skipping, packing failure and
+retry, LODs and FBX/Blend exports, duplicate/remove/clear controls, preflight and
+runtime failure, Reset and the single-mesh fallback. The GUI-host test
+`test_rebake_queue_modal_blender.py` verifies serial asynchronous bakes and stop
+after the current mesh.
 
 With Create LODs enabled, the manual button captures:
 

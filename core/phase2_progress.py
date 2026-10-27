@@ -46,7 +46,7 @@ def draw_pipeline_progress(layout, context, p):
 def draw_start(layout, context, p):
     options = layout.column(align=True)
     options.enabled = not (p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
-                           or p.phase2_final_is_running or p.phase2_auto_render_running)
+                           or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running)
     options.prop(p, 'phase2_run_restore')
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_restore
@@ -98,10 +98,40 @@ def draw_start(layout, context, p):
     rebake = manual.operator('object.polygroups_rebake_final_mesh', text='ReBake Final Mesh', icon='FILE_REFRESH')
     rebake.create_lods = p.phase2_rebake_create_lods
     rebake.export_selected = p.phase2_rebake_create_lods and p.phase2_rebake_export_selected
+    rebake.repair_mesh = p.phase2_rebake_repair_mesh
+    rebake.use_queue = True
+    manual.prop(p, 'phase2_rebake_repair_mesh')
+    if p.phase2_rebake_repair_mesh:
+        repair = manual.column(align=True)
+        for name in ('phase2_rebake_repair_folds','phase2_rebake_repair_coincident',
+                     'phase2_rebake_repair_zero_area','phase2_rebake_repair_stretched'):
+            repair.prop(p,name)
+        if p.phase2_rebake_repair_stretched:
+            repair.prop(p,'fold_repair_stretch_ratio')
+        repair.prop(p,'phase2_rebake_repack_uv')
     manual.prop(p, 'phase2_rebake_create_lods')
     exports = manual.column(align=True)
     exports.enabled = p.phase2_rebake_create_lods
     exports.prop(p, 'phase2_rebake_export_selected')
+    queue = manual.box()
+    queue.label(text=f'ReBake Queue: {len(p.phase2_rebake_queue)} mesh(es)')
+    controls = queue.row(align=True)
+    controls.operator('object.polygroups_rebake_queue_edit',text='Add to Queue',icon='ADD').action='ADD'
+    controls.operator('object.polygroups_rebake_queue_edit',text='Clear List',icon='TRASH').action='CLEAR'
+    icons = dict(DONE='CHECKMARK',FAILED='ERROR',RUNNING='TIME',CANCELLED='CANCEL')
+    for index,entry in enumerate(p.phase2_rebake_queue):
+        row=queue.row(align=True)
+        row.label(text=f'{index+1}. {entry.target.name if entry.target else "Missing mesh"}',
+                  icon=icons.get(entry.state,'RADIOBUT_OFF'))
+        remove=row.operator('object.polygroups_rebake_queue_edit',text='',icon='X')
+        remove.action,remove.index='REMOVE',index
+        if entry.message and entry.state=='FAILED':
+            queue.label(text=entry.message,icon='ERROR')
+    queue.label(text=p.phase2_rebake_queue_status)
+    if p.phase2_rebake_queue_running:
+        live=layout.column(align=True)
+        live.progress(factor=p.phase2_rebake_queue_progress/100,type='BAR',text=p.phase2_rebake_queue_status)
+        live.operator('object.polygroups_stop_lod_job',text='Stop after Current Mesh',icon='CANCEL')
     if p.phase2_pipeline_state:
         draw_pipeline_progress(layout, context, p)
     recovery = layout.row()

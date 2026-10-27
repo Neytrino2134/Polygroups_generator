@@ -745,6 +745,7 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
 
     prepare_materials: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_final: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    rebake_repair_mesh: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_create_lods: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_export_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
 
@@ -753,6 +754,10 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         settings = context.scene.polygroups_baking_settings
         target = _active_mesh(context)
         from .rebake_final import MID_PATTERN
+        from .sequential_jobs import ACTIVE_JOB
+        if (getattr(ACTIVE_JOB,'_is_rebake_queue',False)
+                and not getattr(ACTIVE_JOB,'_rebake_dispatching',False)):
+            return False
         return (not settings.bake_task_is_running and target is not None
                 and (bool(_source_meshes(context, target)) or bool(MID_PATTERN.fullmatch(target.name))))
 
@@ -977,8 +982,10 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             try:
                 session = FinalRebakeSession(context, _active_mesh(context), self.settings,
                                             create_lods=self.rebake_create_lods,
-                                            export_selected=self.rebake_export_selected)
+                                            export_selected=self.rebake_export_selected,
+                                            repair_mesh=self.rebake_repair_mesh)
                 self.final_rebake_session = session
+                session.repair_target()
                 session.begin()
             except Exception as error:
                 if self.final_rebake_session is not None:

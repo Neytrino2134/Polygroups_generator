@@ -1,5 +1,7 @@
 """Final MID rebakes: deterministic sources, existing outputs, reversible scene setup."""
 import json
+import hashlib
+from array import array
 import os
 import re
 import shutil
@@ -19,6 +21,17 @@ CHANNELS = {
     'MergeMask': (C.BAKE_ALPHA_IMAGE_PROP, C.BAKE_SOURCE_ALPHA_IMAGE_PROP, C.BAKE_ALPHA_NODE),
     'ArtifactMask': (C.BAKE_ARTIFACT_IMAGE_PROP, None, 'PolyGroups Bake Artifact Mask'),
 }
+
+
+def uv_signature(mesh):
+    signature = hashlib.blake2b()
+    for layer in mesh.uv_layers:
+        values = array('f',[0]) * (len(layer.data)*2)
+        layer.data.foreach_get('uv',values)
+        signature.update(layer.name.encode('utf-8'))
+        signature.update(len(values).to_bytes(8,'little'))
+        signature.update(values.tobytes())
+    return signature.digest()
 
 
 def final_asset_name(target):
@@ -96,8 +109,9 @@ def final_texture_outputs(target, settings):
 
 
 class FinalRebakeSession:
-    def __init__(self, context, target, settings, create_lods=False, export_selected=False):
+    def __init__(self, context, target, settings, create_lods=False, export_selected=False, repair_mesh=False):
         self.context, self.target, self.settings = context, target, settings
+        self.repair_mesh = repair_mesh
         self.source_import = None
         self.source = None
         try:
@@ -107,6 +121,8 @@ class FinalRebakeSession:
             self.source_import = TemporaryRebakeSource(final_asset_name(target)[1])
         if target.library or target.data.library or target.data.users != 1:
             raise ValueError('ReBake requires a local single-user final mesh')
+        if repair_mesh and target.data.shape_keys:
+            raise ValueError('ReBake Repair Mesh requires a mesh without shape keys')
         self.outputs, self.resolution = final_texture_outputs(target, settings)
         from .rebake_lods import FinalRebakeLODs
         self.lod_job = FinalRebakeLODs(context, target) if create_lods else None
@@ -147,6 +163,39 @@ class FinalRebakeSession:
     def set_attribute(self, owner, name, value):
         self.attributes.append((owner, name, getattr(owner, name)))
         setattr(owner, name, value)
+
+    def repair_target(self):
+        if not self.repair_mesh:
+            return
+        from .phase2_zbrush_export import preserved_selection, export_visibility
+        context,target = self.context,self.target
+        p = context.scene.polygroups_model_preparation_settings
+        mode = context.object.mode if context.object else 'OBJECT'
+        if mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        try:
+            with preserved_selection(context),export_visibility(context,target):
+                bpy.ops.object.select_all(action='DESELECT')
+                target.select_set(True)
+                context.view_layer.objects.active = target
+                before = uv_signature(target.data)
+                result = bpy.ops.mesh.polygroups_repair_mesh_folds('EXEC_DEFAULT', action='REPAIR',
+                    fix_folds=p.phase2_rebake_repair_folds,
+                    fix_degenerate=p.phase2_rebake_repair_coincident,
+                    fix_zero_area=p.phase2_rebake_repair_zero_area,
+                    fix_stretched_triangles=p.phase2_rebake_repair_stretched,
+                    stretched_triangle_ratio=p.fold_repair_stretch_ratio, selected_only=False)
+                if 'FINISHED' not in result:
+                    raise RuntimeError('ReBake Final Mesh: Auto Repair failed for ' + target.name)
+                if uv_signature(target.data) != before:
+                    target['polygroups_rebake_uv_needs_pack'] = True
+                if p.phase2_rebake_repack_uv and target.get('polygroups_rebake_uv_needs_pack'):
+                    if 'FINISHED' not in bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT'):
+                        raise RuntimeError('ReBake Final Mesh: UV repack after repair failed for ' + target.name)
+                    del target['polygroups_rebake_uv_needs_pack']
+        finally:
+            if mode == 'EDIT' and context.active_object == target and target.mode != 'EDIT':
+                bpy.ops.object.mode_set(mode='EDIT')
 
     def begin(self):
         if self.source_import is not None:
@@ -392,6 +441,8 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
         description='Create LODs after a successful rebake using the Phase 2 pipeline and asset settings')
     export_selected: bpy.props.BoolProperty(name='Export Selected FBX / Blend', default=False, options={'SKIP_SAVE'},
         description='After Create LODs, select current asset meshes and replace their FBX and Blend exports')
+    repair_mesh: bpy.props.BoolProperty(name='Repair Mesh', default=False, options={'SKIP_SAVE'})
+    use_queue: bpy.props.BoolProperty(default=False, options={'HIDDEN','SKIP_SAVE'})
 
     @classmethod
     def poll(cls, context):
@@ -400,16 +451,21 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
         p = getattr(context.scene, 'polygroups_model_preparation_settings', None)
         from .sequential_jobs import ACTIVE_JOB
         busy = p and any(getattr(p, name) for name in ('phase2_pipeline_running', 'phase2_is_running',
-                        'phase2_final_is_running', 'phase2_auto_render_running', 'batch_is_running'))
-        return bool(settings and not settings.bake_task_is_running and target and target.type == 'MESH'
-                    and MID_PATTERN.fullmatch(target.name) and not busy and ACTIVE_JOB is None)
+                        'phase2_final_is_running', 'phase2_auto_render_running', 'batch_is_running',
+                        'phase2_rebake_queue_running'))
+        valid_target = target and target.type == 'MESH' and MID_PATTERN.fullmatch(target.name)
+        return bool(settings and not settings.bake_task_is_running and (valid_target or (p and len(p.phase2_rebake_queue)))
+                    and not busy and ACTIVE_JOB is None)
 
     def execute(self, context):
         # The common task owns setup/cleanup for both modal and background runs.
         try:
+            if self.use_queue and len(context.scene.polygroups_model_preparation_settings.phase2_rebake_queue):
+                return bpy.ops.object.polygroups_rebake_queue_run('EXEC_DEFAULT',
+                    repair_mesh=self.repair_mesh, create_lods=self.create_lods, export_selected=self.export_selected)
             return bpy.ops.object.polygroups_bake_task('INVOKE_DEFAULT', prepare_materials=True,
                         rebake_final=True, rebake_create_lods=self.create_lods,
-                        rebake_export_selected=self.export_selected)
+                        rebake_export_selected=self.export_selected, rebake_repair_mesh=self.repair_mesh)
         except RuntimeError as error:
             self.report({'ERROR'}, str(error))
             return {'CANCELLED'}
