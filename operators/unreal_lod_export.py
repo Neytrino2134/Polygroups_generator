@@ -18,6 +18,9 @@ def lod_identity(obj, engine='Unreal'):
     match = re.fullmatch(r'SM_(.+)_LOD(\d+)', obj.name, re.IGNORECASE)
     if match:
         return match[1], 'LOD', int(match[2])
+    match = re.fullmatch(r'SM_(.+)_LOW', obj.name, re.IGNORECASE)
+    if match:
+        return match[1], 'LOD', 0
     base = obj.get('unreal_lod_asset')
     if base and obj.get('unreal_lod_index') == -1:
         return base, 'HIGH', None

@@ -1,5 +1,6 @@
 from .unity_export_workflow import (OBJECT_OT_polygroups_prepare_and_export_unity, OBJECT_OT_polygroups_save_unity_export_preset, OBJECT_OT_polygroups_load_unity_export_preset, OBJECT_OT_polygroups_unity_load_from_file)
 from .phase2_export import OBJECT_OT_polygroups_phase2_export
+from .rename_final import OBJECT_OT_polygroups_rename_final_meshes
 from .smart_lods import OBJECT_OT_polygroups_smart_lods_prepare
 from .unity_preparation import OBJECT_OT_polygroups_unity_collection_step
 from .unity_preparation import OBJECT_OT_polygroups_fix_unity_textures
@@ -250,6 +251,7 @@ CLASSES = (
     *REBAKE_QUEUE_CLASSES,
     OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj,
     OBJECT_OT_polygroups_phase2_export,
+    OBJECT_OT_polygroups_rename_final_meshes,
     OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder,
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
     OBJECT_OT_polygroups_phase2_open_zbrush_folder, OBJECT_OT_polygroups_phase2_export_zbrush_folder,

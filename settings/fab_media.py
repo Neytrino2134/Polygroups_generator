@@ -13,6 +13,7 @@ class AIRETOPO_PG_fab_media_settings(bpy.types.PropertyGroup):
         'prompt_text': bpy.props.PointerProperty(name='Prepared prompt', type=bpy.types.Text),
         'is_generating': bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'}),
         'last_status': bpy.props.StringProperty(name='Status'),
+        'saved_filepath': bpy.props.StringProperty(name='Saved JSON', subtype='FILE_PATH'),
         'inventory_summary': bpy.props.StringProperty(name='Inventory'),
         'max_tokens': bpy.props.IntProperty(name='Max Output Tokens', default=8192, min=1024, max=128000),
     }

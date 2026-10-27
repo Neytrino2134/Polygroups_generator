@@ -132,9 +132,13 @@ def _inventory(context):
     visit(context.scene.collection)
     depsgraph = context.evaluated_depsgraph_get()
     assets, warnings, seen = [], [], set()
-    for collection in sorted(collections, key=lambda c: natural(c.name)):
+    groups = {}
+    for collection in collections:
+        base = re.sub(r'_LOD\d+(?=_Collection$)', '', collection.name, flags=re.I)
+        groups.setdefault(base, set()).update(collection.all_objects)
+    for collection_name in sorted(groups, key=natural):
         candidates = {'LOW': [], 'MID': []}
-        for obj in collection.all_objects:
+        for obj in sorted(groups[collection_name], key=lambda obj: natural(obj.name)):
             if obj.type != 'MESH' or obj.name.upper().startswith(('UCX_', 'UBX_', 'USP_', 'UCP_')):
                 continue
             name = re.sub(r'\.\d{3}$', '', obj.name)
@@ -154,7 +158,7 @@ def _inventory(context):
             candidates[role].append((priority, obj))
         if not any(candidates.values()):
             continue
-        asset = {'collection': collection.name, 'versions': {}}
+        asset = {'collection': collection_name, 'versions': {}}
         for role, objects in candidates.items():
             if not objects:
                 continue
@@ -162,7 +166,7 @@ def _inventory(context):
             best = min(priority for priority, _ in objects)
             choices = [obj for priority, obj in objects if priority == best]
             if len(choices) != 1:
-                raise ValueError(f'{collection.name}: multiple {role} meshes; use one asset per collection')
+                raise ValueError(f'{collection_name}: multiple {role} meshes; use one asset per collection')
             obj = choices[0]
             if obj.as_pointer() in seen:
                 raise ValueError('Mesh belongs to multiple asset collections: ' + obj.name)

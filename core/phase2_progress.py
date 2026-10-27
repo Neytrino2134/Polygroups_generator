@@ -96,8 +96,34 @@ def draw_start(layout, context, p):
     mode.prop(p, 'phase2_run_transparent')
     sub.prop(p, 'phase2_auto_skip_scene')
     options.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
-    manual = options.column(align=True)
-    manual.enabled = not context.scene.polygroups_baking_settings.bake_task_is_running
+    from ..ui_panels.common import draw_collapsible_box
+    rebake = draw_collapsible_box(layout, p, 'phase2_show_rebake', 'ReBake', 'FILE_REFRESH')
+    if rebake is not None:
+        draw_rebake(rebake, context, p)
+    rename = draw_collapsible_box(layout, p, 'phase2_show_rename_final', 'Rename Final Mesh', 'SORTALPHA')
+    if rename is not None:
+        controls = rename.column(align=True)
+        controls.enabled = options.enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
+        for name in ('phase2_rename_asset', 'phase2_rename_name_index', 'phase2_rename_version_index'):
+            controls.prop(p, name)
+        rename.label(text='All prepared asset collections in this scene', icon='INFO')
+        controls.prop(p, 'phase2_rename_fbx')
+        controls.prop(p, 'phase2_rename_blend')
+        controls.prop(p, 'phase2_rename_json')
+        rename.label(text='Export pipeline: ' + ('Unity' if unity else 'Unreal / FAB'))
+        controls.operator('object.polygroups_rename_final_meshes', text='Rename Final Meshes', icon='SORTALPHA')
+        rename.label(text=p.phase2_rename_status)
+    if p.phase2_pipeline_state:
+        draw_pipeline_progress(layout, context, p)
+    recovery = layout.row()
+    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
+
+
+def draw_rebake(layout, context, p):
+    manual = layout.column(align=True)
+    manual.enabled = not (context.scene.polygroups_baking_settings.bake_task_is_running
+        or p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
+        or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running)
     rebake = manual.operator('object.polygroups_rebake_final_mesh', text='ReBake Final Mesh', icon='FILE_REFRESH')
     rebake.create_lods = p.phase2_rebake_create_lods
     rebake.export_selected = p.phase2_rebake_create_lods and p.phase2_rebake_export_selected
@@ -137,10 +163,6 @@ def draw_start(layout, context, p):
         live=layout.column(align=True)
         live.progress(factor=p.phase2_rebake_queue_progress/100,type='BAR',text=p.phase2_rebake_queue_status)
         live.operator('object.polygroups_stop_lod_job',text='Stop after Current Mesh',icon='CANCEL')
-    if p.phase2_pipeline_state:
-        draw_pipeline_progress(layout, context, p)
-    recovery = layout.row()
-    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
 
 
 class PipelineOverlay:

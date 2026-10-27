@@ -118,6 +118,7 @@ class OBJECT_OT_airetopo_fab_media(bpy.types.Operator):
                 s.notes_text = None
                 s.prompt_text = None
                 s.result_text = None
+                s.saved_filepath = ''
                 s.inventory_summary = ''
                 s.last_status = 'Fields cleared'
                 return {'FINISHED'}
@@ -212,6 +213,7 @@ class OBJECT_OT_airetopo_save_fab_media(bpy.types.Operator, ExportHelper):
             self.report({'WARNING'}, str(error))
             return {'CANCELLED'}
         s.last_status = 'Saved: ' + self.filepath
+        s.saved_filepath = self.filepath
         return {'FINISHED'}
 
 
