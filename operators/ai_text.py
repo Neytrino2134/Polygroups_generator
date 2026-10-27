@@ -157,6 +157,8 @@ CLASSES = (OBJECT_OT_airetopo_generate_text, OBJECT_OT_airetopo_text_document)
 
 
 def register():
+    from . import fab_media
+    fab_media.register()
     from . import asset_translation
     asset_translation.register()
     for cls in CLASSES:
@@ -167,6 +169,8 @@ def register():
 
 
 def unregister():
+    from . import fab_media
+    fab_media.unregister()
     from . import asset_translation
     asset_translation.unregister()
     stop_text_jobs()

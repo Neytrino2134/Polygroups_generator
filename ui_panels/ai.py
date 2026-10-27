@@ -48,6 +48,51 @@ class VIEW3D_PT_airetopo_ai_generation(bpy.types.Panel):
             self.draw_text_generation(context, text_content, 'OPENAI')
             self.draw_text_generation(context, text_content, 'GOOGLE')
 
+        json_content = draw_topic(layout, context, 'ai_4', 'JSON generation', 'FILE_TEXT')
+        if json_content is not None:
+            self.draw_json_generation(context, json_content)
+
+    def draw_json_generation(self, context, layout):
+        from ..services.fab_media import FIELD_DEFAULTS, MEASURED
+        s = context.scene.airetopo_fab_media_settings
+        controls = layout.column(align=True)
+        controls.enabled = not s.is_generating
+        controls.label(text=t(context, 'fab_json_target'), icon='INFO')
+        controls.prop(s, 'model')
+        row = controls.row(align=True)
+        row.operator('object.airetopo_fab_media', text=t(context, 'fab_json_fill'), icon='FILE_REFRESH').action = 'FILL'
+        row.operator('object.airetopo_fab_media', text=t(context, 'fab_json_clear'), icon='TRASH').action = 'CLEAR'
+        for key in FIELD_DEFAULTS:
+            if key not in MEASURED:
+                controls.prop(s, key, text=t(context, 'fab_json_' + key))
+        controls.prop(s, 'notes', text=t(context, 'fab_json_notes'))
+        controls.prop(s, 'notes_text', text=t(context, 'text_multiline_input'))
+        controls.operator('object.airetopo_fab_media', text=t(context, 'text_edit_input'), icon='TEXT').action = 'NOTES'
+        if s.notes_text:
+            controls.label(text=t(context, 'text_multiline_used'), icon='INFO')
+        stats = controls.box()
+        stats.label(text=t(context, 'fab_json_stats'))
+        values = stats.column(align=True)
+        values.enabled = False
+        for key in MEASURED:
+            values.prop(s, key, text=t(context, 'fab_json_' + key))
+        controls.label(text=t(context, 'fab_json_lods'), icon='INFO')
+        if s.inventory_summary:
+            controls.label(text=s.inventory_summary)
+        controls.prop(s, 'max_tokens')
+        controls.operator('object.airetopo_fab_media', text=t(context, 'fab_json_prompt'), icon='TEXT').action = 'PROMPT'
+        controls.operator('object.airetopo_fab_media', text=t(context, 'fab_json_generate'), icon='PLAY').action = 'GENERATE'
+        if s.is_generating:
+            layout.operator('object.airetopo_fab_media', text=t(context, 'fab_json_cancel'), icon='CANCEL').action = 'CANCEL'
+        if s.last_status:
+            for line in textwrap.wrap(s.last_status, width=48):
+                layout.label(text=line)
+        if s.result_text:
+            row = layout.row(align=True)
+            row.operator('object.airetopo_fab_media', text=t(context, 'text_open_result'), icon='TEXT').action = 'RESULT'
+            row.operator('object.airetopo_fab_media', text=t(context, 'text_copy_result'), icon='COPYDOWN').action = 'COPY'
+            layout.operator('object.airetopo_save_fab_media', text=t(context, 'fab_json_save'), icon='EXPORT')
+
     def draw_text_generation(self, context, layout, provider):
         from ..operators.ai_text import settings_for
         s = settings_for(context.scene, provider)

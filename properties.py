@@ -81,6 +81,7 @@ from .settings.baking import (
     POLYGROUPS_PG_resculpting_settings,
 )
 
+from .settings.fab_media import AIRETOPO_PG_fab_media_settings
 from .settings.ai import (
     AIRETOPO_PG_openai_text_settings,
     AIRETOPO_PG_google_text_settings,
@@ -91,6 +92,7 @@ from .settings.ai import (
 
 
 CLASSES = (
+    AIRETOPO_PG_fab_media_settings,
     POLYGROUPS_PG_rebake_queue_item,
     AIRETOPO_PG_openai_text_settings,
     AIRETOPO_PG_google_text_settings,
@@ -116,6 +118,7 @@ CLASSES = (
 def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+    bpy.types.Scene.airetopo_fab_media_settings = bpy.props.PointerProperty(type=AIRETOPO_PG_fab_media_settings)
     bpy.types.Scene.airetopo_openai_text_settings = bpy.props.PointerProperty(type=AIRETOPO_PG_openai_text_settings)
     bpy.types.Scene.airetopo_google_text_settings = bpy.props.PointerProperty(type=AIRETOPO_PG_google_text_settings)
 
@@ -166,6 +169,7 @@ def register():
 
 
 def unregister():
+    del bpy.types.Scene.airetopo_fab_media_settings
     del bpy.types.Scene.airetopo_openai_text_settings
     del bpy.types.Scene.airetopo_google_text_settings
     del bpy.types.Scene.polygroups_remesh_status

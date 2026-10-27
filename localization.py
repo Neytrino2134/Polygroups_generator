@@ -1943,6 +1943,40 @@ TEXT['RU'].update({
 })
 
 
+TEXT['EN'].update({
+    'fab_json_target': 'TexFlow / FAB Media Gallery · JSON v2',
+    'fab_json_fill': 'Fill Fields', 'fab_json_clear': 'Clear',
+    'fab_json_notes': 'Confirmed pack facts / hints', 'fab_json_stats': 'Calculated from scene (triangles)',
+    'fab_json_lods': 'One LOW / LOD chain = one mesh; limit: 20 assets',
+    'fab_json_prompt': 'Prepare / View Prompt', 'fab_json_generate': 'Generate JSON',
+    'fab_json_cancel': 'Cancel Locally', 'fab_json_save': 'Save JSON…',
+    'fab_json_seriesName': 'Series / collection', 'fab_json_seriesIndex': 'Collection number',
+    'fab_json_mainHeadline1': 'Headline · line 1', 'fab_json_mainHeadline2': 'Headline · line 2',
+    'fab_json_description': 'Description / hints', 'fab_json_assetPackHeadline': 'Pack headline',
+    'fab_json_assetHeadline': 'Asset name', 'fab_json_naniteLine1': 'MID Nanite label',
+    'fab_json_naniteLine2': 'LOW Nanite label', 'fab_json_assetsQuantityLine1': 'Unique assets',
+    'fab_json_assetsQuantityLine2': 'Static meshes', 'fab_json_averagePolycountLow': 'Average LOW',
+    'fab_json_averagePolycountMid': 'Average MID', 'fab_json_minMaxPolycountLow': 'Min–Max LOW',
+    'fab_json_minMaxPolycountMid': 'Min–Max MID',
+})
+TEXT['RU'].update({
+    'fab_json_target': 'TexFlow / FAB Media Gallery · JSON v2',
+    'fab_json_fill': 'Заполнить поля', 'fab_json_clear': 'Очистить',
+    'fab_json_notes': 'Факты о паке / подсказки', 'fab_json_stats': 'Рассчитано по сцене (треугольники)',
+    'fab_json_lods': 'LOW / цепочка LOD = один меш; до 20 ассетов',
+    'fab_json_prompt': 'Подготовить / открыть промпт', 'fab_json_generate': 'Генерировать JSON',
+    'fab_json_cancel': 'Отменить локально', 'fab_json_save': 'Сохранить JSON…',
+    'fab_json_seriesName': 'Серия / коллекция', 'fab_json_seriesIndex': 'Номер коллекции',
+    'fab_json_mainHeadline1': 'Заголовок · строка 1', 'fab_json_mainHeadline2': 'Заголовок · строка 2',
+    'fab_json_description': 'Описание / подсказки', 'fab_json_assetPackHeadline': 'Заголовок пака',
+    'fab_json_assetHeadline': 'Название ассета', 'fab_json_naniteLine1': 'Подпись Nanite MID',
+    'fab_json_naniteLine2': 'Подпись Nanite LOW', 'fab_json_assetsQuantityLine1': 'Уникальные ассеты',
+    'fab_json_assetsQuantityLine2': 'Статические меши', 'fab_json_averagePolycountLow': 'Среднее LOW',
+    'fab_json_averagePolycountMid': 'Среднее MID', 'fab_json_minMaxPolycountLow': 'Мин–Макс LOW',
+    'fab_json_minMaxPolycountMid': 'Мин–Макс MID',
+})
+
+
 def get_preferences(context):
     if context is None:
         return None
