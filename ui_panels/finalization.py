@@ -327,6 +327,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             text=t(context, "duplicate_and_apply_decimate"),
         )
         column.prop(settings, "smart_decimate_hide_source", text=t(context, "smart_decimate_hide_low"))
+        column.prop(settings, 'smart_decimate_reunwrap_uv', text=t(context, 'smart_decimate_reunwrap_uv'))
         column.prop(settings, "smart_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))
         ratios = column.column(align=True)
         ratios.enabled = settings.smart_decimate_triangle_limit == 0
@@ -348,6 +349,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             icon="MOD_DECIM",
         )
         smart_decimate_operator.hide_source = settings.smart_decimate_hide_source
+        smart_decimate_operator.reunwrap_uv = settings.smart_decimate_reunwrap_uv
         smart_decimate_operator.ratio = settings.smart_decimate_ratio
         smart_decimate_operator.triangle_limit = settings.smart_decimate_triangle_limit
         smart_decimate_operator.seams_ratio = settings.smart_decimate_seams_ratio

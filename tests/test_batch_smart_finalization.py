@@ -146,7 +146,7 @@ objects[2].hide_viewport = True
 final.smart_decimate_triangle_limit = 200
 final.smart_decimate_duplicate_and_apply = False
 assert bpy.ops.object.polygroups_smart_decimate_all_generated() == {'FINISHED'}
-assert len(objects[2].modifiers) == 2
+assert not objects[2].modifiers  # UV correction applies both passes to this mesh.
 assert all(not obj.modifiers for obj in objects if obj != objects[2])
 assert layer.exclude and collection.hide_viewport and objects[2].hide_viewport
 assert sibling_layer.exclude

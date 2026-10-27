@@ -1,14 +1,14 @@
 """Run with Blender --background --factory-startup --python this_file."""
-import importlib.util
+import sys
 from pathlib import Path
 
 import bpy
+import addon_utils
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("smart_decimate", ROOT / "operators/smart_decimate.py")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-bpy.utils.register_class(module.OBJECT_OT_polygroups_smart_decimate)
+sys.path.insert(0, str(ROOT.parent))
+addon_utils.enable(ROOT.name, default_set=False)
+from polygroups_generator.operators import smart_decimate as module
 
 bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16)
 source = bpy.context.object
@@ -22,12 +22,12 @@ for edge in source.data.edges:
     edge.use_seam = all(abs(source.data.vertices[i].co.y) < 1e-5 for i in edge.vertices)
 original_vertices = len(source.data.vertices)
 
-assert bpy.ops.object.polygroups_smart_decimate(ratio=.4) == {"FINISHED"}
+assert bpy.ops.object.polygroups_smart_decimate(ratio=.4, reunwrap_uv=False) == {"FINISHED"}
 seams, body = source.modifiers
 assert seams.name == "Seams Decimate" and abs(seams.ratio - .9) < 1e-6
 assert not seams.invert_vertex_group and body.invert_vertex_group
 assert seams.vertex_group == body.vertex_group
-assert bpy.ops.object.polygroups_smart_decimate(seams_ratio=.8) == {"FINISHED"}
+assert bpy.ops.object.polygroups_smart_decimate(seams_ratio=.8, reunwrap_uv=False) == {"FINISHED"}
 assert len(source.modifiers) == 2
 assert abs(seams.ratio - .8) < 1e-6
 

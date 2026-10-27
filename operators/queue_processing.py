@@ -368,6 +368,9 @@ class QueueProcessingMixin:
             if "FINISHED" not in result:
                 raise RuntimeError(f"Smart Decimate failed for {obj.name}: check UV seam edges")
             for name in (SEAMS_DECIMATE_MODIFIER_NAME, SMART_DECIMATE_MODIFIER_NAME):
+                # UV repair already applies each pass on UV-mapped meshes.
+                if obj.modifiers.get(name) is None:
+                    continue
                 if "FINISHED" not in self.tracked(lambda: bpy.ops.object.modifier_apply(modifier=name)):
                     raise RuntimeError(f"Applying {name} failed for {obj.name}")
             self.file_record.setdefault("finalization", []).append({

@@ -7,6 +7,7 @@ from ..core.lod_naming import lod_base, lod_name, lod_index
 from mathutils import Vector
 from .sequential_jobs import SequentialJob
 from ..core.mesh_fold_repair import repair_local_folds
+from .uv_boundary_relax import relax_uv_boundaries
 
 from .smart_decimate import (
     SEAMS_DECIMATE_MODIFIER_NAME,
@@ -465,6 +466,7 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
                 # from the actual mesh produced by the previous stage.
                 for modifier in tuple(lod.modifiers):
                     bpy.ops.object.modifier_apply(modifier=modifier.name)
+                    relax_uv_boundaries(context, lod)
                 seam_mod, body_mod = _configure_pass(lod)
                 depsgraph = context.evaluated_depsgraph_get()
                 tris, body, seam = _fit_ratios(lod, seam_mod, body_mod, target, depsgraph)
@@ -474,15 +476,20 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
                     final_mod, tris, final_ratio = _fit_final_decimate(lod, target, depsgraph)
                 if seam_mod is not None:
                     bpy.ops.object.modifier_apply(modifier=seam_mod.name)
+                    relax_uv_boundaries(context, lod)
                 bpy.ops.object.modifier_apply(modifier=body_mod.name)
+                relax_uv_boundaries(context, lod)
                 if final_mod is not None:
                     bpy.ops.object.modifier_apply(modifier=final_mod.name)
+                    relax_uv_boundaries(context, lod)
                 if settings.smart_lods_triangulate_all:
                     triangulate = lod.modifiers.new("LOD Triangulate", "TRIANGULATE")
                     bpy.ops.object.modifier_apply(modifier=triangulate.name)
+                    relax_uv_boundaries(context, lod)
                 if settings.smart_lods_remove_zero_area:
                     removed = _clean_zero_area_lod(lod)
                     if removed:
+                        relax_uv_boundaries(context, lod)
                         self.report({'INFO'}, f'LOD{index}: removed {removed} zero-area triangles')
                 actual = _triangle_count(lod, context.evaluated_depsgraph_get())
                 if actual > target:

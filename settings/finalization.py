@@ -374,6 +374,8 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         description="Duplicate the active object, add Smart Decimate to the duplicate, and apply it",
         default=True,
     )
+    smart_decimate_reunwrap_uv: bpy.props.BoolProperty(name='Reunwrap UV / Pin Island Borders', default=True,
+        description='Apply both decimation passes and relax UV interiors while preserving island borders')
     smart_decimate_hide_source: bpy.props.BoolProperty(
         name="Hide LOW After Decimate", default=False,
         description="Disable original LOW viewport display after successful Smart Decimate",

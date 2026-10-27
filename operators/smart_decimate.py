@@ -94,6 +94,8 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
         name="Hide LOW After Decimate", default=False,
         description="Disable the original LOW object in the viewport after successful decimation",
     )
+    reunwrap_uv: bpy.props.BoolProperty(name='Reunwrap UV / Pin Island Borders', default=True,
+        description='Apply decimation and relax UV interiors with fixed seam/island borders after each pass')
 
     @classmethod
     def poll(cls, context):
@@ -109,6 +111,8 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="OBJECT")
 
         obj = _duplicate_mesh_object(context, source_obj) if self.duplicate_and_apply else source_obj
+        if self.reunwrap_uv and obj.data.uv_layers and obj.data.users > 1:
+            obj.data = obj.data.copy()
         bpy.ops.object.select_all(action="DESELECT")
         obj.select_set(True)
         context.view_layer.objects.active = obj
@@ -181,13 +185,38 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
                 budget_suffix += "; triangle limit could not be reached"
 
         applied_suffix = ""
-        if self.duplicate_and_apply:
+        if self.duplicate_and_apply or (self.reunwrap_uv and obj.data.uv_layers):
+            backup = obj.data.copy()
+            attributes = ('decimate_type', 'ratio', 'vertex_group', 'invert_vertex_group',
+                          'vertex_group_factor', 'use_collapse_triangulate', 'show_viewport', 'show_render')
+            saved_passes = [(mod.name, obj.modifiers.find(mod.name),
+                             {name: getattr(mod, name) for name in attributes})
+                            for mod in (seams_modifier, modifier)]
             try:
+                from .uv_boundary_relax import relax_uv_boundaries
                 bpy.ops.object.modifier_apply(modifier=seams_modifier.name)
+                if self.reunwrap_uv:
+                    relax_uv_boundaries(context, obj)
                 bpy.ops.object.modifier_apply(modifier=modifier.name)
-                applied_suffix = ", applied to duplicate"
-            except RuntimeError as error:
-                self.report({"WARNING"}, f"{obj.name}: {error}")
+                if self.reunwrap_uv:
+                    relax_uv_boundaries(context, obj)
+                applied_suffix = ', applied to duplicate' if self.duplicate_and_apply else ', applied to current mesh'
+                if self.reunwrap_uv and obj.data.uv_layers:
+                    applied_suffix += ', UV borders pinned and interiors unwrapped'
+            except (RuntimeError, ValueError) as error:
+                failed_mesh = obj.data
+                obj.data = backup
+                for name, position, values in saved_passes:
+                    restored = obj.modifiers.get(name) or obj.modifiers.new(name, 'DECIMATE')
+                    for attribute, value in values.items():
+                        setattr(restored, attribute, value)
+                    bpy.ops.object.modifier_move_to_index(modifier=restored.name, index=position)
+                if failed_mesh.users == 0:
+                    bpy.data.meshes.remove(failed_mesh)
+                self.report({'WARNING'}, f'{obj.name}: decimation/UV repair failed; mesh restored: {error}')
+                return {'CANCELLED'}
+            else:
+                bpy.data.meshes.remove(backup)
 
         if obj.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
@@ -287,6 +316,7 @@ class OBJECT_OT_polygroups_smart_decimate_all_generated(bpy.types.Operator):
                         seams_ratio=settings.smart_decimate_seams_ratio,
                         duplicate_and_apply=settings.smart_decimate_duplicate_and_apply,
                         hide_source=settings.smart_decimate_hide_source,
+                        reunwrap_uv=settings.smart_decimate_reunwrap_uv,
                     )
                     if 'FINISHED' not in result:
                         raise RuntimeError('Smart Decimate cancelled; check UV seam edges')
