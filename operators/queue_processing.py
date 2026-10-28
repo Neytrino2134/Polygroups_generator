@@ -4,6 +4,7 @@ import bmesh
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once, get_remesh_preset_counts
 from .small_islands import plan_merge
 from .relax_seams import relax_seams
+from ..pin_edges import pin_layer
 from .object_seam_cutter import (
     _delete_loose_geometry_for_autofix,
     _fill_open_nonmanifold_boundaries,
@@ -268,6 +269,32 @@ class QueueProcessingMixin:
             )
         finally:
             bpy.ops.object.mode_set(mode="OBJECT")
+
+    def reset_smart_seams(self, context, obj):
+        """Replace all seams and pins with Smart Seams before the third remesh."""
+        self.select_source(context, obj)
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+            self.owned_meshes.add(obj.data)
+        seam_settings = self.scene.polygroups_seam_preparation_settings
+        previous_angle = seam_settings.smart_seam_angle_limit
+        bpy.ops.object.mode_set(mode="EDIT")
+        try:
+            bm = bmesh.from_edit_mesh(obj.data)
+            pins = pin_layer(bm)
+            for edge in bm.edges:
+                edge.seam = False
+                if pins is not None:
+                    edge[pins] = 0
+            bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+            bpy.ops.mesh.select_all(action="SELECT")
+            seam_settings.smart_seam_angle_limit = self.settings.batch_stage_4_reset_smart_seams_angle
+            result = bpy.ops.mesh.polygroups_mark_smart_angle_seams("EXEC_DEFAULT")
+        finally:
+            seam_settings.smart_seam_angle_limit = previous_angle
+            bpy.ops.object.mode_set(mode="OBJECT")
+        if "FINISHED" not in result:
+            raise RuntimeError(f"Smart Seams failed before the third remesh: {obj.name}")
 
     def autofix_second_pass(self, context, obj):
         self.select_source(context, obj)

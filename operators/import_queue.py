@@ -418,6 +418,17 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                         settings.remesh_pregenerate_polygroups,
                         settings.remesh_auto_generate_seams,
                     )
+                self.stage = (
+                    "RESET_SMART_SEAMS"
+                    if self.batch_stages and self.pass_number == 4
+                    and settings.batch_stage_4_reset_smart_seams
+                    else "REMESH" if self.pass_method else self.pre_unwrap_stage()
+                )
+        elif self.stage == "RESET_SMART_SEAMS":
+            self.reset_smart_seams(context, self.pass_sources[self.mesh_index])
+            self.mesh_index += 1
+            if self.mesh_index >= len(self.pass_sources):
+                self.mesh_index = 0
                 self.stage = "REMESH" if self.pass_method else self.pre_unwrap_stage()
         elif self.stage == "REMESH":
             settings.batch_remesh_progress = 0
@@ -547,7 +558,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                         selected_only=False,
                         sharp_preference=3.0,
                         create_edges=True,
-                        pin_generated=True,
+                        pin_generated=getattr(settings, repair_prefix + "_pin_generated"),
                         merge_small_islands=True,
                         small_island_threshold=3.0,
                         smart_relax=True,

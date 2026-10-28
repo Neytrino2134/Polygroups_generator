@@ -890,6 +890,7 @@ def draw_batch_processing(content, context, settings):
         repair.prop(settings, "batch_first_uv_repair_threshold", text=t(context, "uv_repair_threshold"))
         repair.prop(settings, "batch_first_uv_repair_min_faces", text=t(context, "uv_repair_min_faces"))
         repair.prop(settings, "batch_first_uv_repair_surface_angle", text=t(context, "uv_repair_surface_angle"))
+        repair.prop(settings, "batch_first_uv_repair_pin_generated", text=t(context, "uv_repair_pin_generated"))
 
     if draw_batch_stage_heading(content, t(context, "batch_stage_narrow"),
                                 settings, 3, "batch_narrow_island_enabled"):
@@ -929,6 +930,13 @@ def draw_batch_processing(content, context, settings):
                                     f"batch_stage_{number}_enabled"):
             stage = content.column(align=True)
             stage.enabled = editable and getattr(settings, f"batch_stage_{number}_enabled")
+            if number == 4:
+                stage.prop(settings, "batch_stage_4_reset_smart_seams", text=t(context, "batch_reset_smart_seams"))
+                reset_angle = stage.row()
+                reset_angle.enabled = settings.batch_stage_4_reset_smart_seams
+                reset_angle.prop(settings, "batch_stage_4_reset_smart_seams_angle",
+                                 text=t(context, "smart_seam_angle_limit"))
+                stage.separator()
             stage.prop(settings, f"batch_stage_{number}_auto_remesh", text="Auto Remesh (Quad)")
             remesh_options = stage.column(align=True)
             remesh_options.enabled = getattr(settings, f"batch_stage_{number}_auto_remesh")
@@ -966,7 +974,7 @@ def draw_batch_processing(content, context, settings):
             stage.prop(settings, "fold_repair_dangling", text=t(context, "fold_repair_dangling"))
             repair = stage.column(align=True)
             repair.enabled = getattr(settings, f"batch_stage_{number}_uv_repair_enabled")
-            for suffix in ("threshold", "min_faces", "surface_angle"):
+            for suffix in ("threshold", "min_faces", "surface_angle", "pin_generated"):
                 repair.prop(settings, f"batch_stage_{number}_uv_repair_{suffix}",
                             text=t(context, "uv_repair_" + suffix))
 

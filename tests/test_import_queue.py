@@ -476,9 +476,16 @@ with tempfile.TemporaryDirectory() as directory:
     def traced_autofix(queue, scene_context, obj):
         chain.append(("autofix", obj, None))
 
+    original_reset = queue_module.ImportQueue.reset_smart_seams
+
+    def traced_reset(queue, scene_context, obj):
+        chain.append(("reset", obj, None))
+        return original_reset(queue, scene_context, obj)
+
     with (patch.object(queue_module, "RemeshJob", ChainedJob),
           patch.object(queue_module.ImportQueue, "smart_relax_edges", traced_relax),
-          patch.object(queue_module.ImportQueue, "autofix_second_pass", traced_autofix)):
+          patch.object(queue_module.ImportQueue, "autofix_second_pass", traced_autofix),
+          patch.object(queue_module.ImportQueue, "reset_smart_seams", traced_reset)):
         queue = queue_module.ImportQueue(context, paths[:1], False, report)
         queue.begin()
         advance_until(queue, lambda: queue.stage == "UNWRAP_PASS" and queue.pass_number == 3)
@@ -486,11 +493,15 @@ with tempfile.TemporaryDirectory() as directory:
         advance_until(queue, lambda: queue.finished)
         assert settings.batch_failed_count == 0
         assert [item[0] for item in chain] == [
-            "start", "finish", "relax", "autofix", "start", "finish", "relax",
+            "start", "finish", "relax", "autofix", "reset", "start", "finish", "relax", "autofix",
         ]
         assert chain[2][1] == chain[1][1]
         assert chain[3][1] == chain[1][1]
-        assert chain[6][1] == chain[5][1]
+        # Smart Seams replace all seams on the pass-2 result before the third remesh.
+        assert chain[4][1] == chain[1][1] == chain[5][1]
+        reset_mesh = chain[4][1].data
+        assert any(edge.use_seam for edge in reset_mesh.edges)
+        assert chain[7][1] == chain[6][1]
         assert [item[2] for item in chain if item[0] == "start"] == [
             dict(queue_module.get_remesh_preset_counts(context))[preset]
             for preset in ("LOW", "HIGH")

@@ -51,6 +51,12 @@ assert model.batch_first_uv_repair_enabled
 assert model.batch_first_uv_repair_threshold == 4.0
 assert model.batch_first_uv_repair_min_faces == 6
 assert abs(model.batch_first_uv_repair_surface_angle - radians(45)) < 1.0e-6
+assert not any(getattr(model, name + "_uv_repair_pin_generated")
+               for name in ("batch_first", "batch_stage_3", "batch_stage_4"))
+assert model.batch_stage_3_uv_repair_enabled
+assert not model.batch_stage_4_uv_repair_enabled
+assert model.batch_stage_4_reset_smart_seams
+assert abs(model.batch_stage_4_reset_smart_seams_angle - radians(25)) < 1.0e-6
 assert model.batch_first_remove_small_loose_parts
 assert model.batch_first_small_loose_part_metric == "BOUNDING_BOX"
 assert model.batch_first_small_loose_part_threshold_percent == 8.0
@@ -116,6 +122,10 @@ model.batch_first_uv_repair_enabled = False
 model.batch_first_uv_repair_threshold = 9.0
 model.batch_first_uv_repair_min_faces = 12
 model.batch_first_uv_repair_surface_angle = radians(30)
+model.batch_stage_3_uv_repair_pin_generated = True
+model.batch_stage_4_uv_repair_enabled = True
+model.batch_stage_4_reset_smart_seams = False
+model.batch_stage_4_reset_smart_seams_angle = radians(50)
 model.batch_narrow_island_max_width_percent = 20.0
 model.batch_stage_4_enabled = False
 model.batch_stage_3_remesh_preset = "HIGH"
@@ -166,6 +176,10 @@ assert model.batch_first_uv_repair_enabled
 assert model.batch_first_uv_repair_threshold == 4.0
 assert model.batch_first_uv_repair_min_faces == 6
 assert abs(model.batch_first_uv_repair_surface_angle - radians(45)) < 1.0e-6
+assert not model.batch_stage_3_uv_repair_pin_generated
+assert not model.batch_stage_4_uv_repair_enabled
+assert model.batch_stage_4_reset_smart_seams
+assert abs(model.batch_stage_4_reset_smart_seams_angle - radians(25)) < 1.0e-6
 assert model.batch_narrow_island_max_width_percent == 10.0
 assert model.batch_stage_4_enabled
 assert model.batch_stage_3_remesh_preset == "MID"

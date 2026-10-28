@@ -629,6 +629,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Surface Angle", default=radians(45.0),
         min=0.0, max=radians(180.0), subtype="ANGLE",
     )
+    batch_first_uv_repair_pin_generated: bpy.props.BoolProperty(
+        name="Pin Generated Seams", default=False,
+        description="Pin seams created by Smart UV Repair in remesh pass 1",
+    )
     batch_first_remove_small_loose_parts: bpy.props.BoolProperty(
         name="Remove Small Loose Parts",
         default=True,
@@ -764,6 +768,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Surface Angle", default=radians(45.0),
         min=0.0, max=radians(180.0), subtype="ANGLE",
     )
+    batch_stage_3_uv_repair_pin_generated: bpy.props.BoolProperty(
+        name="Pin Generated Seams", default=False,
+        description="Pin seams created by Smart UV Repair in remesh pass 2",
+    )
     batch_stage_3_auto_unwrap_method: bpy.props.EnumProperty(
         name="Unwrap Method", items=BATCH_REMESH_UNWRAP_METHOD_ITEMS, default="ANGLE",
     )
@@ -815,6 +823,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_stage_4_enabled: bpy.props.BoolProperty(
         name="Stage 8: Third Remesh", default=True,
         description="Remesh the result of the preceding enabled stage at the selected density",
+    )
+    batch_stage_4_reset_smart_seams: bpy.props.BoolProperty(
+        name="Clear All Seams and Generate Smart Seams", default=True,
+        description="Before the third remesh, clear every seam and pin, then generate Smart Seams on the whole mesh",
+    )
+    batch_stage_4_reset_smart_seams_angle: bpy.props.FloatProperty(
+        name="Surface Angle", default=radians(25.0),
+        min=radians(1.0), max=radians(89.0), subtype="ANGLE",
+        description="Surface angle for Smart Seams generated before the third remesh",
     )
     batch_stage_4_auto_remesh: bpy.props.BoolProperty(name="Auto Remesh", default=True)
     batch_stage_4_remesh_preset: bpy.props.EnumProperty(items=REMESH_PRESET_ITEMS, default="MID")
@@ -875,7 +892,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     batch_stage_4_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap", default=True)
     batch_stage_4_uv_repair_enabled: bpy.props.BoolProperty(
-        name="Smart UV Repair", default=True,
+        name="Smart UV Repair", default=False,
         description="Run Smart UV Repair after Auto Unwrap in remesh pass 3",
     )
     batch_stage_4_uv_repair_threshold: bpy.props.FloatProperty(
@@ -887,6 +904,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_stage_4_uv_repair_surface_angle: bpy.props.FloatProperty(
         name="Surface Angle", default=radians(45.0),
         min=0.0, max=radians(180.0), subtype="ANGLE",
+    )
+    batch_stage_4_uv_repair_pin_generated: bpy.props.BoolProperty(
+        name="Pin Generated Seams", default=False,
+        description="Pin seams created by Smart UV Repair in remesh pass 3",
     )
     batch_stage_4_auto_unwrap_method: bpy.props.EnumProperty(
         name="Unwrap Method", items=BATCH_REMESH_UNWRAP_METHOD_ITEMS, default="ANGLE",
