@@ -257,6 +257,40 @@ assert all(is_disk(classify(chart)) for chart in charts(live)), [classify(c).chi
 bpy.ops.object.mode_set(mode="OBJECT")
 settings.topology_guard_after_smart_seams = False
 
+# ---- Batch Import: Topology Guard is the last step of remesh pass 3, before Auto Unwrap
+from polygroups_generator.operators.queue_processing import QueueProcessingMixin
+
+batch = scene.polygroups_model_preparation_settings
+assert batch.batch_stage_4_topology_guard
+
+
+class GuardQueue(QueueProcessingMixin):
+    def __init__(self, pass_number):
+        self.scene, self.settings = scene, batch
+        self.batch_stages, self.pass_number = True, pass_number
+        self.owned_meshes, self.messages = set(), []
+
+    def report(self, level, message):
+        self.messages.append(message)
+
+
+assert GuardQueue(3).unwrap_entry_stage() == "UNWRAP_PASS"
+queue = GuardQueue(4)
+assert queue.unwrap_entry_stage() == "TOPOLOGY_GUARD"
+batch.batch_stage_4_autofix_enabled = False
+batch.batch_stage_4_remove_small_loose_parts = False
+assert queue.pre_unwrap_stage() == "TOPOLOGY_GUARD"
+batch.batch_stage_4_topology_guard = False
+assert queue.pre_unwrap_stage() == "UNWRAP_PASS"
+batch.batch_stage_4_topology_guard = True
+torus = fresh("GuardBatch", lambda: bpy.ops.mesh.primitive_torus_add(major_segments=48, minor_segments=12))
+queue.topology_guard_fix(bpy.context, torus)
+assert torus.mode == "OBJECT" and queue.messages, queue.messages
+bm = bmesh.new()
+bm.from_mesh(torus.data)
+assert all_disks(bm)
+bm.free()
+
 # ---- the user's reference meshes (broken / manually fixed pairs)
 # The file is a live work scene; check whatever reference meshes it still holds.
 RETOPO_03 = "Retopo_03_Highpoly_Generated.001"

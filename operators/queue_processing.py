@@ -4,6 +4,7 @@ import bmesh
 from ..core.remesh_defaults import apply_quad_remesher_defaults_once, get_remesh_preset_counts
 from .small_islands import plan_merge
 from .relax_seams import relax_seams
+from .topology_guard import apply_topology_guard
 from ..pin_edges import pin_layer
 from .object_seam_cutter import (
     _delete_loose_geometry_for_autofix,
@@ -352,6 +353,33 @@ class QueueProcessingMixin:
             return "SECOND_SMALL_ISLANDS"
         return "PASS_SETUP"
 
+    def topology_guard_enabled(self):
+        return bool(self.batch_stages and self.pass_number == 4
+                    and self.settings.batch_stage_4_topology_guard)
+
+    def unwrap_entry_stage(self):
+        """Last step of remesh pass 3 before Auto Unwrap: Topology Guard, when enabled."""
+        self.mesh_index = 0
+        return "TOPOLOGY_GUARD" if self.topology_guard_enabled() else "UNWRAP_PASS"
+
+    def topology_guard_fix(self, context, obj):
+        """Collapse mesh knots and fix non-disk charts with the 09 UV Preparation settings."""
+        self.select_source(context, obj)
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+            self.owned_meshes.add(obj.data)
+        guard = self.scene.polygroups_seam_finalization_settings
+        bpy.ops.object.mode_set(mode="EDIT")
+        try:
+            # Auto Unwrap runs next and unwraps every chart; skip the guard's own unwrap.
+            result, _created, generated = apply_topology_guard(
+                context, obj, guard, selected_only=False, unwrap=False)
+        finally:
+            bpy.ops.object.mode_set(mode="OBJECT")
+        if generated or result.knots:
+            self.report({"INFO"}, f"{obj.name}: Topology Guard collapsed {result.knots} knot(s), "
+                                  f"added {generated} seam edge(s)")
+
     def pre_unwrap_stage(self, loose_cleanup_done=False):
         if self.batch_stages and self.pass_number in (3, 4):
             self.mesh_index = 0
@@ -360,7 +388,7 @@ class QueueProcessingMixin:
                 return "REMOVE_SMALL_LOOSE_PARTS"
             if getattr(self.settings, f"batch_stage_{self.pass_number}_autofix_enabled"):
                 return "AUTOFIX_SECOND"
-            return "UNWRAP_PASS"
+            return self.unwrap_entry_stage()
         if (
             self.remove_small_loose_parts
             and self.pass_number == (2 if self.batch_stages else 1)

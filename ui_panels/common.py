@@ -961,6 +961,8 @@ def draw_batch_processing(content, context, settings):
             for suffix in ("fin_loose", "close_nonmanifold", "triangulate_ngons"):
                 autofix.prop(settings, f"batch_stage_{number}_autofix_{suffix}",
                              text=t(context, "batch_second_autofix_" + suffix))
+            if number == 4:
+                stage.prop(settings, "batch_stage_4_topology_guard", text=t(context, "batch_topology_guard"))
             stage.prop(settings, f"batch_stage_{number}_auto_unwrap", text=t(context, "auto_smart_uv_project"))
             unwrap_method = stage.row(align=True)
             unwrap_method.enabled = getattr(settings, f"batch_stage_{number}_auto_unwrap")

@@ -890,6 +890,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Triangulate N-gons", default=True,
         description="Triangulate faces with more than four sides",
     )
+    batch_stage_4_topology_guard: bpy.props.BoolProperty(
+        name="Topology Guard Fix", default=True,
+        description=("Before Auto Unwrap in remesh pass 3, collapse mesh knots and fix non-disk charts "
+                     "with the Topology Guard settings from 09 UV Preparation"),
+    )
     batch_stage_4_auto_unwrap: bpy.props.BoolProperty(name="Auto Unwrap", default=True)
     batch_stage_4_uv_repair_enabled: bpy.props.BoolProperty(
         name="Smart UV Repair", default=False,

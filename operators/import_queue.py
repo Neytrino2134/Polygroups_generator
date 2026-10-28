@@ -503,7 +503,14 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             targets = self.pass_outputs or self.pass_sources
             self.autofix_second_pass(context, targets[self.mesh_index])
             self.mesh_index += 1
-            self.stage = "AUTOFIX_SECOND" if self.mesh_index < len(targets) else "UNWRAP_PASS"
+            self.stage = "AUTOFIX_SECOND" if self.mesh_index < len(targets) else self.unwrap_entry_stage()
+        elif self.stage == "TOPOLOGY_GUARD":
+            targets = self.pass_outputs or self.pass_sources
+            self.topology_guard_fix(context, targets[self.mesh_index])
+            self.mesh_index += 1
+            if self.mesh_index >= len(targets):
+                self.mesh_index = 0
+                self.stage = "UNWRAP_PASS"
         elif self.stage == "REMOVE_SMALL_LOOSE_PARTS":
             targets = self.pass_outputs or self.pass_sources
             obj = targets[self.mesh_index]
@@ -586,13 +593,19 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                     self.select_source(context, obj)
                     if self.pass_unwrap_method == "SMART":
                         seam_settings = self.scene.polygroups_seam_preparation_settings
+                        guard = self.scene.polygroups_seam_finalization_settings
                         previous_angle = seam_settings.smart_seam_angle_limit
+                        previous_guard = guard.topology_guard_after_smart_seams
                         if self.batch_stages and self.pass_number == 2:
                             seam_settings.smart_seam_angle_limit = settings.batch_first_surface_angle
+                        if self.topology_guard_enabled():
+                            # Smart Unwrap regenerates seams; keep its charts disks too.
+                            guard.topology_guard_after_smart_seams = True
                         try:
                             success, _packed = smart_uv_unwrap_all(context, obj)
                         finally:
                             seam_settings.smart_seam_angle_limit = previous_angle
+                            guard.topology_guard_after_smart_seams = previous_guard
                         if not success:
                             raise RuntimeError(f"Smart UV Unwrap failed for {obj.name}")
                     elif self.pass_unwrap_method == "CLASSIC":
@@ -897,7 +910,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             ) / max(1, len(self.pass_sources))
         if self.stage in {
             "PASS_SETUP", "REMESH", "WAIT_REMESH", "AUTOFIX_SECOND",
-            "REMOVE_SMALL_LOOSE_PARTS", "UNWRAP_PASS",
+            "REMOVE_SMALL_LOOSE_PARTS", "TOPOLOGY_GUARD", "UNWRAP_PASS",
         }:
             count = max(1, len(getattr(self, "passes", ())))
             completed = min(self.pass_index, count)
@@ -906,6 +919,8 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 within = 0.85 * (self.mesh_index + (remesh_progress or 0)) / len(self.pass_sources)
             elif self.stage == "UNWRAP_PASS":
                 within = 0.9
+            elif self.stage == "TOPOLOGY_GUARD":
+                within = 0.89 + 0.01 * self.mesh_index / max(1, len(self.pass_outputs or self.pass_sources))
             elif self.stage == "REMOVE_SMALL_LOOSE_PARTS":
                 within = 0.88 + 0.02 * self.mesh_index / max(
                     1, len(self.pass_outputs or self.pass_sources),
