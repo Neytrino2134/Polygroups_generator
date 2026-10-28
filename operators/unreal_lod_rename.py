@@ -7,6 +7,7 @@ from ..core.asset_names import asset_name
 import bpy
 from .mesh_export import _safe_path_token
 from .fab_preparation import _texture_suffix
+from .render_textures import texture_planes
 
 
 def image_nodes(tree, seen=None):
@@ -168,11 +169,16 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
                 rebuilding = any(re.fullmatch(re.escape(f'SM_{base}') + r'_(?:HIGH|MID|LOW)', source or '', re.I)
                                  for source in sources)
                 permitted = {obj for obj in outside if obj.type == 'FONT' and obj.parent in objects}
+                # Render texture previews belong to the collection, not the LOD
+                # pack. Recognize their persistent tag rather than their names.
+                if collection:
+                    permitted.update(texture_planes(collection))
                 if rebuilding:
                     permitted.update(obj for obj in outside if re.fullmatch(
                         re.escape(f'SM_{base}') + r'_(?:HIGH|MID|LOW)', obj.name, re.I))
                 if outside - permitted:
-                    raise ValueError(f'Collection contains unselected objects: {base}')
+                    names = ', '.join(sorted(obj.name for obj in outside - permitted))
+                    raise ValueError(f'Collection contains unselected objects: {base}: {names}')
                 plans.append((base, meshes, names))
             if s.unreal_lod_prepare_materials:
                 if s.unreal_lod_copy_textures and not bpy.data.filepath:
