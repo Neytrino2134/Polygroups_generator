@@ -157,7 +157,7 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         description="Average island scale and pack all UV islands after unwrapping",
     )
     topology_guard_after_smart_seams: bpy.props.BoolProperty(
-        name="Run After Smart Seams", default=True,
+        name="Run After Smart Seams", default=False,
         description="Run Topology Guard automatically inside Generate Smart Seams and Smart UV Unwrap",
     )
     topology_guard_before_repair: bpy.props.BoolProperty(

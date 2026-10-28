@@ -67,7 +67,7 @@ def collapsed_share(bm):
 # ---- panel and defaults
 assert "topic_uv_4" in SECTION_SUBSECTION_PROPERTIES["show_uv_preparation_section"]
 assert settings.topology_guard_fix_handles and settings.topology_guard_fix_necks
-assert settings.topology_guard_create_edges and settings.topology_guard_after_smart_seams
+assert settings.topology_guard_create_edges and not settings.topology_guard_after_smart_seams
 assert math.isclose(settings.topology_guard_hole_ratio, 0.25, rel_tol=1e-6)
 
 
@@ -180,10 +180,21 @@ bpy.ops.object.mode_set(mode="OBJECT")
 torus = fresh("GuardSmartSeams", lambda: bpy.ops.mesh.primitive_torus_add(major_segments=48, minor_segments=12))
 bpy.ops.object.mode_set(mode="EDIT")
 bpy.ops.mesh.select_all(action="SELECT")
+# Topology Guard is a separate step by default: Smart Seams alone leaves the torus open.
+assert bpy.ops.mesh.polygroups_mark_smart_angle_seams() == {"FINISHED"}
+live = bmesh.from_edit_mesh(torus.data)
+assert not all(is_disk(classify(chart)) for chart in charts(live))
+bpy.ops.object.mode_set(mode="OBJECT")
+
+torus = fresh("GuardSmartSeamsHook", lambda: bpy.ops.mesh.primitive_torus_add(major_segments=48, minor_segments=12))
+settings.topology_guard_after_smart_seams = True
+bpy.ops.object.mode_set(mode="EDIT")
+bpy.ops.mesh.select_all(action="SELECT")
 assert bpy.ops.mesh.polygroups_mark_smart_angle_seams() == {"FINISHED"}
 live = bmesh.from_edit_mesh(torus.data)
 assert all(is_disk(classify(chart)) for chart in charts(live)), [classify(c).chi for c in charts(live)]
 bpy.ops.object.mode_set(mode="OBJECT")
+settings.topology_guard_after_smart_seams = False
 
 # ---- the user's reference meshes (broken / manually fixed pairs)
 if ZABROSHKA.exists():
