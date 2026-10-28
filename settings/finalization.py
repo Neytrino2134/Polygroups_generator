@@ -161,7 +161,7 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         description="Run Topology Guard automatically inside Generate Smart Seams and Smart UV Unwrap",
     )
     topology_guard_before_repair: bpy.props.BoolProperty(
-        name="Run Before Smart UV Repair", default=True,
+        name="Run Before Smart UV Repair", default=False,
         description="Fix chart topology and unwrap before Smart UV Repair measures stretch",
     )
     narrow_island_source: bpy.props.EnumProperty(

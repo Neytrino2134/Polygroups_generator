@@ -68,6 +68,7 @@ def collapsed_share(bm):
 assert "topic_uv_4" in SECTION_SUBSECTION_PROPERTIES["show_uv_preparation_section"]
 assert settings.topology_guard_fix_handles and settings.topology_guard_fix_necks
 assert settings.topology_guard_create_edges and not settings.topology_guard_after_smart_seams
+assert not settings.topology_guard_before_repair
 assert math.isclose(settings.topology_guard_hole_ratio, 0.25, rel_tol=1e-6)
 
 

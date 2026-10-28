@@ -121,8 +121,8 @@ assert any(v in {v for e in boundary for v in e.verts} for e in cut for v in e.v
 # Roll back the entire mesh if the post-commit relaxation/unwrap stage fails.
 from polygroups_generator.operators import repair_uv_stretch as module
 guard_settings = bpy.context.scene.polygroups_seam_finalization_settings
-# Topology Guard would already fix this open tube; test Repair's own rollback first.
-guard_settings.topology_guard_before_repair = False
+# Topology Guard is opt-in for Repair; test Repair's own rollback first.
+assert not guard_settings.topology_guard_before_repair
 obj = cylinder(True)
 bm = bmesh.from_edit_mesh(obj.data)
 uv = bm.loops.layers.uv.active
