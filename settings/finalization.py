@@ -306,6 +306,10 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         description="Check every generated LOD after decimation/triangulation and remove exactly zero-area triangles; keep nonzero thin faces",
         default=True,
     )
+    smart_decimate_smart_arrange: bpy.props.BoolProperty(name="Smart Arrange", default=True,
+        description="Place decimated copies on a common origin grid sized by the widest source asset")
+    smart_lods_smart_arrange: bpy.props.BoolProperty(name="Smart Arrange", default=True,
+        description="Precompute one grid from the widest source asset; align every LOD level to the same world X by object origins")
     smart_lods_auto_arrange: bpy.props.BoolProperty(
         name="Auto Arrange",
         description="Arrange one LOD pack per row on the XY floor plane, aligned by object origins",

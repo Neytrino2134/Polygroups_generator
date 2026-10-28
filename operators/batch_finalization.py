@@ -149,7 +149,11 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
                 source.hide_viewport = source.hide_render = source.hide_select = False
                 source.hide_set(False)
             sources = [source for col, source, meshes in packs]
-            if p.phase2_final_lods and s.smart_lods_auto_arrange:
+            if p.phase2_final_lods and s.smart_lods_auto_arrange and s.smart_lods_smart_arrange:
+                from ..core.smart_arrange import SmartArrangeGrid
+                worker._smart_grid = SmartArrangeGrid(context, sources, s.smart_lods_spacing)
+                worker._smart_grid.arrange_sources(context)
+            elif p.phase2_final_lods and s.smart_lods_auto_arrange:
                 from .batch_import import arrange_objects_zx
                 arrange_objects_zx(sources, mode='GRID', rows=len(sources), plane='XY', spacing=.1,
                     secondary_spacing=s.smart_lods_spacing, alignment='ORIGIN', preserve_order=True)

@@ -228,6 +228,8 @@ class OBJECT_OT_polygroups_smart_decimate(bpy.types.Operator):
                 f"vertex/vertices from {len(seam_edges)} seam edge(s){applied_suffix}{budget_suffix}"
             ),
         )
+        from ..core.smart_arrange import arrange_decimated
+        arrange_decimated(context, source_obj, obj)
         if self.hide_source:
             source_obj.hide_viewport = True
         return {"FINISHED"}

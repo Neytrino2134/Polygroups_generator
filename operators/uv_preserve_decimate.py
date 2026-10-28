@@ -84,6 +84,8 @@ class OBJECT_OT_polygroups_uv_preserve_decimate(bpy.types.Operator):
         bpy.ops.object.select_all(action="DESELECT")
         obj.select_set(True)
         context.view_layer.objects.active = obj
+        from ..core.smart_arrange import arrange_decimated
+        arrange_decimated(context, source_obj, obj)
         if self.hide_source and obj is not source_obj:
             source_obj.hide_viewport = True
         unreached = stats["triangles"] > target

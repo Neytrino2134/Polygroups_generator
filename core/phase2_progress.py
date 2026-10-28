@@ -81,6 +81,7 @@ def draw_start(layout, context, p):
         controls = relod.column(align=True)
         controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
         controls.prop(p, 'phase2_relod_delete_current_lods')
+        controls.prop(context.scene.polygroups_mesh_finalization_settings, 'smart_lods_smart_arrange')
         controls.prop(p, 'phase2_relod_method')
         if p.phase2_relod_method == 'UV_PRESERVE':
             controls.prop(p, 'phase2_relod_seam_mode')

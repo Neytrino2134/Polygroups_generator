@@ -374,6 +374,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         operator.join_angle = settings.uv_decimate_join_angle
         operator.duplicate = settings.uv_decimate_duplicate
         operator.hide_source = settings.uv_decimate_hide_source
+        column.prop(settings, "smart_decimate_smart_arrange")
         column.operator("object.polygroups_uv_preserve_decimate_all_generated",
                         text=t(context, "uv_decimate_all_generated"), icon="MOD_DECIM")
 
@@ -385,6 +386,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             "smart_decimate_duplicate_and_apply",
             text=t(context, "duplicate_and_apply_decimate"),
         )
+        column.prop(settings, "smart_decimate_smart_arrange")
         column.prop(settings, "smart_decimate_hide_source", text=t(context, "smart_decimate_hide_low"))
         column.prop(settings, 'smart_decimate_reunwrap_uv', text=t(context, 'smart_decimate_reunwrap_uv'))
         column.prop(settings, "smart_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))

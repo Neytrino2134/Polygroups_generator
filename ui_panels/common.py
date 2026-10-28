@@ -1017,6 +1017,7 @@ def draw_batch_processing(content, context, settings):
                                 settings, 11, "batch_smart_decimate_enabled"):
         decimate = content.column(align=True)
         decimate.enabled = editable and settings.batch_smart_decimate_enabled
+        decimate.prop(context.scene.polygroups_mesh_finalization_settings, "smart_decimate_smart_arrange")
         decimate.prop(settings, "batch_smart_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))
 
     if draw_batch_stage_heading(content, t(context, "batch_stage_smart_lods"),
@@ -1033,6 +1034,7 @@ def draw_batch_processing(content, context, settings):
 
 def draw_lod_decimate_method(layout, context, settings, prefix):
     """LOD decimate method menu; seam protection applies to UV Preserve only."""
+    layout.prop(context.scene.polygroups_mesh_finalization_settings, "smart_lods_smart_arrange")
     layout.prop(settings, prefix + "decimate_method", text=t(context, "lod_decimate_method"))
     seams = layout.row(align=True)
     seams.enabled = getattr(settings, prefix + "decimate_method") == "UV_PRESERVE"

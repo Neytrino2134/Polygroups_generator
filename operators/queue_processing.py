@@ -390,7 +390,7 @@ class QueueProcessingMixin:
             try:
                 for name in names:
                     setattr(lod_settings, name, getattr(settings, "batch_" + name))
-                lod_settings.smart_lods_auto_arrange = False
+                lod_settings.smart_lods_auto_arrange = lod_settings.smart_lods_smart_arrange
                 result = self.tracked(lambda: bpy.ops.object.polygroups_generate_smart_lods(active_only=True))
                 if "FINISHED" not in result:
                     raise RuntimeError(f"Smart LODs failed for {obj.name}")
@@ -402,6 +402,9 @@ class QueueProcessingMixin:
             if self.collection:
                 move_to_collection(outputs, self.collection)
             self.result_meshes.extend(item for item in outputs if item.type == "MESH")
+            if lod_settings.smart_lods_smart_arrange:
+                from ..core.smart_arrange import arrange_scene_lods
+                arrange_scene_lods(context, lod_settings.smart_lods_spacing)
             self.file_record.setdefault("finalization", []).append({
                 "object": obj.name, "stage": 12,
                 "decimate_method": settings.batch_smart_lods_decimate_method,
@@ -459,6 +462,13 @@ class QueueProcessingMixin:
                 matrix.translation += delta
                 obj.matrix_world = matrix
                 self.view_layer.update()
+
+        # File-group placement can shift an already generated LOD pack. Reflow
+        # the retained scene's outputs against a single shared source envelope.
+        final = self.scene.polygroups_mesh_finalization_settings
+        if final.smart_lods_smart_arrange and self.settings.batch_smart_lods_enabled:
+            from ..core.smart_arrange import arrange_scene_lods
+            arrange_scene_lods(bpy.context, final.smart_lods_spacing)
 
     @staticmethod
     def count_tris(objects):

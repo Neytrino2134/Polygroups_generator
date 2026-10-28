@@ -415,7 +415,13 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
         try:
             if mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
-            if settings.smart_lods_auto_arrange:
+            if settings.smart_lods_auto_arrange and settings.smart_lods_smart_arrange:
+                from ..core.smart_arrange import SmartArrangeGrid, scene_lod_sources
+                grid_sources = scene_lod_sources(context, active) if self.active_only else sources
+                self._smart_grid = SmartArrangeGrid(context, grid_sources, settings.smart_lods_spacing)
+                if not self.active_only:
+                    self._smart_grid.arrange_sources(context)
+            elif settings.smart_lods_auto_arrange:
                 from .batch_import import arrange_objects_zx
                 arrange_objects_zx(sources, mode='GRID', rows=len(sources), plane='XY',
                     spacing=.1, secondary_spacing=settings.smart_lods_spacing,
@@ -431,7 +437,7 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
                     progress = .02 + .98 * (pack_index + lod_index_done / settings.smart_lods_count) / len(sources)
                     yield progress, f'{pack_index+1}/{len(sources)} | {source.name} | LOD{lod_index_done-1}'
                 completed += 1
-            if settings.smart_lods_auto_arrange and completed:
+            if settings.smart_lods_auto_arrange and completed and not settings.smart_lods_smart_arrange:
                 objects = [obj for source in sources for obj in [source] +
                     [bpy.data.objects[lod_name(source.name, i, settings.smart_lods_prepare_mode)]
                      for i in range(settings.smart_lods_count)]]
@@ -465,6 +471,12 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
         original_mode = source.mode
         selected = tuple(context.selected_objects)
         settings = context.scene.polygroups_mesh_finalization_settings
+        grid = None
+        if settings.smart_lods_auto_arrange and settings.smart_lods_smart_arrange:
+            from ..core.smart_arrange import SmartArrangeGrid, scene_lod_sources
+            grid = getattr(self, '_smart_grid', None)
+            if grid is None:
+                grid = SmartArrangeGrid(context, scene_lod_sources(context, source), settings.smart_lods_spacing)
         targets = [getattr(settings, f"smart_lods_target_{i}") for i in range(1, settings.smart_lods_count + 1)]
         existing = [
             lod_name(source.name, index, settings.smart_lods_prepare_mode)
@@ -530,7 +542,10 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
                     over_budget.append(f"LOD{index}: {actual}/{target} tris")
                 else:
                     self.report({"INFO"}, f"LOD{index}: {actual}/{target} tris ({detail})")
-                if settings.smart_lods_auto_arrange:
+                if grid is not None:
+                    grid.place(lod, source, index+1)
+                    context.view_layer.update()
+                elif settings.smart_lods_auto_arrange:
                     step = getattr(self, '_lod_x_step', _world_x_bounds(source)[1] - _world_x_bounds(source)[0] + .1)
                     _arrange_after_previous(context, lod, previous, step, 'ORIGIN')
                 if settings.smart_lods_create_text:
