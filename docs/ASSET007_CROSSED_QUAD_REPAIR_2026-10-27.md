@@ -1,5 +1,7 @@
 # Asset_00_07: crossed-quad ear and singleton UV triangle repair
 
+Historical asset report. Current shared rules: [Auto Repair](dangling_mesh_repair.md).
+
 ## Reported asset
 
 Source: `Crystals_Pack_01/!Blend/Asset_00_07.blend`, object `SM_Asset_00_07_MID`.

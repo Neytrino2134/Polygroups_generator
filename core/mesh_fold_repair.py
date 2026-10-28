@@ -67,10 +67,10 @@ def _uv_boundary(patch, boundary, layers):
     for layer in layers:
         values = {}
         for edge in boundary:
-            inside = next(f for f in edge.link_faces if f in patch)
+            inside = next((f for f in edge.link_faces if f in patch), None)
             outside = next(f for f in edge.link_faces if f not in patch)
-            face = inside if edge.seam else outside
-            priority = 1 if edge.seam else 2
+            face = inside if edge.seam and inside is not None else outside
+            priority = 1 if edge.seam and inside is not None else 2
             for vert in edge.verts:
                 loop = next(l for l in face.loops if l.vert == vert)
                 values.setdefault(vert, []).append((priority, loop))
@@ -498,10 +498,6 @@ def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
     seam_collapsed = 0
     stretched = 0
     dangling = {}
-    if fix_dangling:
-        from .dangling_repair import repair_dangling
-        dangling = repair_dangling(bm, selected_only)
-        affected.update(dangling.pop('affected'))
     if fix_degenerate or fix_zero_area:
         # Rebuild the candidate list after each weld; BMesh may invalidate edges.
         while True:
@@ -604,6 +600,12 @@ def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
             if any(not e.is_manifold for e in boundary):
                 raise ValueError('Repair would open the patch boundary')
             folds += 1
+    # Preserve the established exact-weld and small-pocket transforms before
+    # the general region cleaner; they can also expose a previously blocked neck.
+    if fix_dangling:
+        from .dangling_repair import repair_dangling
+        dangling = repair_dangling(bm, selected_only)
+        affected.update(dangling.pop('affected'))
     if fix_stretched_triangles:
         for face in original_triangles:
             if not face.is_valid or (selected_only and face not in seeded):

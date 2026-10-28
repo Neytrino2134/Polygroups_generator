@@ -9,7 +9,7 @@ from ..localization import t
 class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
     bl_idname = 'mesh.polygroups_repair_mesh_folds'
     bl_label = 'Repair Mesh Folds'
-    bl_description = ('Repair local folds, zero-length edges and enabled singleton triangle '
+    bl_description = ('Repair local folds, open/closed folded regions, loose geometry, zero-length edges and singleton triangle '
                       'UV outliers while preserving surrounding topology and UV seams')
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -25,7 +25,7 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
     fix_zero_area: bpy.props.BoolProperty(name='Repair Zero Area at UV Seams', default=False,
         description='Merge identical endpoints of zero-area faces; preserve corner UVs and union seam/sharp flags')
     fix_dangling: bpy.props.BoolProperty(name='Remove Dangling Faces / Edges', default=True,
-        description='Remove small sheets attached through non-manifold edges, collapsed folded tails and loose geometry; fill and triangulate only repaired tail necks')
+        description='Remove attached sheets, open or closed folded regions and loose geometry; fill and triangulate only validated polygonal necks')
     selected_only: bpy.props.BoolProperty(name='Selected Area Only', default=False,
         description='Use selected defect faces as seeds; include the minimal surrounding patch')
     fix_stretched_triangles: bpy.props.BoolProperty(name='Merge Stretched Single Triangles', default=True,
@@ -77,18 +77,22 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
                 for face in source.faces:
                     if face.index in result['affected']:
                         face.select_set(True)
+                source.select_flush_mode()
                 source.edges.index_update()
                 source.verts.index_update()
+                loose_found = False
                 for edge in source.edges:
-                    if edge.index in result.get('affected_edges', ()):
+                    if not edge.link_faces and edge.index in result.get('affected_edges', ()):
                         edge.select_set(True)
+                        loose_found = True
                 for vertex in source.verts:
-                    if vertex.index in result.get('affected_verts', ()):
+                    if not vertex.link_edges and vertex.index in result.get('affected_verts', ()):
                         vertex.select_set(True)
-                if not result['affected'] and (result.get('affected_edges') or result.get('affected_verts')):
-                    source.select_mode = {'VERT'}
-                    context.tool_settings.mesh_select_mode = (True, False, False)
-                source.select_flush_mode()
+                        loose_found = True
+                if loose_found:
+                    source.select_mode = {'VERT', 'EDGE', 'FACE'} if result['affected'] else {'VERT'}
+                    context.tool_settings.mesh_select_mode = ((True, True, True) if result['affected']
+                                                              else (True, False, False))
                 if edit:
                     bmesh.update_edit_mesh(obj.data, destructive=False)
                 else:

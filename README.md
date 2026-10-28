@@ -289,6 +289,6 @@ switch off alphabetic sorting and collapse the tree to show collapsed top-level
 collections. This also folds other top-level collection branches. Entire-studio
 reset restores Color 8; other scoped resets retain the chosen tag.
 
-Auto Repair: [Dangling faces / edges and folded tails](docs/dangling_mesh_repair.md).
+Auto Repair: [Shared search, geometry/UV rules and open/closed folded regions](docs/dangling_mesh_repair.md).
 
 Smart Arrange: [Shared origin grid for Decimate and all LOD workflows](docs/smart_arrange.md).

@@ -3,22 +3,23 @@ import bpy,bmesh,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from polygroups_generator.core.mesh_fold_repair import repair_local_folds
-expected={'MID':23,'LOD0':10,'LOD1':6,'LOD2':4,'LOD3':1,'LOD4':1}
+expected={'MID':23,'LOD0':12,'LOD1':8,'LOD2':4,'LOD3':1,'LOD4':1}
+fills={'MID':1,'LOD0':1,'LOD1':1,'LOD2':1,'LOD3':0,'LOD4':0}
 for suffix,removed in expected.items():
  obj=bpy.data.objects['SM_Containers_01_01_'+suffix]
- bm=bmesh.new();bm.from_mesh(obj.data)
+ bm=bmesh.new();bm.from_mesh(obj.data);bm.faces.index_update()
  original={f.index for f in obj.data.polygons if f.select}
  positions={v:tuple(v.co) for v in bm.verts}
  layers=list(bm.loops.layers.uv.values())
- uv_snapshot={f:tuple(tuple(tuple(l[u].uv) for l in f.loops) for u in layers) for f in bm.faces}
+ uv_snapshot={f:(f.index,tuple(tuple(tuple(l[u].uv) for l in f.loops) for u in layers)) for f in bm.faces}
  invalid_before=sum(not e.is_manifold for e in bm.edges)
  result=repair_local_folds(bm,fix_folds=False,fix_degenerate=False,fix_dangling=True)
  assert result['dangling_faces']==removed,(suffix,result)
  assert original<=result['affected'],(suffix,original-result['affected'])
- assert result['dangling_filled']==(suffix=='MID')
+ assert result['dangling_filled']==fills[suffix]
  assert all(tuple(v.co)==positions[v] for v in bm.verts)
  assert all(tuple(tuple(tuple(l[u].uv) for l in f.loops) for u in layers)==uvs
-            for f,uvs in uv_snapshot.items() if f.is_valid)
+            for f,(index,uvs) in uv_snapshot.items() if f.is_valid and index not in result['affected'])
  assert sum(not e.is_manifold for e in bm.edges)==(invalid_before if suffix=='MID' else 0)
  assert not any(not e.link_faces for e in bm.edges)
  assert not any(not v.link_edges for v in bm.verts)

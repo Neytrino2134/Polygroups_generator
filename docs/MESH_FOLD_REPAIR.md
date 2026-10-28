@@ -1,5 +1,9 @@
 # Local mesh fold repair
 
+Current complete Auto Repair rules and usage: [General mesh repair](dangling_mesh_repair.md).
+This document describes the original small-pocket and exact-edge rules; its
+triangular-boundary limits do not apply to the separate generalized dangling-region rule.
+
 Available in **Model Preparation → Mesh Editing → Auto Repair** and
 **Seam Preparation → Mesh Editing → Auto Repair**. The existing tools remain
 under **Manual Editing**. These subsections are shared by the sidebar and

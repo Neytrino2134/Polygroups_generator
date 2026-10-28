@@ -1,5 +1,7 @@
 # Crystal backtracking ear repair — 2026-10-26
 
+Historical asset report. Current shared rules: [Auto Repair](dangling_mesh_repair.md).
+
 Asset: `Crystals_Pack_02_18.BLEND`, object `SM_Crystals_Pack_02_18_MID`.
 Output: sibling `Crystals_Pack_02_18_REPAIRED.blend`; original untouched.
 

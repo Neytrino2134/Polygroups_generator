@@ -1,5 +1,7 @@
 # Crystals_Pack_02_02: twisted backtracking ear — 2026-10-27
 
+Historical asset report. Current shared rules: [Auto Repair](dangling_mesh_repair.md).
+
 Object: `SM_Crystals_Pack_02_02_MID`.
 Input: `Crystals_Pack_02_02.blend` in the pack's `!Blend` directory.
 Output: `Crystals_Pack_02_02_REPAIRED.blend` alongside the source.

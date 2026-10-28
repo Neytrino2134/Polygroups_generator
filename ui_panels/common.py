@@ -319,6 +319,7 @@ def draw_mesh_editing(layout, context, prefix, loose_parts=False):
                                   text=t(context, "fold_repair_quality"), icon="UV")
         quality.action = 'SELECT_QUALITY'
         quality.selected_only = settings.fold_repair_selected_only
+        column.label(text=t(context, "fold_repair_quality_hint"))
         if settings.fold_repair_dangling:
             column.label(text=t(context, "fold_repair_dangling_hint"), icon="INFO")
         column.label(text=t(context, "fold_repair_hint"))
