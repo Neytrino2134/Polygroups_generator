@@ -832,7 +832,9 @@ def draw_batch_processing(content, context, settings):
     outside = content.column(align=True)
     outside.enabled = editable
     outside.prop(settings, "batch_disable_view_assist", text=t(context, "disable_view_assist"))
-    outside.prop(settings, "batch_separate_collections", text=t(context, "import_separate_collections"))
+    separate = outside.row(align=True)
+    separate.enabled = not settings.batch_phase2_enabled
+    separate.prop(settings, "batch_separate_collections", text=t(context, "import_separate_collections"))
 
     content.separator()
     content.label(text=t(context, "batch_stages"), icon="MODIFIER")
@@ -1050,8 +1052,7 @@ def draw_batch_processing(content, context, settings):
         phase2.enabled = editable and settings.batch_phase2_enabled
         phase2.label(text=t(context, "batch_phase2_hint"), icon="INFO")
         phase2.label(text=t(context, "batch_phase2_replaces"))
-        if not (settings.batch_separate_collections and settings.batch_save_generated_separately):
-            phase2.label(text=t(context, "batch_phase2_needs_separate"), icon="ERROR")
+        phase2.label(text=t(context, "batch_phase2_needs_separate"))
 
 
 def draw_lod_decimate_method(layout, context, settings, prefix):

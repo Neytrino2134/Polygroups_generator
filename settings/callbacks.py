@@ -141,22 +141,24 @@ def _update_batch_smart_lods(self, context):
     if self.batch_smart_lods_enabled:
         self.batch_smart_decimate_enabled = False
 
-# Stages 9-12 that Phase 2 replaces; their choice is kept while Phase 2 is on.
+# Stages 9-12 that Phase 2 replaces are forced off; Phase 2 reads separately saved
+# Generated.N files, so saving them is forced on. Both are restored when it is off.
 PHASE2_REPLACED_STAGES = ("batch_stage_5_enabled", "batch_autobake_enabled",
                           "batch_smart_decimate_enabled", "batch_smart_lods_enabled")
+PHASE2_REQUIRED = ("batch_separate_collections", "batch_save_generated_separately")
+PHASE2_LOCKED = PHASE2_REPLACED_STAGES + PHASE2_REQUIRED
 
 
 def _update_batch_phase2(self, context):
     del context
     if self.batch_phase2_enabled:
         self.batch_phase2_saved_stages = "".join(
-            "1" if getattr(self, name) else "0" for name in PHASE2_REPLACED_STAGES)
-        for name in PHASE2_REPLACED_STAGES:
-            setattr(self, name, False)
-    elif len(self.batch_phase2_saved_stages) == len(PHASE2_REPLACED_STAGES):
-        for name, flag in zip(PHASE2_REPLACED_STAGES, self.batch_phase2_saved_stages):
-            if flag == "1":
-                setattr(self, name, True)
+            "1" if getattr(self, name) else "0" for name in PHASE2_LOCKED)
+        for name in PHASE2_LOCKED:
+            setattr(self, name, name in PHASE2_REQUIRED)
+    elif len(self.batch_phase2_saved_stages) == len(PHASE2_LOCKED):
+        for name, flag in zip(PHASE2_LOCKED, self.batch_phase2_saved_stages):
+            setattr(self, name, flag == "1")
         self.batch_phase2_saved_stages = ""
 
 def _normalize_render_output_directory(self, context):

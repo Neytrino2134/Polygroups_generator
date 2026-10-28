@@ -346,7 +346,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
                 separate_save = group.column(align=True)
                 separate_save.enabled = not settings.batch_is_running
-                separate_save.prop(
+                # Stage 13 Phase 2 needs the separate files; it locks this switch on.
+                separate_toggle = separate_save.row(align=True)
+                separate_toggle.enabled = not settings.batch_phase2_enabled
+                separate_toggle.prop(
                     settings,
                     "batch_save_generated_separately",
                     text=t(context, "batch_save_generated_separately"),
