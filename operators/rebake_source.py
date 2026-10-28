@@ -1,11 +1,23 @@
-"""Temporarily append the numbered Resculpting source for a final rebake."""
+"""Rank numbered Highpoly sources and temporarily append external collections."""
 from pathlib import Path
 import re
 
 import bpy
 
 COLLECTION_PATTERN = re.compile(r'^Generated\.(\d+)$', re.IGNORECASE)
-SOURCE_PATTERN = re.compile(r'^Resculpting_01_Highpoly_Generated(?:\.(\d+))?$', re.IGNORECASE)
+SOURCE_PATTERN = re.compile(r'^(Resculpting_01_)?Highpoly_Generated(?:\.(\d+))?$', re.IGNORECASE)
+
+
+def preferred_source_name(names, index, location):
+    candidates = [(bool(match[1]), name) for name in names
+                  if (match := SOURCE_PATTERN.fullmatch(name)) and int(match[2] or 0) == index]
+    if not candidates:
+        raise ValueError(f'{location}: no Highpoly_Generated.{index:03d} or Resculpting_01_Highpoly_Generated.{index:03d} mesh')
+    rank = min(priority for priority, _ in candidates)
+    preferred = [name for priority, name in candidates if priority == rank]
+    if len(preferred) != 1:
+        raise ValueError(f'{location}: ambiguous Highpoly sources: ' + ', '.join(sorted(preferred)))
+    return preferred[0]
 # Track append-owned IDs only; never purge pre-existing data by name or globally.
 DATA_KINDS = ('collections', 'objects', 'meshes', 'curves', 'materials', 'images',
               'node_groups', 'textures', 'actions', 'armatures', 'cameras', 'lights',
@@ -50,11 +62,11 @@ class TemporaryRebakeSource:
                 collections = [canonical]
             if len(collections) != 1:
                 raise ValueError(f'{self.path.name}: expected one Generated.{index:03d} collection')
-            sources = [name for name in library.objects
-                       if (match := SOURCE_PATTERN.fullmatch(name)) and int(match[1] or 0) == index]
-            if len(sources) != 1:
-                raise ValueError(f'{self.path.name}: expected one Resculpting_01_Highpoly_Generated.{index:03d} mesh')
-            self.collection_name, self.source_name = collections[0], sources[0]
+            self.collection_name = collections[0]
+            self.source_names = [name for name in library.objects
+                                 if (match := SOURCE_PATTERN.fullmatch(name)) and int(match[2] or 0) == index]
+            if not self.source_names:
+                preferred_source_name([], index, self.path.name)
 
     def load(self, context):
         before = {kind: set(getattr(bpy.data, kind)) for kind in DATA_KINDS if hasattr(bpy.data, kind)}
@@ -62,17 +74,20 @@ class TemporaryRebakeSource:
             try:
                 with bpy.data.libraries.load(str(self.path), link=False) as (_library, appended):
                     appended.collections = [self.collection_name]
-                    # Request the object too, retaining a direct ID reference if
-                    # Blender adds .001 because its name already exists elsewhere.
-                    appended.objects = [self.source_name]
+                    # Direct references preserve file-name identity across ID
+                    # collisions with pre-existing objects in another scene.
+                    appended.objects = list(self.source_names)
             finally:
                 self.owned.update(item for kind, snapshot in before.items()
                                   for item in set(getattr(bpy.data, kind)) - snapshot)
             self.collection = appended.collections[0]
-            self.source = appended.objects[0]
-            if (self.collection is None or self.source is None or self.source.type != 'MESH'
-                    or self.source.name not in self.collection.all_objects):
-                raise ValueError(f'{self.path.name}: the Resculpting mesh is not in {self.collection_name}')
+            if self.collection is None:
+                raise ValueError(f'{self.path.name}: could not load {self.collection_name}')
+            members = {name: obj for name, obj in zip(self.source_names, appended.objects)
+                       if obj is not None and obj.type == 'MESH' and obj.name in self.collection.all_objects}
+            if not members:
+                raise ValueError(f'{self.path.name}: Highpoly mesh is not in {self.collection_name}')
+            self.source = members[preferred_source_name(members, self.index, self.collection_name)]
             if self.source.library:
                 raise ValueError('The imported Highpoly must be a local appended object')
             if self.source.data.library or self.source.data.users != 1:

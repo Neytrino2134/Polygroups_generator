@@ -174,11 +174,11 @@ with tempfile.TemporaryDirectory() as directory:
     # Reject an absent/mismatched or ambiguous source without mutating state.
     high.name='OtherSource.002'
     try:final.FinalRebakeSession(bpy.context,target,settings)
-    except ValueError as error:assert 'Generated.002.blend' in str(error)
+    except ValueError as error:assert 'Generated.002' in str(error) and 'Highpoly' in str(error)
     else:raise AssertionError('Missing source accepted')
     high.name='Resculpting_01_Highpoly_Generated.002'
     duplicate=high.copy();duplicate.data=high.data.copy();duplicate.name='Resculpting_01_Highpoly_Generated.02'
-    scene.collection.objects.link(duplicate)
+    generated.objects.link(duplicate)
     try:final.resolve_final_source(bpy.context,target)
     except ValueError as error:assert 'ambiguous' in str(error)
     else:raise AssertionError('Ambiguous source accepted')
@@ -321,6 +321,10 @@ with tempfile.TemporaryDirectory() as directory:
         assert hashlib.sha256(working_file.read_bytes()).hexdigest()==working_hash
         rebuilt=[bpy.data.objects[name] for name in expected]
         print('FINAL_REBAKE_EXPORT_FBX_BLEND_'+engine+'_OK')
+        # Export selects MID + LODs. Request automatic Highpoly lookup for the
+        # next run by selecting only the target under the new source contract.
+        bpy.ops.object.select_all(action='DESELECT');target.select_set(True)
+        bpy.context.view_layer.objects.active=target
         # Failure after stashing must bring originals back with their exact data.
         rollback_curve=bpy.data.curves.new('Recoverable label','FONT')
         rollback_label=bpy.data.objects.new('Recoverable label '+engine,rollback_curve)

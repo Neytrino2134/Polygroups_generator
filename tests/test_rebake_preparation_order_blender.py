@@ -19,6 +19,9 @@ bpy.ops.mesh.primitive_plane_add(size=2);target=c.object;target.name='SM_Prepara
 material=bpy.data.materials.new('Final material');material.use_nodes=True;target.data.materials.append(material)
 bpy.ops.mesh.primitive_grid_add(x_subdivisions=6,y_subdivisions=6,size=3,location=(0,0,.1))
 high=c.object;high.name='Resculpting_01_Highpoly_Generated.001'
+generated=bpy.data.collections.new('Generated.001');scene.collection.children.link(generated)
+for owner in list(high.users_collection):owner.objects.unlink(high)
+generated.objects.link(high)
 source_material=bpy.data.materials.new('Source material');source_material.use_nodes=True
 source_material.node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value=(.1,.8,.2,1)
 high.data.materials.append(source_material)
@@ -56,15 +59,22 @@ with tempfile.TemporaryDirectory() as directory:
   if channel=='Normal':image.colorspace_settings.name='Non-Color'
   image.save();node=material.node_tree.nodes.new('ShaderNodeTexImage');node.image=image
  bpy.ops.object.select_all(action='DESELECT');target.select_set(True);c.view_layer.objects.active=target
+ high.name='Manually selected sculpt';high.select_set(True)
+ # An explicit source/active-target pair wins over a populated Phase 2 queue.
+ p.phase2_rebake_queue.add().target=target
+ p.phase2_rebake_queue.add()  # Invalid entry would fail if the queue ran.
  with patch.object(Repair,'execute',repair),patch.object(Pack,'execute',pack),\
       patch.object(rebake_final.FinalRebakeSession,'freeze_source_geometry',frozen),\
       patch.object(baking.OBJECT_OT_polygroups_bake_task,'_launch_pass',checked_launch):
-  assert bpy.ops.object.polygroups_rebake_final_mesh(repair_mesh=True)=={'FINISHED'},s.bake_task_message
+  assert bpy.ops.object.polygroups_rebake_final_mesh(repair_mesh=True,use_queue=True)=={'FINISHED'},s.bake_task_message
+ p.phase2_rebake_queue.clear()
  assert events==['repair','pack','freeze','DIFFUSE','NORMAL'],events
  assert high.data==original_data and (mod.show_viewport,mod.show_render,mod.levels,mod.render_levels)==flags
  assert tuple(tuple(l.uv) for l in original_data.uv_layers.active.data)==original_uv
  assert not any(mesh.name.startswith('ReBake_') and 'FrozenHighpoly' in mesh.name for mesh in bpy.data.meshes)
  assert s.auto_pack_uv_before_bake
+ high.name='Resculpting_01_Highpoly_Generated.001'
+ high.select_set(False)
  print('REBAKE_REPAIR_PACK_FREEZE_REAL_CYCLES_OK',flush=True)
  # A pending failed pack is honored even when Repair Mesh is disabled for retry.
  target['polygroups_rebake_uv_needs_pack']=True

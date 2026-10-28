@@ -97,7 +97,7 @@ class OBJECT_OT_polygroups_rebake_queue_run(SequentialJob,bpy.types.Operator):
                     raise ValueError('Queued mesh is missing from the current scene')
                 FinalRebakeSession(context,entry.target,context.scene.polygroups_baking_settings,
                     create_lods=self.create_lods,export_selected=self.export_selected,repair_mesh=self.repair_mesh,
-                    delete_current_lods=self.delete_current_lods)
+                    delete_current_lods=self.delete_current_lods,use_selection=False)
             for entry in self.entries:
                 entry.state,entry.message = 'PENDING',''
             self.current = None

@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory() as directory:
         node=final_mat.node_tree.nodes.new('ShaderNodeTexImage');node.name=final.CHANNELS[channel][2];node.image=image
         outputs[channel]=image
     # Existing data of the same names must not be reused, renamed, or removed.
-    local_col=bpy.data.collections.new('Generated.002');scene.collection.children.link(local_col)
+    local_col=bpy.data.collections.new('Generated.002_Local');scene.collection.children.link(local_col)
     sentinel=bpy.data.objects.new('KeepThisLocalMesh',bpy.data.meshes.new('KeepLocalData'));local_col.objects.link(sentinel)
     layer=ctx.view_layer.layer_collection.children[local_col.name];layer.exclude=True;layer.hide_viewport=True
     local_col.hide_viewport=local_col.hide_render=True

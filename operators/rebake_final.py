@@ -14,7 +14,6 @@ import bpy
 from . import bake_constants as C
 
 MID_PATTERN = re.compile(r'^SM_(.+_(\d+))_MID$', re.IGNORECASE)
-SOURCE_PATTERN = re.compile(r'^Resculpting_01_Highpoly_Generated(?:\.(\d+))?$', re.IGNORECASE)
 CHANNELS = {
     'BaseColor': (C.BAKE_BASE_COLOR_IMAGE_PROP, C.BAKE_SOURCE_BASE_COLOR_IMAGE_PROP, C.BAKE_BASE_COLOR_NODE),
     'Normal': (C.BAKE_NORMAL_IMAGE_PROP, C.BAKE_SOURCE_NORMAL_IMAGE_PROP, C.BAKE_NORMAL_NODE),
@@ -45,23 +44,26 @@ class MissingFinalSourceError(ValueError):
     pass
 
 
-def resolve_final_source(context, target):
+def resolve_final_source(context, target, use_selection=True):
+    from .rebake_source import COLLECTION_PATTERN, preferred_source_name
     asset, index = final_asset_name(target)
-    candidates = []
-    for obj in context.scene.objects:
-        match = SOURCE_PATTERN.fullmatch(obj.name)
-        if obj.type == 'MESH' and match and int(match.group(1) or 0) == index:
-            candidates.append(obj)
-    if len(candidates) != 1:
-        expected = f'Resculpting_01_Highpoly_Generated.{index:03d}'
-        reason = 'not found in this scene' if not candidates else 'ambiguous (multiple matching sources)'
-        error = MissingFinalSourceError if not candidates else ValueError
-        raise error(f'{expected}: {reason}; keep exactly one matching Highpoly in the scene')
-    source = candidates[0]
-    owners = [int(c.name.split('.')[-1]) for c in source.users_collection
-              if re.fullmatch(r'Generated\.\d+', c.name, re.IGNORECASE)]
-    if owners and index not in owners:
-        raise ValueError(f'{source.name}: Generated collection index does not match {asset}')
+    selected = [obj for obj in context.selected_objects if obj.type == 'MESH' and obj != target] if use_selection else []
+    if selected:
+        if context.active_object != target or target not in context.selected_objects or len(selected) != 1:
+            raise ValueError('Select one Highpoly and make the final MID mesh active')
+        source = selected[0]
+    else:
+        collections = [col for col in context.scene.collection.children_recursive
+                       if (match := COLLECTION_PATTERN.fullmatch(col.name)) and int(match[1]) == index]
+        canonical = [col for col in collections if col.name == f'Generated.{index:03d}']
+        collections = canonical or collections
+        if not collections:
+            raise MissingFinalSourceError(f'Generated.{index:03d}: collection not found in this scene')
+        if len(collections) != 1:
+            raise ValueError(f'Ambiguous Generated collections for {asset}')
+        collection = collections[0]
+        candidates = {obj.name: obj for obj in collection.all_objects if obj.type == 'MESH' and obj != target}
+        source = candidates[preferred_source_name(candidates, index, collection.name)]
     if (source.library or source.data.library or source.data.users != 1
             or target.library or target.data.library or target.data.users != 1):
         raise ValueError('ReBake requires local objects and a single-user final mesh')
@@ -110,14 +112,14 @@ def final_texture_outputs(target, settings):
 
 class FinalRebakeSession:
     def __init__(self, context, target, settings, create_lods=False, export_selected=False, repair_mesh=False,
-                 delete_current_lods=False):
+                 delete_current_lods=False, use_selection=True):
         self.context, self.target, self.settings = context, target, settings
         self.repair_mesh = repair_mesh
         self.delete_lods_before_bake = delete_current_lods
         self.source_import = None
         self.source = None
         try:
-            self.source = resolve_final_source(context, target)
+            self.source = resolve_final_source(context, target, use_selection=use_selection)
         except MissingFinalSourceError:
             from .rebake_source import TemporaryRebakeSource
             self.source_import = TemporaryRebakeSource(final_asset_name(target)[1])
@@ -497,7 +499,7 @@ class FinalRebakeSession:
 class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
     bl_idname = 'object.polygroups_rebake_final_mesh'
     bl_label = 'ReBake Final Mesh'
-    bl_description = 'Find the numbered Resculpting Highpoly, align it and rebake into the existing final texture files'
+    bl_description = 'Rebake selected Highpoly onto the active MID, or find Highpoly in Generated.N locally and then in !Blend'
     bl_options = {'REGISTER', 'UNDO'}
 
     create_lods: bpy.props.BoolProperty(name='Create LODs', default=False, options={'SKIP_SAVE'},
@@ -524,7 +526,14 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
     def execute(self, context):
         # The common task owns setup/cleanup for both modal and background runs.
         try:
-            if self.use_queue and len(context.scene.polygroups_model_preparation_settings.phase2_rebake_queue):
+            queue = context.scene.polygroups_model_preparation_settings.phase2_rebake_queue
+            selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+            queue_targets = {entry.target for entry in queue if entry.target}
+            explicit_source = (context.active_object is not None and
+                MID_PATTERN.fullmatch(context.active_object.name) and
+                len(selected_meshes) == 2 and not set(selected_meshes).issubset(queue_targets) and
+                not any(obj.get('polygroups_lod_source') for obj in selected_meshes if obj != context.active_object))
+            if self.use_queue and not explicit_source and len(queue):
                 return bpy.ops.object.polygroups_rebake_queue_run('EXEC_DEFAULT',
                     repair_mesh=self.repair_mesh, create_lods=self.create_lods, export_selected=self.export_selected,
                     delete_current_lods=self.delete_current_lods)
