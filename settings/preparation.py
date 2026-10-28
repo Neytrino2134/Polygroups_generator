@@ -491,6 +491,8 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Collapse near-zero edges of degenerate triangles, preserving UV seams")
     fold_repair_zero_area: bpy.props.BoolProperty(name="Repair Zero Area at UV Seams", default=False,
         description="Repair zero-length edges even across UV seams; preserve corner UVs and seam/sharp flags")
+    fold_repair_dangling: bpy.props.BoolProperty(name="Remove Dangling Faces / Edges", default=True,
+        description="Remove attached open sheets, collapsed folded tails and loose geometry; fill and triangulate only the repaired neck. Used by Phase 1 and Phase 2 Auto Repair")
     fold_repair_selected_only: bpy.props.BoolProperty(name="Selected Area Only", default=False,
         description="Repair defects seeded by selected faces, including their local boundary")
     fold_repair_stretched_triangles: bpy.props.BoolProperty(name="Merge Stretched Single Triangles", default=True,

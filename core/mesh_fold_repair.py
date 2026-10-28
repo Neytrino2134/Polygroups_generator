@@ -473,7 +473,7 @@ def _merge_triangle_center(bm, plan, layers):
 def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
                        selected_only=False, relative_tolerance=1e-7,
                        fix_zero_area=False, fix_stretched_triangles=False,
-                       stretched_triangle_ratio=50.0):
+                       stretched_triangle_ratio=50.0, fix_dangling=False):
     """Mutate a working BMesh. Caller commits only after successful validation.
 
     Return original face indices for inspection, plus repair/remaining counts.
@@ -497,6 +497,11 @@ def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
     invalid_edges_before = sum(not e.is_manifold for e in bm.edges)
     seam_collapsed = 0
     stretched = 0
+    dangling = {}
+    if fix_dangling:
+        from .dangling_repair import repair_dangling
+        dangling = repair_dangling(bm, selected_only)
+        affected.update(dangling.pop('affected'))
     if fix_degenerate or fix_zero_area:
         # Rebuild the candidate list after each weld; BMesh may invalidate edges.
         while True:
@@ -622,4 +627,4 @@ def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
     return dict(folds=folds, collapsed=collapsed, affected=affected,
                 stretched=stretched,
                 remaining_degenerate=len(remaining), remaining_zero_triangles=zero_triangles,
-                seam_collapsed=seam_collapsed)
+                seam_collapsed=seam_collapsed, **dangling)

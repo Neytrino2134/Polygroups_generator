@@ -296,14 +296,14 @@ def draw_mesh_editing(layout, context, prefix, loose_parts=False):
     auto = draw_topic(layout, context, prefix + "_auto", "mesh_edit_auto", "MODIFIER")
     if auto is not None:
         column = auto.column(align=True)
-        for prop in ("fold_repair_folds", "fold_repair_degenerate", "fold_repair_zero_area", "fold_repair_stretched_triangles"):
+        for prop in ("fold_repair_folds", "fold_repair_degenerate", "fold_repair_zero_area", "fold_repair_dangling", "fold_repair_stretched_triangles"):
             column.prop(settings, prop, text=t(context, prop))
         if settings.fold_repair_stretched_triangles:
             column.prop(settings, 'fold_repair_stretch_ratio', text=t(context, 'fold_repair_stretch_ratio'))
         column.prop(settings, 'fold_repair_selected_only', text=t(context, 'fold_repair_selected_only'))
         row = column.row(align=True)
         row.enabled = (settings.fold_repair_folds or settings.fold_repair_degenerate or settings.fold_repair_zero_area
-                       or settings.fold_repair_stretched_triangles)
+                       or settings.fold_repair_stretched_triangles or settings.fold_repair_dangling)
         for action, label, icon in (("SELECT", "fold_repair_find", "VIEWZOOM"),
                                     ("REPAIR", "fold_repair_apply", "MOD_TRIANGULATE")):
             op = row.operator("mesh.polygroups_repair_mesh_folds", text=t(context, label), icon=icon)
@@ -311,6 +311,7 @@ def draw_mesh_editing(layout, context, prefix, loose_parts=False):
             op.fix_folds = settings.fold_repair_folds
             op.fix_degenerate = settings.fold_repair_degenerate
             op.fix_zero_area = settings.fold_repair_zero_area
+            op.fix_dangling = settings.fold_repair_dangling
             op.fix_stretched_triangles = settings.fold_repair_stretched_triangles
             op.stretched_triangle_ratio = settings.fold_repair_stretch_ratio
             op.selected_only = settings.fold_repair_selected_only
@@ -318,6 +319,8 @@ def draw_mesh_editing(layout, context, prefix, loose_parts=False):
                                   text=t(context, "fold_repair_quality"), icon="UV")
         quality.action = 'SELECT_QUALITY'
         quality.selected_only = settings.fold_repair_selected_only
+        if settings.fold_repair_dangling:
+            column.label(text=t(context, "fold_repair_dangling_hint"), icon="INFO")
         column.label(text=t(context, "fold_repair_hint"))
         column.label(text=t(context, "fold_repair_uv_hint"))
 
@@ -880,6 +883,7 @@ def draw_batch_processing(content, context, settings):
         first.separator()
         first.prop(settings, "batch_first_uv_repair_enabled", text=t(context, "uv_repair"))
         first.prop(settings, "batch_first_geometry_repair", text=t(context, "batch_geometry_repair"))
+        first.prop(settings, "fold_repair_dangling", text=t(context, "fold_repair_dangling"))
         repair = first.column(align=True)
         repair.enabled = settings.batch_first_uv_repair_enabled
         repair.prop(settings, "batch_first_uv_repair_threshold", text=t(context, "uv_repair_threshold"))
@@ -958,6 +962,7 @@ def draw_batch_processing(content, context, settings):
 
             stage.prop(settings, f"batch_stage_{number}_uv_repair_enabled", text=t(context, "uv_repair"))
             stage.prop(settings, f"batch_stage_{number}_geometry_repair", text=t(context, "batch_geometry_repair"))
+            stage.prop(settings, "fold_repair_dangling", text=t(context, "fold_repair_dangling"))
             repair = stage.column(align=True)
             repair.enabled = getattr(settings, f"batch_stage_{number}_uv_repair_enabled")
             for suffix in ("threshold", "min_faces", "surface_angle"):

@@ -288,3 +288,5 @@ across view layers. When new studio collections are created, View Layer Outliner
 switch off alphabetic sorting and collapse the tree to show collapsed top-level
 collections. This also folds other top-level collection branches. Entire-studio
 reset restores Color 8; other scoped resets retain the chosen tag.
+
+Auto Repair: [Dangling faces / edges and folded tails](docs/dangling_mesh_repair.md).

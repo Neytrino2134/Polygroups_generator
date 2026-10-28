@@ -24,6 +24,8 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
         description='Collapse only near-zero edges belonging to degenerate triangles')
     fix_zero_area: bpy.props.BoolProperty(name='Repair Zero Area at UV Seams', default=False,
         description='Merge identical endpoints of zero-area faces; preserve corner UVs and union seam/sharp flags')
+    fix_dangling: bpy.props.BoolProperty(name='Remove Dangling Faces / Edges', default=True,
+        description='Remove small sheets attached through non-manifold edges, collapsed folded tails and loose geometry; fill and triangulate only repaired tail necks')
     selected_only: bpy.props.BoolProperty(name='Selected Area Only', default=False,
         description='Use selected defect faces as seeds; include the minimal surrounding patch')
     fix_stretched_triangles: bpy.props.BoolProperty(name='Merge Stretched Single Triangles', default=True,
@@ -62,6 +64,7 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
             else:
                 result = repair_local_folds(work, self.fix_folds, self.fix_degenerate,
                     self.selected_only, fix_zero_area=self.fix_zero_area,
+                    fix_dangling=self.fix_dangling,
                     fix_stretched_triangles=self.fix_stretched_triangles,
                     stretched_triangle_ratio=self.stretched_triangle_ratio)
             if self.action in {'SELECT', 'SELECT_QUALITY'}:
@@ -74,13 +77,25 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
                 for face in source.faces:
                     if face.index in result['affected']:
                         face.select_set(True)
+                source.edges.index_update()
+                source.verts.index_update()
+                for edge in source.edges:
+                    if edge.index in result.get('affected_edges', ()):
+                        edge.select_set(True)
+                for vertex in source.verts:
+                    if vertex.index in result.get('affected_verts', ()):
+                        vertex.select_set(True)
+                if not result['affected'] and (result.get('affected_edges') or result.get('affected_verts')):
+                    source.select_mode = {'VERT'}
+                    context.tool_settings.mesh_select_mode = (True, False, False)
                 source.select_flush_mode()
                 if edit:
                     bmesh.update_edit_mesh(obj.data, destructive=False)
                 else:
                     source.to_mesh(obj.data)
                     bpy.ops.object.mode_set(mode='EDIT')
-            elif result['folds'] or result['collapsed'] or result.get('stretched'):
+            elif any(result.get(key) for key in ('folds', 'collapsed', 'stretched',
+                                                'dangling_faces', 'dangling_edges', 'dangling_verts')):
                 # Only the validated working mesh reaches the user's datablock.
                 if edit:
                     bpy.ops.object.mode_set(mode='OBJECT')
@@ -94,6 +109,10 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
                 self.report({'INFO'}, t(context, 'fold_repair_result',
                     folds=result['folds'], collapsed=result['collapsed'],
                     stretched=result.get('stretched', 0),
+                    dangling=result.get('dangling_faces', 0),
+                    wires=result.get('dangling_edges', 0),
+                    vertices=result.get('dangling_verts', 0),
+                    filled=result.get('dangling_filled', 0),
                     zero=result.get('remaining_zero_triangles', 0),
                     remaining=max(0, result['remaining_degenerate'] - result.get('remaining_zero_triangles', 0)),
                     action=t(context, 'fold_repair_found' if self.action == 'SELECT' else 'fold_repair_fixed')))

@@ -195,6 +195,7 @@ class FinalRebakeSession:
                     fix_degenerate=p.phase2_rebake_repair_coincident,
                     fix_zero_area=p.phase2_rebake_repair_zero_area,
                     fix_stretched_triangles=p.phase2_rebake_repair_stretched,
+                    fix_dangling=p.fold_repair_dangling,
                     stretched_triangle_ratio=p.fold_repair_stretch_ratio, selected_only=False)
                 if 'FINISHED' not in result:
                     raise RuntimeError('ReBake Final Mesh: Auto Repair failed for ' + target.name)

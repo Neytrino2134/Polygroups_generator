@@ -284,6 +284,7 @@ class Phase2Queue:
             'EXEC_DEFAULT', action='REPAIR', fix_folds=True,
             fix_degenerate=True, fix_zero_area=True, selected_only=False,
             fix_stretched_triangles=self.settings.fold_repair_stretched_triangles,
+            fix_dangling=self.settings.fold_repair_dangling,
             stretched_triangle_ratio=self.settings.fold_repair_stretch_ratio)
         if 'FINISHED' not in result:
             raise RuntimeError(f'Auto Repair failed for {low.name}; processing skipped')

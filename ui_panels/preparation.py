@@ -476,6 +476,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     warning.label(text=t(context, "phase2_clear_hint2"), icon="BLANK1")
                 controls.prop(settings, 'phase2_skip_retopo_backups')
                 controls.prop(settings, "phase2_mesh_auto_repair", text=t(context, "phase2_mesh_auto_repair"))
+                controls.prop(settings, "fold_repair_dangling", text=t(context, "fold_repair_dangling"))
                 controls.prop(settings, 'phase2_mid_remesh')
                 if settings.phase2_mid_remesh:
                     controls.label(text='Clear seams + pins | Smart Seams 22 degrees | MID', icon='INFO')
