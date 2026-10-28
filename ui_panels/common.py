@@ -1053,8 +1053,19 @@ def draw_batch_processing(content, context, settings):
         phase2.label(text=t(context, "batch_phase2_hint"), icon="INFO")
         phase2.label(text=t(context, "batch_phase2_replaces"))
         phase2.label(text=t(context, "batch_phase2_needs_separate"))
-        # Same setting as Phase 2 > Restore and Processing.
+        # Same settings as the Phase 2 queue options; edits here change Phase 2 too.
         phase2.prop(settings, "phase2_clear_generated", text=t(context, "phase2_clear"))
+        phase2.separator()
+        phase2.prop(settings, "phase2_run_engine", expand=True)
+        meshes = phase2.row(align=True)
+        meshes.prop(settings, "phase2_export_glb")
+        meshes.prop(settings, "phase2_export_fbx")
+        final = context.scene.polygroups_mesh_finalization_settings
+        unity = settings.phase2_run_engine == "UNITY"
+        names = phase2.column(align=True)
+        names.prop(final, "unity_asset_name" if unity else "unreal_lod_asset_name", text="Asset Name")
+        names.prop(final, "unity_name_index" if unity else "unreal_lod_name_index", text="Name Index")
+        names.prop(final, "unity_asset_index" if unity else "unreal_lod_version_index", text="Version Index")
 
 
 def draw_lod_decimate_method(layout, context, settings, prefix):
