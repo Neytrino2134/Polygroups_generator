@@ -1995,6 +1995,7 @@ TEXT['EN'].update({
     'uv_decimate_uv_weight': 'UV Weight',
     'uv_decimate_max_error': 'Max Error',
     'uv_decimate_missing_library': 'lib/meshoptimizer.dll not found',
+    'lod_decimate_method': 'Decimate Method',
 })
 TEXT['RU'].update({
     'smart_decimate_blender': 'Умный децимейт (Blender)',
@@ -2008,6 +2009,7 @@ TEXT['RU'].update({
     'uv_decimate_uv_weight': 'Вес UV',
     'uv_decimate_max_error': 'Макс. ошибка',
     'uv_decimate_missing_library': 'Не найден lib/meshoptimizer.dll',
+    'lod_decimate_method': 'Метод децимейта',
 })
 
 

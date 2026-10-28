@@ -7,6 +7,7 @@ from ..operators.asset_translation import draw_asset_name
 from .common import (
     draw_collapsible_box,
     draw_fab_variant_visibility,
+    draw_lod_decimate_method,
     draw_overlay_polygon_limit_status,
     draw_seam_gap_controls,
     draw_section_header_icon,
@@ -425,6 +426,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         column.prop(settings, "smart_lods_count")
         for index in range(1, settings.smart_lods_count + 1):
             column.prop(settings, f"smart_lods_target_{index}", text=f"LOD{index-1} Tris")
+        draw_lod_decimate_method(column, context, settings, "smart_lods_")
         column.prop(settings, "smart_lods_final_decimate")
         column.prop(settings, "smart_lods_triangulate_all")
         column.prop(settings, "smart_lods_remove_zero_area", text=t(context, "smart_lods_remove_zero_area"))

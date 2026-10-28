@@ -166,6 +166,29 @@ def _fit_final_decimate(obj, target, depsgraph):
     return modifier, tris, ratio
 
 
+UV_SEAM_ESCALATION = ("LOCK", "PRIORITY", "FREE")
+
+
+def _fit_uv_preserve(obj, target, seam_mode):
+    """Simplify with exact UVs; relax seam protection only while the budget is missed."""
+    from ..core import meshopt_simplify
+    modes = UV_SEAM_ESCALATION[UV_SEAM_ESCALATION.index(seam_mode):]
+    original = obj.data.copy()
+    try:
+        for attempt, mode in enumerate(modes):
+            if attempt:
+                bm = bmesh.new()
+                bm.from_mesh(original)
+                bm.to_mesh(obj.data)
+                bm.free()
+            stats = meshopt_simplify.simplify_mesh(obj.data, target, seam_mode=mode, join_triangles=False)
+            if stats["triangles"] <= target:
+                break
+        return stats["triangles"], mode
+    finally:
+        bpy.data.meshes.remove(original)
+
+
 def _copy_into_source_collections(source, name, context):
     duplicate = source.copy()
     duplicate.data = source.data.copy()
@@ -464,39 +487,49 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
                 lod[LOD_INDEX] = index
                 # Bake inherited modifiers before fitting so each new LOD starts
                 # from the actual mesh produced by the previous stage.
+                # UV Preserve keeps every corner UV exact; re-unwrapping would undo that.
+                uv_preserve = settings.smart_lods_decimate_method == 'UV_PRESERVE' and bool(lod.data.uv_layers)
+                relax = (lambda: None) if uv_preserve else (lambda: relax_uv_boundaries(context, lod))
                 for modifier in tuple(lod.modifiers):
                     bpy.ops.object.modifier_apply(modifier=modifier.name)
-                    relax_uv_boundaries(context, lod)
-                seam_mod, body_mod = _configure_pass(lod)
+                    relax()
                 depsgraph = context.evaluated_depsgraph_get()
-                tris, body, seam = _fit_ratios(lod, seam_mod, body_mod, target, depsgraph)
+                if uv_preserve:
+                    tris, seam_mode = _fit_uv_preserve(lod, target, settings.smart_lods_uv_seam_mode)
+                    detail = f"UV preserve, seams {seam_mode.lower()}"
+                    seam_mod = body_mod = None
+                else:
+                    seam_mod, body_mod = _configure_pass(lod)
+                    tris, body, seam = _fit_ratios(lod, seam_mod, body_mod, target, depsgraph)
+                    detail = f"body {body:.3f}, seams {seam:.3f}"
                 final_mod = None
-                final_ratio = None
                 if tris > target and settings.smart_lods_final_decimate:
                     final_mod, tris, final_ratio = _fit_final_decimate(lod, target, depsgraph)
+                    detail += f", final {final_ratio:.3f}"
                 if seam_mod is not None:
                     bpy.ops.object.modifier_apply(modifier=seam_mod.name)
-                    relax_uv_boundaries(context, lod)
-                bpy.ops.object.modifier_apply(modifier=body_mod.name)
-                relax_uv_boundaries(context, lod)
+                    relax()
+                if body_mod is not None:
+                    bpy.ops.object.modifier_apply(modifier=body_mod.name)
+                    relax()
                 if final_mod is not None:
                     bpy.ops.object.modifier_apply(modifier=final_mod.name)
+                    # The unrestricted fallback moves vertices, so its UVs need the repair.
                     relax_uv_boundaries(context, lod)
                 if settings.smart_lods_triangulate_all:
                     triangulate = lod.modifiers.new("LOD Triangulate", "TRIANGULATE")
                     bpy.ops.object.modifier_apply(modifier=triangulate.name)
-                    relax_uv_boundaries(context, lod)
+                    relax()
                 if settings.smart_lods_remove_zero_area:
                     removed = _clean_zero_area_lod(lod)
                     if removed:
-                        relax_uv_boundaries(context, lod)
+                        relax()
                         self.report({'INFO'}, f'LOD{index}: removed {removed} zero-area triangles')
                 actual = _triangle_count(lod, context.evaluated_depsgraph_get())
                 if actual > target:
                     over_budget.append(f"LOD{index}: {actual}/{target} tris")
                 else:
-                    suffix = f", final {final_ratio:.3f}" if final_ratio is not None else ""
-                    self.report({"INFO"}, f"LOD{index}: {actual}/{target} tris (body {body:.3f}, seams {seam:.3f}{suffix})")
+                    self.report({"INFO"}, f"LOD{index}: {actual}/{target} tris ({detail})")
                 if settings.smart_lods_auto_arrange:
                     step = getattr(self, '_lod_x_step', _world_x_bounds(source)[1] - _world_x_bounds(source)[0] + .1)
                     _arrange_after_previous(context, lod, previous, step, 'ORIGIN')

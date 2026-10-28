@@ -97,11 +97,24 @@ with tempfile.TemporaryDirectory() as directory:
     settings.batch_smart_lods_target_5 = 20
     settings.batch_smart_lods_final_decimate = True
     settings.batch_smart_lods_triangulate_all = True
+    # Stage 12 uses its own method even when Mesh Finalization is set differently.
+    assert settings.batch_smart_lods_decimate_method == 'UV_PRESERVE'
+    final.smart_lods_decimate_method = 'SMART_DECIMATE'
     original_final = {name: getattr(final, name) for name in (
         'smart_lods_count', 'smart_lods_target_1', 'smart_lods_target_2',
         'smart_lods_target_3', 'smart_lods_target_4', 'smart_lods_target_5',
-        'smart_lods_final_decimate', 'smart_lods_triangulate_all', 'smart_lods_auto_arrange')}
-    queue, records = run([str(Path(directory) / 'lods.obj')])
+        'smart_lods_final_decimate', 'smart_lods_triangulate_all', 'smart_lods_auto_arrange',
+        'smart_lods_decimate_method', 'smart_lods_uv_seam_mode')}
+    from polygroups_generator.operators import smart_lods as smart_lods_module
+    uv_fits = []
+    fit_uv_preserve = smart_lods_module._fit_uv_preserve
+    smart_lods_module._fit_uv_preserve = lambda *args: uv_fits.append(args[1]) or fit_uv_preserve(*args)
+    try:
+        queue, records = run([str(Path(directory) / 'lods.obj')])
+    finally:
+        smart_lods_module._fit_uv_preserve = fit_uv_preserve
+    assert len(uv_fits) == 10, uv_fits  # 2 source meshes x 5 LODs through UV Preserve.
+    assert all(record['decimate_method'] == 'UV_PRESERVE' for record in records[0]['finalization'])
     assert settings.batch_failed_count == 0 and settings.batch_imported_count == 1
     assert len(records[0]['finalization']) == 2  # Both source meshes finish exactly once.
     assert all(len(record['lods']) == 5 for record in records[0]['finalization'])

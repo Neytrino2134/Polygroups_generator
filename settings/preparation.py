@@ -13,6 +13,7 @@ from .callbacks import (
     bpy,
     radians,
 )
+from ..core.meshopt_simplify import DECIMATE_METHOD_ITEMS, SEAM_MODE_ITEMS
 
 
 def _auto_skip_scene_update(self, context):
@@ -905,6 +906,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_smart_lods_target_3: bpy.props.IntProperty(name="LOD2 Tris", default=1000, min=1)
     batch_smart_lods_target_4: bpy.props.IntProperty(name="LOD3 Tris", default=500, min=1)
     batch_smart_lods_target_5: bpy.props.IntProperty(name="LOD4 Tris", default=150, min=1)
+    batch_smart_lods_decimate_method: bpy.props.EnumProperty(
+        name="Decimate Method", items=DECIMATE_METHOD_ITEMS, default="UV_PRESERVE")
+    batch_smart_lods_uv_seam_mode: bpy.props.EnumProperty(
+        name="Seams", items=SEAM_MODE_ITEMS, default="LOCK",
+        description="Starting seam protection; relaxed automatically when a LOD budget is not reached")
     batch_smart_lods_final_decimate: bpy.props.BoolProperty(name="Final Decimate Fallback", default=False)
     batch_smart_lods_triangulate_all: bpy.props.BoolProperty(name="Triangulate All LODs", default=False)
     batch_redo_collection_name: bpy.props.StringProperty(

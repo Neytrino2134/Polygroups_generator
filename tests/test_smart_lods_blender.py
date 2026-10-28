@@ -27,6 +27,9 @@ assert settings.smart_lods_final_decimate
 assert settings.smart_lods_triangulate_all
 assert settings.smart_lods_auto_arrange
 assert abs(settings.smart_lods_spacing - 1.0) < 1e-6
+assert settings.smart_lods_decimate_method == "UV_PRESERVE"
+# These budget/fallback checks cover the Blender Decimate path; UV Preserve has its own test.
+settings.smart_lods_decimate_method = "SMART_DECIMATE"
 settings.smart_lods_final_decimate = False
 settings.smart_lods_triangulate_all = False
 settings.smart_lods_auto_arrange = False

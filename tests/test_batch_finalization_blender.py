@@ -32,8 +32,19 @@ def fixture():
  for layer in bpy.context.view_layer.layer_collection.children:layer.exclude=True
  return sources
 
+# Phase 2 Prepare LODs shares the Smart LODs method, UV Preserve by default.
+from polygroups_generator.operators import smart_lods as smart_lods_module
+assert s.smart_lods_decimate_method=='UV_PRESERVE'
+uv_fits=[];fit_uv_preserve=smart_lods_module._fit_uv_preserve
+smart_lods_module._fit_uv_preserve=lambda *args:uv_fits.append(args[1]) or fit_uv_preserve(*args)
+
 with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_batch_final_') as directory:
  bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory)/'Working.blend'))
+ fixture();p.phase2_final_lods=True;p.phase2_final_rename=False
+ assert bpy.ops.object.polygroups_batch_finalization(asset='uv check',name_index='01',version_index='01')=={'FINISHED'}
+ assert uv_fits==[80,40,80,40],uv_fits
+ smart_lods_module._fit_uv_preserve=fit_uv_preserve
+ p.phase2_final_rename=True
  for engine,rename in (('UNREAL','FAB'),('UNITY','FAB'),('UNITY','UNITY'),('UNREAL','UNITY')):
   sources=fixture();p.phase2_final_lod_engine=engine;p.phase2_final_rename_engine=rename
   s.unreal_lod_random_collection_color = engine != 'UNREAL'

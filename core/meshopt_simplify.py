@@ -21,6 +21,10 @@ SEAM_MODE_ITEMS = (
     ("PRIORITY", "Prefer Seams", "Seam vertices are kept as long as possible; reaches lower budgets"),
     ("FREE", "Free Seams", "Seams may collapse along themselves; lowest geometric error"),
 )
+DECIMATE_METHOD_ITEMS = (
+    ("UV_PRESERVE", "UV Preserve", "meshoptimizer: positions and UVs stay exact, textures do not slide"),
+    ("SMART_DECIMATE", "Smart Decimate", "Blender Decimate with seam weighting and UV re-unwrap"),
+)
 
 _library = None
 
@@ -140,19 +144,34 @@ def simplify_mesh(mesh, target_triangles, seam_mode="LOCK", uv_weight=1.0, max_e
     groups = {vertex.index: [(group.group, group.weight) for group in vertex.groups]
               for vertex in mesh.vertices}
 
+    triangles = [tuple(destination[index:index + 3]) for index in range(0, result_count, 3)]
+    # An island collapsed onto three locked seam vertices leaves the same triangle on
+    # both seam sides with opposite winding: a zero-volume pocket. Keeping one half
+    # would open the surrounding edges, so both halves are dropped.
+    by_vertices = {}
+    for triangle in triangles:
+        by_vertices.setdefault(frozenset(wedges[wedge][0] for wedge in triangle), []).append(triangle)
+    pockets = set()
+    for same in by_vertices.values():
+        windings = {min((a, b, c), (b, c, a), (c, a, b))
+                    for a, b, c in ((wedges[wedge][0] for wedge in triangle) for triangle in same)}
+        if len(windings) == 2:
+            pockets.update(same)
+    kept = [triangle for triangle in triangles if triangle not in pockets]
+
     bm = bmesh.new()
     uv_layers = [bm.loops.layers.uv.new(name) for name in uv_names]
     deform = bm.verts.layers.deform.verify()
     verts = {}
-    for index in range(result_count):
-        vertex = wedges[destination[index]][0]
-        if vertex not in verts:
-            new = verts[vertex] = bm.verts.new(mesh.vertices[vertex].co)
-            for group, weight in groups[vertex]:
-                new[deform][group] = weight
-    skipped = 0
-    for index in range(0, result_count, 3):
-        corner_wedges = destination[index:index + 3]
+    for triangle in kept:
+        for wedge in triangle:
+            vertex = wedges[wedge][0]
+            if vertex not in verts:
+                new = verts[vertex] = bm.verts.new(mesh.vertices[vertex].co)
+                for group, weight in groups[vertex]:
+                    new[deform][group] = weight
+    skipped = len(pockets)
+    for corner_wedges in kept:
         try:
             face = bm.faces.new([verts[wedges[wedge][0]] for wedge in corner_wedges])
         except ValueError:
@@ -163,6 +182,10 @@ def simplify_mesh(mesh, target_triangles, seam_mode="LOCK", uv_weight=1.0, max_e
         for loop, wedge in zip(face.loops, corner_wedges):
             for layer, uv in zip(uv_layers, wedges[wedge][1]):
                 loop[layer].uv = uv
+    loose = [vert for vert in bm.verts if not vert.link_faces]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context="VERTS")
+        verts = {vertex: new for vertex, new in verts.items() if new.is_valid}
     bm.verts.index_update()
     original_of = {new: vertex for vertex, new in verts.items()}
     active_layer = uv_layers[active_uv]

@@ -1021,8 +1021,17 @@ def draw_batch_processing(content, context, settings):
         lods.prop(settings, "batch_smart_lods_count", text=t(context, "batch_lods_count"))
         for index in range(1, settings.batch_smart_lods_count + 1):
             lods.prop(settings, f"batch_smart_lods_target_{index}", text=f"LOD{index-1} Tris")
+        draw_lod_decimate_method(lods, context, settings, "batch_smart_lods_")
         lods.prop(settings, "batch_smart_lods_final_decimate", text=t(context, "batch_lods_fallback"))
         lods.prop(settings, "batch_smart_lods_triangulate_all", text=t(context, "batch_lods_triangulate"))
+
+
+def draw_lod_decimate_method(layout, context, settings, prefix):
+    """LOD decimate method menu; seam protection applies to UV Preserve only."""
+    layout.prop(settings, prefix + "decimate_method", text=t(context, "lod_decimate_method"))
+    seams = layout.row(align=True)
+    seams.enabled = getattr(settings, prefix + "decimate_method") == "UV_PRESERVE"
+    seams.prop(settings, prefix + "uv_seam_mode", text=t(context, "uv_decimate_seam_mode"))
 
 
 def draw_studio_position(layout, context, target, obj, axes, label):

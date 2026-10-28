@@ -6,7 +6,7 @@ from .callbacks import (
     bpy,
     radians,
 )
-from ..core.meshopt_simplify import SEAM_MODE_ITEMS
+from ..core.meshopt_simplify import DECIMATE_METHOD_ITEMS, SEAM_MODE_ITEMS
 
 
 class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
@@ -286,6 +286,11 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     smart_lods_target_3: bpy.props.IntProperty(name="LOD2", step=100, default=1000, min=1)
     smart_lods_target_4: bpy.props.IntProperty(name="LOD3", step=100, default=500, min=1)
     smart_lods_target_5: bpy.props.IntProperty(name="LOD4", step=100, default=150, min=1)
+    smart_lods_decimate_method: bpy.props.EnumProperty(
+        name="Decimate Method", items=DECIMATE_METHOD_ITEMS, default="UV_PRESERVE")
+    smart_lods_uv_seam_mode: bpy.props.EnumProperty(
+        name="Seams", items=SEAM_MODE_ITEMS, default="LOCK",
+        description="Starting seam protection; relaxed automatically when a LOD budget is not reached")
     smart_lods_final_decimate: bpy.props.BoolProperty(
         name="Final Decimate Fallback",
         description="If seam-aware decimation cannot reach a triangle limit, add an unrestricted Decimate pass",

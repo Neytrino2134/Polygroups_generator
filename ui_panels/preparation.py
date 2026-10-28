@@ -8,6 +8,7 @@ from .common import (
     draw_collapsible_box,
     draw_import_progress,
     draw_import_remesh_options,
+    draw_lod_decimate_method,
     draw_mesh_editing,
     draw_section_header_icon,
     draw_topic,
@@ -536,6 +537,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     engine = config.row()
                     engine.enabled = settings.phase2_final_lods
                     engine.prop(settings, "phase2_final_lod_engine", expand=True)
+                    method = config.column(align=True)
+                    method.enabled = settings.phase2_final_lods
+                    # Shared with Mesh Finalization > Smart LODs: Phase 2 runs and rebakes use it.
+                    draw_lod_decimate_method(method, context, context.scene.polygroups_mesh_finalization_settings, "smart_lods_")
                     config.prop(settings, "phase2_final_rename")
                     engine = config.row()
                     engine.enabled = settings.phase2_final_rename

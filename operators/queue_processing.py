@@ -381,7 +381,8 @@ class QueueProcessingMixin:
             })
         else:
             lod_settings = self.scene.polygroups_mesh_finalization_settings
-            names = ["smart_lods_count", "smart_lods_final_decimate", "smart_lods_triangulate_all"]
+            names = ["smart_lods_count", "smart_lods_final_decimate", "smart_lods_triangulate_all",
+                     "smart_lods_decimate_method", "smart_lods_uv_seam_mode"]
             names.extend(f"smart_lods_target_{i}" for i in range(1, 6))
             previous = {name: getattr(lod_settings, name) for name in names + ["smart_lods_auto_arrange"]}
             before = set(bpy.data.objects)
@@ -402,6 +403,7 @@ class QueueProcessingMixin:
             self.result_meshes.extend(item for item in outputs if item.type == "MESH")
             self.file_record.setdefault("finalization", []).append({
                 "object": obj.name, "stage": 12,
+                "decimate_method": settings.batch_smart_lods_decimate_method,
                 "fallback": settings.batch_smart_lods_final_decimate,
                 "triangulate": settings.batch_smart_lods_triangulate_all,
                 "lods": [{"object": item.name, "output_tris": self.count_tris([item]),
