@@ -164,6 +164,8 @@ class FinalRebakeSession:
         self.created_materials = []
         self.started = False
         self.closed = False
+        self.target_prepared = False
+        self.frozen_source = None
 
     def set_attribute(self, owner, name, value):
         self.attributes.append((owner, name, getattr(owner, name)))
@@ -176,7 +178,10 @@ class FinalRebakeSession:
         return delete_current_asset_lods(self.context, self.target)
 
     def repair_target(self):
-        if not self.repair_mesh:
+        p = self.context.scene.polygroups_model_preparation_settings
+        pending_pack = p.phase2_rebake_repack_uv and self.target.get('polygroups_rebake_uv_needs_pack')
+        if not self.repair_mesh and not pending_pack:
+            self.target_prepared = True
             return
         from .phase2_zbrush_export import preserved_selection, export_visibility
         context,target = self.context,self.target
@@ -190,26 +195,66 @@ class FinalRebakeSession:
                 target.select_set(True)
                 context.view_layer.objects.active = target
                 before = uv_signature(target.data)
-                result = bpy.ops.mesh.polygroups_repair_mesh_folds('EXEC_DEFAULT', action='REPAIR',
-                    fix_folds=p.phase2_rebake_repair_folds,
-                    fix_degenerate=p.phase2_rebake_repair_coincident,
-                    fix_zero_area=p.phase2_rebake_repair_zero_area,
-                    fix_stretched_triangles=p.phase2_rebake_repair_stretched,
-                    fix_dangling=p.fold_repair_dangling,
-                    stretched_triangle_ratio=p.fold_repair_stretch_ratio, selected_only=False)
-                if 'FINISHED' not in result:
-                    raise RuntimeError('ReBake Final Mesh: Auto Repair failed for ' + target.name)
+                if self.repair_mesh:
+                    result = bpy.ops.mesh.polygroups_repair_mesh_folds('EXEC_DEFAULT', action='REPAIR',
+                        fix_folds=p.phase2_rebake_repair_folds,
+                        fix_degenerate=p.phase2_rebake_repair_coincident,
+                        fix_zero_area=p.phase2_rebake_repair_zero_area,
+                        fix_stretched_triangles=p.phase2_rebake_repair_stretched,
+                        fix_dangling=p.fold_repair_dangling,
+                        stretched_triangle_ratio=p.fold_repair_stretch_ratio, selected_only=False)
+                    if 'FINISHED' not in result:
+                        raise RuntimeError('ReBake Final Mesh: Auto Repair failed for ' + target.name)
                 if uv_signature(target.data) != before:
                     target['polygroups_rebake_uv_needs_pack'] = True
                 if p.phase2_rebake_repack_uv and target.get('polygroups_rebake_uv_needs_pack'):
                     if 'FINISHED' not in bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT'):
                         raise RuntimeError('ReBake Final Mesh: UV repack after repair failed for ' + target.name)
                     del target['polygroups_rebake_uv_needs_pack']
+                target.data.update()
+                context.view_layer.update()
+                self.target_prepared = True
         finally:
             if mode == 'EDIT' and context.active_object == target and target.mode != 'EDIT':
                 bpy.ops.object.mode_set(mode='EDIT')
 
+    def freeze_source_geometry(self):
+        """Use one evaluated Multires surface/UV for every bake/diagnostic pass.
+
+        Multires can resample evaluated UVs differently after shader overrides.
+        Keep the original object identity, data and modifier settings recoverable.
+        """
+        source = self.source
+        if not any(mod.type == 'MULTIRES' and mod.show_viewport for mod in source.modifiers):
+            return
+        self.context.view_layer.update()
+        graph = self.context.evaluated_depsgraph_get()
+        mesh = bpy.data.meshes.new_from_object(source.evaluated_get(graph),
+                                              preserve_all_data_layers=True, depsgraph=graph)
+        mesh.name = self.token + '_FrozenHighpoly'
+        flags = [(mod, mod.show_viewport, mod.show_render) for mod in source.modifiers]
+        self.frozen_source = (source.data, mesh, flags)
+        for mod, _, _ in flags:
+            mod.show_viewport = mod.show_render = False
+        source.data = mesh
+        self.context.view_layer.update()
+
+    def restore_source_geometry(self):
+        if self.frozen_source is None:
+            return
+        original, mesh, flags = self.frozen_source
+        self.source.data = original
+        for mod, viewport, render in flags:
+            mod.show_viewport, mod.show_render = viewport, render
+        if mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
+        self.frozen_source = None
+
     def begin(self):
+        # All target fixes and packing finish before source/material setup and
+        # before any projection fingerprint or native bake can be created.
+        if not self.target_prepared:
+            self.repair_target()
         if self.source_import is not None:
             self.source = self.source_import.load(self.context)
         context, target, source = self.context, self.target, self.source
@@ -264,6 +309,10 @@ class FinalRebakeSession:
                 self.set_attribute(modifier, 'show_viewport', True)
                 self.set_attribute(modifier, 'show_render', True)
                 self.set_attribute(modifier, 'levels', modifier.render_levels)
+            else:
+                self.set_attribute(modifier, 'show_viewport', modifier.show_render)
+                if modifier.type == 'SUBSURF':
+                    self.set_attribute(modifier, 'levels', modifier.render_levels)
         # Align translation only: retain each mesh's rotation, scale and vertices.
         matrix = source.matrix_world.copy()
         matrix.translation = target.matrix_world.translation
@@ -291,6 +340,7 @@ class FinalRebakeSession:
         target.select_set(True)
         context.view_layer.objects.active = target
         context.view_layer.update()
+        self.freeze_source_geometry()
 
     def save(self):
         """Stage all outputs, then replace files; roll back replacements on error."""
@@ -359,6 +409,7 @@ class FinalRebakeSession:
             return
         self.closed = True
         target, context = self.target, self.context
+        self.restore_source_geometry()
         work_material = target.data.materials[0] if target.data.materials else None
         for obj, materials in self.slots:
             obj.data.materials.clear()

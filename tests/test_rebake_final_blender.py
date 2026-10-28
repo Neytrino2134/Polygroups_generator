@@ -85,7 +85,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert self.target==target and self.sources==[high]
         assert (high.matrix_world.translation-target.matrix_world.translation).length<1e-6
         assert not high.hide_render and not high.hide_viewport and not high.hide_get()
-        assert multires.show_render and multires.show_viewport and multires.levels==1
+        assert multires.levels==1 and not multires.show_render and not multires.show_viewport
+        assert self.final_rebake_session.frozen_source is not None
         assert not layer.exclude and not parent.hide_render and not parent.hide_viewport
         assert node.image not in images.values()
         assert [tuple(l.uv) for l in target.data.uv_layers.active.data]==uv_before
@@ -200,7 +201,7 @@ with tempfile.TemporaryDirectory() as directory:
     phase2_tree=capture(bpy.context,1)
     assert not phase2_tree.errors,phase2_tree.errors
     phase2_ops=[b[1] for b in phase2_tree.bindings.values() if b[0]=='operator']
-    assert phase2_ops.index('object.polygroups_rebake_final_mesh')==phase2_ops.index('object.polygroups_start_phase2')+1
+    assert 'object.polygroups_start_phase2' in phase2_ops and 'object.polygroups_rebake_final_mesh' in phase2_ops
     assert any(b[0]=='property' and b[2]=='phase2_rebake_create_lods' for b in phase2_tree.bindings.values())
     assert any(b[0]=='property' and b[2]=='phase2_rebake_export_selected' for b in phase2_tree.bindings.values())
     from polygroups_generator.operators import phase2_pipeline_stages

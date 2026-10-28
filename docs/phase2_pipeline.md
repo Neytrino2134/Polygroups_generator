@@ -64,6 +64,30 @@ With rendering disabled, ZBrush follows the other enabled passes. With ZBrush
 disabled, the option does not change queue ordering. The queue order is fixed
 when the process starts. Automated validation includes actual rendering before
 the simulated ZBrush launch, with Generated sources retained until cleanup.
+## ReBake: исправление, упаковка и стабильность Multires
+
+Порядок подготовки ReBake Final Mesh: **Repair Mesh → Repack UV → ReBake**.
+Исправление выполняется при включённом Repair Mesh; упаковка — при включённом
+Repack UV If Repair Changed UV, если исправление изменило UV или число UV-углов. Оба шага
+завершаются до подготовки материалов, запекания и создания диагностического
+снимка. Повторный запуск после неудачной упаковки сохраняет требование упаковки,
+даже если Repair Mesh уже выключен. Неудачная упаковка останавливает ReBake.
+
+Для highpoly с Multires один раз создаётся временный evaluated-меш на уровне
+Render. Все проходы BaseColor, Normal и диагностики используют его поверхность
+и UV. Это устраняет ложное `Evaluated geometry/UVs changed during diagnostics`:
+при смене диагностических материалов Blender может слегка пересчитать UV
+Multires без редактирования исходного меша. По завершении, отмене или ошибке
+восстанавливаются исходный mesh datablock и настройки модификаторов;
+временный меш удаляется. Исходный highpoly не применяется и не сохраняется.
+
+Проверка настоящих изменений остаётся строгой: ошибка содержит имя объекта
+и изменившиеся компоненты, например `UV`, `vertices` или `topology`.
+Регрессия `test_rebake_preparation_order_blender.py` проверяет порядок операций,
+повтор упаковки, реальные Cycles-проходы и восстановление исходных данных.
+`check_container_rebake_multires_blender.py` проверяет Containers на 32×32
+с выводом во временную папку и контролем хешей исходных текстур.
+
 ## ReLOD и статус Start Phase 2
 
 Внутри **Start Phase 2** подсекция **Status and Statistics** содержит статус

@@ -86,7 +86,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert imported.source!=outside and imported.source in imported.collection.all_objects[:]
         assert self.sources==[imported.source]
         mod=next(m for m in imported.source.modifiers if m.type=='MULTIRES')
-        assert mod.show_render and mod.show_viewport and mod.levels==1
+        assert not mod.show_render and not mod.show_viewport and mod.levels==1
+        assert self.final_rebake_session.frozen_source is not None
         tex=next(n.image for n in imported.source.active_material.node_tree.nodes if n.type=='TEX_IMAGE')
         assert tex!=existing_image and Path(bpy.path.abspath(tex.filepath)).is_file(),tex.filepath
         assert list(tex.pixels)[1]>.5

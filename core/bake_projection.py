@@ -32,34 +32,43 @@ def pixels(image):
     return values.reshape(image.size[1], image.size[0], 4)
 
 
-def geometry_signature(context, objects):
+def geometry_signatures(context, objects):
     digest = hashlib.sha256()
+    parts = {}
     graph = context.evaluated_depsgraph_get()
     for obj in objects:
         evaluated = obj.evaluated_get(graph)
-        mesh = evaluated.to_mesh()
+        mesh = evaluated.to_mesh(preserve_all_data_layers=True, depsgraph=graph)
+        fields = {}
+        def record(name, data):
+            digest.update(data)
+            fields[name] = hashlib.sha256(data).hexdigest()
         try:
-            digest.update(obj.name_full.encode())
-            digest.update(np.asarray(obj.matrix_world, dtype=np.float64).tobytes())
+            record('object', obj.name_full.encode())
+            record('transform', np.asarray(obj.matrix_world, dtype=np.float64).tobytes())
             coords = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
             mesh.vertices.foreach_get('co', coords)
-            digest.update(coords.tobytes())
+            record('vertices', coords.tobytes())
             loops = np.empty(len(mesh.loops), dtype=np.int32)
             mesh.loops.foreach_get('vertex_index', loops)
-            digest.update(loops.tobytes())
+            record('topology', loops.tobytes())
             normals = np.empty(len(mesh.corner_normals) * 3, dtype=np.float32)
             mesh.corner_normals.foreach_get('vector', normals)
-            digest.update(normals.tobytes())
-            digest.update(str([(p.loop_start, p.loop_total, p.use_smooth, p.material_index) for p in mesh.polygons]).encode())
+            record('normals', normals.tobytes())
+            record('polygons', str([(p.loop_start, p.loop_total, p.use_smooth, p.material_index) for p in mesh.polygons]).encode())
             if mesh.uv_layers.active:
                 uv = np.empty(len(mesh.loops) * 2, dtype=np.float32)
                 mesh.uv_layers.active.data.foreach_get('uv', uv)
-                digest.update(mesh.uv_layers.active.name.encode())
-                digest.update(uv.tobytes())
+                record('UV map', mesh.uv_layers.active.name.encode())
+                record('UV', uv.tobytes())
+            parts[obj.name_full] = fields
         finally:
             evaluated.to_mesh_clear()
-    return digest.hexdigest()
+    return digest.hexdigest(), parts
 
+
+def geometry_signature(context, objects):
+    return geometry_signatures(context, objects)[0]
 
 def material_signature(objects):
     visited = set()
@@ -200,8 +209,9 @@ class ProjectionSession:
         # Selected-to-active samples source shaders; target bake image nodes are
         # outputs and may legitimately be reinitialized by Blender during NORMAL.
         self.material_objects = self.sources if self.bake_snapshot['use_selected_to_active'] else (target,)
+        signature, self.geometry_parts = geometry_signatures(context, self.objects)
         self.frozen = BakeProjectionContext(target[RUN_PROP], self.scene.frame_current,
-            geometry_signature(context, self.objects), material_signature(self.material_objects), width, height, self.normal.name if self.normal else '',
+            signature, material_signature(self.material_objects), width, height, self.normal.name if self.normal else '',
             tuple(self.bake_snapshot.items()), tuple(o.name_full for o in sources))
         self.ownership = uv_ownership(context, target, width, height)
         self.z = None
@@ -216,8 +226,15 @@ class ProjectionSession:
     def validate(self):
         if self.target.get(RUN_PROP) != self.frozen.run or self.scene.frame_current != self.frozen.frame:
             raise ValueError('Bake run/frame changed during diagnostics')
-        if geometry_signature(self.context, self.objects) != self.frozen.signature:
-            raise ValueError('Evaluated geometry/UVs changed during diagnostics')
+        signature, parts = geometry_signatures(self.context, self.objects)
+        if signature != self.frozen.signature:
+            changed = []
+            for name in sorted(set(parts) | set(self.geometry_parts)):
+                before, after = self.geometry_parts.get(name, {}), parts.get(name, {})
+                fields = [field for field in sorted(set(before) | set(after)) if before.get(field) != after.get(field)]
+                if fields:
+                    changed.append(name + ' [' + ', '.join(fields) + ']')
+            raise ValueError('Evaluated geometry/UVs changed during diagnostics: ' + '; '.join(changed))
         if material_signature(self.material_objects) != self.frozen.materials:
             raise ValueError('Materials changed during diagnostics')
 
