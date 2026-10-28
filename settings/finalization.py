@@ -6,6 +6,7 @@ from .callbacks import (
     bpy,
     radians,
 )
+from ..core.meshopt_simplify import SEAM_MODE_ITEMS
 
 
 class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
@@ -380,6 +381,34 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         name="Hide LOW After Decimate", default=False,
         description="Disable original LOW viewport display after successful Smart Decimate",
     )
+    show_smart_decimate_blender_settings: bpy.props.BoolProperty(name="Smart Decimate (Blender)", default=True)
+    show_uv_decimate_settings: bpy.props.BoolProperty(name="UV Preserve Decimate", default=False)
+    uv_decimate_triangle_limit: bpy.props.IntProperty(
+        name="Triangle Limit", description="Target triangle count; 0 uses Ratio", default=0, min=0)
+    uv_decimate_ratio: bpy.props.FloatProperty(
+        name="Ratio", description="Fraction of source triangles to keep when Triangle Limit is 0",
+        default=0.25, min=0.0, max=1.0, subtype="FACTOR")
+    uv_decimate_seam_mode: bpy.props.EnumProperty(name="Seams", items=SEAM_MODE_ITEMS, default="LOCK")
+    uv_decimate_uv_weight: bpy.props.FloatProperty(
+        name="UV Weight", description="Importance of UV error relative to geometric error",
+        default=1.0, min=0.0, soft_max=10.0)
+    uv_decimate_max_error: bpy.props.FloatProperty(
+        name="Max Error", description="Stop before this relative error (1.0 = only the triangle budget limits)",
+        default=1.0, min=0.0, max=1.0, subtype="FACTOR")
+    uv_decimate_lock_open_borders: bpy.props.BoolProperty(
+        name="Lock Open Borders", description="Never move vertices on open mesh borders", default=False)
+    uv_decimate_join_triangles: bpy.props.BoolProperty(
+        name="Join Triangles To Quads",
+        description="Merge triangle pairs into quads without moving vertices or crossing seams/materials",
+        default=True)
+    uv_decimate_join_angle: bpy.props.FloatProperty(
+        name="Quad Angle", description="Max face and shape angle for joining triangle pairs into quads",
+        default=radians(60), min=0.0, max=radians(180), subtype="ANGLE")
+    uv_decimate_duplicate: bpy.props.BoolProperty(
+        name="Decimate A Duplicate", description="Keep the active object and decimate a copy", default=True)
+    uv_decimate_hide_source: bpy.props.BoolProperty(
+        name="Hide LOW After Decimate", default=False,
+        description="Disable original LOW viewport display after successful UV Preserve Decimate")
     fab_prepare_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     fab_prepare_stop_requested: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     fab_prepare_total: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})

@@ -203,6 +203,9 @@ from .smart_decimate import (
     OBJECT_OT_polygroups_smart_decimate, OBJECT_OT_polygroups_smart_decimate_all_generated,
     OBJECT_OT_polygroups_delete_all_decimated, OBJECT_OT_polygroups_show_all_low,
 )
+from .uv_preserve_decimate import (
+    OBJECT_OT_polygroups_uv_preserve_decimate, OBJECT_OT_polygroups_uv_preserve_decimate_all_generated,
+)
 from .sequential_jobs import OBJECT_OT_polygroups_stop_lod_job, stop_jobs
 from .auto_render import OBJECT_OT_polygroups_phase2_auto_render
 from .batch_finalization import OBJECT_OT_polygroups_batch_finalization
@@ -459,6 +462,8 @@ CLASSES = (
     MESH_OT_polygroups_select_seam_tool,
     OBJECT_OT_polygroups_smart_decimate,
     OBJECT_OT_polygroups_smart_decimate_all_generated,
+    OBJECT_OT_polygroups_uv_preserve_decimate,
+    OBJECT_OT_polygroups_uv_preserve_decimate_all_generated,
     OBJECT_OT_polygroups_delete_all_decimated,
     OBJECT_OT_polygroups_show_all_low,
     OBJECT_OT_polygroups_generate_smart_lods,

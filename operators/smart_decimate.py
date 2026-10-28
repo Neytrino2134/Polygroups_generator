@@ -35,20 +35,20 @@ def _select_seam_edges(obj):
     mesh.update()
 
 
-def _decimated_name(name):
+def _decimated_name(name, suffix=SMART_DECIMATE_DUPLICATE_SUFFIX):
     match = re.search(r"\.\d+$", name)
     if match:
-        return f"{name[:match.start()]}{SMART_DECIMATE_DUPLICATE_SUFFIX}{match.group()}"
-    return f"{name}{SMART_DECIMATE_DUPLICATE_SUFFIX}"
+        return f"{name[:match.start()]}{suffix}{match.group()}"
+    return f"{name}{suffix}"
 
 
-def _duplicate_mesh_object(context, obj):
+def _duplicate_mesh_object(context, obj, suffix=SMART_DECIMATE_DUPLICATE_SUFFIX):
     duplicate = obj.copy()
     duplicate.data = obj.data.copy()
     duplicate.animation_data_clear()
     duplicate["polygroups_smart_decimated"] = True
-    duplicate.name = _decimated_name(obj.name)
-    duplicate.data.name = _decimated_name(obj.data.name)
+    duplicate.name = _decimated_name(obj.name, suffix)
+    duplicate.data.name = _decimated_name(obj.data.name, suffix)
 
     for collection in obj.users_collection or (context.scene.collection,):
         collection.objects.link(duplicate)
@@ -270,82 +270,90 @@ class OBJECT_OT_polygroups_smart_decimate_all_generated(bpy.types.Operator):
                 and not context.scene.polygroups_model_preparation_settings.batch_is_running)
 
     def execute(self, context):
-        from .rename_objects import layer_collection_paths
         settings = context.scene.polygroups_mesh_finalization_settings
-        targets = generated_retopo_targets(context.scene)
-        if not targets:
-            self.report({'WARNING'}, 'No matching Retopo meshes in Generated.N collections')
-            return {'CANCELLED'}
-        selected = list(context.selected_objects)
-        active = context.view_layer.objects.active
-        original_mode = active.mode if active else 'OBJECT'
-        successful, failed = 0, []
-        try:
-            if active is not None and active.mode != 'OBJECT':
-                bpy.ops.object.mode_set(mode='OBJECT')
-            for obj in sorted(targets, key=lambda item: item.name):
-                layers, collection_flags = {}, {}
-                pending_layers = [context.view_layer.layer_collection]
-                while pending_layers:
-                    layer = pending_layers.pop()
-                    layers[layer] = (layer.exclude, layer.hide_viewport)
-                    pending_layers.extend(reversed(list(layer.children)))
-                reveal_layers = set()
-                processed = False
-                object_hidden = obj.hide_viewport, obj.hide_get()
-                try:
-                    for owner in obj.users_collection:
-                        for path in layer_collection_paths(context.view_layer.layer_collection, owner):
-                            for layer in path:
-                                reveal_layers.add(layer)
-                                collection_flags.setdefault(layer.collection, layer.collection.hide_viewport)
-                    for layer in reveal_layers:
-                        layer.exclude = False
-                        layer.hide_viewport = False
-                        layer.collection.hide_viewport = False
-                    context.view_layer.update()
-                    obj.hide_viewport = False
-                    obj.hide_set(False)
-                    for item in context.selected_objects:
-                        item.select_set(False)
-                    obj.select_set(True)
-                    context.view_layer.objects.active = obj
-                    result = bpy.ops.object.polygroups_smart_decimate(
-                        triangle_limit=settings.smart_decimate_triangle_limit,
-                        ratio=settings.smart_decimate_ratio,
-                        seams_ratio=settings.smart_decimate_seams_ratio,
-                        duplicate_and_apply=settings.smart_decimate_duplicate_and_apply,
-                        hide_source=settings.smart_decimate_hide_source,
-                        reunwrap_uv=settings.smart_decimate_reunwrap_uv,
-                    )
-                    if 'FINISHED' not in result:
-                        raise RuntimeError('Smart Decimate cancelled; check UV seam edges')
-                    processed = True
-                    successful += 1
-                except RuntimeError as error:
-                    failed.append(f'{obj.name}: {error}')
-                finally:
-                    obj.hide_viewport = True if processed and settings.smart_decimate_hide_source else object_hidden[0]
-                    hidden = object_hidden[1]
-                    obj.hide_set(hidden)
-                    for collection, hidden in collection_flags.items():
-                        collection.hide_viewport = hidden
-                    for layer, (excluded, hidden) in layers.items():
-                        layer.hide_viewport = hidden
-                        layer.exclude = excluded
-                    context.view_layer.update()
-        finally:
-            for item in context.selected_objects:
-                item.select_set(False)
-            for item in selected:
-                item.select_set(True)
-            context.view_layer.objects.active = active
-            if active is not None and original_mode != 'OBJECT':
-                bpy.ops.object.mode_set(mode=original_mode)
-        for message in failed:
-            self.report({'WARNING'}, message)
-        self.report({'INFO'}, f'Smart Decimate: {successful}/{len(targets)} Generated collections processed')
-        return {'FINISHED'} if successful else {'CANCELLED'}
+        return run_on_generated_targets(
+            self, context, 'Smart Decimate', settings.smart_decimate_hide_source,
+            lambda: bpy.ops.object.polygroups_smart_decimate(
+                triangle_limit=settings.smart_decimate_triangle_limit,
+                ratio=settings.smart_decimate_ratio,
+                seams_ratio=settings.smart_decimate_seams_ratio,
+                duplicate_and_apply=settings.smart_decimate_duplicate_and_apply,
+                hide_source=settings.smart_decimate_hide_source,
+                reunwrap_uv=settings.smart_decimate_reunwrap_uv,
+            ),
+        )
+
+
+def run_on_generated_targets(operator, context, label, hide_source, run):
+    """Run `run()` with each latest Generated.N Retopo revealed, selected and active."""
+    from .rename_objects import layer_collection_paths
+    targets = generated_retopo_targets(context.scene)
+    if not targets:
+        operator.report({'WARNING'}, 'No matching Retopo meshes in Generated.N collections')
+        return {'CANCELLED'}
+    selected = list(context.selected_objects)
+    active = context.view_layer.objects.active
+    original_mode = active.mode if active else 'OBJECT'
+    successful, failed = 0, []
+    try:
+        if active is not None and active.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        for obj in sorted(targets, key=lambda item: item.name):
+            layers, collection_flags = {}, {}
+            pending_layers = [context.view_layer.layer_collection]
+            while pending_layers:
+                layer = pending_layers.pop()
+                layers[layer] = (layer.exclude, layer.hide_viewport)
+                pending_layers.extend(reversed(list(layer.children)))
+            reveal_layers = set()
+            processed = False
+            object_hidden = obj.hide_viewport, obj.hide_get()
+            try:
+                for owner in obj.users_collection:
+                    for path in layer_collection_paths(context.view_layer.layer_collection, owner):
+                        for layer in path:
+                            reveal_layers.add(layer)
+                            collection_flags.setdefault(layer.collection, layer.collection.hide_viewport)
+                for layer in reveal_layers:
+                    layer.exclude = False
+                    layer.hide_viewport = False
+                    layer.collection.hide_viewport = False
+                context.view_layer.update()
+                obj.hide_viewport = False
+                obj.hide_set(False)
+                for item in context.selected_objects:
+                    item.select_set(False)
+                obj.select_set(True)
+                context.view_layer.objects.active = obj
+                result = run()
+                if 'FINISHED' not in result:
+                    raise RuntimeError(f'{label} cancelled; check UV seam edges')
+                processed = True
+                successful += 1
+            except RuntimeError as error:
+                failed.append(f'{obj.name}: {error}')
+            finally:
+                obj.hide_viewport = True if processed and hide_source else object_hidden[0]
+                hidden = object_hidden[1]
+                obj.hide_set(hidden)
+                for collection, hidden in collection_flags.items():
+                    collection.hide_viewport = hidden
+                for layer, (excluded, hidden) in layers.items():
+                    layer.hide_viewport = hidden
+                    layer.exclude = excluded
+                context.view_layer.update()
+    finally:
+        for item in context.selected_objects:
+            item.select_set(False)
+        for item in selected:
+            item.select_set(True)
+        context.view_layer.objects.active = active
+        if active is not None and original_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode=original_mode)
+    for message in failed:
+        operator.report({'WARNING'}, message)
+    operator.report({'INFO'}, f'{label}: {successful}/{len(targets)} Generated collections processed')
+    return {'FINISHED'} if successful else {'CANCELLED'}
 
 
 class OBJECT_OT_polygroups_delete_all_decimated(bpy.types.Operator):

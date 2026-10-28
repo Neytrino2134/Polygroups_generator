@@ -1983,6 +1983,34 @@ TEXT['RU'].update({
 })
 
 
+TEXT['EN'].update({
+    'smart_decimate_blender': 'Smart Decimate (Blender)',
+    'uv_decimate': 'UV Preserve Decimate',
+    'uv_decimate_all_generated': 'UV Preserve Decimate all generated',
+    'uv_decimate_duplicate': 'Decimate a Duplicate',
+    'uv_decimate_join_triangles': 'Join Triangles to Quads',
+    'uv_decimate_join_angle': 'Quad Angle',
+    'uv_decimate_lock_open_borders': 'Lock Open Borders',
+    'uv_decimate_seam_mode': 'Seams',
+    'uv_decimate_uv_weight': 'UV Weight',
+    'uv_decimate_max_error': 'Max Error',
+    'uv_decimate_missing_library': 'lib/meshoptimizer.dll not found',
+})
+TEXT['RU'].update({
+    'smart_decimate_blender': 'Умный децимейт (Blender)',
+    'uv_decimate': 'Децимейт с сохранением UV',
+    'uv_decimate_all_generated': 'Децимейт с сохранением UV всех Generated',
+    'uv_decimate_duplicate': 'Децимейт копии объекта',
+    'uv_decimate_join_triangles': 'Объединить треугольники в квады',
+    'uv_decimate_join_angle': 'Угол для квадов',
+    'uv_decimate_lock_open_borders': 'Закрепить открытые края',
+    'uv_decimate_seam_mode': 'Швы',
+    'uv_decimate_uv_weight': 'Вес UV',
+    'uv_decimate_max_error': 'Макс. ошибка',
+    'uv_decimate_missing_library': 'Не найден lib/meshoptimizer.dll',
+})
+
+
 def get_preferences(context):
     if context is None:
         return None

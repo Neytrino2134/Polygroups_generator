@@ -1,6 +1,7 @@
 """Finalization section panels."""
 import json
 import bpy
+from ..core import meshopt_simplify
 from ..localization import t
 from ..operators.asset_translation import draw_asset_name
 from .common import (
@@ -320,6 +321,63 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
 
     def draw_decimate(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
+        blender_content = draw_collapsible_box(
+            layout, settings, "show_smart_decimate_blender_settings",
+            t(context, "smart_decimate_blender"), "MOD_DECIM",
+        )
+        if blender_content is not None:
+            self.draw_smart_decimate_blender(context, blender_content)
+
+        uv_content = draw_collapsible_box(
+            layout, settings, "show_uv_decimate_settings",
+            t(context, "uv_decimate"), "UV",
+        )
+        if uv_content is not None:
+            self.draw_uv_preserve_decimate(context, uv_content)
+
+        column = layout.column(align=True)
+        column.operator("object.polygroups_show_all_low", text=t(context, "smart_decimate_show_low"), icon="RESTRICT_VIEW_OFF")
+        column.operator("object.polygroups_delete_all_decimated", text=t(context, "smart_decimate_delete_all"), icon="TRASH")
+
+    def draw_uv_preserve_decimate(self, context, layout):
+        settings = context.scene.polygroups_mesh_finalization_settings
+        column = layout.column(align=True)
+        if not meshopt_simplify.is_available():
+            column.label(text=t(context, "uv_decimate_missing_library"), icon="ERROR")
+        column.prop(settings, "uv_decimate_duplicate", text=t(context, "uv_decimate_duplicate"))
+        column.prop(settings, "uv_decimate_hide_source", text=t(context, "smart_decimate_hide_low"))
+        column.prop(settings, "uv_decimate_join_triangles", text=t(context, "uv_decimate_join_triangles"))
+        angle = column.row(align=True)
+        angle.enabled = settings.uv_decimate_join_triangles
+        angle.prop(settings, "uv_decimate_join_angle", text=t(context, "uv_decimate_join_angle"))
+        column.prop(settings, "uv_decimate_lock_open_borders", text=t(context, "uv_decimate_lock_open_borders"))
+        column.separator()
+        column.prop(settings, "uv_decimate_seam_mode", text=t(context, "uv_decimate_seam_mode"))
+        column.prop(settings, "uv_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))
+        ratio = column.row(align=True)
+        ratio.enabled = settings.uv_decimate_triangle_limit == 0
+        ratio.prop(settings, "uv_decimate_ratio", text=t(context, "ratio"), slider=True)
+        column.prop(settings, "uv_decimate_uv_weight", text=t(context, "uv_decimate_uv_weight"))
+        column.prop(settings, "uv_decimate_max_error", text=t(context, "uv_decimate_max_error"), slider=True)
+        column.separator()
+        operator = column.operator(
+            "object.polygroups_uv_preserve_decimate", text=t(context, "uv_decimate"), icon="MOD_DECIM",
+        )
+        operator.triangle_limit = settings.uv_decimate_triangle_limit
+        operator.ratio = settings.uv_decimate_ratio
+        operator.seam_mode = settings.uv_decimate_seam_mode
+        operator.uv_weight = settings.uv_decimate_uv_weight
+        operator.max_error = settings.uv_decimate_max_error
+        operator.lock_open_borders = settings.uv_decimate_lock_open_borders
+        operator.join_triangles = settings.uv_decimate_join_triangles
+        operator.join_angle = settings.uv_decimate_join_angle
+        operator.duplicate = settings.uv_decimate_duplicate
+        operator.hide_source = settings.uv_decimate_hide_source
+        column.operator("object.polygroups_uv_preserve_decimate_all_generated",
+                        text=t(context, "uv_decimate_all_generated"), icon="MOD_DECIM")
+
+    def draw_smart_decimate_blender(self, context, layout):
+        settings = context.scene.polygroups_mesh_finalization_settings
         column = layout.column(align=True)
         column.prop(
             settings,
@@ -359,9 +417,6 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
 
         column.operator("object.polygroups_smart_decimate_all_generated",
                         text=t(context, "smart_decimate_all_generated"), icon="MOD_DECIM")
-
-        column.operator("object.polygroups_show_all_low", text=t(context, "smart_decimate_show_low"), icon="RESTRICT_VIEW_OFF")
-        column.operator("object.polygroups_delete_all_decimated", text=t(context, "smart_decimate_delete_all"), icon="TRASH")
 
     def draw_smart_lods(self, context, layout):
         settings = context.scene.polygroups_mesh_finalization_settings
