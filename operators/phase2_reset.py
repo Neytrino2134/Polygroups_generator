@@ -17,7 +17,8 @@ def reset_available(context):
         if owner is not None and owner.scene != context.scene:
             return False
     job = sequential_jobs.ACTIVE_JOB
-    if job is not None and (not getattr(job, 'phase2_job', False) or job._job_scene != context.scene):
+    if job is not None and (not (getattr(job, 'phase2_job', False) or getattr(job, '_is_relod', False))
+                            or job._job_scene != context.scene):
         return False
     task = baking._ACTIVE_BAKE_TASK
     if task is not None and task.settings != context.scene.polygroups_baking_settings:
@@ -143,6 +144,9 @@ def reset_phase2_state(context):
                  'phase2_final_progress', 'phase2_autosave_status'):
         p.property_unset(name)
     for name in ('phase2_rebake_queue_running','phase2_rebake_queue_progress','phase2_rebake_queue_status'):
+        p.property_unset(name)
+    for name in ('phase2_relod_running', 'phase2_relod_progress', 'phase2_relod_status',
+                 'phase2_relod_done', 'phase2_relod_total'):
         p.property_unset(name)
     for entry in p.phase2_rebake_queue:
         entry.state,entry.message='PENDING',''

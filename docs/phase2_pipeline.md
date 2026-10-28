@@ -64,3 +64,29 @@ With rendering disabled, ZBrush follows the other enabled passes. With ZBrush
 disabled, the option does not change queue ordering. The queue order is fixed
 when the process starts. Automated validation includes actual rendering before
 the simulated ZBrush launch, with Generated sources retained until cleanup.
+## ReLOD и статус Start Phase 2
+
+Внутри **Start Phase 2** подсекция **Status and Statistics** содержит статус
+пайплайна, общую и текущую шкалы прогресса, статистику этапов/времени,
+статус обработки, ReBake, ReLOD и Rename. Её можно свернуть целиком.
+
+Непосредственно над ней расположена **ReLOD**:
+
+- **Re-create LODs** обрабатывает все меши текущей сцены с суффиксами `_MID`
+  и `_HIGH`, включая скрытые. Если у ассета есть оба источника, используется MID.
+- **Delete Current LODs** разрешает замену старых LOD и их подписей. По умолчанию
+  выключено: если LOD уже существуют, запуск останавливается до изменения сцены.
+- **Decimate Method** по умолчанию **UV Preserve**; начальный режим швов — Lock.
+  Метод и режим швов ReLOD независимы от настроек других запусков.
+- Количество LOD, лимиты треугольников, расположение и подписи берутся из Smart LODs.
+  Имена сохраняют основу источника: `<основа>_LOD0`, `<основа>_LOD1`, …
+- ReLOD не запускает ReBake, экспорт или переименование исходных MID/HIGH.
+  Исходная геометрия, UV, трансформации и ограничения видимости сохраняются.
+- **Stop ReLOD** находится в Status and Statistics. Незавершённый текущий набор
+  откатывается; ранее завершённые ассеты остаются. Ошибка генерации также
+  восстанавливает старые LOD и подписи текущего ассета. Reset State поддерживает ReLOD.
+
+Регрессии: `tests/test_relod_blender.py` — реальная UV Preserve генерация,
+замена, отказ при конфликте имён, остановка/ошибка с откатом и вложенность UI.
+Проверка `Containers_01_01.blend` без сохранения исходника пересоздала пять LOD:
+2878 / 1490 / 1000 / 498 / 148 треугольников; MID и его UV остались неизменными.

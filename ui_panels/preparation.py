@@ -672,25 +672,6 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 config.operator("object.polygroups_phase2_auto_render", text="Start Render", icon="RENDER_STILL")
                 if settings.phase2_auto_render_running:
                     auto.operator("object.polygroups_stop_lod_job", text="Stop Render", icon="CANCEL")
-            group = draw_collapsible_box(content, settings, "phase2_show_status",
-                t(context, "phase2_processing_status"), "INFO")
-            if group is not None:
-                if settings.phase2_status:
-                    group.separator(type="LINE")
-                    group.label(text=settings.phase2_status, icon="INFO")
-                if settings.phase2_final_is_running or settings.phase2_auto_render_running or settings.phase2_final_progress:
-                    group.progress(factor=settings.phase2_final_progress / 100, type='BAR', text=f'{settings.phase2_final_progress:.0f}%')
-                if settings.phase2_total_count:
-                    group.progress(
-                        factor=(settings.phase2_done_count + settings.phase2_failed_count) / settings.phase2_total_count,
-                        type="BAR", text=t(context, "phase2_progress", done=settings.phase2_done_count,
-                                           failed=settings.phase2_failed_count, total=settings.phase2_total_count),
-                    )
-                if settings.phase2_is_running:
-                    group.operator("object.polygroups_phase2_stop", text=t(context, "phase2_stop"), icon="PAUSE")
-                if settings.phase2_final_is_running or settings.phase2_auto_render_running:
-                    group.operator("object.polygroups_stop_lod_job", icon="CANCEL")
-
             manager = draw_collapsible_box(content, settings, "phase2_show_files",
                 t(context, "phase2_file_manager"), "FILE_BLEND")
             if manager is not None:

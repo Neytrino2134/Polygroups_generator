@@ -45,7 +45,8 @@ def draw_pipeline_progress(layout, context, p):
 
 def draw_start(layout, context, p):
     controls_enabled = not (p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
-                           or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running)
+                           or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running
+                           or p.phase2_relod_running or context.scene.polygroups_mesh_finalization_settings.smart_lods_is_running)
     start = layout.column(align=True)
     start.enabled = controls_enabled
     start.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
@@ -75,9 +76,20 @@ def draw_start(layout, context, p):
         controls.prop(p, 'phase2_rename_json')
         rename.label(text='Export pipeline: ' + ('Unity' if unity else 'Unreal / FAB'))
         controls.operator('object.polygroups_rename_final_meshes', text='Rename Final Meshes', icon='SORTALPHA')
-        rename.label(text=p.phase2_rename_status)
-    if p.phase2_pipeline_state:
-        draw_pipeline_progress(layout, context, p)
+    relod = draw_collapsible_box(layout, p, 'phase2_show_relod', 'ReLOD', 'MOD_DECIM')
+    if relod is not None:
+        controls = relod.column(align=True)
+        controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
+        controls.prop(p, 'phase2_relod_delete_current_lods')
+        controls.prop(p, 'phase2_relod_method')
+        if p.phase2_relod_method == 'UV_PRESERVE':
+            controls.prop(p, 'phase2_relod_seam_mode')
+        controls.label(text='All _MID / _HIGH meshes in scene (MID preferred)', icon='INFO')
+        controls.label(text='Uses Smart LOD count and triangle budgets')
+        controls.operator('object.polygroups_relod', text='Re-create LODs', icon='FILE_REFRESH')
+    status = draw_collapsible_box(layout, p, 'phase2_show_status', 'Status and Statistics', 'INFO')
+    if status is not None:
+        draw_start_status(status, context, p)
 
 
 def draw_process_settings(options, context, p):
@@ -140,7 +152,8 @@ def draw_rebake(layout, context, p):
     manual = layout.column(align=True)
     manual.enabled = not (context.scene.polygroups_baking_settings.bake_task_is_running
         or p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
-        or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running)
+        or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running
+        or p.phase2_relod_running or context.scene.polygroups_mesh_finalization_settings.smart_lods_is_running)
     rebake = manual.operator('object.polygroups_rebake_final_mesh', text='ReBake Final Mesh', icon='FILE_REFRESH')
     rebake.create_lods = p.phase2_rebake_create_lods
     rebake.export_selected = p.phase2_rebake_create_lods and p.phase2_rebake_export_selected
@@ -175,11 +188,34 @@ def draw_rebake(layout, context, p):
         remove.action,remove.index='REMOVE',index
         if entry.message and entry.state=='FAILED':
             queue.label(text=entry.message,icon='ERROR')
-    queue.label(text=p.phase2_rebake_queue_status)
+
+
+def draw_start_status(layout, context, p):
+    from ..localization import t
+    draw_pipeline_progress(layout, context, p)
+    if p.phase2_status:
+        layout.label(text=p.phase2_status, icon='INFO')
+    if p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_final_progress:
+        layout.progress(factor=p.phase2_final_progress/100, type='BAR', text=f'{p.phase2_final_progress:.0f}%')
+    if p.phase2_total_count:
+        layout.progress(factor=(p.phase2_done_count+p.phase2_failed_count)/p.phase2_total_count,
+                        type='BAR', text=t(context, 'phase2_progress', done=p.phase2_done_count,
+                        failed=p.phase2_failed_count, total=p.phase2_total_count))
+    if p.phase2_is_running:
+        layout.operator('object.polygroups_phase2_stop', text=t(context, 'phase2_stop'), icon='PAUSE')
+    if p.phase2_final_is_running or p.phase2_auto_render_running:
+        layout.operator('object.polygroups_stop_lod_job', icon='CANCEL')
+    layout.label(text='ReBake: '+p.phase2_rebake_queue_status)
+    if p.phase2_rebake_queue_running or p.phase2_rebake_queue_progress:
+        layout.progress(factor=p.phase2_rebake_queue_progress/100, type='BAR', text=p.phase2_rebake_queue_status)
     if p.phase2_rebake_queue_running:
-        live=layout.column(align=True)
-        live.progress(factor=p.phase2_rebake_queue_progress/100,type='BAR',text=p.phase2_rebake_queue_status)
-        live.operator('object.polygroups_stop_lod_job',text='Stop after Current Mesh',icon='CANCEL')
+        layout.operator('object.polygroups_stop_lod_job', text='Stop after Current Mesh', icon='CANCEL')
+    layout.label(text=f'ReLOD: {p.phase2_relod_status} | {p.phase2_relod_done}/{p.phase2_relod_total}')
+    if p.phase2_relod_running or p.phase2_relod_progress:
+        layout.progress(factor=p.phase2_relod_progress/100, type='BAR', text=p.phase2_relod_status)
+    if p.phase2_relod_running:
+        layout.operator('object.polygroups_stop_lod_job', text='Stop ReLOD', icon='CANCEL')
+    layout.label(text='Rename: '+p.phase2_rename_status)
 
 
 class PipelineOverlay:

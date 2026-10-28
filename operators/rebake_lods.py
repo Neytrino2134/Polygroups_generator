@@ -187,6 +187,7 @@ class LODReplacement:
         self.objects = set(meshes) | {obj for obj in context.scene.objects if obj.type == 'FONT'
                         and (obj.parent in meshes or obj.get(LOD_LABEL) in names)}
         self.snapshot = [(obj, obj.name, list(obj.users_collection)) for obj in self.objects]
+        self.labels = {obj: obj[LOD_LABEL] for obj in self.objects if LOD_LABEL in obj}
         self.storage = None
 
     def stash(self):
@@ -200,6 +201,10 @@ class LODReplacement:
             for collection in collections:
                 collection.objects.unlink(obj)
             obj.name = self.storage.name + '_' + name
+            if obj in self.labels:
+                # Label lookup scans all datablocks, including this unlinked
+                # backup. Do not let generation reuse a stashed old label.
+                obj[LOD_LABEL] = obj.name
         self.context.view_layer.update()
 
     def finish(self, success):
@@ -214,6 +219,8 @@ class LODReplacement:
         else:
             for obj, name, collections in self.snapshot:
                 obj.name = name
+                if obj in self.labels:
+                    obj[LOD_LABEL] = self.labels[obj]
                 for collection in collections:
                     if obj.name not in collection.objects:
                         collection.objects.link(obj)
