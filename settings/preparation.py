@@ -9,6 +9,7 @@ from .callbacks import (
     _redraw_view3d,
     _single_section_mode_update,
     _update_batch_smart_decimate,
+    _update_batch_phase2,
     _update_batch_smart_lods,
     bpy,
     radians,
@@ -955,6 +956,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Starting seam protection; relaxed automatically when a LOD budget is not reached")
     batch_smart_lods_final_decimate: bpy.props.BoolProperty(name="Final Decimate Fallback", default=False)
     batch_smart_lods_triangulate_all: bpy.props.BoolProperty(name="Triangulate All LODs", default=False)
+    batch_phase2_enabled: bpy.props.BoolProperty(
+        name="Stage 13: Phase 2", default=False, update=_update_batch_phase2,
+        description=("After a successful Import Processing run, start Phase 2 with its own settings. "
+                     "Stages 9-12 are switched off while this is on; Phase 2 does that work itself"),
+    )
+    batch_phase2_saved_stages: bpy.props.StringProperty(
+        default="", options={"HIDDEN"},
+        description="Stage 9-12 switches to restore when Phase 2 is turned off",
+    )
     batch_redo_collection_name: bpy.props.StringProperty(
         name="Redo Collection", description="Generated.N collection selected for rebuilding",
     )

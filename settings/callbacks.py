@@ -141,6 +141,24 @@ def _update_batch_smart_lods(self, context):
     if self.batch_smart_lods_enabled:
         self.batch_smart_decimate_enabled = False
 
+# Stages 9-12 that Phase 2 replaces; their choice is kept while Phase 2 is on.
+PHASE2_REPLACED_STAGES = ("batch_stage_5_enabled", "batch_autobake_enabled",
+                          "batch_smart_decimate_enabled", "batch_smart_lods_enabled")
+
+
+def _update_batch_phase2(self, context):
+    del context
+    if self.batch_phase2_enabled:
+        self.batch_phase2_saved_stages = "".join(
+            "1" if getattr(self, name) else "0" for name in PHASE2_REPLACED_STAGES)
+        for name in PHASE2_REPLACED_STAGES:
+            setattr(self, name, False)
+    elif len(self.batch_phase2_saved_stages) == len(PHASE2_REPLACED_STAGES):
+        for name, flag in zip(PHASE2_REPLACED_STAGES, self.batch_phase2_saved_stages):
+            if flag == "1":
+                setattr(self, name, True)
+        self.batch_phase2_saved_stages = ""
+
 def _normalize_render_output_directory(self, context):
     del context
     value = (self.output_directory or "").strip()

@@ -1047,7 +1047,51 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                     save_current_blend_file()
                 except Exception as error:
                     self.report({'WARNING'}, f'Could not save recovered batch: {error}')
+        if (status == "DONE" and not rollback and not self.redo_mode and self.batch_stages
+                and self.settings.batch_phase2_enabled and self.settings.batch_failed_count == 0):
+            schedule_phase2(self.scene, self.view_layer, self.report)
         redraw(context)
+
+
+PHASE2_START_TIMEOUT = 120.0
+
+
+def schedule_phase2(scene, view_layer, report):
+    """Start Phase 2 once the finished import queue has released Blender.
+
+    The batch operator clears ACTIVE_QUEUE only after this queue returns, and Phase 2
+    refuses to start while any queue, bake or render is active, so poll on a timer.
+    """
+    from .phase2_processing import available
+    deadline = time.monotonic() + PHASE2_START_TIMEOUT
+    owner_report = report
+
+    def report(level, message):
+        # The batch operator that owns ``report`` may already be freed.
+        try:
+            owner_report(level, message)
+        except (ReferenceError, RuntimeError):
+            print(f"[AI Retopo] {message}")
+
+    def start():
+        context = bpy.context
+        window = next(iter(context.window_manager.windows), None)
+        if window is None:
+            return None
+        with context.temp_override(window=window, scene=scene, view_layer=view_layer):
+            if not available(bpy.context):
+                if time.monotonic() < deadline:
+                    return 0.5
+                report({"WARNING"}, t(bpy.context, "batch_phase2_unavailable"))
+                return None
+            report({"INFO"}, t(bpy.context, "batch_phase2_started"))
+            try:
+                bpy.ops.object.polygroups_start_phase2("INVOKE_DEFAULT")
+            except RuntimeError as error:
+                report({"WARNING"}, f"Phase 2 not started: {error}")
+        return None
+
+    bpy.app.timers.register(start, first_interval=0.5)
 
 
 class OBJECT_OT_polygroups_toggle_batch_stage(bpy.types.Operator):
@@ -1056,7 +1100,7 @@ class OBJECT_OT_polygroups_toggle_batch_stage(bpy.types.Operator):
     bl_description = "Show or hide this stage's settings without changing whether it runs"
     bl_options = {"INTERNAL"}
 
-    stage: bpy.props.IntProperty(min=1, max=12, options={"SKIP_SAVE"})
+    stage: bpy.props.IntProperty(min=1, max=13, options={"SKIP_SAVE"})
 
     def execute(self, context):
         settings = context.scene.polygroups_model_preparation_settings

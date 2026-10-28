@@ -728,12 +728,12 @@ def draw_import_remesh_options(layout, context, settings, prefix, stacked_labels
     column.prop(settings, prefix + "_separate_collections", text=t(context, "import_separate_collections"))
 
 
-def draw_batch_stage_heading(layout, title, settings, stage_number, property_name=None):
+def draw_batch_stage_heading(layout, title, settings, stage_number, property_name=None, active=True):
     layout.separator(type="LINE")
     row = layout.row(align=True)
     heading = row.row(align=True)
     if property_name:
-        heading.enabled = not settings.batch_is_running or settings.batch_stage == "PAUSED"
+        heading.enabled = active and (not settings.batch_is_running or settings.batch_stage == "PAUSED")
         heading.prop(settings, property_name, text=title)
     else:
         heading.label(text=title)
@@ -1010,8 +1010,10 @@ def draw_batch_processing(content, context, settings):
                     second_small.prop(settings, f"batch_second_small_island_{suffix}",
                                       text=t(context, label))
 
+    # Phase 2 does packing, baking and LODs itself; stages 9-12 stay off while it is on.
+    standalone = not settings.batch_phase2_enabled
     if draw_batch_stage_heading(content, t(context, "batch_stage_packing"),
-                                settings, 9, "batch_stage_5_enabled"):
+                                settings, 9, "batch_stage_5_enabled", standalone):
         pack = content.column(align=True)
         pack.enabled = editable and settings.batch_stage_5_enabled
         installed, enabled, available = uvpackmaster_status(context)
@@ -1019,20 +1021,20 @@ def draw_batch_processing(content, context, settings):
                    icon="CHECKMARK" if available else "ERROR")
 
     if draw_batch_stage_heading(content, t(context, "batch_stage_autobake"),
-                                settings, 10, "batch_autobake_enabled"):
+                                settings, 10, "batch_autobake_enabled", standalone):
         autobake = content.column(align=True)
         autobake.enabled = editable and settings.batch_autobake_enabled
         autobake.prop(settings, "batch_autobake_cage_mode", expand=True)
 
     if draw_batch_stage_heading(content, t(context, "batch_stage_smart_decimate"),
-                                settings, 11, "batch_smart_decimate_enabled"):
+                                settings, 11, "batch_smart_decimate_enabled", standalone):
         decimate = content.column(align=True)
         decimate.enabled = editable and settings.batch_smart_decimate_enabled
         decimate.prop(context.scene.polygroups_mesh_finalization_settings, "smart_decimate_smart_arrange")
         decimate.prop(settings, "batch_smart_decimate_triangle_limit", text=t(context, "smart_decimate_triangle_limit"))
 
     if draw_batch_stage_heading(content, t(context, "batch_stage_smart_lods"),
-                                settings, 12, "batch_smart_lods_enabled"):
+                                settings, 12, "batch_smart_lods_enabled", standalone):
         lods = content.column(align=True)
         lods.enabled = editable and settings.batch_smart_lods_enabled
         lods.prop(settings, "batch_smart_lods_count", text=t(context, "batch_lods_count"))
@@ -1041,6 +1043,15 @@ def draw_batch_processing(content, context, settings):
         draw_lod_decimate_method(lods, context, settings, "batch_smart_lods_")
         lods.prop(settings, "batch_smart_lods_final_decimate", text=t(context, "batch_lods_fallback"))
         lods.prop(settings, "batch_smart_lods_triangulate_all", text=t(context, "batch_lods_triangulate"))
+
+    if draw_batch_stage_heading(content, t(context, "batch_stage_phase2"),
+                                settings, 13, "batch_phase2_enabled"):
+        phase2 = content.column(align=True)
+        phase2.enabled = editable and settings.batch_phase2_enabled
+        phase2.label(text=t(context, "batch_phase2_hint"), icon="INFO")
+        phase2.label(text=t(context, "batch_phase2_replaces"))
+        if not (settings.batch_separate_collections and settings.batch_save_generated_separately):
+            phase2.label(text=t(context, "batch_phase2_needs_separate"), icon="ERROR")
 
 
 def draw_lod_decimate_method(layout, context, settings, prefix):
