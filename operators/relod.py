@@ -1,6 +1,6 @@
 """Recreate scene MID/HIGH LOD packs without rebaking or changing sources."""
 import re
-from contextlib import closing
+from contextlib import closing, ExitStack
 from types import SimpleNamespace
 
 import bpy
@@ -26,8 +26,16 @@ def scene_sources(context):
 
 
 class ReLODPlan:
-    def __init__(self, context, source, delete_current):
+    def __init__(self, context, source, delete_current, reexport=False):
         self.source = source
+        self.reexport = reexport
+        self.generated = []
+        self.export_collection = None
+        if reexport:
+            from .rebake_export import rebake_asset_collection
+            if not bpy.data.filepath:
+                raise ValueError('ReLOD re-export: save the working blend file first')
+            self.export_collection = rebake_asset_collection(context, source)
         if source.library or source.data.library or not source.data.polygons:
             raise ValueError('ReLOD requires a local, non-empty mesh: ' + source.name)
         base = lod_base(source.name, 'UNREAL')
@@ -84,6 +92,7 @@ class ReLODPlan:
                 raise RuntimeError('ReLOD did not produce the requested LOD count')
             for obj in generated:
                 obj.data.name = obj.name
+            self.generated = generated
             success = True
         finally:
             if not success:
@@ -96,6 +105,22 @@ class ReLODPlan:
             replacement.finish(success)
             for name, value in saved.items():
                 setattr(s, name, value)
+
+    def export(self, context, report):
+        if not self.reexport:
+            return
+        from .rebake_export import export_rebaked_asset
+        from .phase2_zbrush_export import export_visibility, preserved_selection
+        try:
+            with ExitStack() as stack:
+                stack.enter_context(preserved_selection(context))
+                meshes = set(self.generated) | {obj for obj in self.export_collection.all_objects if obj.type == 'MESH'}
+                for obj in sorted(meshes, key=lambda item: item.name):
+                    stack.enter_context(export_visibility(context, obj))
+                export_rebaked_asset(context, self.source, self.generated, self.export_collection,
+                    'UNREAL', report, operation='ReLOD')
+        except (ValueError, RuntimeError, OSError) as error:
+            raise RuntimeError(f'ReLOD succeeded; re-export failed for {self.source.name}: {error}') from error
 
 
 class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
@@ -113,7 +138,7 @@ class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
     def execute(self, context):
         p = context.scene.polygroups_model_preparation_settings
         try:
-            self.plans = [ReLODPlan(context, source, p.phase2_relod_delete_current_lods)
+            self.plans = [ReLODPlan(context, source, p.phase2_relod_delete_current_lods, p.phase2_relod_reexport)
                           for source in scene_sources(context)]
             if not self.plans:
                 raise ValueError('ReLOD: no _MID / _HIGH meshes in this scene')
@@ -137,6 +162,9 @@ class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
             with closing(plan.steps(context, self.report)) as iterator:
                 for number in iterator:
                     yield (index+number/plan.options['smart_lods_count'])/len(self.plans), f'{plan.source.name} | LOD{number-1}'
+            if plan.reexport:
+                self.update_job(context, (index+1)/len(self.plans), f'{plan.source.name} | Re-export FBX / Blend')
+                plan.export(context, self.report)
             p.phase2_relod_done += 1
             yield (index+1)/len(self.plans), f'{plan.source.name} completed'
 

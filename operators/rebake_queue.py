@@ -10,7 +10,7 @@ from .rebake_final import MID_PATTERN, FinalRebakeSession
 def child_dispatch():
     from . import sequential_jobs
     job = sequential_jobs.ACTIVE_JOB
-    owned = job is not None and getattr(job, '_is_rebake_queue', False)
+    owned = job is not None and (getattr(job, '_is_rebake_queue', False) or getattr(job, '_is_relod', False))
     previous = getattr(job, '_rebake_dispatching', False) if owned else False
     if owned:
         job._rebake_dispatching = True

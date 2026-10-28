@@ -20,7 +20,7 @@ def rebake_asset_collection(context, target):
     return candidates[0]
 
 
-def export_rebaked_asset(context, target, generated, collection, engine, report):
+def export_rebaked_asset(context, target, generated, collection, engine, report, operation='ReBake Final Mesh'):
     p = context.scene.polygroups_model_preparation_settings
     s = context.scene.polygroups_mesh_finalization_settings
     meshes = set(generated)
@@ -78,4 +78,4 @@ def export_rebaked_asset(context, target, generated, collection, engine, report)
     export_selected_collection_blend(collection, meshes, destination, p.phase2_blend_export_pack,
         reset_y=p.phase2_blend_export_reset_y and collection.name.endswith(COLLECTION_SUFFIX))
     p.phase2_blend_export_status = f'Exported {len(meshes)} selected meshes to {destination.name}'
-    report({'INFO'}, f'ReBake Final Mesh: exported {len(meshes)} meshes to FBX and {destination.name}')
+    report({'INFO'}, f'{operation}: exported {len(meshes)} meshes to FBX and {destination.name}')
