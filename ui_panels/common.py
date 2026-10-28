@@ -1053,6 +1053,8 @@ def draw_batch_processing(content, context, settings):
         phase2.label(text=t(context, "batch_phase2_hint"), icon="INFO")
         phase2.label(text=t(context, "batch_phase2_replaces"))
         phase2.label(text=t(context, "batch_phase2_needs_separate"))
+        # Same setting as Phase 2 > Restore and Processing.
+        phase2.prop(settings, "phase2_clear_generated", text=t(context, "phase2_clear"))
 
 
 def draw_lod_decimate_method(layout, context, settings, prefix):

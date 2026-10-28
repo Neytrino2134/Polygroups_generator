@@ -362,7 +362,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Scan all blend files beside the working blend and in subfolders, excluding the working file",
     )
     phase2_clear_generated: bpy.props.BoolProperty(
-        name="Clear Current Generated.N Collections", default=False,
+        name="Clear Current Generated.N Collections", default=True,
         description="Remove existing Generated.N collections before restoring the scanned files",
     )
     phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
