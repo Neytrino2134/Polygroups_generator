@@ -501,6 +501,10 @@ with tempfile.TemporaryDirectory() as directory:
         assert chain[4][1] == chain[1][1] == chain[5][1]
         reset_mesh = chain[4][1].data
         assert any(edge.use_seam for edge in reset_mesh.edges)
+        face_sets = reset_mesh.attributes.get(".sculpt_face_set")
+        assert face_sets is not None
+        assert [item.value for item in face_sets.data] == [
+            face.material_index + 1 for face in reset_mesh.polygons]
         assert chain[7][1] == chain[6][1]
         assert [item[2] for item in chain if item[0] == "start"] == [
             dict(queue_module.get_remesh_preset_counts(context))[preset]

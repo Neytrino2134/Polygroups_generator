@@ -826,7 +826,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     batch_stage_4_reset_smart_seams: bpy.props.BoolProperty(
         name="Clear All Seams and Generate Smart Seams", default=True,
-        description="Before the third remesh, clear every seam and pin, then generate Smart Seams on the whole mesh",
+        description="Before the third remesh, clear every seam and pin, generate Smart Seams on the whole mesh, then generate PolyGroups from them",
     )
     batch_stage_4_reset_smart_seams_angle: bpy.props.FloatProperty(
         name="Surface Angle", default=radians(25.0),

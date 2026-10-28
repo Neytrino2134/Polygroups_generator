@@ -271,7 +271,7 @@ class QueueProcessingMixin:
             bpy.ops.object.mode_set(mode="OBJECT")
 
     def reset_smart_seams(self, context, obj):
-        """Replace all seams and pins with Smart Seams before the third remesh."""
+        """Replace all seams and pins with Smart Seams, then PolyGroups, before the third remesh."""
         self.select_source(context, obj)
         if obj.data.users > 1:
             obj.data = obj.data.copy()
@@ -295,6 +295,8 @@ class QueueProcessingMixin:
             bpy.ops.object.mode_set(mode="OBJECT")
         if "FINISHED" not in result:
             raise RuntimeError(f"Smart Seams failed before the third remesh: {obj.name}")
+        if "FINISHED" not in bpy.ops.object.generate_polygroups(remesh_preparation=True):
+            raise RuntimeError(f"Generate PolyGroups failed before the third remesh: {obj.name}")
 
     def autofix_second_pass(self, context, obj):
         self.select_source(context, obj)
