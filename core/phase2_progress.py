@@ -135,6 +135,9 @@ def draw_process_settings(options, context, p):
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_blend
     sub.prop(p, 'phase2_blend_export_generated')
+    highpoly = sub.row()
+    highpoly.enabled = p.phase2_blend_export_generated
+    highpoly.prop(p, 'phase2_blend_export_highpoly')
     options.prop(p, 'phase2_run_zbrush')
     from ..localization import t
     zbrush = options.column(align=True)

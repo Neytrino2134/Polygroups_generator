@@ -179,6 +179,15 @@ def mesh_uv_signature(mesh):
     return digest.digest()
 
 
+def keep_highpoly_for_blend(settings):
+    """Generated.N blend export asked to carry Highpoly_Generated.N next to Resculpting_01."""
+    return settings.phase2_blend_export_generated and settings.phase2_blend_export_highpoly
+
+
+def delete_highpoly_after_bake(settings):
+    return settings.phase2_delete_high_after_bake and not keep_highpoly_for_blend(settings)
+
+
 def remove_mesh_objects(objects):
     """Delete objects and only their now-unused mesh datablocks."""
     count = 0
@@ -379,7 +388,7 @@ class Phase2Queue:
                 if cleanup_pair is not None:
                     high, low = cleanup_pair
                     doomed = []
-                    if self.settings.phase2_delete_high_after_bake:
+                    if delete_highpoly_after_bake(self.settings):
                         doomed.append(high)
                     if self.settings.phase2_delete_lower_retopo:
                         stage = int(LOW.fullmatch(low.name).group(1))

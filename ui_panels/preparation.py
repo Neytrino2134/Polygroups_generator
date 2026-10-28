@@ -496,7 +496,11 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                             controls.label(text='Clear seams + pins | Smart Seams 22 degrees | HIGH', icon='INFO')
                         controls.prop(settings, 'phase2_repair_after_resculpt')
                     controls.prop(settings, 'phase2_autobake_retopo01')
-                    controls.prop(settings, "phase2_delete_high_after_bake")
+                    delete_high = controls.row()
+                    # Export Blend > Include Highpoly_Generated.N keeps the source for the Generated.N blend.
+                    delete_high.enabled = not (settings.phase2_blend_export_generated
+                                               and settings.phase2_blend_export_highpoly)
+                    delete_high.prop(settings, "phase2_delete_high_after_bake")
                     controls.prop(settings, "phase2_delete_lower_retopo")
                     keep = controls.row()
                     keep.enabled = settings.phase2_delete_lower_retopo
@@ -587,6 +591,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     controls.prop(settings, 'phase2_blend_export_pack')
                     controls.prop(settings, 'phase2_blend_export_reset_y')
                     controls.prop(settings, 'phase2_blend_export_generated')
+                    highpoly = controls.row()
+                    highpoly.enabled = settings.phase2_blend_export_generated
+                    highpoly.prop(settings, 'phase2_blend_export_highpoly')
                     controls.label(text='One clean blend per *_Collection in !Blend', icon='INFO')
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_export_blend', text='Export Blend Files', icon='EXPORT')
