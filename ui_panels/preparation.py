@@ -402,7 +402,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 operator_row.operator_context = "EXEC_DEFAULT"
                 start_import = operator_row.operator(
                     "object.polygroups_batch_import",
-                    text=t(context, "import_folder"),
+                    text=t(context, "import_folder_phase2" if settings.batch_phase2_enabled
+                           else "import_folder"),
                     icon="PLAY",
                 )
                 start_import.use_file_selection = False
