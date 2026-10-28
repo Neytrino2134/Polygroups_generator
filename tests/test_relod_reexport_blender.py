@@ -1,5 +1,5 @@
 """Real ReLOD -> replacement FBX/Blend, visibility restoration and export failures."""
-import sys,tempfile,hashlib
+import sys,tempfile,hashlib,json
 from pathlib import Path
 from unittest.mock import patch
 import bpy,addon_utils
@@ -31,6 +31,7 @@ with tempfile.TemporaryDirectory(prefix='test_relod_reexport_',dir=ROOT) as dire
         assert bpy.ops.object.polygroups_relod()=={'FINISHED'}
         assert not export.called
     p.phase2_relod_delete_current_lods=True;p.phase2_relod_reexport=True
+    p.phase2_relod_json=True
     exports=root/'!Unreal'/'FBX';exports.mkdir(parents=True)
     blends=root/'!Blend';blends.mkdir()
     for source,col in zip(sources,collections):
@@ -61,6 +62,9 @@ with tempfile.TemporaryDirectory(prefix='test_relod_reexport_',dir=ROOT) as dire
     assert not list(root.rglob('*.glb')) and not list(root.rglob('*.gltf'))
     assert not p.phase2_export_fbx and p.phase2_export_glb and p.phase2_export_gltf
     assert hashlib.sha256(main.read_bytes()).hexdigest()==working_hash
+    info=json.loads((root/'!Unreal'/'MeshInfo.json').read_text(encoding='utf-8'))
+    assert info['totals']['meshes']==6 and len(info['assets'])==2,info['totals']
+    assert all(row['files'].get('FBX') for row in info['meshes'])
     for obj,(data,matrix,coords) in snapshot.items():
         assert obj.data==data and obj.matrix_world==matrix and tuple(tuple(v.co) for v in obj.data.vertices)==coords
     print('RELOD_REAL_FBX_BLEND_REPLACEMENT_AND_SOURCE_PRESERVATION_OK',flush=True)

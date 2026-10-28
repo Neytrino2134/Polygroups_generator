@@ -111,7 +111,12 @@ class ReLODPlan:
             return
         from .rebake_export import export_rebaked_asset
         from .phase2_zbrush_export import export_visibility, preserved_selection
+        p = context.scene.polygroups_model_preparation_settings
+        saved_json = p.phase2_export_json, p.is_property_set('phase2_export_json')
         try:
+            # Write one complete JSON after the batch, not a partial per-asset
+            # document that overwrites the previous asset's statistics.
+            p.phase2_export_json = False
             with ExitStack() as stack:
                 stack.enter_context(preserved_selection(context))
                 meshes = set(self.generated) | {obj for obj in self.export_collection.all_objects if obj.type == 'MESH'}
@@ -121,6 +126,11 @@ class ReLODPlan:
                     'UNREAL', report, operation='ReLOD')
         except (ValueError, RuntimeError, OSError) as error:
             raise RuntimeError(f'ReLOD succeeded; re-export failed for {self.source.name}: {error}') from error
+        finally:
+            if saved_json[1]:
+                p.phase2_export_json = saved_json[0]
+            else:
+                p.property_unset('phase2_export_json')
 
 
 class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
@@ -138,6 +148,10 @@ class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
     def execute(self, context):
         p = context.scene.polygroups_model_preparation_settings
         try:
+            self.update_json = p.phase2_relod_json
+            if self.update_json:
+                from .relod_json import validate_json_update
+                validate_json_update(context)
             self.plans = [ReLODPlan(context, source, p.phase2_relod_delete_current_lods, p.phase2_relod_reexport)
                           for source in scene_sources(context)]
             if not self.plans:
@@ -167,6 +181,13 @@ class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
                 plan.export(context, self.report)
             p.phase2_relod_done += 1
             yield (index+1)/len(self.plans), f'{plan.source.name} completed'
+        if self.update_json:
+            from .relod_json import update_json
+            self.update_job(context, 1, 'Export / Update JSON')
+            try:
+                update_json(context, self.plans)
+            except (ValueError, RuntimeError, OSError) as error:
+                raise RuntimeError(f'ReLOD succeeded; JSON update failed: {error}') from error
 
     def update_job(self, context, fraction, message):
         super().update_job(context, fraction, message)
