@@ -162,20 +162,6 @@ def draw_rebake(layout, context, p):
     rebake.repair_mesh = p.phase2_rebake_repair_mesh
     rebake.use_queue = True
     rebake.delete_current_lods = p.phase2_rebake_delete_current_lods
-    manual.prop(p, 'phase2_rebake_repair_mesh')
-    if p.phase2_rebake_repair_mesh:
-        repair = manual.column(align=True)
-        for name in ('phase2_rebake_repair_folds','phase2_rebake_repair_coincident',
-                     'phase2_rebake_repair_zero_area','phase2_rebake_repair_stretched'):
-            repair.prop(p,name)
-        if p.phase2_rebake_repair_stretched:
-            repair.prop(p,'fold_repair_stretch_ratio')
-        repair.prop(p,'phase2_rebake_repack_uv')
-    manual.prop(p, 'phase2_rebake_delete_current_lods')
-    manual.prop(p, 'phase2_rebake_create_lods')
-    exports = manual.column(align=True)
-    exports.enabled = p.phase2_rebake_create_lods
-    exports.prop(p, 'phase2_rebake_export_selected')
     queue = manual.box()
     queue.label(text=f'ReBake Queue: {len(p.phase2_rebake_queue)} mesh(es)')
     controls = queue.row(align=True)
@@ -190,6 +176,20 @@ def draw_rebake(layout, context, p):
         remove.action,remove.index='REMOVE',index
         if entry.message and entry.state=='FAILED':
             queue.label(text=entry.message,icon='ERROR')
+    manual.prop(p, 'phase2_rebake_repair_mesh')
+    if p.phase2_rebake_repair_mesh:
+        repair = manual.column(align=True)
+        for name in ('phase2_rebake_repair_folds','phase2_rebake_repair_coincident',
+                     'phase2_rebake_repair_zero_area','phase2_rebake_repair_stretched'):
+            repair.prop(p,name)
+        if p.phase2_rebake_repair_stretched:
+            repair.prop(p,'fold_repair_stretch_ratio')
+        repair.prop(p,'phase2_rebake_repack_uv')
+    manual.prop(p, 'phase2_rebake_delete_current_lods')
+    manual.prop(p, 'phase2_rebake_create_lods')
+    exports = manual.column(align=True)
+    exports.enabled = p.phase2_rebake_create_lods
+    exports.prop(p, 'phase2_rebake_export_selected')
 
 
 def draw_start_status(layout, context, p):
