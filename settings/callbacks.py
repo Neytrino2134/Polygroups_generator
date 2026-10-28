@@ -93,7 +93,7 @@ SECTION_SUBSECTION_PROPERTIES = {
     "show_remesh_section": ("topic_remesh_0", "topic_remesh_1"),
     "show_resculpting_section": ("topic_sculpt_0", "topic_sculpt_1"),
     "show_seam_finalization_section": tuple(f"topic_seam_final_{index}" for index in range(6)),
-    "show_uv_preparation_section": ("topic_uv_0", "topic_uv_3", "topic_uv_2", "topic_uv_1"),
+    "show_uv_preparation_section": ("topic_uv_0", "topic_uv_4", "topic_uv_3", "topic_uv_2", "topic_uv_1"),
     "show_baking_section": tuple(f"topic_bake_{index}" for index in range(5)),
     "show_ai_generation_section": tuple(f"topic_ai_{index}" for index in range(5)),
     "show_mesh_finalization_section": tuple(f"topic_export_{index}" for index in range(4)),

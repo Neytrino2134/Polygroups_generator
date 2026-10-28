@@ -14,6 +14,7 @@ from .render_selected import CLASSES as SELECTED_RENDER_CLASSES
 from ..core.render_palettes import OPERATOR_CLASSES as PALETTE_OPERATOR_CLASSES, ensure_libraries, flush_library, stop_library
 from .repair_uv_stretch import MESH_OT_polygroups_repair_uv_stretch, IMAGE_PT_polygroups_uv_repair
 from .uv_artifacts import MESH_OT_polygroups_uv_artifact_cleanup
+from .topology_guard import MESH_OT_polygroups_topology_guard
 from .repair_mesh_folds import MESH_OT_polygroups_repair_mesh_folds
 from .split_narrow_islands import (
     MESH_OT_polygroups_split_narrow_islands,
@@ -276,6 +277,7 @@ CLASSES = (
     *PALETTE_OPERATOR_CLASSES,
     MESH_OT_polygroups_repair_uv_stretch,
     MESH_OT_polygroups_uv_artifact_cleanup,
+    MESH_OT_polygroups_topology_guard,
     MESH_OT_polygroups_repair_mesh_folds,
     IMAGE_PT_polygroups_uv_repair,
     MESH_OT_polygroups_split_narrow_islands,

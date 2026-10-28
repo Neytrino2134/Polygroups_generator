@@ -6,6 +6,7 @@ from ..core.smart_seam_routing import route_seams
 from ..pin_edges import pin_layer, is_pinned, set_pinned
 from .unwrap_angle_based import auto_uv_after_seam_change
 from .relax_seams import relax_seams
+from .topology_guard import run_guard
 
 TOOL_ID = "polygroups_generator.smart_seams_generator_tool"
 
@@ -93,6 +94,15 @@ class MESH_OT_polygroups_mark_smart_angle_seams(bpy.types.Operator):
             corridor_width=settings.smart_seam_path_corridor,
             edge_preference=settings.smart_seam_edge_preference,
             protected=protected)
+        finalization = context.scene.polygroups_seam_finalization_settings
+        guard_suffix = ""
+        if finalization.topology_guard_after_smart_seams:
+            # Normal clustering never cuts inside a region; make every region a disk.
+            guard, guard_cuts, guard_edges = run_guard(
+                bm, {f for f in bm.faces if f.select and not f.hide}, finalization)
+            cuts += guard_cuts
+            if guard_edges:
+                guard_suffix = f"; Topology Guard added {len(guard_edges)} seam edges"
         if settings.smart_seam_pin_generated:
             # Routing can move or create seam edges after the first marking pass.
             set_pinned((edge for edge in bm.edges if edge.seam and edge not in initial_seams
@@ -113,7 +123,7 @@ class MESH_OT_polygroups_mark_smart_angle_seams(bpy.types.Operator):
         auto_unwrapped = auto_uv_after_seam_change(context)
         uv_suffix = "; updated UVs" if auto_unwrapped else ""
         relax_suffix = f"; relaxed {relaxed} seam vertices" if settings.smart_seam_auto_relax else ""
-        self.report({'INFO'}, f"Generated {region_count} surface regions; marked {marked} seam edges; rerouted {rerouted} paths; created {cuts} diagonal edges{relax_suffix}{uv_suffix}")
+        self.report({'INFO'}, f"Generated {region_count} surface regions; marked {marked} seam edges; rerouted {rerouted} paths; created {cuts} diagonal edges{guard_suffix}{relax_suffix}{uv_suffix}")
         return {'FINISHED'}
 
 

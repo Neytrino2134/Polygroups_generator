@@ -29,7 +29,13 @@ def _chains(edges, anchors=()):
         if len(incident[v]) != 2 or v in anchors:
             for e in sorted(incident[v], key=lambda e: e.index):
                 if e in remaining:
-                    chains.append(walk(v, e))
+                    vertices, path = walk(v, e)
+                    mid = len(path) // 2
+                    if vertices[0] is vertices[-1] and mid:
+                        # A loop leaving and re-entering one anchor would route to itself.
+                        chains.extend([(vertices[:mid+1], path[:mid]), (vertices[mid:], path[mid:])])
+                    else:
+                        chains.append((vertices, path))
     while remaining:
         edge = min(remaining, key=lambda e: e.index)
         vertices, path = walk(edge.verts[0], edge)

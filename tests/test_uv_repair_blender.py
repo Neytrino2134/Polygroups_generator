@@ -120,6 +120,9 @@ assert any(v in {v for e in boundary for v in e.verts} for e in cut for v in e.v
 
 # Roll back the entire mesh if the post-commit relaxation/unwrap stage fails.
 from polygroups_generator.operators import repair_uv_stretch as module
+guard_settings = bpy.context.scene.polygroups_seam_finalization_settings
+# Topology Guard would already fix this open tube; test Repair's own rollback first.
+guard_settings.topology_guard_before_repair = False
 obj = cylinder(True)
 bm = bmesh.from_edit_mesh(obj.data)
 uv = bm.loops.layers.uv.active
@@ -140,6 +143,28 @@ bm = bmesh.from_edit_mesh(obj.data)
 uv = bm.loops.layers.uv.active
 assert snapshot == [tuple(l[uv].uv) for f in bm.faces for l in f.loops]
 assert not any(e.seam for e in bm.edges)
+
+# A failure after Topology Guard also restores its seams and UVs.
+guard_settings.topology_guard_before_repair = True
+obj = cylinder(True)
+bm = bmesh.from_edit_mesh(obj.data)
+uv = bm.loops.layers.uv.active
+snapshot = [tuple(l[uv].uv) for f in bm.faces for l in f.loops]
+old_analyze = module.analyze
+module.analyze = fail
+try:
+    try:
+        bpy.ops.mesh.polygroups_repair_uv_stretch()
+    except RuntimeError as error:
+        assert 'intentional rollback test' in str(error)
+finally:
+    module.analyze = old_analyze
+bm = bmesh.from_edit_mesh(obj.data)
+uv = bm.loops.layers.uv.active
+assert snapshot == [tuple(l[uv].uv) for f in bm.faces for l in f.loops]
+assert not any(e.seam for e in bm.edges)
+# The stages below exercise Repair's own region pipeline on the same open tube.
+guard_settings.topology_guard_before_repair = False
 print('UV_REPAIR_EXTENDED_TESTS_PASSED')
 
 # A visible, correctly mapped island with a different density stays untouched.

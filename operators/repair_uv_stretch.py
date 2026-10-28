@@ -15,6 +15,7 @@ from .mark_longitudinal_seam import (
     _dijkstra, _edges_from_previous,
 )
 from .relax_seams import relax_seams
+from .topology_guard import apply_topology_guard
 from .small_islands import plan_merge
 from .uv_artifacts import find_uv_artifacts, apply_uv_artifacts
 
@@ -161,11 +162,20 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
         if live.loops.layers.uv.active is None:
             self.report({'ERROR'}, 'An existing active UV map is required')
             return {'CANCELLED'}
+        guard_settings = context.scene.polygroups_seam_finalization_settings
         original = live.copy()
-        bm = live.copy()
+        bm = None
         committed = False
         original_select_mode = tuple(context.tool_settings.mesh_select_mode)
         try:
+            if self.action == 'REPAIR' and guard_settings.topology_guard_before_repair:
+                # Slits inside distorted patches cannot fix tubes or handles; fix chart topology first.
+                _guard, _cuts, guarded = apply_topology_guard(
+                    context, obj, guard_settings, self.selected_only, unwrap=True,
+                    pin=self.pin_generated)
+                committed = guarded > 0
+                live = bmesh.from_edit_mesh(obj.data)
+            bm = live.copy()
             pins_layer = pin_layer(bm, True) if self.pin_generated else pin_layer(bm)
             artifact_fixed = 0
             if self.action == 'REPAIR' and self.cleanup_artifacts:
@@ -354,7 +364,8 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
             self.report({'ERROR'}, f'UV repair cancelled: {error}')
             return {'CANCELLED'}
         finally:
-            bm.free()
+            if bm is not None:
+                bm.free()
             original.free()
         return {'FINISHED'}
 

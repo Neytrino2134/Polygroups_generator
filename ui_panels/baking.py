@@ -327,6 +327,40 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             )
             content.separator()
 
+        content = draw_topic(layout, context, "uv_4", "topology_guard", "MOD_UVPROJECT")
+        if content is not None:
+            guard = context.scene.polygroups_seam_finalization_settings
+            column = content.column(align=True)
+            column.label(text=t(context, "topology_guard_detect"), icon="VIEWZOOM")
+            for name in ("fix_handles", "fix_annuli", "fix_closed", "fix_necks", "selected_only"):
+                column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
+            column.separator()
+            column.label(text=t(context, "topology_guard_shape"), icon="MESH_CYLINDER")
+            for name in ("hole_ratio", "lip_angle", "max_flare", "neck_angle", "neck_elongation",
+                         "neck_max_share", "tube_tolerance", "cup_min_height"):
+                column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
+            column.separator()
+            column.label(text=t(context, "topology_guard_seams"), icon="EDGE_SEAM")
+            for name in ("sharp_preference", "create_edges", "smooth_rings", "pin_generated",
+                         "smart_relax", "unwrap", "pack"):
+                column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
+            column.separator()
+            column.label(text=t(context, "topology_guard_auto"), icon="AUTO")
+            for name in ("after_smart_seams", "before_repair"):
+                column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
+            column.separator()
+            column.operator_context = 'EXEC_DEFAULT'
+            row = column.row(align=True)
+            row.operator_context = 'EXEC_DEFAULT'
+            for action, label, icon in (
+                ('SELECT', 'topology_guard_select', 'RESTRICT_SELECT_OFF'),
+                ('APPLY', 'topology_guard_apply', 'EDGE_SEAM'),
+            ):
+                button = row.operator(
+                    'mesh.polygroups_topology_guard', text=t(context, label), icon=icon,
+                )
+                button.action = action
+
         content = draw_topic(layout, context, "uv_3", "uv_repair", "UV")
         if content is not None:
             repair = context.scene.polygroups_seam_finalization_settings

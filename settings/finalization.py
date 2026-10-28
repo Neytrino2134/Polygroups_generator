@@ -76,6 +76,94 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         name="Smart Relax Generated", default=True,
         description="Relax generated seam paths on the mesh surface; this can move mesh vertices",
     )
+    topology_guard_selected_only: bpy.props.BoolProperty(
+        name="Selected Charts Only", default=False,
+        description="Process only seam-bounded charts touched by selected faces",
+    )
+    topology_guard_fix_handles: bpy.props.BoolProperty(
+        name="Handles / Through Holes", default=True,
+        description="Cut genus charts (tubes through a surface, torus handles) with two boundary rings at the tube lips",
+    )
+    topology_guard_fix_annuli: bpy.props.BoolProperty(
+        name="Tubes / Annuli", default=True,
+        description="Add longitudinal seams that connect the boundary loops of tube-like charts",
+    )
+    topology_guard_fix_closed: bpy.props.BoolProperty(
+        name="Closed Charts", default=True,
+        description="Slit closed charts without any boundary between their two farthest points",
+    )
+    topology_guard_fix_necks: bpy.props.BoolProperty(
+        name="Protrusions / Capped Tubes", default=True,
+        description="Ring protrusions such as spikes and legs at their neck, and cut caps off closed tubes",
+    )
+    topology_guard_hole_ratio: bpy.props.FloatProperty(
+        name="Hole Ratio", default=0.25, min=0.0, max=1.0, subtype="FACTOR",
+        description="Boundary loops shorter than this share of the longest loop are holes that unwrap fills; they get no seam",
+    )
+    topology_guard_lip_angle: bpy.props.FloatProperty(
+        name="Lip Angle", default=radians(45.0), subtype="ANGLE", min=radians(5.0), max=radians(85.0),
+        description="Tube rings stop where the surface turns this far away from the tube wall",
+    )
+    topology_guard_max_flare: bpy.props.FloatProperty(
+        name="Max Ring Flare", default=2.5, min=1.05, max=20.0,
+        description="Tube rings stop when a ring becomes this many times longer than the narrowest ring",
+    )
+    topology_guard_sharp_preference: bpy.props.FloatProperty(
+        name="Prefer Sharp Edges", default=1.0, min=0.0, max=20.0,
+        description="Longitudinal seams prefer sharp edges, where they are less visible",
+    )
+    topology_guard_neck_angle: bpy.props.FloatProperty(
+        name="Crease Ring Angle", default=radians(35.0), subtype="ANGLE", min=radians(1.0), max=radians(180.0),
+        description="Closed loops of edges sharper than this are neck candidates",
+    )
+    topology_guard_neck_elongation: bpy.props.FloatProperty(
+        name="Protrusion Elongation", default=0.3, min=0.05, max=10.0,
+        description="Cut a neck when the part beyond it has at least this area relative to the squared neck length",
+    )
+    topology_guard_neck_max_share: bpy.props.FloatProperty(
+        name="Max Protrusion Share", default=0.35, min=0.01, max=0.95, subtype="FACTOR",
+        description="A protrusion may cover at most this share of its chart",
+    )
+    topology_guard_tube_tolerance: bpy.props.FloatProperty(
+        name="Tube Wall Tolerance", default=0.35, min=0.0, max=1.0, subtype="FACTOR",
+        description="Maximum average tilt of a tube wall towards its axis for cap cutting",
+    )
+    topology_guard_cup_min_height: bpy.props.FloatProperty(
+        name="Min Tube Height", default=0.5, min=0.0, max=20.0,
+        description="Cut a cap off a tube only when the tube is at least this many diameters long",
+    )
+    topology_guard_create_edges: bpy.props.BoolProperty(
+        name="Create New Edges", default=True,
+        description="Smooth longitudinal seams like Generate Smart Seams, splitting faces with diagonal edges",
+    )
+    topology_guard_smooth_rings: bpy.props.BoolProperty(
+        name="Smooth Rings Too", default=False,
+        description="Also reroute boundary rings with smart routing; rings on clean edge loops usually need no smoothing",
+    )
+    topology_guard_pin_generated: bpy.props.BoolProperty(
+        name="Pin Generated Seams", default=False,
+        description="Protect generated seams with the toolkit seam pin attribute",
+    )
+    topology_guard_smart_relax: bpy.props.BoolProperty(
+        name="Smart Relax Generated", default=False,
+        description="Relax generated seam paths on the mesh surface; this can move mesh vertices",
+    )
+    topology_guard_unwrap: bpy.props.BoolProperty(
+        name="Unwrap Fixed Charts", default=True,
+        description="Unwrap the processed charts with Angle Based after adding seams",
+    )
+    topology_guard_pack: bpy.props.BoolProperty(
+        name="Average and Pack", default=False,
+        description="Average island scale and pack all UV islands after unwrapping",
+    )
+    topology_guard_after_smart_seams: bpy.props.BoolProperty(
+        name="Run After Smart Seams", default=True,
+        description="Run Topology Guard automatically inside Generate Smart Seams and Smart UV Unwrap",
+    )
+    topology_guard_before_repair: bpy.props.BoolProperty(
+        name="Run Before Smart UV Repair", default=True,
+        description="Fix chart topology and unwrap before Smart UV Repair measures stretch",
+    )
     narrow_island_source: bpy.props.EnumProperty(
         name="Analyze",
         items=(
