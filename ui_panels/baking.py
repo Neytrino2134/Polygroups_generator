@@ -196,6 +196,7 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             auto_bake_row = column.row(align=True)
             auto_bake_row.scale_y = 1.3
             auto_bake_row.enabled = not settings.bake_task_is_running
+            auto_bake_row.operator_context = 'INVOKE_DEFAULT'
             auto_bake_row.operator(
                 "object.polygroups_checked_prepare_and_bake",
                 text=t(context, "prepare_and_bake"),

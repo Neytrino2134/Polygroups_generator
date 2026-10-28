@@ -151,6 +151,7 @@ def draw_process_settings(options, context, p):
 
 def draw_rebake(layout, context, p):
     manual = layout.column(align=True)
+    manual.operator_context = 'INVOKE_DEFAULT'
     manual.enabled = not (context.scene.polygroups_baking_settings.bake_task_is_running
         or p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
         or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running

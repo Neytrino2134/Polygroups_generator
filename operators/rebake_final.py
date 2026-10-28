@@ -496,6 +496,46 @@ class FinalRebakeSession:
             self.source_import.cleanup()
 
 
+def rebake_dispatch(context, use_queue):
+    """One dispatch decision shared by the review and actual launch."""
+    queue = context.scene.polygroups_model_preparation_settings.phase2_rebake_queue
+    selected = [obj for obj in context.selected_objects if obj.type == 'MESH']
+    queued = {entry.target for entry in queue if entry.target}
+    active = context.active_object
+    explicit = (active is not None and MID_PATTERN.fullmatch(active.name) and
+                len(selected) == 2 and not set(selected).issubset(queued) and
+                not any(obj.get('polygroups_lod_source') for obj in selected if obj != active))
+    queued_run = bool(use_queue and queue and not explicit)
+    return queued_run, [entry.target for entry in queue] if queued_run else [active]
+
+
+def rebake_review(context, operator):
+    """Read-only preflight: never append source IDs or modify meshes/files."""
+    queued, targets = rebake_dispatch(context, operator.use_queue)
+    rows, signature = [], []
+    for target in targets:
+        row = dict(target=target.name if target else 'Missing mesh', source='', error='')
+        try:
+            if target is None or target.name not in context.scene.objects:
+                raise ValueError('Mesh is missing from the current scene')
+            session = FinalRebakeSession(context, target, context.scene.polygroups_baking_settings,
+                create_lods=operator.create_lods, export_selected=operator.export_selected,
+                repair_mesh=operator.repair_mesh, delete_current_lods=operator.delete_current_lods,
+                use_selection=not queued)
+            if session.source_import:
+                imported = session.source_import
+                row['source'] = str(imported.path) + ' / ' + imported.collection_name
+                source_key = ('FILE', str(imported.path), imported.collection_name)
+            else:
+                row['source'] = session.source.name
+                source_key = ('MESH', session.source.as_pointer(), session.source.name)
+            signature.append((target.as_pointer(), target.name, source_key))
+        except (ValueError, RuntimeError) as error:
+            row['error'] = str(error)
+        rows.append(row)
+    return dict(queued=queued, rows=rows, signature=(queued, tuple(signature)))
+
+
 class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
     bl_idname = 'object.polygroups_rebake_final_mesh'
     bl_label = 'ReBake Final Mesh'
@@ -526,14 +566,16 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
     def execute(self, context):
         # The common task owns setup/cleanup for both modal and background runs.
         try:
-            queue = context.scene.polygroups_model_preparation_settings.phase2_rebake_queue
-            selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
-            queue_targets = {entry.target for entry in queue if entry.target}
-            explicit_source = (context.active_object is not None and
-                MID_PATTERN.fullmatch(context.active_object.name) and
-                len(selected_meshes) == 2 and not set(selected_meshes).issubset(queue_targets) and
-                not any(obj.get('polygroups_lod_source') for obj in selected_meshes if obj != context.active_object))
-            if self.use_queue and not explicit_source and len(queue):
+            reviewed = getattr(self, '_rebake_review', None)
+            if reviewed is not None:
+                current = rebake_review(context, self)
+                errors = [row['error'] for row in current['rows'] if row['error']]
+                if errors:
+                    raise ValueError('; '.join(errors))
+                if current['signature'] != reviewed['signature']:
+                    raise ValueError('ReBake selection, queue or Highpoly changed; reopen the confirmation window')
+            queued, _targets = rebake_dispatch(context, self.use_queue)
+            if queued:
                 return bpy.ops.object.polygroups_rebake_queue_run('EXEC_DEFAULT',
                     repair_mesh=self.repair_mesh, create_lods=self.create_lods, export_selected=self.export_selected,
                     delete_current_lods=self.delete_current_lods)
@@ -541,6 +583,34 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
                         rebake_final=True, rebake_create_lods=self.create_lods,
                         rebake_export_selected=self.export_selected, rebake_repair_mesh=self.repair_mesh,
                         rebake_delete_current_lods=self.delete_current_lods)
-        except RuntimeError as error:
+        except (ValueError, RuntimeError) as error:
             self.report({'ERROR'}, str(error))
             return {'CANCELLED'}
+
+    def invoke(self, context, event):
+        self._rebake_review = rebake_review(context, self)
+        return context.window_manager.invoke_props_dialog(self, width=640,
+            title='Проверка ReBake Final Mesh', confirm_text='Запустить')
+
+    def draw(self, context):
+        layout = self.layout
+        review = self._rebake_review
+        layout.label(text='Очередь ReBake' if review['queued'] else 'Выбранный объект', icon='OUTLINER_OB_MESH')
+        for index, item in enumerate(review['rows'], 1):
+            box = layout.box()
+            box.label(text=f'{index}. {item["target"]}', icon='MESH_DATA')
+            if item['source']:
+                box.label(text='Highpoly: ' + item['source'])
+            if item['error']:
+                row = box.row()
+                row.alert = True
+                row.label(text=item['error'], icon='ERROR')
+        layout.label(text='Существующие текстуры будут перезаписаны.', icon='ERROR')
+        for enabled, text in ((self.repair_mesh, 'Исправление меша перед ReBake'),
+                (self.delete_current_lods, 'Удаление текущих LOD перед ReBake'),
+                (self.create_lods, 'Создание LOD после ReBake'),
+                (self.export_selected, 'Перезапись экспорта FBX / Blend')):
+            if enabled:
+                layout.label(text=text, icon='CHECKMARK')
+        if any(item['error'] for item in review['rows']):
+            layout.label(text='Устраните ошибки перед запуском.', icon='CANCEL')
