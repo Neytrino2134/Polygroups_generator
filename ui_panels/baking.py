@@ -336,6 +336,11 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             for name in ("fix_handles", "fix_annuli", "fix_closed", "fix_necks", "selected_only"):
                 column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
             column.separator()
+            column.label(text=t(context, "topology_guard_cleanup"), icon="AUTOMERGE_OFF")
+            for name in ("fix_bridges", "bridge_max_edges", "bridge_min_share",
+                         "collapse_knots", "knot_max_verts"):
+                column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
+            column.separator()
             column.label(text=t(context, "topology_guard_shape"), icon="MESH_CYLINDER")
             for name in ("hole_ratio", "lip_angle", "max_flare", "neck_angle", "neck_elongation",
                          "neck_max_share", "tube_tolerance", "cup_min_height"):

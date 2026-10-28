@@ -4,6 +4,7 @@ import bpy
 
 from ..core.chart_cuts import GuardOptions, kind_counts, topology_guard, analyze_charts
 from ..core.chart_topology import charts
+from ..core.knot_repair import collapse_knots, find_knots
 from ..core.smart_seam_routing import route_seams
 from ..pin_edges import pin_layer, set_pinned
 
@@ -24,6 +25,9 @@ def guard_options(settings):
         tube_tolerance=settings.topology_guard_tube_tolerance,
         cup_min_height=settings.topology_guard_cup_min_height,
         max_passes=12,
+        fix_bridges=settings.topology_guard_fix_bridges,
+        bridge_max_edges=settings.topology_guard_bridge_max_edges,
+        bridge_min_share=settings.topology_guard_bridge_min_share,
     )
 
 
@@ -44,7 +48,7 @@ def run_guard(bm, faces, settings, pin=None):
     initial = {e for e in bm.edges if e.seam}
     result = topology_guard(bm, faces, guard_options(settings))
     created = 0
-    generated = result.rings | result.longitudinal
+    generated = result.rings | result.longitudinal | result.bridges
     if generated and settings.topology_guard_create_edges:
         routed = set(result.longitudinal)
         if settings.topology_guard_smooth_rings:
@@ -115,18 +119,32 @@ def unwrap_faces(context, obj, face_indices, pack=False):
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
 
 
+def collapse_scope_knots(bm, settings, selected_only):
+    """Collapse knots (pinched holes, folded faces) in the guard scope. Returns the count."""
+    if not settings.topology_guard_collapse_knots:
+        return 0
+    faces = scope_faces(bm, selected_only)
+    merged = collapse_knots(bm, faces, settings.topology_guard_knot_max_verts)
+    if merged:
+        bm.normal_update()
+    return len(merged)
+
+
 def apply_topology_guard(context, obj, settings, selected_only, unwrap=True, pin=None):
     """Edit Mode entry point shared with Smart UV Repair. Returns (result, created, generated_count)."""
     bm = bmesh.from_edit_mesh(obj.data)
     bm.faces.index_update()
     bm.normal_update()
+    knots = collapse_scope_knots(bm, settings, selected_only)
     faces = scope_faces(bm, selected_only)
     result, created, generated = run_guard(bm, faces, settings, pin)
+    result = result._replace(knots=knots)
     bm.faces.index_update()
     bm.edges.index_update()
     fixed = {f.index for f in guard_charts(bm, generated, faces)} if generated else set()
     generated_indices = {e.index for e in generated}
-    bmesh.update_edit_mesh(obj.data, loop_triangles=bool(created), destructive=bool(created))
+    changed = bool(created or knots)
+    bmesh.update_edit_mesh(obj.data, loop_triangles=changed, destructive=changed)
     if generated and settings.topology_guard_smart_relax:
         from .relax_seams import relax_seams
         prep = context.scene.polygroups_seam_preparation_settings
@@ -174,17 +192,22 @@ class MESH_OT_polygroups_topology_guard(bpy.types.Operator):
             faces = scope_faces(bm, settings.topology_guard_selected_only)
             entries = analyze_charts(bm, faces, settings.topology_guard_hole_ratio)
             problem = {f for chart, kind in entries if kind != "DISK" for f in chart}
+            knots = find_knots(bm, faces, settings.topology_guard_knot_max_verts) \
+                if settings.topology_guard_collapse_knots else []
+            for knot in knots:
+                problem.update(knot)
             for face in bm.faces:
                 face.select_set(face in problem)
             context.tool_settings.mesh_select_mode = (False, False, True)
             bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
-            self.report({"INFO"}, f"{len(entries)} charts: {summary(entries)}")
+            self.report({"INFO"}, f"{len(entries)} charts: {summary(entries)}; {len(knots)} knots")
             return {"FINISHED"}
         result, created, generated = apply_topology_guard(
             context, obj, settings, settings.topology_guard_selected_only,
             unwrap=settings.topology_guard_unwrap)
         self.report({"INFO"}, (
             f"Before: {summary(result.before)}; after: {summary(result.after)}. "
-            f"{generated} seam edges ({len(result.rings)} ring, {len(result.longitudinal)} longitudinal "
-            f"before smoothing), {created} diagonal edges"))
+            f"{generated} seam edges ({len(result.rings)} ring, {len(result.longitudinal)} longitudinal, "
+            f"{len(result.bridges)} bridge before smoothing), {created} diagonal edges, "
+            f"{result.knots} knots collapsed"))
         return {"FINISHED"}

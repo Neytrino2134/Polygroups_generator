@@ -96,6 +96,27 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         name="Protrusions / Capped Tubes", default=True,
         description="Ring protrusions such as spikes and legs at their neck, and cut caps off closed tubes",
     )
+    topology_guard_fix_bridges: bpy.props.BoolProperty(
+        name="Close Nearly Split Islands", default=True,
+        description="When a seam stops a few edges short of the island border, finish it if that splits the island in two",
+    )
+    topology_guard_bridge_max_edges: bpy.props.IntProperty(
+        name="Max Bridge Edges", default=5, min=1, max=20,
+        description="Longest missing seam piece, in edges, that may be added to split an island",
+    )
+    topology_guard_bridge_min_share: bpy.props.FloatProperty(
+        name="Min Split Share", default=0.05, min=0.0, max=0.5, subtype="FACTOR",
+        description="Each of the two new islands must hold at least this share of the original island's faces",
+    )
+    topology_guard_collapse_knots: bpy.props.BoolProperty(
+        name="Collapse Mesh Knots", default=True,
+        description=("Merge tiny tangles into one point: holes whose rim was welded to one vertex, "
+                     "and faces folded over their neighbours. A merge that would break the mesh is skipped"),
+    )
+    topology_guard_knot_max_verts: bpy.props.IntProperty(
+        name="Max Knot Vertices", default=8, min=3, max=24,
+        description="Collapse only knots made of at most this many vertices",
+    )
     topology_guard_hole_ratio: bpy.props.FloatProperty(
         name="Hole Ratio", default=0.25, min=0.0, max=1.0, subtype="FACTOR",
         description="Boundary loops shorter than this share of the longest loop are holes that unwrap fills; they get no seam",

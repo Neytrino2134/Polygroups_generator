@@ -13,6 +13,7 @@ addon_utils.enable(root.name, default_set=False)
 from polygroups_generator import ui
 from polygroups_generator.core.chart_cuts import DEFAULT_OPTIONS, _quad_loops, kind_counts, topology_guard
 from polygroups_generator.core.chart_topology import charts, classify, is_disk
+from polygroups_generator.core.knot_repair import collapse_knots, find_knots
 from polygroups_generator.properties import SECTION_SUBSECTION_PROPERTIES
 
 ZABROSHKA = Path(r"D:\Work\3D Stocks\3D Asset Packs\!NewAssetPack\47_Zabroshka\47_Zabroshka.blend")
@@ -70,6 +71,8 @@ assert settings.topology_guard_fix_handles and settings.topology_guard_fix_necks
 assert settings.topology_guard_create_edges and not settings.topology_guard_after_smart_seams
 assert not settings.topology_guard_before_repair
 assert math.isclose(settings.topology_guard_hole_ratio, 0.25, rel_tol=1e-6)
+assert settings.topology_guard_fix_bridges and settings.topology_guard_bridge_max_edges == 5
+assert settings.topology_guard_collapse_knots and settings.topology_guard_knot_max_verts == 8
 
 
 class Layout:
@@ -167,6 +170,63 @@ assert len(charts(bm)) == 3, (len(charts(bm)), counts)
 assert len(result.rings) == 8 and len(result.longitudinal) == 3, (len(result.rings), len(result.longitudinal))
 bm.free()
 
+# ---- seam that stops short of the border: bridge only when the gap is small
+def stopped_seam(gap):
+    grid = fresh("GuardBridge", lambda: bpy.ops.mesh.primitive_grid_add(
+        x_subdivisions=16, y_subdivisions=16, size=16))
+    bm = bmesh.new()
+    bm.from_mesh(grid.data)
+    xs = sorted({round(v.co.x, 4) for v in bm.verts})
+    middle = sorted({round(v.co.y, 4) for v in bm.verts})[len(xs) // 2]
+    stop = xs[-1 - gap]
+    for edge in bm.edges:
+        a, b = edge.verts
+        if round(a.co.y, 4) == middle == round(b.co.y, 4) and max(a.co.x, b.co.x) <= stop + 1e-4:
+            edge.seam = True
+    return bm
+
+
+bm = stopped_seam(3)
+assert len(charts(bm)) == 1
+result = topology_guard(bm, None, DEFAULT_OPTIONS)
+assert len(result.bridges) == 3 and len(charts(bm)) == 2, (len(result.bridges), len(charts(bm)))
+bm.free()
+bm = stopped_seam(7)
+result = topology_guard(bm, None, DEFAULT_OPTIONS)
+assert not result.bridges and len(charts(bm)) == 1, len(result.bridges)
+bm.free()
+bm = stopped_seam(3)
+result = topology_guard(bm, None, DEFAULT_OPTIONS._replace(fix_bridges=False))
+assert not result.bridges and len(charts(bm)) == 1
+bm.free()
+
+# ---- pinched hole: a quad hole whose rim is welded into a cone at a nearby vertex
+grid = fresh("GuardPinch", lambda: bpy.ops.mesh.primitive_grid_add(x_subdivisions=8, y_subdivisions=8, size=8))
+bm = bmesh.new()
+bm.from_mesh(grid.data)
+border = sum(e.is_boundary for e in bm.edges)
+hole = min(bm.faces, key=lambda f: f.calc_center_median().length)
+rim = [v for v in hole.verts]
+# Diagonal neighbour of a hole corner: shares a face with the rim but no edge.
+apex = next(v for v in bm.verts if v not in rim and not v.is_boundary
+            and not {e.other_vert(v) for e in v.link_edges} & set(rim)
+            and any(r in f.verts for f in v.link_faces for r in rim))
+bm.faces.remove(hole)
+for a, b in zip(rim, rim[1:] + rim[:1]):
+    bm.faces.new((apex, b, a))
+# Pull the rim in, so the cone is a small dent next to the apex.
+center = sum((v.co for v in rim), apex.co * 0.0) / 4
+for vert in rim:
+    vert.co = apex.co + (vert.co - center) * 0.3 + (center - apex.co) * 0.5
+bm.normal_update()
+assert not apex.is_manifold and not any(len(e.link_faces) > 2 for e in bm.edges)
+knots = find_knots(bm)
+assert len(knots) == 1, [sorted(v.index for f in k for v in f.verts) for k in knots]
+assert collapse_knots(bm)
+assert all(v.is_manifold for v in bm.verts)
+assert sum(e.is_boundary for e in bm.edges) == border, (border, sum(e.is_boundary for e in bm.edges))
+bm.free()
+
 # ---- operator in Edit Mode, plus the Generate Smart Seams hook
 torus = fresh("GuardTorusOp", lambda: bpy.ops.mesh.primitive_torus_add(major_segments=48, minor_segments=12))
 bpy.ops.object.mode_set(mode="EDIT")
@@ -198,12 +258,36 @@ bpy.ops.object.mode_set(mode="OBJECT")
 settings.topology_guard_after_smart_seams = False
 
 # ---- the user's reference meshes (broken / manually fixed pairs)
+# The file is a live work scene; check whatever reference meshes it still holds.
+RETOPO_03 = "Retopo_03_Highpoly_Generated.001"
+meshes = {}
 if ZABROSHKA.exists():
-    names = ["Torus", "Torus.001", "Retopo_02", "Retopo_02.001", "Sphere", "Sphere.001", "Chair"]
+    names = ["Torus", "Torus.001", "Retopo_02", "Retopo_02.001", "Sphere", "Sphere.001", "Chair", RETOPO_03]
     with bpy.data.libraries.load(str(ZABROSHKA)) as (source, target):
         target.objects = [n for n in names if n in source.objects]
-    meshes = {obj.name: obj.data for obj in target.objects}
+    meshes = {obj.name: obj.data for obj in target.objects if obj is not None}
+    print("Zabroshka reference meshes:", sorted(meshes))
+else:
+    print("Zabroshka reference file not found; reference-mesh checks skipped")
 
+if RETOPO_03 in meshes:
+    bm = bmesh.new()
+    bm.from_mesh(meshes[RETOPO_03])
+    bm.normal_update()
+    islands = len(charts(bm))
+    # The user's selection: quads 4 and 8 folded over each other plus sliver 5.
+    knots = [sorted({v.index for f in knot for v in f.verts}) for knot in find_knots(bm)]
+    assert [1, 2, 21, 45, 48, 90] in knots, knots
+    assert collapse_knots(bm)
+    bm.normal_update()
+    assert all(v.is_manifold for v in bm.verts) and not any(e.is_boundary for e in bm.edges)
+    assert not find_knots(bm) and len(charts(bm)) == islands
+    # No seam on this mesh stops short of a border any more: no bridges.
+    result = topology_guard(bm, None, DEFAULT_OPTIONS)
+    assert not result.bridges, sorted(e.index for e in result.bridges)
+    bm.free()
+
+if {"Torus", "Torus.001", "Retopo_02", "Retopo_02.001", "Sphere", "Sphere.001", "Chair"} <= set(meshes):
     def manual_seams(broken, fixed):
         a, b = bmesh.new(), bmesh.new()
         a.from_mesh(meshes[broken])
@@ -259,7 +343,7 @@ if ZABROSHKA.exists():
     print(f"Retopo_02 collapsed UV share: before {before:.4f}, after {after:.4f}")
     assert after < before * 0.5 or after < 0.005, (before, after)
     bpy.ops.object.mode_set(mode="OBJECT")
-else:
-    print("Zabroshka reference file not found; reference-mesh checks skipped")
+elif meshes:
+    print("Torus/Sphere/Chair/Retopo_02 reference pairs missing; those checks skipped")
 
 print("TOPOLOGY GUARD PASSED")

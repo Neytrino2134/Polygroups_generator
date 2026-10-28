@@ -9,11 +9,13 @@ chart, then the charts are rebuilt:
 - ANNULUS / MULTI: connect the significant boundary loops with shortest paths.
 - CLOSED (genus 0, no boundary): one slit between the two farthest points.
 - DISK: optional neck cuts for protrusions (spikes, legs) and capped tubes (cups).
+- Bridges (any chart): a seam that stops or bends a few edges short of the chart
+  border (a reflex notch) is closed when that splits the chart into two sizable islands.
 """
 import heapq
 import itertools
 import math
-from collections import namedtuple
+from collections import deque, namedtuple
 
 from .chart_topology import charts, classify, chart_kind, is_cut, significant_loops
 
@@ -21,7 +23,7 @@ from .chart_topology import charts, classify, chart_kind, is_cut, significant_lo
 GuardOptions = namedtuple("GuardOptions", (
     "fix_handles fix_annuli fix_closed fix_necks hole_ratio lip_angle max_flare "
     "sharp_preference neck_angle neck_elongation neck_max_share tube_tolerance "
-    "cup_min_height max_passes"
+    "cup_min_height max_passes fix_bridges bridge_max_edges bridge_min_share"
 ))
 
 DEFAULT_OPTIONS = GuardOptions(
@@ -29,9 +31,12 @@ DEFAULT_OPTIONS = GuardOptions(
     hole_ratio=0.25, lip_angle=math.radians(45.0), max_flare=2.5,
     sharp_preference=1.0, neck_angle=math.radians(35.0), neck_elongation=0.3,
     neck_max_share=0.35, tube_tolerance=0.35, cup_min_height=0.5, max_passes=12,
+    fix_bridges=True, bridge_max_edges=5, bridge_min_share=0.05,
 )
 
-GuardResult = namedtuple("GuardResult", "rings longitudinal before after passes")
+# ``knots`` counts collapsed mesh knots; the geometry step fills it in.
+GuardResult = namedtuple("GuardResult", "rings longitudinal before after passes bridges knots",
+                         defaults=(0,))
 
 
 # --------------------------------------------------------------------------- graphs
@@ -533,6 +538,68 @@ def _neck_cuts(info, options):
     return cut
 
 
+# ------------------------------------------------------------------------ bridges
+
+# Well above the 270 degrees of an ordinary concave chart corner.
+NOTCH_ANGLE = math.radians(315.0)
+
+
+def _notches(info):
+    """Border nodes where the chart wraps around a seam that pokes into it.
+
+    The chart's inner angle there is reflex: 360 degrees at a dangling seam end,
+    a bit less where an unfinished seam bends or two seams almost meet.
+    """
+    border = {node for loop in info.loops for node in loop.nodes}
+    angles = {}
+    for face in info.faces:
+        for corner in face.loops:
+            node = info.nodes.node(face, corner.vert)
+            if node in border:
+                angles[node] = angles.get(node, 0.0) + corner.calc_angle()
+    notches = [node for node, angle in angles.items()
+               if angle >= NOTCH_ANGLE and not node[1].is_boundary]
+    return sorted(notches, key=lambda n: (n[1].index, n[0].index))
+
+
+def _bridge_cuts(info, options):
+    """Shortest path (<= bridge_max_edges) from a border notch to the chart border
+    that splits the chart into two islands of at least ``bridge_min_share`` each."""
+    tips = _notches(info)
+    if not tips:
+        return set()
+    graph = _node_graph(info)
+    border = {node for loop in info.loops for node in loop.nodes}
+    min_faces = max(2, int(math.ceil(len(info.faces) * options.bridge_min_share)))
+    best = None
+    for tip in tips:
+        hops, dist, prev, queue = {tip: 0}, {tip: 0.0}, {}, deque([tip])
+        hits = []
+        while queue:
+            node = queue.popleft()
+            if hops[node] >= options.bridge_max_edges:
+                continue
+            for other, cost, edge in graph.get(node, ()):
+                if other in hops:
+                    continue
+                hops[other] = hops[node] + 1
+                dist[other] = dist[node] + cost
+                prev[other] = (node, edge)
+                if other in border:
+                    hits.append(other)
+                else:
+                    queue.append(other)
+        for hit in sorted(hits, key=lambda n: (hops[n], dist[n])):
+            path = _path(prev, hit)
+            parts = _flood(info.faces, set(path))
+            if len(parts) == 2 and min(len(p) for p in parts) >= min_faces:
+                if best is None or (len(path), dist[hit]) < best[0]:
+                    best = ((len(path), dist[hit]), set(path))
+                break
+    # One bridge per pass: the next pass sees the split charts.
+    return best[1] if best else set()
+
+
 # -------------------------------------------------------------------------- driver
 
 def analyze_charts(bm, faces=None, hole_ratio=DEFAULT_OPTIONS.hole_ratio):
@@ -544,7 +611,7 @@ def analyze_charts(bm, faces=None, hole_ratio=DEFAULT_OPTIONS.hole_ratio):
 def topology_guard(bm, faces=None, options=DEFAULT_OPTIONS, protected=()):
     """Mark seams so charts become disks. Returns GuardResult with new edge sets."""
     protected = set(protected)
-    rings, longitudinal = set(), set()
+    rings, longitudinal, bridges = set(), set(), set()
     pool = set(faces) if faces is not None else None
     before = analyze_charts(bm, pool, options.hole_ratio)
     passes = 0
@@ -559,15 +626,19 @@ def topology_guard(bm, faces=None, options=DEFAULT_OPTIONS, protected=()):
                 continue
             info = classify(chart)
             kind = chart_kind(info, options.hole_ratio)
-            cut, bucket = set(), rings
-            if kind == "HANDLE" and options.fix_handles:
-                cut = _cut_handle(info, options)
-            elif kind in ("ANNULUS", "MULTI") and options.fix_annuli:
-                cut, bucket = _connect_boundaries(info, options), longitudinal
-            elif kind == "CLOSED" and options.fix_closed:
-                cut, bucket = _slit_closed(info, options), longitudinal
-            elif kind == "DISK" and necks_allowed:
-                cut = _neck_cuts(info, options)
+            # Closing a nearly finished seam comes first; the halves are re-checked next pass.
+            cut = _bridge_cuts(info, options) - protected if options.fix_bridges else set()
+            bucket = bridges
+            if not cut:
+                bucket = rings
+                if kind == "HANDLE" and options.fix_handles:
+                    cut = _cut_handle(info, options)
+                elif kind in ("ANNULUS", "MULTI") and options.fix_annuli:
+                    cut, bucket = _connect_boundaries(info, options), longitudinal
+                elif kind == "CLOSED" and options.fix_closed:
+                    cut, bucket = _slit_closed(info, options), longitudinal
+                elif kind == "DISK" and necks_allowed:
+                    cut = _neck_cuts(info, options)
             cut -= protected
             cut = {e for e in cut if not e.seam}
             if not cut and kind in ("HANDLE", "ANNULUS", "MULTI") and (
@@ -584,7 +655,7 @@ def topology_guard(bm, faces=None, options=DEFAULT_OPTIONS, protected=()):
         if not changed:
             break
     after = analyze_charts(bm, pool, options.hole_ratio)
-    return GuardResult(rings, longitudinal, before, after, passes)
+    return GuardResult(rings, longitudinal, before, after, passes, bridges)
 
 
 def kind_counts(entries):
