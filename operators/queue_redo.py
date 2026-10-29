@@ -8,12 +8,65 @@ from .rename_objects import (
 )
 from ..core.remesh_cursor import RemeshCursor
 from .queue_storage import (
+    RETOPO_PASS,
     redo_source,
 )
 
 
 class QueueRedoMixin:
     """Workflow methods sharing the owning ImportQueue state."""
+
+    def prepare_resume(self, context):
+        """Continue a collection whose Retopo mesh finished remesh pass 1 or 2.
+
+        Pass 1 (Retopo_ / Retopo_01) resumes at 3. Narrow Island Splitter, pass 2 (Retopo_02) at
+        6. Narrow Island Splitter; the queue then runs the remaining remesh passes up to stage 8."""
+        info = self.resume
+        collection, source = info["collection"], info["source"]
+        high = redo_source(collection)
+        if info["finished"]:
+            raise RuntimeError("Retopo_03 is the end of Phase 1: nothing to resume")
+        if high is None or source.name not in bpy.data.objects:
+            raise RuntimeError("The selected Retopo mesh has no matching highpoly")
+        if not ensure_collection_visible_in_view_layer(context, collection):
+            raise RuntimeError("The selected Generated collection is not in this View Layer")
+        self.collection = collection
+        collection.color_tag = "COLOR_05"
+        self.meshes = [high]
+        self.file_record["input_tris"] = self.count_tris(self.meshes)
+        self.file_objects = [high, source]
+        self.pass_sources = [source]
+        self.configure_passes(context)
+        finished_pass = 2 if info["level"] == 1 else 3
+        self.passes = [entry for entry in self.passes if entry[0] > finished_pass]
+        self.pass_index = 0
+        if not any(entry[1] for entry in self.passes):
+            raise RuntimeError("Enable a later Remesh pass (stage 5 or 8) to resume this collection")
+        self.redo_source_visibility = (source, source.hide_viewport, source.hide_get(), source.hide_render)
+        source.hide_viewport = False
+        source.hide_set(False)
+        self.select_source(context, source)
+        if self.cursor is None:
+            self.cursor = RemeshCursor(context, label="Resume")
+        # Results of later passes are rebuilt; the finished ones stay untouched.
+        later = []
+        for obj in collection.objects:
+            match = RETOPO_PASS.fullmatch(obj.name)
+            if match and obj != source and int(match.group(1) or 1) > info["level"]:
+                later.append(obj)
+        if later:
+            backup = bpy.data.collections.new(f"__PolygroupsRedoBackup_{collection.name}")
+            self.redo_backup_collection = backup
+            for index, obj in enumerate(later):
+                links = list(obj.users_collection)
+                self.redo_backup.append((obj, obj.name, links))
+                for previous in links:
+                    previous.objects.unlink(obj)
+                backup.objects.link(obj)
+                obj.name = f"__PolygroupsRedoBackup_{collection.name}_{index:03d}"
+        self.second_cleanup_done = info["level"] > 1
+        self.stage = self.first_cleanup_stage() if info["level"] == 1 else self.second_cleanup_stage()
+        self.mesh_index = 0
 
     def prepare_redo(self, context):
         collection = self.redo_collection

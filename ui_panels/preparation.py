@@ -465,6 +465,27 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 selected_hint.label(text=t(context, "batch_selected_hint_line1"), icon="OUTLINER_OB_MESH")
                 selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
 
+                # Resume Selected: continue after the remesh pass the selected Retopo mesh finished.
+                from ..operators.queue_storage import RESUME_FROM_STAGE, resume_state
+                resume = resume_state(context)
+                resume_row = group.row(align=True)
+                resume_row.operator_context = "EXEC_DEFAULT"
+                resume_row.enabled = (not settings.batch_is_running and resume is not None
+                                      and not resume["finished"])
+                if resume is not None and resume["finished"]:
+                    resume_row.operator("object.polygroups_batch_import",
+                                        text=t(context, "batch_resume_finished"), icon="CHECKMARK")
+                else:
+                    resume_op = resume_row.operator("object.polygroups_batch_import",
+                                                    text=t(context, "batch_resume_selected"), icon="FILE_REFRESH")
+                    resume_op.use_file_selection = False
+                    resume_op.resume_selected = True
+                    if resume is not None:
+                        group.label(text=t(context, "batch_resume_from",
+                                           stage=t(context, RESUME_FROM_STAGE[resume["level"]])), icon="INFO")
+                if resume is None:
+                    group.label(text=t(context, "batch_resume_hint"), icon="OUTLINER_OB_MESH")
+
             group = draw_collapsible_box(content, settings, "show_batch_start_cleanup", "Clear Temp Files", "TRASH")
             if group is not None:
                 from ..operators.final_cleanup import draw_final_cleanup

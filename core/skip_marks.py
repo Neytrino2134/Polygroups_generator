@@ -46,6 +46,12 @@ def mark_failed_file(collection, error=''):
     collection[FAILED_AT_KEY] = time.time()
 
 
+def clear_all(collection):
+    """Remove the skip mark and the Phase 1 failure stamp: the collection is finished."""
+    unmark(collection)
+    clear_stamp(collection)
+
+
 def clear_stamp(collection):
     """Drop the Phase 1 failure stamp once the file was fixed by hand."""
     for key in (FAILED_KEY, FAILED_AT_KEY, REASON_KEY):

@@ -474,6 +474,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
     )
     redo_collection_name: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
     do_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    resume_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     directory: bpy.props.StringProperty(
         subtype="DIR_PATH",
         options={"HIDDEN"},
@@ -521,13 +522,25 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         if settings.phase2_is_running or settings.phase2_pipeline_running or settings.phase2_rebake_queue_running:
             self.report({"WARNING"}, "Phase 2 processing is running")
             return {"CANCELLED"}
-        if settings.batch_import_format == "BLEND" and not (self.do_selected or self.redo_collection_name):
+        if settings.batch_import_format == "BLEND" and not (
+                self.do_selected or getattr(self, "resume_selected", False) or self.redo_collection_name):
             self.report({"WARNING"}, "Use Append Generated Collections for Blend format")
             return {"CANCELLED"}
         if import_queue.ACTIVE_QUEUE is not None or ACTIVE_REMESH is not None:
             self.report({"WARNING"}, "An import queue or Remesh is already running")
             return {"CANCELLED"}
         redo_collection_name = getattr(self, "redo_collection_name", "")
+        resume_requested = getattr(self, "resume_selected", False)
+        resume = None
+        if resume_requested:
+            resume = import_queue.resume_state(context)
+            if resume is None:
+                self.report({"ERROR"}, "Select a Retopo_ / Retopo_NN mesh of a Generated.N collection that has its highpoly")
+                return {"CANCELLED"}
+            if resume["finished"]:
+                self.report({"INFO"}, "Retopo_03 is the end of Phase 1: nothing to resume")
+                return {"CANCELLED"}
+            redo_collection_name = resume["collection"].name
         if self.do_selected:
             collection = import_queue.active_highpoly_collection(context)
             if collection is None:
@@ -553,7 +566,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
                 raise RuntimeError("No supported mesh files found")
             if redo_collection is not None:
                 self._queue = import_queue.ImportQueue(
-                    context, files, False, self.report, redo_collection=redo_collection,
+                    context, files, False, self.report, redo_collection=redo_collection, resume=resume,
                 )
             elif file_selection and settings.file_import_automatic_processing:
                 self._queue = import_queue.ImportQueue(
@@ -576,7 +589,8 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
     def invoke(self, context, event):
         from ..core.remesh_cursor import update_remesh_cursor
         update_remesh_cursor(context, event)
-        if self.use_file_selection and not self.redo_collection_name and not self.do_selected:
+        if (self.use_file_selection and not self.redo_collection_name
+                and not self.do_selected and not self.resume_selected):
             return ImportHelper.invoke_popup(self, context)
         return self.execute(context)
 

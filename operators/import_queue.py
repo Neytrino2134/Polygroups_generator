@@ -47,6 +47,7 @@ from .queue_storage import (
     move_to_collection,
     redo_collections,
     redo_source,
+    resume_state,
     reset_batch_import_settings,
     restore_retopo_collection,
     selected_redo_collection,
@@ -84,7 +85,8 @@ def save_current_blend_file():
 
 class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
     def __init__(self, context, files, file_selection, report, redo_collection=None,
-                 automatic_processing=False):
+                 automatic_processing=False, resume=None):
+        self.resume = resume   # resume_state() of a Retopo mesh: continue after its finished remesh pass
         self.scene = context.scene
         self.view_layer = context.view_layer
         self.settings = self.scene.polygroups_model_preparation_settings
@@ -356,7 +358,10 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
 
         settings = self.settings
         if self.stage == "REDO_PREPARE":
-            self.prepare_redo(context)
+            if self.resume is not None:
+                self.prepare_resume(context)
+            else:
+                self.prepare_redo(context)
         elif self.stage == "IMPORT":
             filepath = self.files[self.index]
             operator = find_import_operator(os.path.splitext(filepath)[1].lower())
@@ -409,6 +414,11 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 self.second_cleanup_done = True
                 self.mesh_index = 0
                 self.stage = self.second_cleanup_stage()
+            elif self.resume is not None and self.pass_index >= len(self.passes):
+                # Resume Selected ends with the third remesh pass (stage 8); packing, bake and
+                # finalization are not part of it, and Phase 2 is never chained.
+                self.mesh_index = 0
+                self.stage = "COMPLETE"
             elif self.pass_index >= len(self.passes):
                 if self.batch_stages and settings.batch_stage_5_enabled:
                     self.stage = "PACK"
@@ -710,6 +720,10 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             if self.mesh_index == len(self.pass_sources):
                 self.stage = "COMPLETE"
         elif self.stage == "COMPLETE":
+            if self.collection is not None:
+                # Finished (or finished by Resume Selected): no longer a Phase 1 failure.
+                from ..core.skip_marks import clear_all
+                clear_all(self.collection)
             self.file_record["output_tris"] = self.count_tris((self.pass_sources or self.meshes) + self.result_meshes)
             completed_object_count = len(self.meshes)
             if self.save_generated_separately:

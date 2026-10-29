@@ -45,6 +45,32 @@ def active_highpoly_collection(context):
     return next((collection for collection in source.users_collection
                  if redo_source(collection) == source), None)
 
+RETOPO_PASS = re.compile(r"Retopo_(?:(\d+)_)?Highpoly_Generated\.(\d+)")
+# Remesh passes finished per Retopo number: Retopo_ / Retopo_01 = first (stage 2), 02 = second (5), 03 = third (8).
+RESUME_FROM_STAGE = {1: "batch_stage_narrow", 2: "batch_stage_second_narrow"}
+FINAL_RETOPO_LEVEL = 3
+
+
+def resume_state(context):
+    """What Resume Selected can do for the active Retopo mesh, or None when it is not a Retopo pass result.
+
+    Returns a dict with the mesh (``source``), its Generated.N ``collection``, the finished remesh
+    ``level`` (1-3) and ``finished`` (Retopo_03 is the end of Phase 1)."""
+    source = context.active_object
+    if source is None or source.type != "MESH" or not source.select_get():
+        return None
+    match = RETOPO_PASS.fullmatch(source.name)
+    if match is None:
+        return None
+    collection = next((col for col in source.users_collection
+                       if redo_source(col) is not None and col.name == f"Generated.{match.group(2)}"), None)
+    if collection is None:
+        return None
+    level = int(match.group(1) or 1)
+    return dict(source=source, collection=collection, level=min(max(level, 1), FINAL_RETOPO_LEVEL),
+                finished=level >= FINAL_RETOPO_LEVEL)
+
+
 def redo_collections(view_layer):
     from .generated_visibility import generated_paths
     return [path[-1].collection for path in generated_paths(view_layer)
