@@ -58,7 +58,8 @@ def run(mode, master, high=True, repair=True, bake=True):
     p.phase2_clear_generated = False
     runner = SimpleNamespace(settings=p, report=lambda *_: None,
                              override=lambda owner, name, value: setattr(owner, name, value),
-                             detail=lambda *_: None)
+                             detail=lambda *_: None, collection_result=lambda *_: None,
+                             begin_collections=lambda *_: None)
     queues = []
 
     def make_queue(*args):

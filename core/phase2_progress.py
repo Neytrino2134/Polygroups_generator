@@ -240,9 +240,12 @@ def draw_start_status(layout, context, p):
     if p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_final_progress:
         layout.progress(factor=p.phase2_final_progress/100, type='BAR', text=f'{p.phase2_final_progress:.0f}%')
     if p.phase2_total_count:
-        layout.progress(factor=(p.phase2_done_count+p.phase2_failed_count)/p.phase2_total_count,
-                        type='BAR', text=t(context, 'phase2_progress', done=p.phase2_done_count,
-                        failed=p.phase2_failed_count, total=p.phase2_total_count))
+        handled = p.phase2_done_count + p.phase2_failed_count + p.phase2_skipped_count
+        text = t(context, 'phase2_progress', done=p.phase2_done_count,
+                 failed=p.phase2_failed_count, total=p.phase2_total_count)
+        if p.phase2_skipped_count:
+            text += f' | Skipped {p.phase2_skipped_count}'
+        layout.progress(factor=handled/p.phase2_total_count, type='BAR', text=text)
     if p.phase2_is_running:
         layout.operator('object.polygroups_phase2_stop', text=t(context, 'phase2_stop'), icon='PAUSE')
     if p.phase2_final_is_running or p.phase2_auto_render_running:

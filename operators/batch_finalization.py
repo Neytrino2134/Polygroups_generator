@@ -2,6 +2,7 @@
 import re
 import bpy
 from ..core.asset_names import asset_name
+from ..core import skip_marks
 from ..core.lod_naming import lod_name
 from .sequential_jobs import SequentialJob
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods, LOD_SOURCE, _world_x_bounds
@@ -17,7 +18,7 @@ def finalization_packs(context):
     scene_objects = set(context.scene.objects)
     packs = []
     for col in bpy.data.collections:
-        if not re.fullmatch(r'Generated(?:\.\d+)*', col.name, re.I):
+        if not re.fullmatch(r'Generated(?:\.\d+)*', col.name, re.I) or skip_marks.is_marked(col):
             continue
         meshes = [obj for obj in col.all_objects if obj in scene_objects and obj.type == 'MESH'
                   and not HIGH.fullmatch(obj.name) and not obj.name.lower().startswith(('backup_retopo_', 'backup_resculpting_'))]
@@ -38,6 +39,22 @@ def finalization_packs(context):
         source = min(meshes, key=lambda obj: lod_order(obj, depsgraph))
         packs.append((col, source, meshes))
     return packs
+
+
+def natural_key(name):
+    return [int(p) if p.isdigit() else p.lower() for p in re.split(r'(\d+)', name)]
+
+
+def asset_slots(packs):
+    """Slot of each pack among all Generated collections.
+
+    A collection marked as skipped keeps its place, so asset numbers do not shift:
+    with Generated.008 skipped, Generated.009 still becomes the ninth asset."""
+    names = {col.name for col, _source, _meshes in packs}
+    names.update(col.name for col in bpy.data.collections
+                 if re.fullmatch(r'Generated(?:\.\d+)*', col.name, re.I) and skip_marks.is_marked(col))
+    order = {name: slot for slot, name in enumerate(sorted(names, key=natural_key))}
+    return [order[col.name] for col, _source, _meshes in packs]
 
 
 def layer_tree(root):
@@ -127,6 +144,7 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
         if not p.phase2_final_lods and not p.phase2_final_rename:
             raise ValueError('Enable Prepare LODs or Rename')
         packs = finalization_packs(context)
+        slots = asset_slots(packs)
         if len({source for col, source, meshes in packs}) != len(packs):
             raise ValueError('A source mesh belongs to multiple Generated collections')
         if p.phase2_final_lods:
@@ -186,7 +204,7 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
                     if not generated:
                         generated = list(meshes)
                 if p.phase2_final_rename:
-                    version = str(int(self.version_index) + ordinal).zfill(max(2, len(self.version_index)))
+                    version = str(int(self.version_index) + slots[ordinal]).zfill(max(2, len(self.version_index)))
                     fab = p.phase2_final_rename_engine == 'FAB'
                     targets = list(generated)
                     if fab and p.phase2_final_lods and s.unreal_lod_keep_high:

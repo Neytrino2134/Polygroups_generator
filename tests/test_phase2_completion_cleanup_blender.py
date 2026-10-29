@@ -28,6 +28,11 @@ assert not layer.exclude
 q,col,objs=fixture(402);names=[o.name for o in objs];q.complete('injected bake failure')
 assert all(n in bpy.data.objects for n in names)
 assert not col.hide_render and not col.hide_viewport
+# A failed collection is marked, so the clear operators below keep its meshes for manual work.
+from polygroups_generator.core import skip_marks
+assert skip_marks.is_marked(col) and all(o.get(skip_marks.SKIP_KEY) for o in objs)
+assert phase.remove_mesh_objects(objs)==0
+skip_marks.unmark(col)
 q,col,objs=fixture(403);names=[o.name for o in objs];q.stage='RESTORE';q.baked_pair=None;q.complete()
 assert all(n in bpy.data.objects for n in names) # no bake: do not delete
 # Shared external object is unlinked only from completed collection.

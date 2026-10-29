@@ -1,5 +1,6 @@
 """Single owner of the sequential Phase 2 queue and its lifecycle."""
 import json
+import os
 import time
 
 import bpy
@@ -39,6 +40,7 @@ class Phase2Pipeline:
         self.fraction = 0
         self.overlay = None
         self.timer = None
+        self.log = None
 
     def override(self, settings, key, value):
         if not any(owner == settings and name == key for owner, name, _, _ in self.saved):
@@ -63,7 +65,35 @@ class Phase2Pipeline:
         p.phase2_pipeline_status = 'Starting Phase 2'
         from ..core.phase2_progress import PipelineOverlay
         self.overlay = PipelineOverlay(context)
+        self.start_log()
         self.publish(context)
+
+    def start_log(self):
+        """Phase 2 report beside the Phase 1 ones; failures to write it never stop the run."""
+        from pathlib import Path
+        from ..core.batch_report import BatchReport
+        try:
+            self.log = BatchReport(Path(bpy.data.filepath).parent, [], phase=2)
+            self.log.event('plan', {'stages': [key for key, *_ in self.plan]})
+            self.report({'INFO'}, f'Phase 2 reports: {self.log.directory}')
+        except OSError as error:
+            self.log = None
+            self.report({'WARNING'}, f'Cannot create Phase 2 reports: {error}')
+
+    def log_event(self, event, data):
+        if self.log is not None:
+            try:
+                self.log.event(event, data)
+            except OSError as error:
+                self.report({'WARNING'}, f'Cannot update Phase 2 reports: {error}')
+
+    def begin_collections(self, entries):
+        if self.log is not None:
+            self.log.files = [f'{os.path.basename(path)}::{name}' for path, name in entries]
+        self.log_event('collections', {'count': len(entries)})
+
+    def collection_result(self, record):
+        self.log_event('file_complete', record)
 
     def detail(self, progress, text):
         self.settings.phase2_pipeline_detail_progress = min(100, max(0, progress))
@@ -157,6 +187,7 @@ class Phase2Pipeline:
                 self.stage_started = time.monotonic()
                 self.fraction = 0
                 self.rows[self.index]['state'] = 'RUNNING'
+                self.log_event('stage', {'stage': self.plan[self.index][0], 'label': self.plan[self.index][1]})
                 self.detail(0, self.plan[self.index][1])
                 self.iterator = iter(self.plan[self.index][3](self, context))
             DISPATCHING = True
@@ -165,6 +196,8 @@ class Phase2Pipeline:
             except StopIteration:
                 self.rows[self.index].update(state='DONE', progress=100,
                     seconds=round(time.monotonic()-self.stage_started, 1))
+                self.log_event('stage_done', {'stage': self.plan[self.index][0],
+                                              'seconds': self.rows[self.index]['seconds']})
                 self.iterator = None
                 self.index += 1
                 self.fraction = 0
@@ -221,10 +254,19 @@ class Phase2Pipeline:
             self.settings.phase2_pipeline_paused = False
             self.settings.phase2_pipeline_state = state
             self.settings.phase2_pipeline_status = f'{state}: {error}' if error else f'Phase 2 {state.lower()}'
+            problems = self.settings.phase2_failed_count + self.settings.phase2_skipped_count
+            if problems and not error:
+                self.settings.phase2_pipeline_status += (
+                    f' | {self.settings.phase2_failed_count} failed, '
+                    f'{self.settings.phase2_skipped_count} skipped (kept for manual work)')
             if state == 'COMPLETED':
                 self.index = len(self.plan)
                 self.fraction = 0
             self.publish(context)
+            self.log_event('finish', {'status': state, 'error': error,
+                                      'done': self.settings.phase2_done_count,
+                                      'failed': self.settings.phase2_failed_count,
+                                      'skipped': self.settings.phase2_skipped_count})
             from ..core.run_progress import end_combined
             end_combined()
             if self.overlay:

@@ -723,6 +723,15 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         settings.batch_stage = self.stage
 
 
+    def record_collection(self):
+        """Name the Generated.N collection in the report so each file maps to its collection."""
+        try:
+            name = self.collection.name if self.collection is not None else None
+        except ReferenceError:
+            name = None
+        if name and not self.file_record.get("collection"):
+            self.file_record["collection"] = name
+
     def write_batch_report(self, event, data):
         if self.batch_report is not None:
             try:
@@ -782,6 +791,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.collection.color_tag = "COLOR_02" if success else "COLOR_05"
         if self.file_record is not None:
             self.file_record.update(status="success" if success else "failed", finished=time.time())
+            self.record_collection()
             self.write_batch_report("file_complete", self.file_record)
             self.file_record = None
         self.timing.complete_file(success)
@@ -835,6 +845,11 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         if collection is None:
             raise RuntimeError("Separate saving could not find the completed Generated.N collection")
         collection.color_tag = "COLOR_02" if completed else "COLOR_05"
+        if not completed:
+            # Phase 2 still imports this collection but leaves it untouched for manual work.
+            from ..core.skip_marks import mark_failed_file
+            record = getattr(self, "file_record", None) or {}
+            mark_failed_file(collection, record.get("error") or record.get("status") or "Interrupted")
         output_path = generated_collection_output_path(bpy.data.filepath, collection.name)
         working_path = bpy.data.filepath
         write_collection_blend(output_path, collection)
@@ -1037,6 +1052,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         if self.file_record is not None:
             self.file_record.update(status="cancelled" if rollback else "interrupted",
                                     failed_stage=self.stage, finished=time.time())
+            self.record_collection()
             self.write_batch_report("file_complete", self.file_record)
             self.file_record = None
         self.write_batch_report("finish", {"status": status})
@@ -1060,7 +1076,8 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 except Exception as error:
                     self.report({'WARNING'}, f'Could not save recovered batch: {error}')
         if (status == "DONE" and not rollback and not self.redo_mode and self.batch_stages
-                and self.settings.batch_phase2_enabled and self.settings.batch_failed_count == 0):
+                and self.settings.batch_phase2_enabled and self.settings.batch_imported_count > 0):
+            # Failed files do not stop the run: Phase 2 reads their logs and skips them.
             from ..core import run_progress
             run_progress.finish_phase1(self.settings.batch_elapsed_seconds)
             schedule_phase2(self.scene, self.view_layer, self.report)

@@ -11,6 +11,7 @@ from mathutils import Vector
 from .phase2_processing import available
 from .render_studio import TAG as STUDIO_TAG
 from ..core.generated_index import GENERATED_INDEX_PATTERN
+from ..core.skip_marks import is_marked
 
 BLEND_FOLDER = '!Blend'
 COLLECTION_SUFFIX = '_Collection'
@@ -33,10 +34,13 @@ def asset_collections(scene):
     return result
 
 
-def generated_collections(scene):
-    """Generated.N collections (Retopo / Resculpting meshes) that contain objects."""
+def generated_collections(scene, include_marked=False):
+    """Generated.N collections (Retopo / Resculpting meshes) that contain objects.
+
+    Collections marked as skipped (unfinished in Phase 1 or 2) are left out unless asked for."""
     return [col for col in scene.collection.children_recursive
-            if GENERATED_INDEX_PATTERN.match(col.name) and col.all_objects]
+            if GENERATED_INDEX_PATTERN.match(col.name) and col.all_objects
+            and (include_marked or not is_marked(col))]
 
 
 def blend_file_stem(collection):

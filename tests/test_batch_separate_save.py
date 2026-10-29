@@ -185,7 +185,12 @@ with tempfile.TemporaryDirectory() as directory:
     assert bpy.data.collections["Generated.002"].color_tag == "COLOR_05"
     assert bpy.data.collections["Generated.003"].color_tag == "COLOR_02"
     summary = json.loads((queue.batch_report.directory / "summary.json").read_text())
-    records = json.loads((queue.batch_report.directory / "files.json").read_text())
+    index = json.loads((queue.batch_report.directory / "files.json").read_text())
+    records = [json.loads((queue.batch_report.directory / row["log"]).read_text()) for row in index]
+    assert "traceback" not in index[0] and index[0]["log"] == "files/Generated.002.json", index[0]
+    assert summary["failed_collections"][0]["collection"] == "Generated.002"
+    assert summary["failed_collections"][0]["log"] == "files/Generated.002.json"
+    assert summary["successful_collections"] == ["Generated.003"], summary
     assert summary["total_files"] == 2
     assert summary["successful_files"] == summary["failed_files"] == 1
     assert records[0]["failed_stage"] == "REMESH_WAIT"
@@ -195,6 +200,15 @@ with tempfile.TemporaryDirectory() as directory:
     assert records[0]['output_file']
     with bpy.data.libraries.load(records[0]['output_file']) as (source, _target):
         assert 'FailedArtifact' in source.objects
+    # The failed Generated.N blend carries the stamp Phase 2 reads; the good one does not.
+    stamped = {}
+    for key in (0, 1):
+        with bpy.data.libraries.load(records[key]['output_file']) as (source, target):
+            target.collections = [name for name in source.collections if name.startswith('Generated.')]
+        stamped[key] = [bool(col.get('polygroups_failed')) for col in target.collections]
+        for col in target.collections:
+            bpy.data.collections.remove(col)
+    assert stamped[0] == [True] and stamped[1] == [False], stamped
     assert records[1]["input_tris"] == records[1]["output_tris"] == 1
     with bpy.data.libraries.load(records[1]["output_file"]) as (source, _target):
         assert len([name for name in source.collections if name.startswith("Generated")]) == 1

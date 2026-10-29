@@ -69,7 +69,8 @@ def run(files):
             if queue.finished:
                 break
     assert queue.finished
-    records = json.loads((queue.batch_report.directory / 'files.json').read_text())
+    index = json.loads((queue.batch_report.directory / 'files.json').read_text())
+    records = [json.loads((queue.batch_report.directory / row['log']).read_text()) for row in index]
     return queue, records
 
 

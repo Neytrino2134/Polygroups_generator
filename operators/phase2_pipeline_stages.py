@@ -29,6 +29,8 @@ def restore(run, context):
     if p.phase2_clear_generated:
         phase.clear_generated_collections(context.scene)
     queue = phase.Phase2Queue(context, entries, rebake, p.phase2_repair_artifacts, run.report)
+    queue.on_result = run.collection_result
+    run.begin_collections(entries)
     phase.ACTIVE_PHASE2 = queue
     queue.begin()
     started = None
@@ -49,9 +51,8 @@ def restore(run, context):
                 timings.append(dict(collection=entries[previous][1], seconds=round(now-started, 2)))
                 p.phase2_pipeline_collection_times = json.dumps(timings)
                 started = None
-            if queue.results and queue.results[-1][1]:
-                raise RuntimeError(queue.results[-1][1])
-            bake = context.scene.polygroups_baking_settings
+            # A failed or skipped collection is logged and marked; the run goes on with the others.
+            bake =context.scene.polygroups_baking_settings
             progress = bake.bake_task_progress if 'BAKE' in queue.stage and bake.bake_task_is_running else 0
             detail = queue.stage
             if queue.stage in {'MID_REMESH_WAIT', 'RETOPO01_HIGH_REMESH_WAIT'}:
@@ -64,6 +65,10 @@ def restore(run, context):
             run.detail(progress, detail)
             fraction = min(1, (queue.index + within) / len(entries))
             yield fraction, p.phase2_status, boundary
+        if not p.phase2_done_count and (p.phase2_failed_count or p.phase2_skipped_count):
+            raise RuntimeError(f'No collection was processed: {p.phase2_failed_count} failed, '
+                               f'{p.phase2_skipped_count} skipped (see the Phase 2 report)')
+        yield 1, p.phase2_status, True
     finally:
         queue.finish(stopped=not queue.finished)
         if phase.ACTIVE_PHASE2 is queue:

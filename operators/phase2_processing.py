@@ -9,6 +9,7 @@ from pathlib import Path
 import bpy
 from bpy.app.handlers import persistent
 
+from ..core import phase1_logs, skip_marks
 from .batch_import import import_path_sort_key
 from .import_queue import generated_collection_files, redraw
 
@@ -55,7 +56,8 @@ def clear_generated_collections(scene=None):
         if col not in reachable:
             reachable.add(col)
             pending.extend(col.children)
-    doomed = {col for col in reachable if NUMBERED.fullmatch(col.name)}
+    # Marked collections hold unfinished work kept for manual finishing.
+    doomed = {col for col in reachable if NUMBERED.fullmatch(col.name) and not skip_marks.is_marked(col)}
     parents = {}
     for parent in list(bpy.data.collections) + [scene.collection for scene in bpy.data.scenes]:
         for child in parent.children:
@@ -202,7 +204,7 @@ def remove_mesh_objects(objects):
     """Delete objects and only their now-unused mesh datablocks."""
     count = 0
     for obj in list(objects):
-        if obj.library:
+        if obj.library or skip_marks.is_marked_object(obj):
             continue
         mesh = obj.data if obj.type == 'MESH' else None
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -249,11 +251,18 @@ class Phase2Queue:
         self.previous_collection = None
         self.mid_remesh = None
         self.resculpt_completed = False
+        self.skipped = []          # (entry, reason) of collections left untouched
+        self.on_result = None      # callback(record dict) for the Phase 2 report
+        self.phase1_failures = {}
+        self.entry_started = time.monotonic()
 
     def begin(self):
         settings = self.settings
+        if bpy.data.filepath:
+            from ..core import phase1_logs
+            self.phase1_failures = phase1_logs.failed_outputs(os.path.dirname(bpy.data.filepath))
         settings.phase2_is_running = True
-        settings.phase2_done_count = settings.phase2_failed_count = 0
+        settings.phase2_done_count = settings.phase2_failed_count = settings.phase2_skipped_count = 0
         settings.phase2_total_count = len(self.entries)
         settings.phase2_final_progress = 0
         settings.phase2_status = 'Starting Phase 2'
@@ -428,16 +437,58 @@ class Phase2Queue:
         self.baked_pair = None
         self.primary_pair = None
         self.retopo01 = None
+        failed_stage = self.stage
         if error:
+            if self.collection is not None:
+                # Half-processed: later passes and the clear operators must leave it alone.
+                skip_marks.mark(self.collection, error)
             self.settings.phase2_failed_count += 1
             self.report({'WARNING'}, f'{self.entries[self.index]}: {error}')
         else:
             self.settings.phase2_done_count += 1
         self.results.append((self.entries[self.index], error))
+        self.notify('failed' if error else 'success', error=error, failed_stage=failed_stage if error else None)
         self.index += 1
         self.stage, self.collection = 'RESTORE', None
         if not error:
             self.autosave_completed()
+
+    def notify(self, status, error='', failed_stage=None, phase1=None):
+        """Describe the finished entry for the Phase 2 report."""
+        if self.on_result is None:
+            return
+        path, name = self.entries[self.index]
+        record = dict(file=path, collection=name, status=status, finished=time.time(),
+                      seconds=round(time.monotonic() - self.entry_started, 2))
+        if self.collection is not None:
+            record['restored_as'] = self.collection.name
+        if error:
+            record['error'] = error
+            record['failed_stage'] = failed_stage
+        if phase1:
+            record.update(reason=phase1['reason'], phase1_status=phase1['status'],
+                          phase1_failed_stage=phase1['failed_stage'], phase1_failed_pass=phase1['failed_pass'],
+                          phase1_log=phase1['log'])
+        try:
+            self.on_result(record)
+        except Exception as problem:  # a report problem must never stop processing
+            self.report({'WARNING'}, f'Phase 2 report: {problem}')
+
+    def skip(self, reason, phase1=None):
+        """Keep an unfinished Generated.N as restored (Highpoly and finished passes) and move on."""
+        collection = self.collection
+        if collection is not None:
+            skip_marks.mark(collection, reason)
+            set_collection_excluded(collection, self.view_layer, False)
+            self.previous_collection = collection
+        self.settings.phase2_skipped_count += 1
+        self.skipped.append((self.entries[self.index], reason))
+        self.report({'WARNING'}, f'{self.entries[self.index][1]} skipped: {reason}')
+        self.notify('skipped', phase1=phase1 or dict(reason=reason, status='marked', failed_stage=None,
+                                                      failed_pass=None, log=''))
+        self.index += 1
+        self.stage, self.collection = 'RESTORE', None
+        self.baked_pair = self.primary_pair = self.retopo01 = None
 
     def finish(self, stopped=False):
         if self.finished:
@@ -447,7 +498,8 @@ class Phase2Queue:
         self.restore_bake_settings()
         self.settings.phase2_is_running = False
         self.settings.phase2_status = ('Stopped' if stopped else 'Completed') + (
-            f': {self.settings.phase2_done_count} OK, {self.settings.phase2_failed_count} failed')
+            f': {self.settings.phase2_done_count} OK, {self.settings.phase2_failed_count} failed'
+            + (f', {self.settings.phase2_skipped_count} skipped' if self.settings.phase2_skipped_count else ''))
         if self.autosave_error:
             self.settings.phase2_status += ' | ' + self.autosave_error
         self.finished = True
@@ -467,11 +519,18 @@ class Phase2Queue:
         self.settings.phase2_status = f'{self.index+1}/{len(self.entries)}: {name} / {self.stage}'
         try:
             if self.stage == 'RESTORE':
+                self.entry_started = time.monotonic()
                 self.collection = restore_collection(path, name, self.scene)
                 if self.previous_collection is not None and self.previous_collection != self.collection:
                     disable_completed_collection(self.previous_collection, self.view_layer)
                     self.previous_collection = None
                 self.view_layer.update()
+                # Phase 1 did not finish this file: import it, mark it, process nothing.
+                phase1 = phase1_logs.failure_for(path, self.phase1_failures)
+                stamped = '' if phase1 else skip_marks.stamped_failure(self.collection, file_mtime(path))
+                if phase1 or stamped:
+                    self.skip(phase1['reason'] if phase1 else stamped, phase1)
+                    return
                 if self.auto_bake and (self.settings.phase2_resculpt_retopo01 or self.settings.phase2_autobake_retopo01):
                     candidates = [obj for obj in self.collection.all_objects if obj.type == 'MESH'
                         and (match := LOW.fullmatch(obj.name)) and int(match.group(1)) == 1]
@@ -558,7 +617,20 @@ class Phase2Queue:
                     raise RuntimeError(f'Retopo_01 Auto Bake failed: {bake.bake_task_message}')
                 self.complete()
         except Exception as error:
-            self.complete(str(error))
+            phase1 = (phase1_logs.failure_for(path, self.phase1_failures)
+                      if self.stage == 'RESTORE' and self.collection is None else None)
+            if phase1:
+                # The unfinished file has nothing restorable (for example no Highpoly): not a Phase 2 error.
+                self.skip(phase1['reason'], phase1)
+            else:
+                self.complete(str(error))
+
+
+def file_mtime(path):
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
 
 
 @persistent

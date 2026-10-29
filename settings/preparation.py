@@ -502,6 +502,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     phase2_done_count: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
     phase2_failed_count: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
+    phase2_skipped_count: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
     phase2_total_count: bpy.props.IntProperty(default=0, options={"SKIP_SAVE"})
     phase2_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     batch_auto_arrange_objects: bpy.props.BoolProperty(

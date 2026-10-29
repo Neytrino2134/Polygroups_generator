@@ -140,7 +140,7 @@ def reset_phase2_state(context):
         if prop.identifier.startswith('phase2_pipeline_'):
             p.property_unset(prop.identifier)
     for name in ('phase2_is_running', 'phase2_final_is_running', 'phase2_auto_render_running',
-                 'phase2_done_count', 'phase2_failed_count', 'phase2_total_count',
+                 'phase2_done_count', 'phase2_failed_count', 'phase2_skipped_count', 'phase2_total_count',
                  'phase2_final_progress', 'phase2_autosave_status'):
         p.property_unset(name)
     for name in ('phase2_rebake_queue_running','phase2_rebake_queue_progress','phase2_rebake_queue_status'):
