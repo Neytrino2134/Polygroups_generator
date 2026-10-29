@@ -29,9 +29,13 @@ class SmartArrangeGrid:
 
     def place(self, obj, source, column):
         matrix = obj.matrix_world.copy()
-        matrix.translation.x = self.origin.x + column*self.x_step
-        matrix.translation.y = (source.matrix_world.translation.y if self.keep_rows
-                                else self.origin.y + self.rows[source]*self.y_step)
+        if self.keep_rows:
+            # Offset from the source itself, so an unaligned row stays intact.
+            matrix.translation.x = source.matrix_world.translation.x + column*self.x_step
+            matrix.translation.y = source.matrix_world.translation.y
+        else:
+            matrix.translation.x = self.origin.x + column*self.x_step
+            matrix.translation.y = self.origin.y + self.rows[source]*self.y_step
         obj.matrix_world = matrix
 
     def arrange_sources(self, context):

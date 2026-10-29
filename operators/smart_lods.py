@@ -476,7 +476,10 @@ class OBJECT_OT_polygroups_generate_smart_lods(SequentialJob, bpy.types.Operator
             from ..core.smart_arrange import SmartArrangeGrid, scene_lod_sources
             grid = getattr(self, '_smart_grid', None)
             if grid is None:
-                grid = SmartArrangeGrid(context, scene_lod_sources(context, source), settings.smart_lods_spacing)
+                # Single-source calls (ReBake, ReLOD, Phase 1) land in a scene
+                # that is already laid out: stay on the source row, move along X.
+                grid = SmartArrangeGrid(context, scene_lod_sources(context, source),
+                                        settings.smart_lods_spacing, keep_rows=True)
         targets = [getattr(settings, f"smart_lods_target_{i}") for i in range(1, settings.smart_lods_count + 1)]
         existing = [
             lod_name(source.name, index, settings.smart_lods_prepare_mode)

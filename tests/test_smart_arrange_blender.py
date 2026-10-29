@@ -59,7 +59,7 @@ probe=bpy.data.objects[sources[1].name[:-4]+'_LOD0']
 sources[1].location.y+=3.7;c.view_layer.update()
 keep.place(probe,sources[1],1)
 assert abs(probe.matrix_world.translation.y-sources[1].matrix_world.translation.y)<1e-5
-assert abs(probe.matrix_world.translation.x-(keep.origin.x+keep.x_step))<1e-5
+assert abs(probe.matrix_world.translation.x-(sources[1].matrix_world.translation.x+keep.x_step))<1e-5
 sources[1].location.y-=3.7;keep.place(probe,sources[1],1);c.view_layer.update()
 # Phase 1 group translations must not destroy the shared columns.
 for obj in c.scene.objects:

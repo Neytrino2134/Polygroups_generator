@@ -102,11 +102,6 @@ class FinalRebakeLODs:
             self.target.select_set(True)
             context.view_layer.objects.active = self.target
             worker = SimpleNamespace(report=report)
-            if s.smart_lods_auto_arrange and s.smart_lods_smart_arrange:
-                from ..core.smart_arrange import SmartArrangeGrid, scene_lod_sources
-                # The scene is already laid out: new LODs stay on the MID row.
-                worker._smart_grid = SmartArrangeGrid(context, scene_lod_sources(context, self.target),
-                                                      s.smart_lods_spacing, keep_rows=True)
             # Reuse single-source generation without batch arrangement of MID.
             for _ in OBJECT_OT_polygroups_generate_smart_lods.source_steps(worker, context):
                 pass
