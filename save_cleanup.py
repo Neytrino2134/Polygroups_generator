@@ -249,6 +249,10 @@ def draw_cleanup(layout, context):
     row.operator('wm.airetopo_clean_backup_saves', icon='TRASH')
     layout.separator()
     draw_missing_files(layout, context)
+    layout.separator()
+    layout.label(text='Clear Temp Files', icon='TRASH')
+    from .operators.final_cleanup import draw_final_cleanup
+    draw_final_cleanup(layout, context)
 
 
 CLASSES = (AIRETOPO_PG_save_cleanup, AIRETOPO_OT_scan_save_cleanup, AIRETOPO_OT_scan_current_save_folder, AIRETOPO_OT_clean_backup_saves, AIRETOPO_OT_find_missing_project_files, AIRETOPO_OT_make_texture_paths_relative)

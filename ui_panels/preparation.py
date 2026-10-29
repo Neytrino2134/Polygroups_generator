@@ -455,6 +455,11 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 selected_hint.label(text=t(context, "batch_selected_hint_line1"), icon="OUTLINER_OB_MESH")
                 selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
 
+            group = draw_collapsible_box(content, settings, "show_batch_start_cleanup", "Clear Temp Files", "TRASH")
+            if group is not None:
+                from ..operators.final_cleanup import draw_final_cleanup
+                draw_final_cleanup(group, context)
+
 
         content = draw_topic(layout, context, "batch_5", t(context, "phase2_title"), "RECOVER_LAST")
         if content is not None:
@@ -705,19 +710,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 config.operator("object.polygroups_phase2_auto_render", text="Start Render", icon="RENDER_STILL")
                 if settings.phase2_auto_render_running:
                     auto.operator("object.polygroups_stop_lod_job", text="Stop Render", icon="CANCEL")
-            manager = draw_collapsible_box(content, settings, "phase2_show_files",
-                t(context, "phase2_file_manager"), "FILE_BLEND")
+            manager = draw_collapsible_box(content, settings, "phase2_show_files", "Clear Temp Files", "TRASH")
             if manager is not None:
-                buttons = manager.column(align=True)
-                buttons.enabled = not settings.phase2_pipeline_running and not settings.phase2_is_running and not settings.phase2_final_is_running and not settings.phase2_auto_render_running and not settings.batch_is_running
-                buttons.operator("object.polygroups_phase2_files_scan", icon="VIEWZOOM")
-                buttons.prop(settings, "phase2_files_cleanup")
-                move = buttons.row()
-                move.enabled = settings.phase2_files_found > 0
-                move.operator("object.polygroups_phase2_files_move", icon="FILE_FOLDER")
-                manager.label(text=settings.phase2_files_status, icon="INFO")
-                if settings.phase2_files_cleanup_status:
-                    manager.label(text=settings.phase2_files_cleanup_status)
+                from ..operators.final_cleanup import draw_final_cleanup
+                draw_final_cleanup(manager, context)
 
         content = draw_topic(layout, context, "batch_4", t(context, "import_group_progress"), "INFO")
         if content is not None:
