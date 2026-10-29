@@ -16,6 +16,7 @@ assert not p.phase2_keep_retopo01 and not p.phase2_high_remesh_before_resculptin
 p.phase2_keep_retopo01=True
 p.phase2_mid_remesh=False
 real=bpy
+p.batch_stage_4_topology_guard=False
 p.phase2_mesh_auto_repair=True;p.phase2_repack_after_repair=True
 p.phase2_delete_high_after_bake=True;p.phase2_delete_lower_retopo=True;p.phase2_blend_export_generated=False
 ctx.scene.polygroups_resculpting_settings.multires_levels=1
@@ -57,12 +58,16 @@ def run(resculpt,rebake,failure='',stop_when=''):
   bake.bake_task_is_running=False
   bake.bake_task_stage='FAILED' if target==low01 and failure=='bake' else 'DONE'
   return {'FINISHED'}
+ def fake_guard(context,obj,*args,**kwargs):
+  assert obj==low01 and not low01.modifiers.get(MULTIRES_MODIFIER_NAME) and kwargs['unwrap']
+  events.append(('guard',obj.name));return SimpleNamespace(timed_out=False,knots=0),0,3
  proxy=SimpleNamespace(data=real.data,ops=SimpleNamespace(
   mesh=SimpleNamespace(polygroups_repair_mesh_folds=repair),
-  object=SimpleNamespace(polygroups_uvpackmaster_pack=pack,
+  object=SimpleNamespace(polygroups_uvpackmaster_pack=pack,mode_set=lambda **kw:None,
    polygroups_setup_resculpting=sculpt,polygroups_checked_prepare_and_bake=start_bake)))
  q=phase2.Phase2Queue(ctx,[('mock-source.blend',col.name)],True,True,lambda *args:None);q.begin()
- with patch.object(phase2,'restore_collection',return_value=col),patch.object(phase2,'bpy',proxy):
+ with patch.object(phase2,'restore_collection',return_value=col),patch.object(phase2,'bpy',proxy),\
+   patch.object(phase2,'apply_topology_guard',fake_guard):
   for _ in range(25):
    if q.stage==stop_when:q.stop_requested=True
    q.step(ctx)
@@ -95,6 +100,13 @@ for resculpt,rebake in ((True,True),(True,False),(False,True)):
  events=run(resculpt,rebake)
  if resculpt and rebake:
   assert [kind for kind,name in events]==['repair','pack','bake','sculpt','repair','pack','bake']
+# Topology Guard fixes Retopo_01 UV before its Multires and bake, then the UV is repacked.
+p.batch_stage_4_topology_guard=True
+events=run(True,True)
+assert [kind for kind,name in events]==['repair','pack','bake','guard','pack','sculpt','repair','pack','bake'],events
+events=run(False,True)
+assert [kind for kind,name in events]==['repair','pack','bake','guard','pack','repair','pack','bake'],events
+p.batch_stage_4_topology_guard=False
 run(True,True,'bake');run(False,True,'pack')
 run(True,True,stop_when='RETOPO01_RESCULPT')
 # An in-flight secondary bake keeps Multires disabled until it actually ends.

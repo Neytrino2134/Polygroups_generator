@@ -26,6 +26,7 @@ settings.phase2_delete_high_after_bake = True
 settings.phase2_blend_export_generated = False
 settings.phase2_mesh_auto_repair = False
 settings.phase2_repair_after_resculpt = False
+settings.batch_stage_4_topology_guard = False
 settings.phase2_repack_after_repair = False
 context.scene.polygroups_resculpting_settings.multires_levels = 0
 settings.phase2_show_restore = True

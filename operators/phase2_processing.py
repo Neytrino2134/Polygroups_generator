@@ -12,6 +12,7 @@ from bpy.app.handlers import persistent
 from ..core import phase1_logs, skip_marks
 from .batch_import import import_path_sort_key
 from .import_queue import generated_collection_files, redraw
+from .topology_guard import apply_topology_guard
 
 GENERATED = re.compile(r'^Generated(?:\.\d+)*$', re.I)
 NUMBERED = re.compile(r'^Generated\.\d+(?:\.\d+)*$', re.I)
@@ -333,6 +334,38 @@ class Phase2Queue:
             if 'FINISHED' not in result:
                 raise RuntimeError(f'UVPackmaster PACK failed for {low.name}; processing skipped')
 
+    def guard_retopo01(self, context):
+        """Topology Guard + UV repack for Retopo_01 before its High remesh, Multires and bake."""
+        guard = self.scene.polygroups_seam_finalization_settings
+        low = self.retopo01
+        if not self.settings.batch_stage_4_topology_guard:
+            return
+        if low.data.uv_layers.active is None or any(
+                mod.type == 'MULTIRES' and mod.total_levels for mod in low.modifiers):
+            return
+        if context.object and context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        for obj in context.selected_objects:
+            obj.select_set(False)
+        low.hide_viewport = low.hide_render = low.hide_select = False
+        low.hide_set(False)
+        low.select_set(True)
+        self.view_layer.objects.active = low
+        if low.data.users > 1:
+            low.data = low.data.copy()
+        bpy.ops.object.mode_set(mode='EDIT')
+        try:
+            result, _created, generated = apply_topology_guard(
+                context, low, guard, selected_only=False, unwrap=True)
+        finally:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        if result.timed_out:
+            self.report({'WARNING'}, f'{low.name}: Topology Guard stopped at its time limit')
+        if generated or result.knots:
+            self.report({'INFO'}, f'{low.name}: Topology Guard collapsed {result.knots} knot(s), '
+                                  f'added {generated} seam edge(s)')
+            self.repack_mesh(context, low)
+
     def start_bake(self, context, target=None):
         from .rename_objects import ensure_collection_visible_in_view_layer
         high, low = bake_pair(self.collection)
@@ -571,6 +604,9 @@ class Phase2Queue:
                 if bake.bake_task_stage != 'DONE':
                     raise RuntimeError(f'Auto Bake failed: {bake.bake_task_message}')
                 self.restore_bake_settings()
+                if self.retopo01 is not None and (self.settings.phase2_resculpt_retopo01
+                                                 or self.settings.phase2_autobake_retopo01):
+                    self.guard_retopo01(context)
                 if self.settings.phase2_resculpt_retopo01:
                     if self.settings.phase2_high_remesh_before_resculpting:
                         from .phase2_mid_remesh import Phase2MidRemesh
