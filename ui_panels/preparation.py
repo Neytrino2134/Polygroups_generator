@@ -548,6 +548,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                         if settings.phase2_high_remesh_before_resculpting:
                             controls.label(text='Clear seams + pins | Smart Seams 22 degrees | HIGH', icon='INFO')
                         controls.prop(settings, 'phase2_repair_after_resculpt')
+                    if settings.phase2_resculpt_retopo01:
+                        controls.prop(settings, 'phase2_topology_guard_retopo01')
                     controls.prop(settings, 'phase2_autobake_retopo01')
                     delete_high = controls.row()
                     # Export Blend > Include Highpoly_Generated.N keeps the source for the Generated.N blend.

@@ -335,10 +335,10 @@ class Phase2Queue:
                 raise RuntimeError(f'UVPackmaster PACK failed for {low.name}; processing skipped')
 
     def guard_retopo01(self, context):
-        """Topology Guard + UV repack for Retopo_01 before its High remesh, Multires and bake."""
+        """Topology Guard + UV repack for Retopo_01 before its High remesh, Multires and bake (optional)."""
         guard = self.scene.polygroups_seam_finalization_settings
         low = self.retopo01
-        if not self.settings.batch_stage_4_topology_guard:
+        if not self.settings.phase2_topology_guard_retopo01:
             return
         if low.data.uv_layers.active is None or any(
                 mod.type == 'MULTIRES' and mod.total_levels for mod in low.modifiers):

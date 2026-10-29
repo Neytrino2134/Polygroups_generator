@@ -1,4 +1,4 @@
-"""Secondary Retopo_01 stages: ordering, forced repack and deferred cleanup."""
+﻿"""Secondary Retopo_01 stages: ordering, forced repack and deferred cleanup."""
 import sys,tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +16,7 @@ assert not p.phase2_keep_retopo01 and not p.phase2_high_remesh_before_resculptin
 p.phase2_keep_retopo01=True
 p.phase2_mid_remesh=False
 real=bpy
-p.batch_stage_4_topology_guard=False
+p.phase2_topology_guard_retopo01=False
 p.phase2_mesh_auto_repair=True;p.phase2_repack_after_repair=True
 p.phase2_delete_high_after_bake=True;p.phase2_delete_lower_retopo=True;p.phase2_blend_export_generated=False
 ctx.scene.polygroups_resculpting_settings.multires_levels=1
@@ -101,12 +101,12 @@ for resculpt,rebake in ((True,True),(True,False),(False,True)):
  if resculpt and rebake:
   assert [kind for kind,name in events]==['repair','pack','bake','sculpt','repair','pack','bake']
 # Topology Guard fixes Retopo_01 UV before its Multires and bake, then the UV is repacked.
-p.batch_stage_4_topology_guard=True
+p.phase2_topology_guard_retopo01=True
 events=run(True,True)
 assert [kind for kind,name in events]==['repair','pack','bake','guard','pack','sculpt','repair','pack','bake'],events
 events=run(False,True)
 assert [kind for kind,name in events]==['repair','pack','bake','guard','pack','repair','pack','bake'],events
-p.batch_stage_4_topology_guard=False
+p.phase2_topology_guard_retopo01=False
 run(True,True,'bake');run(False,True,'pack')
 run(True,True,stop_when='RETOPO01_RESCULPT')
 # An in-flight secondary bake keeps Multires disabled until it actually ends.

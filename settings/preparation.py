@@ -38,6 +38,16 @@ def _paired(source, other, factory, **options):
     return factory(update=update, **options)
 
 
+def _skip_rebake_get(self):
+    return not self.phase2_run_bake_resculpt
+
+
+def _skip_rebake_set(self, value):
+    # Skipping the Resculpting_01 rebake also drops the expensive Topology Guard pass.
+    self.phase2_run_bake_resculpt = not value
+    self.phase2_run_topology_guard = not value
+
+
 def _mode_update(self, context):
     if not self.phase2_pipeline_running:
         _assign(self, "phase2_auto_bake", self.phase2_run_mode != "IMPORT")
@@ -315,6 +325,15 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Auto Bake Resculpting_01", default=False,
         description="Bake the new Resculpting_01 mesh after resculpting and optional repair",
     )
+    phase2_run_topology_guard: _paired("phase2_run_topology_guard", "phase2_topology_guard_retopo01", bpy.props.BoolProperty,
+        name="Topology Guard Retopo_01", default=True,
+        description="Fix non-disk UV charts of Retopo_01 and repack its UV before High Remesh, Multires and the bake",
+    )
+    phase2_run_skip_rebake: bpy.props.BoolProperty(
+        name="Skip Rebake", get=_skip_rebake_get, set=_skip_rebake_set,
+        description=("Do not rebake Retopo_01 / Resculpting_01 and skip its Topology Guard: High Remesh, "
+                     "Setup Resculpting and the UV repack still run, the mesh keeps no textures"),
+    )
     phase2_run_prepare: bpy.props.BoolProperty(name="Batch Finalization: Prepare LODs / Rename", default=True,
         update=_run_prepare_update)
     phase2_run_engine: bpy.props.EnumProperty(name="Pipeline", update=_run_engine_update, items=(('FAB', 'Unreal (FAB)', ''), ('UNITY', 'Unity', '')), default='FAB')
@@ -474,6 +493,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_autobake_retopo01: _paired("phase2_autobake_retopo01", "phase2_run_bake_resculpt", bpy.props.BoolProperty,
         name="Autobake Retopo_01", default=False,
         description="Repair and rebake Retopo_01 before highpoly cleanup; enabled UV repacking always runs")
+    phase2_topology_guard_retopo01: _paired("phase2_topology_guard_retopo01", "phase2_run_topology_guard", bpy.props.BoolProperty,
+        name="Topology Guard Retopo_01", default=True,
+        description="Fix non-disk UV charts of Retopo_01 and repack its UV before High Remesh, Multires and the bake",
+    )
     phase2_mesh_auto_repair: bpy.props.BoolProperty(
         name="Auto Repair Mesh", default=True,
         description="Repair folded pockets (including backtracking triangles), coincident vertices and zero-area UV seam faces on the highest Retopo stage",

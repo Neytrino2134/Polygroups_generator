@@ -9,7 +9,7 @@ PRESETS = (
 )
 # Highpoly options that only the ZBrush pipeline needs.
 HIGHPOLY_OPTIONS = ('phase2_run_resculpt_retopo01', 'phase2_run_high_remesh', 'phase2_run_repair_resculpt',
-                    'phase2_run_bake_resculpt')
+                    'phase2_run_bake_resculpt', 'phase2_run_topology_guard')
 SHARED_ON = ('phase2_run_restore', 'phase2_run_prepare', 'phase2_run_export', 'phase2_run_blend',
              'phase2_run_render', 'phase2_run_mid', 'phase2_export_fbx', 'phase2_blend_export_generated',
              'phase2_blend_export_highpoly', 'phase2_blend_export_retopo01', 'phase2_autosave',
@@ -109,6 +109,12 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         layout = self.layout
         layout.use_property_split = False
         draw_start_presets(layout, p)
+        if active_start_preset(p) == 'UNREAL_ZBRUSH':
+            options = layout.column(align=True)
+            options.prop(p, 'phase2_run_skip_rebake', icon='FF')
+            guard = options.row()
+            guard.enabled = not p.phase2_run_skip_rebake
+            guard.prop(p, 'phase2_run_topology_guard')
         steps = layout.box()
         steps.label(text='Phase 2 will run', icon='INFO')
         for _key, label, _prop, _function in selected_stages(p):
