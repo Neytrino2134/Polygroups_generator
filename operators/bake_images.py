@@ -8,6 +8,7 @@ from .bake_constants import (
     BAKE_ALPHA_NODE,
     BAKE_BASE_COLOR_IMAGE_PROP,
     BAKE_BASE_COLOR_NODE,
+    BAKE_MATERIAL_ROUGHNESS,
     BAKE_NORMAL_IMAGE_PROP,
     BAKE_NORMAL_NODE,
     BAKE_PACK_TYPE_MERGED,
@@ -33,6 +34,13 @@ def _principled_bsdf(material):
             return node
 
     return material.node_tree.nodes.get("Principled BSDF")
+
+
+def _apply_bake_roughness(bsdf):
+    """Prepared bake materials use a fixed Roughness; a textured (linked) Roughness is left alone."""
+    roughness = bsdf.inputs.get("Roughness") if bsdf is not None else None
+    if roughness is not None and not roughness.is_linked:
+        roughness.default_value = BAKE_MATERIAL_ROUGHNESS
 
 
 def _set_polygroup_material_texture_only(material):
@@ -181,6 +189,7 @@ def _ensure_bake_material(target, settings, base_image=None, normal_image=None, 
     bsdf = _principled_bsdf(material)
     if bsdf is None:
         bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    _apply_bake_roughness(bsdf)
 
     if base_image is None:
         base_image = _ensure_target_image(

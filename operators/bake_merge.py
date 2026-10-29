@@ -19,6 +19,7 @@ from .bake_constants import (
     BAKE_TEMP_IMAGE_PREFIX,
 )
 from .bake_images import (
+    _apply_bake_roughness,
     _find_object_source_bake_image,
     _image_is_readable,
     _image_resolution,
@@ -243,6 +244,7 @@ def _ensure_merged_material(pack_name, base_image, normal_image, alpha_image, ob
     bsdf = _principled_bsdf(material)
     if bsdf is None:
         bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    _apply_bake_roughness(bsdf)
 
     base_node = nodes.get(BAKE_BASE_COLOR_NODE)
     if base_node is None:
