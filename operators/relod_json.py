@@ -26,7 +26,7 @@ def validate_json_update(context):
     gallery_document(context)
 
 
-def update_json(context, plans):
+def update_json(context, plans, untouched=()):
     from ..core.lod_naming import lod_base
     from ..services import fab_media as media
     from .mesh_export import _evaluated_mesh_counts, _write_export_mesh_info, _safe_path_token
@@ -38,6 +38,7 @@ def update_json(context, plans):
     meshes.update(obj for obj in context.scene.objects if obj.type == 'MESH'
                   and obj.name.upper().endswith(('_MID', '_HIGH'))
                   and lod_base(obj.name, 'UNREAL').casefold() in families)
+    meshes.update(obj for obj in untouched if obj.name in context.scene.objects)
     document, gallery_path = gallery_document(context)
     generated = {obj: (lod_identity(plan.source, 'Unreal')[0], 'LOD', obj[LOD_INDEX])
                  for plan in plans for obj in plan.generated}

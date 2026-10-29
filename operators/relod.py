@@ -25,6 +25,29 @@ def scene_sources(context):
     return sorted(families.values(), key=lambda obj: obj.name.casefold())
 
 
+def selected_sources(context, sources):
+    """Scene sources owning the selection: a selected MID/HIGH or any of its LODs."""
+    families = {lod_base(src.name, 'UNREAL').casefold(): src for src in sources}
+    by_name = {src.name: src for src in sources}
+    picked = []
+    for obj in context.selected_objects:
+        if obj.type != 'MESH':
+            continue
+        owner = by_name.get(obj.get(LOD_SOURCE)) if isinstance(obj.get(LOD_SOURCE), str) else None
+        owner = owner or families.get(lod_base(obj.name, 'UNREAL').casefold())
+        if owner is None:
+            raise ValueError('ReLOD: selected mesh has no _MID / _HIGH source: ' + obj.name)
+        picked.append(owner)
+    return sorted(set(picked), key=lambda obj: obj.name.casefold())
+
+
+def family_meshes(context, source):
+    """Source plus its current LOD meshes, for JSON rows of untouched assets."""
+    pattern = re.compile(re.escape(lod_base(source.name, 'UNREAL')) + r'[._]LOD[._]?\d+', re.I)
+    return [obj for obj in context.scene.objects if obj.type == 'MESH'
+            and (obj == source or pattern.fullmatch(obj.name))]
+
+
 class ReLODPlan:
     def __init__(self, context, source, delete_current, reexport=False):
         self.source = source
@@ -140,6 +163,15 @@ class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     _is_relod = True
 
+    selected_only: bpy.props.BoolProperty(name='Selected Only', default=False, options={'SKIP_SAVE'},
+        description='Recreate LODs only for assets of the selected MID/HIGH or LOD meshes')
+
+    @classmethod
+    def description(cls, context, properties):
+        if properties.selected_only:
+            return 'Recreate LODs only for the selected assets: select their MID/HIGH or any of their LODs'
+        return cls.bl_description
+
     @classmethod
     def poll(cls, context):
         from .rebake_queue import editable
@@ -152,8 +184,18 @@ class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
             if self.update_json:
                 from .relod_json import validate_json_update
                 validate_json_update(context)
+            sources = scene_sources(context)
+            self.untouched = []
+            if self.selected_only:
+                chosen = selected_sources(context, sources)
+                if not chosen:
+                    raise ValueError('ReLOD: select a _MID / _HIGH mesh or one of its LODs')
+                # The JSON is rewritten whole; keep rows of assets not rebuilt.
+                self.untouched = [obj for source in sources if source not in chosen
+                                  for obj in family_meshes(context, source)]
+                sources = chosen
             self.plans = [ReLODPlan(context, source, p.phase2_relod_delete_current_lods, p.phase2_relod_reexport)
-                          for source in scene_sources(context)]
+                          for source in sources]
             if not self.plans:
                 raise ValueError('ReLOD: no _MID / _HIGH meshes in this scene')
         except ValueError as error:
@@ -185,7 +227,7 @@ class OBJECT_OT_polygroups_relod(SequentialJob, bpy.types.Operator):
             from .relod_json import update_json
             self.update_job(context, 1, 'Export / Update JSON')
             try:
-                update_json(context, self.plans)
+                update_json(context, self.plans, self.untouched)
             except (ValueError, RuntimeError, OSError) as error:
                 raise RuntimeError(f'ReLOD succeeded; JSON update failed: {error}') from error
 

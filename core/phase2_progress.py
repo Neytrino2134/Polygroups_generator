@@ -89,7 +89,10 @@ def draw_start(layout, context, p):
             controls.prop(p, 'phase2_relod_seam_mode')
         controls.label(text='All _MID / _HIGH meshes in scene (MID preferred)', icon='INFO')
         controls.label(text='Uses Smart LOD count and triangle budgets')
-        controls.operator('object.polygroups_relod', text='Re-create LODs', icon='FILE_REFRESH')
+        buttons = controls.row(align=True)
+        buttons.operator('object.polygroups_relod', text='Re-create LODs', icon='FILE_REFRESH')
+        buttons.operator('object.polygroups_relod', text='Re-create Selected',
+                         icon='RESTRICT_SELECT_OFF').selected_only = True
     status = draw_collapsible_box(layout, p, 'phase2_show_status', 'Status and Statistics', 'INFO')
     if status is not None:
         draw_start_status(status, context, p)

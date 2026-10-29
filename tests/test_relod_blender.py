@@ -46,6 +46,19 @@ p.phase2_relod_delete_current_lods=True
 assert bpy.ops.object.polygroups_relod()=={'FINISHED'}
 assert all(bpy.data.objects[name].as_pointer()!=ptr for name,ptr in old.items())
 assert not any('.001' in o.name for o in c.scene.objects)
+# Selected Only: a selected LOD resolves to its source; other packs stay untouched.
+box={o.name:o.as_pointer() for o in c.scene.objects if o.name.startswith('SM_Box_01_01_LOD')}
+others={o.name:o.as_pointer() for o in c.scene.objects if o.name.startswith('Other_LOD')}
+bpy.ops.object.select_all(action='DESELECT');bpy.data.objects['Other_LOD0'].select_set(True)
+assert bpy.ops.object.polygroups_relod(selected_only=True)=={'FINISHED'}
+assert p.phase2_relod_total==1
+assert all(bpy.data.objects[name].as_pointer()==ptr for name,ptr in box.items())
+assert all(bpy.data.objects[name].as_pointer()!=ptr for name,ptr in others.items())
+bpy.ops.object.select_all(action='DESELECT')
+try:bpy.ops.object.polygroups_relod(selected_only=True)
+except RuntimeError:pass
+assert 'select a _MID' in p.phase2_relod_status
+other.select_set(True);c.view_layer.objects.active=other
 # Interrupted per-asset generation restores old meshes and labels, settings and hidden source.
 plan=ReLODPlan(c,mid,True);old={o.name:o.as_pointer() for o in plan.old}
 it=plan.steps(c,lambda *_:None);assert next(it)==1;it.close()
