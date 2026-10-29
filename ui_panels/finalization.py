@@ -4,6 +4,7 @@ import bpy
 from ..core import meshopt_simplify
 from ..localization import t
 from ..operators.asset_translation import draw_asset_name
+from ..operators.index_step import draw_index
 from .common import (
     draw_collapsible_box,
     draw_fab_variant_visibility,
@@ -252,7 +253,7 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             navigation.operator("object.polygroups_unity_collection_step", text="Next Collections", icon="TRIA_RIGHT").delta = 1
             unity_content.label(text="Unity Prepare")
             draw_asset_name(unity_content, context, settings, "unity_asset_name", text=t(context, "fab_asset_name"))
-            unity_content.prop(settings, "unity_name_index")
+            draw_index(unity_content, settings, "unity_name_index")
             row = unity_content.row(align=True)
             row.operator("object.polygroups_unity_index_step", text="", icon="TRIA_LEFT").delta = -1
             row.prop(settings, "unity_asset_index", text="Version Index")
@@ -449,13 +450,13 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         prepare_box = column.box().column(align=True)
         if settings.smart_lods_prepare_mode == 'UNITY':
             draw_asset_name(prepare_box, context, settings, "unity_asset_name", text="Asset Name")
-            prepare_box.prop(settings, "unity_name_index")
-            prepare_box.prop(settings, "unity_asset_index", text="Version Index")
+            draw_index(prepare_box, settings, "unity_name_index")
+            draw_index(prepare_box, settings, "unity_asset_index", "Version Index")
             prepare_box.operator("object.polygroups_unity_load_from_file", text="Load from File", icon="FILE_BLEND")
         else:
             draw_asset_name(prepare_box, context, settings, "unreal_lod_asset_name", text="Asset Name")
-            prepare_box.prop(settings, "unreal_lod_name_index", text="Name Index")
-            prepare_box.prop(settings, "unreal_lod_version_index", text="Version Index")
+            draw_index(prepare_box, settings, "unreal_lod_name_index", "Name Index")
+            draw_index(prepare_box, settings, "unreal_lod_version_index", "Version Index")
         prepare_box.operator("object.polygroups_smart_lods_prepare", icon="MOD_DECIM")
         box = column.box().column(align=True)
         box.prop(settings, "smart_lods_render_mode")
@@ -562,8 +563,8 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         unreal = draw_collapsible_box(layout, settings, "show_unreal_lod_rename", "Unreal LOD Rename", "MOD_DECIM")
         if unreal is not None:
             draw_asset_name(unreal, context, settings, "unreal_lod_asset_name")
-            unreal.prop(settings, "unreal_lod_name_index")
-            unreal.prop(settings, "unreal_lod_version_index")
+            draw_index(unreal, settings, "unreal_lod_name_index")
+            draw_index(unreal, settings, "unreal_lod_version_index")
             unreal.prop(settings, "unreal_lod_keep_high")
             high_suffix = unreal.row()
             high_suffix.enabled = settings.unreal_lod_keep_high

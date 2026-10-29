@@ -69,8 +69,10 @@ def draw_start(layout, context, p):
     if rename is not None:
         controls = rename.column(align=True)
         controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
-        for name in ('phase2_rename_asset', 'phase2_rename_name_index', 'phase2_rename_version_index'):
-            controls.prop(p, name)
+        from ..operators.index_step import draw_index
+        controls.prop(p, 'phase2_rename_asset')
+        for name in ('phase2_rename_name_index', 'phase2_rename_version_index'):
+            draw_index(controls, p, name, owner='PREPARATION')
         rename.label(text='All prepared asset collections in this scene', icon='INFO')
         controls.prop(p, 'phase2_rename_fbx')
         controls.prop(p, 'phase2_rename_blend')
@@ -129,8 +131,9 @@ def draw_process_settings(options, context, p):
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_prepare
     sub.prop(s, 'unity_asset_name' if unity else 'unreal_lod_asset_name', text='Asset Name')
-    sub.prop(s, 'unity_name_index' if unity else 'unreal_lod_name_index', text='Name Index')
-    sub.prop(s, 'unity_asset_index' if unity else 'unreal_lod_version_index', text='Version Index')
+    from ..operators.index_step import draw_index
+    draw_index(sub, s, 'unity_name_index' if unity else 'unreal_lod_name_index', 'Name Index')
+    draw_index(sub, s, 'unity_asset_index' if unity else 'unreal_lod_version_index', 'Version Index')
     sub.operator('object.polygroups_unity_load_from_file', text='Load from File', icon='FILE_BLEND').target = 'PHASE2'
     options.prop(p, 'phase2_run_export')
     sub = options.row(align=True)

@@ -102,11 +102,13 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
 
     def draw(self, context):
         from .asset_translation import draw_asset_name
+        from .index_step import draw_index
         from .phase2_pipeline_stages import selected_stages
         p = context.scene.polygroups_model_preparation_settings
         s = context.scene.polygroups_mesh_finalization_settings
         layout = self.layout
         layout.use_property_split = False
+        draw_start_presets(layout, p)
         steps = layout.box()
         steps.label(text='Phase 2 will run', icon='INFO')
         for _key, label, _prop, _function in selected_stages(p):
@@ -119,8 +121,8 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
             names = layout.column(align=True)
             draw_asset_name(names, context, s, asset, text='Asset Name')
             names.operator('object.polygroups_unity_load_from_file', text='Load from File', icon='FILE_BLEND').target = 'PHASE2'
-            names.prop(s, name_index, text='Name Index')
-            names.prop(s, version_index, text='Version Index')
+            draw_index(names, s, name_index, 'Name Index')
+            draw_index(names, s, version_index, 'Version Index')
         if p.phase2_run_export:
             row = layout.row(align=True)
             row.label(text='Export Format')

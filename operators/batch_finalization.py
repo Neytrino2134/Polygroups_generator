@@ -5,6 +5,7 @@ from ..core.asset_names import asset_name
 from ..core.lod_naming import lod_name
 from .sequential_jobs import SequentialJob
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods, LOD_SOURCE, _world_x_bounds
+from .unity_export_workflow import _index_button
 
 
 class LODWorker:
@@ -72,6 +73,14 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
     asset: bpy.props.StringProperty(name='Asset Name', default='Asset')
     name_index: bpy.props.StringProperty(name='Name Index', default='00')
     version_index: bpy.props.StringProperty(name='Version Index', default='01')
+    name_index_decrease: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Decrease Name Index', update=_index_button('name_index', -1))
+    name_index_increase: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Increase Name Index', update=_index_button('name_index', 1))
+    version_index_decrease: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Decrease Version Index', update=_index_button('version_index', -1))
+    version_index_increase: bpy.props.BoolProperty(options={'HIDDEN', 'SKIP_SAVE'},
+        description='Increase Version Index', update=_index_button('version_index', 1))
 
     @classmethod
     def poll(cls, context):
@@ -93,7 +102,10 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
         from .asset_translation import draw_asset_name
         draw_asset_name(self.layout, context, self, 'asset', dialog=getattr(self, '_translation_dialog', ''))
         for key in ('name_index', 'version_index'):
-            self.layout.prop(self, key)
+            row = self.layout.row(align=True)
+            row.prop(self, key + '_decrease', text='', icon='TRIA_LEFT', toggle=True)
+            row.prop(self, key)
+            row.prop(self, key + '_increase', text='', icon='TRIA_RIGHT', toggle=True)
         self.layout.label(text='Preview: ' + asset_name(self.asset))
 
     def cancel(self, context):

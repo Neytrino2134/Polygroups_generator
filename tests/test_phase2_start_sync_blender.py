@@ -94,4 +94,20 @@ assert dialog.asset_fields(p)[0] == 'unreal_lod_asset_name'
 p.phase2_run_engine = 'UNITY'
 assert dialog.asset_fields(p)[0] == 'unity_asset_name'
 assert hasattr(bpy.types, 'OBJECT_OT_polygroups_phase2_confirm_start')
+
+# Index arrows step by 01 and keep the zero padding.
+fs = ctx.scene.polygroups_mesh_finalization_settings
+fs.unreal_lod_version_index = '09'
+step = bpy.ops.object.polygroups_step_naming_index
+assert step(owner='FINALIZATION', field='unreal_lod_version_index', delta=1) == {'FINISHED'}
+assert fs.unreal_lod_version_index == '10'
+step(owner='FINALIZATION', field='unreal_lod_version_index', delta=-1)
+step(owner='FINALIZATION', field='unreal_lod_version_index', delta=-1)
+assert fs.unreal_lod_version_index == '08'
+fs.unreal_lod_name_index = '99'
+step(owner='FINALIZATION', field='unreal_lod_name_index', delta=1)
+assert fs.unreal_lod_name_index == '99'
+p.phase2_rename_version_index = '01'
+step(owner='PREPARATION', field='phase2_rename_version_index', delta=1)
+assert p.phase2_rename_version_index == '02'
 print('phase2 start sync ok')
