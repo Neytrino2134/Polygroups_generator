@@ -40,6 +40,8 @@ def restore(run, context):
                 started = time.monotonic()
             queue.step(context)
             boundary = queue.index != previous
+            p.phase2_pipeline_collection_index = min(queue.index, len(entries))
+            p.phase2_pipeline_collection_total = len(entries)
             now = time.monotonic()
             if started is not None:
                 p.phase2_pipeline_collection_seconds = now - started

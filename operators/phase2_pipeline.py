@@ -58,6 +58,8 @@ class Phase2Pipeline:
         p.phase2_pipeline_detail_progress = 0
         p.phase2_pipeline_collection_times = '[]'
         p.phase2_pipeline_collection_seconds = 0
+        p.phase2_pipeline_collection_index = p.phase2_pipeline_collection_total = 0
+        p.phase2_pipeline_stage_eta = -1
         p.phase2_pipeline_status = 'Starting Phase 2'
         from ..core.phase2_progress import PipelineOverlay
         self.overlay = PipelineOverlay(context)
@@ -80,6 +82,19 @@ class Phase2Pipeline:
             row = self.rows[self.index]
             row.update(progress=100*self.fraction, seconds=round(now-self.stage_started, 1))
         p.phase2_pipeline_queue = json.dumps(self.rows)
+        from ..core import run_progress
+        key, label = (self.plan[self.index][:2] if self.index < len(self.plan) else ('', ''))
+        p.phase2_pipeline_stage_label = label
+        p.phase2_pipeline_prev_seconds = p.phase2_pipeline_avg_seconds = 0
+        if key == 'RESTORE' and p.phase2_pipeline_collection_total:
+            previous, average, remaining = run_progress.collection_estimate(
+                run_progress.parse_timings(p.phase2_pipeline_collection_times),
+                p.phase2_pipeline_collection_index, p.phase2_pipeline_collection_total,
+                p.phase2_pipeline_collection_seconds)
+            p.phase2_pipeline_prev_seconds, p.phase2_pipeline_avg_seconds = previous, average
+            p.phase2_pipeline_stage_eta = remaining
+        else:
+            p.phase2_pipeline_stage_eta = run_progress.fraction_estimate(self.fraction, now - self.stage_started)
         from .import_queue import redraw
         redraw(context)
 
@@ -210,6 +225,8 @@ class Phase2Pipeline:
                 self.index = len(self.plan)
                 self.fraction = 0
             self.publish(context)
+            from ..core.run_progress import end_combined
+            end_combined()
             if self.overlay:
                 self.overlay.close()
             if self.timer is not None:

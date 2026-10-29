@@ -187,3 +187,12 @@ Multires без редактирования исходного меша. По �
   asset name (translate and Load from File buttons), indices, pipeline and GLB/FBX before starting.
 - Defaults: Autosave Completed Collections, FBX export, Export Generated.N with highpoly and Retopo_01,
   ZBrush Return to Blender and Cleanup, Skip Renders with Scene.
+
+
+## Progress text (Phase 1, Phase 2, Phase 1 + 2)
+
+`core/run_progress.py` builds the status text used by both the 3D overlay (`PipelineOverlay`, one shared draw
+handler) and the N panel. Phase 2 shows `Phase 2 | Stages n/N`, the pass, times, the previous collection time,
+the average of finished collections and a pass ETA (Restore: average x collections left; other passes: from
+their own progress). Phase 1 uses `Phase 1 | Stages done/total`. With stage 13 on, a `Phase 1 + 2` header shows
+overall progress (each phase weighs 50 %), total time and the time spent in each phase.

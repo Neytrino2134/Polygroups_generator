@@ -751,7 +751,13 @@ def draw_import_progress(layout, context, settings):
         return
     from ..operators.import_queue import redo_collections, selected_redo_collection
 
+    from ..core.phase2_progress import draw_combined_progress
+    from ..core.run_progress import phase1_lines
+    draw_combined_progress(layout, settings)
     box = layout.box()
+    if settings.batch_is_running or settings.batch_total_count:
+        header = phase1_lines(settings)
+        box.label(text=header[0], icon="INFO")
     box.progress(factor=settings.batch_import_progress / 100, type="BAR",
                  text=f'{t(context, "import_total_progress")}: {settings.batch_import_progress:.1f}%')
     box.progress(factor=settings.batch_current_progress / 100, type="BAR",

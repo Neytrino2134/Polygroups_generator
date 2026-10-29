@@ -9,9 +9,23 @@ def duration(seconds):
     return f'{seconds//3600:02d}:{seconds//60%60:02d}:{seconds%60:02d}'
 
 
-def draw_pipeline_progress(layout, context, p):
+def draw_combined_progress(layout, p):
+    """Phase 1 + 2 summary shown above the running phase; same text as the 3D overlay."""
+    from .run_progress import COMBINED, combined_lines, combined_numbers
+    if not COMBINED['active']:
+        return
     box = layout.box()
-    box.label(text='Phase 2 | ' + (p.phase2_pipeline_state or 'Ready'), icon='INFO')
+    overall, _phase1, _phase2 = combined_numbers(p)
+    box.progress(factor=overall/100, type='BAR', text=combined_lines(p)[0])
+    box.label(text=combined_lines(p)[1])
+
+
+def draw_pipeline_progress(layout, context, p):
+    from .run_progress import phase2_lines, eta_text
+    draw_combined_progress(layout, p)
+    box = layout.box()
+    header = phase2_lines(p)[0]
+    box.label(text=header + ' | ' + (p.phase2_pipeline_state or 'Ready'), icon='INFO')
     box.progress(factor=p.phase2_pipeline_progress/100, type='BAR',
                  text=f'Overall {p.phase2_pipeline_progress:.1f}% | Stages {p.phase2_pipeline_done}/{p.phase2_pipeline_total}')
     box.progress(factor=p.phase2_pipeline_stage_progress/100, type='BAR', text=f'Current pass {p.phase2_pipeline_stage_progress:.1f}%')
@@ -20,6 +34,11 @@ def draw_pipeline_progress(layout, context, p):
     box.label(text=p.phase2_pipeline_status)
     box.label(text=f'Total {duration(p.phase2_pipeline_elapsed)} | Current pass {duration(p.phase2_pipeline_stage_seconds)}')
     box.label(text=f'Restore collection {duration(p.phase2_pipeline_collection_seconds)}')
+    if p.phase2_pipeline_prev_seconds > 0:
+        box.label(text=f'Previous collection {duration(p.phase2_pipeline_prev_seconds)}'
+                       f' | Average {duration(p.phase2_pipeline_avg_seconds)}')
+    if p.phase2_pipeline_running:
+        box.label(text=f'Pass ETA {eta_text(p.phase2_pipeline_stage_eta)}', icon='TIME')
     try:
         rows = json.loads(p.phase2_pipeline_queue)
         timings = json.loads(p.phase2_pipeline_collection_times)
@@ -242,21 +261,30 @@ def draw_start_status(layout, context, p):
 
 
 class PipelineOverlay:
-    def __init__(self, context):
-        self.scene = context.scene
-        self.handle = None
-        if not bpy.app.background:
-            self.handle = bpy.types.SpaceView3D.draw_handler_add(self.draw, (), 'WINDOW', 'POST_PIXEL')
+    """3D status text for Phase 1, Phase 2 and the combined run.
 
-    def draw(self):
-        if bpy.context.scene != self.scene:
+    Phase 1 and Phase 2 each open one; they share a single draw handler so the text is drawn once."""
+    _handle = None
+    _scene = None
+    _users = 0
+
+    def __init__(self, context):
+        self.closed = False
+        cls = PipelineOverlay
+        cls._users += 1
+        if cls._handle is None:
+            cls._scene = context.scene
+            if not bpy.app.background:
+                cls._handle = bpy.types.SpaceView3D.draw_handler_add(cls.draw, (), 'WINDOW', 'POST_PIXEL')
+
+    @staticmethod
+    def draw():
+        scene = PipelineOverlay._scene
+        if scene is None or bpy.context.scene != scene:
             return
-        p = self.scene.polygroups_model_preparation_settings
+        from .run_progress import active_lines
+        lines = active_lines(scene.polygroups_model_preparation_settings)
         scale = bpy.context.preferences.system.ui_scale
-        lines = [f'Phase 2: {p.phase2_pipeline_progress:.1f}% | Stages {p.phase2_pipeline_done}/{p.phase2_pipeline_total}',
-                 p.phase2_pipeline_status,
-                 f'{p.phase2_pipeline_detail}: {p.phase2_pipeline_detail_progress:.1f}%',
-                 f'Total {duration(p.phase2_pipeline_elapsed)} | Pass {duration(p.phase2_pipeline_stage_seconds)} | Collection {duration(p.phase2_pipeline_collection_seconds)}']
         blf.size(0, 14*scale)
         for i, line in enumerate(reversed(lines)):
             x, y = 18*scale, (20+i*21)*scale
@@ -268,6 +296,12 @@ class PipelineOverlay:
             blf.draw(0, line)
 
     def close(self):
-        if self.handle is not None:
-            bpy.types.SpaceView3D.draw_handler_remove(self.handle, 'WINDOW')
-            self.handle = None
+        if self.closed:
+            return
+        self.closed = True
+        cls = PipelineOverlay
+        cls._users = max(0, cls._users - 1)
+        if cls._users == 0 and cls._handle is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(cls._handle, 'WINDOW')
+            cls._handle = None
+            cls._scene = None

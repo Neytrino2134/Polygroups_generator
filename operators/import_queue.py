@@ -187,6 +187,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         self.finished = False
         self.timer = None
         self.cursor = None
+        self.progress_overlay = None
         self.saved_remesh_settings = None
         self.saved_unwrap_checker = None
         self.saved_bake_settings = None
@@ -204,6 +205,14 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.report({"WARNING"}, f"Cannot create batch reports: {error}")
         self.timing = ImportTiming()
         settings = self.settings
+        from ..core import run_progress
+        from ..core.phase2_progress import PipelineOverlay
+        # Phase 1 followed by Phase 2 reports as one run; the same conditions as schedule_phase2 below.
+        if settings.batch_phase2_enabled and self.batch_stages and not self.redo_mode:
+            run_progress.begin_combined()
+        else:
+            run_progress.end_combined()
+        self.progress_overlay = PipelineOverlay(bpy.context)
         # Import owns its UV workflow. Disable the seam/remesh automatic unwrap
         # and Smart UV Unwrap packing switches on the first import run.
         seam_settings = self.scene.polygroups_seam_finalization_settings
@@ -977,6 +986,9 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         if self.cursor is not None:
             self.cursor.close()
             self.cursor = None
+        if self.progress_overlay is not None:
+            self.progress_overlay.close()
+            self.progress_overlay = None
         if not rollback and not self.redo_mode and status != 'DONE':
             self.preserve_partial_file()
         if rollback:
@@ -1049,7 +1061,12 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                     self.report({'WARNING'}, f'Could not save recovered batch: {error}')
         if (status == "DONE" and not rollback and not self.redo_mode and self.batch_stages
                 and self.settings.batch_phase2_enabled and self.settings.batch_failed_count == 0):
+            from ..core import run_progress
+            run_progress.finish_phase1(self.settings.batch_elapsed_seconds)
             schedule_phase2(self.scene, self.view_layer, self.report)
+        else:
+            from ..core import run_progress
+            run_progress.end_combined()
         redraw(context)
 
 
@@ -1083,12 +1100,16 @@ def schedule_phase2(scene, view_layer, report):
                 if time.monotonic() < deadline:
                     return 0.5
                 report({"WARNING"}, t(bpy.context, "batch_phase2_unavailable"))
+                from ..core.run_progress import end_combined
+                end_combined()
                 return None
             report({"INFO"}, t(bpy.context, "batch_phase2_started"))
             try:
                 bpy.ops.object.polygroups_start_phase2("INVOKE_DEFAULT")
             except RuntimeError as error:
                 report({"WARNING"}, f"Phase 2 not started: {error}")
+                from ..core.run_progress import end_combined
+                end_combined()
         return None
 
     bpy.app.timers.register(start, first_interval=0.5)
