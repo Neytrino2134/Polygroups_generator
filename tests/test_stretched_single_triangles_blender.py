@@ -72,7 +72,7 @@ for protection in ('disabled','modest_uv','uv_pin','edge_pin','hidden','unselect
 
 context=bpy.context
 settings=context.scene.polygroups_model_preparation_settings
-assert settings.fold_repair_stretched_triangles and settings.fold_repair_stretch_ratio==50
+assert settings.fold_repair_stretched_triangles and settings.fold_repair_stretch_ratio==10
 
 
 def object_fixture(name):

@@ -317,6 +317,82 @@ def _merge_backtracking_tip(bm, patch, interior, boundary, layers):
     bm.normal_update()
 
 
+def _degree_two_tip_target(bm, tip, tolerance, pin=None, folded_only=True):
+    """Weld target for an interior vertex used by only two faces, or None.
+
+    When both faces fold over the tip, their corner angles there are equal,
+    so the angle sum is twice one corner instead of 360 degrees. An
+    angle-based unwrap must still open a full turn around the vertex, and the
+    pair inflates into a huge UV island. The shape-specific ear rules decide
+    by sign tests that sit at zero when the tip lies on the closing edge; this
+    fallback tests the fold directly and validates the welded result on a copy.
+    With folded_only off (a proven UV outlier), the fold test and seam guard
+    are skipped.
+    """
+    faces = list(tip.link_faces)
+    if (len(faces) != 2 or len(tip.link_edges) != 2
+            or any(not e.is_manifold for e in tip.link_edges)
+            or any(not _visible(f) for f in faces) or all(len(f.verts) == 3 for f in faces)
+            or faces[0].material_index != faces[1].material_index
+            or (pin is not None and any(e[pin] for e in tip.link_edges))
+            or any(l[layer].pin_uv for f in faces for l in f.loops
+                   for layer in bm.loops.layers.uv.values())):
+        return None
+    # Folded faces overlap, so their normals oppose. A tip inside the closing
+    # triangle tiles it validly (a reflex quad), and both normals agree.
+    if folded_only and (any(e.seam for e in tip.link_edges)
+                        or faces[0].normal.dot(faces[1].normal) > -.5):
+        return None
+    bm.verts.index_update()
+    for target in sorted((e.other_vert(tip) for e in tip.link_edges),
+                         key=lambda v: ((v.co - tip.co).length_squared, v.index)):
+        work = bm.copy()
+        try:
+            work.verts.ensure_lookup_table()
+            kept = work.verts[target.index]
+            # Welding renumbers the copy; keep vertex references, not indices.
+            survivors = [frozenset(work.verts[v.index] for v in f.verts if v != tip)
+                         for f in faces if len(f.verts) > 3]
+            bmesh.ops.weld_verts(work, targetmap={work.verts[tip.index]: kept})
+            work.normal_update()
+            fan = kept.link_faces
+            if (any(not e.is_manifold for e in kept.link_edges)
+                    or any(len({v for v in f.verts}) != len(f.verts) for f in fan)):
+                continue
+            shrunk = [f for f in fan if frozenset(f.verts) in survivors]
+            if len(shrunk) != len(survivors):
+                continue
+            # The shrunk faces must agree with the surface they now close.
+            if all(f.calc_area() > tolerance ** 2 and all(
+                    o.normal.dot(f.normal) > .2 for e in f.edges for o in e.link_faces if o != f)
+                   for f in shrunk):
+                return target
+        finally:
+            work.free()
+    return None
+
+
+def _weld_degree_two_tip(bm, tip, target, layers):
+    keys = [frozenset(v for v in f.verts if v != tip) for f in tip.link_faces if len(f.verts) > 3]
+    flags = {}
+    for edge in tip.link_edges:
+        other = edge.other_vert(tip)
+        if other != target:
+            flags[other] = (edge.seam, not edge.smooth)
+    bmesh.ops.weld_verts(bm, targetmap={tip: target})
+    for edge in target.link_edges:
+        other = edge.other_vert(target)
+        if other in flags:
+            seam, sharp = flags[other]
+            edge.seam, edge.smooth = edge.seam or seam, edge.smooth and not sharp
+    survivors = [f for f in target.link_faces if frozenset(f.verts) in keys]
+    # Keep any UV cut the removed tip carried as an explicit seam.
+    _mark_uv_cuts({e for f in survivors for e in f.edges if e.is_manifold}, layers)
+    for face in survivors:
+        face.select_set(True)
+    bm.normal_update()
+
+
 def _uv_face_area(face, layer):
     points = [loop[layer].uv for loop in face.loops]
     return abs(sum(a.x*b.y-a.y*b.x for a,b in zip(points, points[1:]+points[:1]))) * .5
@@ -347,6 +423,32 @@ def _triangle_uv_anisotropy(face, layer):
             if det else math.inf)
 
 
+def _uv_outlier(face, layers, tolerance, ratio):
+    """A single-face triangle UV island far larger or more stretched than its neighbors."""
+    if len(face.verts) != 3 or not layers or not _visible(face):
+        return False
+    area = (face.verts[1].co-face.verts[0].co).cross(face.verts[2].co-face.verts[0].co).length * .5
+    if area <= tolerance*tolerance:
+        return False
+    neighbors = {other for edge in face.edges for other in edge.link_faces if other != face}
+    if not neighbors or any(not edge.is_manifold for edge in face.edges):
+        return False
+    for layer in layers:
+        if not all(_uv_cut(edge, face, layer) for edge in face.edges):
+            continue
+        density = _uv_face_area(face, layer) / area
+        references = [_uv_face_area(other, layer)/other.calc_area() for other in neighbors
+                      if other.calc_area() > tolerance*tolerance and _uv_face_area(other, layer) > 1e-16]
+        if len(references) != len(neighbors) or not math.isfinite(density) or density <= 0:
+            continue
+        # Compare linear texel scale, not just triangle shape. A nearly
+        # equilateral but enormously enlarged UV island is also an outlier.
+        if (math.sqrt(density/median(references)) >= ratio
+                or _triangle_uv_anisotropy(face, layer) >= ratio):
+            return True
+    return False
+
+
 def _stretched_single_triangle_plan(face, layers, tolerance, ratio, pin=None):
     """A single-face UV island with an extreme local scale/stretch outlier.
 
@@ -367,25 +469,7 @@ def _stretched_single_triangle_plan(face, layers, tolerance, ratio, pin=None):
             or any(loop[layer].pin_uv for other in touched for loop in other.loops for layer in layers)
             or (pin is not None and any(edge[pin] for vertex in vertices for edge in vertex.link_edges))):
         return None
-    area = (face.verts[1].co-face.verts[0].co).cross(face.verts[2].co-face.verts[0].co).length * .5
-    if area <= tolerance*tolerance:
-        return None
-    severe = False
-    for layer in layers:
-        if not all(_uv_cut(edge, face, layer) for edge in face.edges):
-            continue
-        density = _uv_face_area(face, layer) / area
-        references = [_uv_face_area(other, layer)/other.calc_area() for other in neighbors
-                      if other.calc_area() > tolerance*tolerance and _uv_face_area(other, layer) > 1e-16]
-        if len(references) != 3 or not math.isfinite(density) or density <= 0:
-            continue
-        # Compare linear texel scale, not just triangle shape. A nearly
-        # equilateral but enormously enlarged UV island is also an outlier.
-        if (math.sqrt(density/median(references)) >= ratio
-                or _triangle_uv_anisotropy(face, layer) >= ratio):
-            severe = True
-            break
-    if not severe:
+    if not _uv_outlier(face, layers, tolerance, ratio):
         return None
     center = sum((vertex.co for vertex in sorted(vertices,key=lambda v:v.index)), Vector((0,0,0))) / 3
     target = min(vertices, key=lambda vertex:vertex.index)
@@ -473,7 +557,7 @@ def _merge_triangle_center(bm, plan, layers):
 def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
                        selected_only=False, relative_tolerance=1e-7,
                        fix_zero_area=False, fix_stretched_triangles=False,
-                       stretched_triangle_ratio=50.0, fix_dangling=False):
+                       stretched_triangle_ratio=10.0, fix_dangling=False):
     """Mutate a working BMesh. Caller commits only after successful validation.
 
     Return original face indices for inspection, plus repair/remaining counts.
@@ -600,6 +684,19 @@ def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
             if any(not e.is_manifold for e in boundary):
                 raise ValueError('Repair would open the patch boundary')
             folds += 1
+        # Degree-two tips the ear rules rejected: their sign tests sit at
+        # zero when the tip lies on the closing edge, which is exactly where
+        # unwrapping explodes the pair.
+        for tip in [v for v in bm.verts if len(v.link_faces) == 2]:
+            if not tip.is_valid or (selected_only and not any(f in seeded for f in tip.link_faces)):
+                continue
+            faces = list(tip.link_faces)
+            target = _degree_two_tip_target(bm, tip, tolerance, pin)
+            if target is None:
+                continue
+            affected.update(ids[f] for f in faces if f in ids)
+            _weld_degree_two_tip(bm, tip, target, layers)
+            folds += 1
     # Preserve the established exact-weld and small-pocket transforms before
     # the general region cleaner; they can also expose a previously blocked neck.
     if fix_dangling:
@@ -612,6 +709,16 @@ def repair_local_folds(bm, fix_folds=True, fix_degenerate=True,
                 continue
             planned = _stretched_single_triangle_plan(face, layers, tolerance, stretched_triangle_ratio, pin)
             if planned is None:
+                # A center merge cannot remove a triangle folded onto its
+                # neighbor around a degree-two tip; weld the tip away instead.
+                tips = ([v for v in face.verts if len(v.link_faces) == 2]
+                        if _uv_outlier(face, layers, tolerance, stretched_triangle_ratio) else [])
+                target = (_degree_two_tip_target(bm, tips[0], tolerance, pin, folded_only=False)
+                          if len(tips) == 1 else None)
+                if target is not None:
+                    affected.add(ids[face])
+                    _weld_degree_two_tip(bm, tips[0], target, layers)
+                    stretched += 1
                 continue
             affected.add(ids[face])
             _merge_triangle_center(bm, planned, layers)

@@ -30,7 +30,7 @@ class MESH_OT_polygroups_repair_mesh_folds(bpy.types.Operator):
         description='Use selected defect faces as seeds; include the minimal surrounding patch')
     fix_stretched_triangles: bpy.props.BoolProperty(name='Merge Stretched Single Triangles', default=True,
         description='Find single-face triangle UV islands with extreme scale/stretch and weld their vertices to the face center when the surrounding surface stays valid')
-    stretched_triangle_ratio: bpy.props.FloatProperty(name='Triangle Stretch Ratio', default=50, min=2, max=10000,
+    stretched_triangle_ratio: bpy.props.FloatProperty(name='Triangle Stretch Ratio', default=10, min=2, max=10000,
         description='Minimum UV anisotropy or linear texel-scale ratio to neighboring faces for a singleton triangle')
     thin_quality: bpy.props.FloatProperty(name='Thin Triangle Quality', default=.01, min=.000001, max=.5,
         description='Scale-independent quality: 1 is equilateral, 0 is degenerate')

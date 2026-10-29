@@ -517,7 +517,8 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Repair defects seeded by selected faces, including their local boundary")
     fold_repair_stretched_triangles: bpy.props.BoolProperty(name="Merge Stretched Single Triangles", default=True,
         description="Merge severe singleton triangle UV outliers to the face center when topology stays valid; also used by Batch Import and Phase 2 Auto Repair")
-    fold_repair_stretch_ratio: bpy.props.FloatProperty(name="Triangle Stretch Ratio", default=50, min=2, max=10000,
+    # Folded-tip islands measured about 38x after one unwrap; healthy faces stay below 2x.
+    fold_repair_stretch_ratio: bpy.props.FloatProperty(name="Triangle Stretch Ratio", default=10, min=2, max=10000,
         description="Minimum UV anisotropy or linear texel-scale ratio to neighboring faces for a singleton triangle")
     small_loose_part_metric: bpy.props.EnumProperty(
         name="Size Metric",
