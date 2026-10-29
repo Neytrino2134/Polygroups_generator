@@ -112,7 +112,8 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_blend_export_') as direc
     mesh.materials.append(material)
     generated.objects.link(bpy.data.objects.new('Resculpting_01.001', mesh))
     bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Pack.blend'))
-    assert not p.phase2_blend_export_generated
+    assert p.phase2_blend_export_generated
+    p.phase2_blend_export_generated = False
     assert bpy.ops.object.polygroups_phase2_export_blend() == {'FINISHED'}
     assert not (out / 'Generated.001.blend').exists()
     p.phase2_blend_export_generated = True

@@ -14,7 +14,7 @@ bpy.ops.mesh.primitive_cube_add(location=(0,0,1));source=context.object
 source.name='SM_Scene_Stones_01_01_MID';source.scale=(.2,.3,.5)
 for old in list(source.users_collection):old.objects.unlink(source)
 col.objects.link(source);context.view_layer.update()
-p.phase2_auto_transparent=True;p.phase2_auto_scene_prefix='Scene'
+p.phase2_auto_skip_scene=False;p.phase2_auto_transparent=True;p.phase2_auto_scene_prefix='Scene'
 p.phase2_auto_freestyle=False;p.phase2_auto_textures=False
 s.max_samples=1;s.skip_existing=False
 real_config=auto.configure_auto_render;real_render=rq._render_current_job

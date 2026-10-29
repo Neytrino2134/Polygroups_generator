@@ -16,9 +16,8 @@ from polygroups_generator.operators import phase2_processing as phase
 
 context = bpy.context
 p = context.scene.polygroups_model_preparation_settings
-assert all(getattr(p, name) for name in (
-    'phase2_run_resculpt_retopo01', 'phase2_run_high_remesh',
-    'phase2_run_repair_resculpt', 'phase2_run_bake_resculpt'))
+p.phase2_run_resculpt_retopo01 = p.phase2_run_high_remesh = True
+p.phase2_run_repair_resculpt = p.phase2_run_bake_resculpt = True
 p.phase2_show_start = True
 panel = capture(context, 1)
 assert not panel.errors, panel.errors

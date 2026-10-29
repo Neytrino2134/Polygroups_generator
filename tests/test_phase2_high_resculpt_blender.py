@@ -23,6 +23,7 @@ settings.phase2_autobake_retopo01 = True
 settings.phase2_keep_retopo01 = False
 settings.phase2_delete_lower_retopo = True
 settings.phase2_delete_high_after_bake = True
+settings.phase2_blend_export_generated = False
 settings.phase2_mesh_auto_repair = False
 settings.phase2_repair_after_resculpt = False
 settings.phase2_repack_after_repair = False

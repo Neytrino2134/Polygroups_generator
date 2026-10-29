@@ -35,14 +35,16 @@ def drive(run, limit=150):
 with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_pipeline_') as directory:
     root = Path(directory)
     bpy.ops.wm.save_as_mainfile(filepath=str(root / 'Working.blend'))
-    assert not p.phase2_run_zbrush_at_end
+    assert not p.phase2_run_zbrush_at_end and not p.phase2_run_zbrush
+    p.phase2_run_zbrush = True
     assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-3:] == ['ZBRUSH', 'CLEANUP', 'RENDER']
     p.phase2_run_zbrush_at_end = True
     assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-3:] == ['RENDER', 'ZBRUSH', 'CLEANUP']
     p.phase2_run_render = False
     assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-2:] == ['ZBRUSH', 'CLEANUP']
     p.phase2_run_zbrush = False
-    assert [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan][-1] == 'CLEANUP'
+    # Return to Blender and Cleanup is part of Export ZBrush: it never runs without it.
+    assert 'CLEANUP' not in [entry[0] for entry in pipeline.Phase2Pipeline(ctx, reports).plan]
     p.phase2_run_render = p.phase2_run_zbrush = True
     p.phase2_run_zbrush_at_end = False
     events = []

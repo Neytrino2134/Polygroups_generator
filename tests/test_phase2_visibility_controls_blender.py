@@ -9,6 +9,7 @@ addon_utils.enable(ROOT.name,default_set=False)
 from polygroups_generator.operators import phase2_processing as phase
 ctx=bpy.context;p=ctx.scene.polygroups_model_preparation_settings
 p.phase2_mesh_auto_repair=False
+p.phase2_autosave=False
 p.phase2_mid_remesh=False
 def cube(name,col):
  bpy.ops.mesh.primitive_cube_add();obj=ctx.object;obj.name=name

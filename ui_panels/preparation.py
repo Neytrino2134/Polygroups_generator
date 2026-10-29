@@ -400,13 +400,21 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 operator_row = group.row(align=True)
                 operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
                 operator_row.operator_context = "EXEC_DEFAULT"
-                start_import = operator_row.operator(
-                    "object.polygroups_batch_import",
-                    text=t(context, "import_folder_phase2" if settings.batch_phase2_enabled
-                           else "import_folder"),
-                    icon="PLAY",
-                )
-                start_import.use_file_selection = False
+                if settings.batch_phase2_enabled:
+                    # Phase 2 follows the import, so confirm its asset name, indices and format first.
+                    operator_row.operator_context = "INVOKE_DEFAULT"
+                    operator_row.operator(
+                        "object.polygroups_phase2_confirm_start",
+                        text=t(context, "import_folder_phase2"),
+                        icon="PLAY",
+                    ).then = "IMPORT"
+                else:
+                    start_import = operator_row.operator(
+                        "object.polygroups_batch_import",
+                        text=t(context, "import_folder"),
+                        icon="PLAY",
+                    )
+                    start_import.use_file_selection = False
                 group.separator(type="LINE")
                 heading = group.row(align=True)
                 heading.alignment = "CENTER"
@@ -427,14 +435,22 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     not settings.batch_is_running
                     and active_highpoly_collection(context) is not None
                 )
-                selected_row.operator_context = "EXEC_DEFAULT"
-                do_selected = selected_row.operator(
-                    "object.polygroups_batch_import",
-                    text=t(context, "batch_do_selected"),
-                    icon="PLAY",
-                )
-                do_selected.use_file_selection = False
-                do_selected.do_selected = True
+                if settings.batch_phase2_enabled:
+                    selected_row.operator_context = "INVOKE_DEFAULT"
+                    selected_row.operator(
+                        "object.polygroups_phase2_confirm_start",
+                        text=t(context, "batch_do_selected"),
+                        icon="PLAY",
+                    ).then = "IMPORT_SELECTED"
+                else:
+                    selected_row.operator_context = "EXEC_DEFAULT"
+                    do_selected = selected_row.operator(
+                        "object.polygroups_batch_import",
+                        text=t(context, "batch_do_selected"),
+                        icon="PLAY",
+                    )
+                    do_selected.use_file_selection = False
+                    do_selected.do_selected = True
                 selected_hint = group.column(align=True)
                 selected_hint.label(text=t(context, "batch_selected_hint_line1"), icon="OUTLINER_OB_MESH")
                 selected_hint.label(text=t(context, "batch_selected_hint_line2"), icon="BLANK1")
@@ -474,8 +490,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls.separator(type="LINE")
                 controls.prop(settings, "phase2_clear_generated", text=t(context, "phase2_clear"))
                 if settings.phase2_clear_generated:
+                    # Blender labels only have a red alert state; the yellow-orange warning triangle
+                    # icon carries the warning color instead of tinting the text red.
                     warning = controls.column(align=True)
-                    warning.alert = True
                     warning.label(text=t(context, "phase2_clear_hint1"), icon="ERROR")
                     warning.label(text=t(context, "phase2_clear_hint2"), icon="BLANK1")
                 controls.prop(settings, 'phase2_skip_retopo_backups')
@@ -594,6 +611,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     highpoly = controls.row()
                     highpoly.enabled = settings.phase2_blend_export_generated
                     highpoly.prop(settings, 'phase2_blend_export_highpoly')
+                    retopo = controls.row()
+                    retopo.enabled = settings.phase2_blend_export_generated and settings.phase2_blend_export_highpoly
+                    retopo.prop(settings, 'phase2_blend_export_retopo01')
                     controls.label(text='One clean blend per *_Collection in !Blend', icon='INFO')
                     row = controls.row(align=True)
                     row.operator('object.polygroups_phase2_export_blend', text='Export Blend Files', icon='EXPORT')

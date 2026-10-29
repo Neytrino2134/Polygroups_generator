@@ -242,6 +242,7 @@ from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_w
 from .phase2_blend_export import OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder
 from .phase2_pipeline import OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control
 from .phase2_reset import OBJECT_OT_polygroups_phase2_reset_state
+from .phase2_start_dialog import CLASSES as PHASE2_START_DIALOG_CLASSES
 from .relod import OBJECT_OT_polygroups_relod
 from .rebake_queue import CLASSES as REBAKE_QUEUE_CLASSES
 from .zbrush_cleanup import OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj
@@ -253,6 +254,7 @@ from .phase2_zbrush_export import (
 CLASSES = (
     OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control,
     OBJECT_OT_polygroups_phase2_reset_state,
+    *PHASE2_START_DIALOG_CLASSES,
     *REBAKE_QUEUE_CLASSES,
     OBJECT_OT_polygroups_relod,
     OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj,

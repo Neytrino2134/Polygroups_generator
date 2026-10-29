@@ -11,11 +11,11 @@ DISPATCHING = False
 
 class Phase2Pipeline:
     def __init__(self, context, report):
-        from .phase2_pipeline_stages import STAGES
+        from .phase2_pipeline_stages import selected_stages
         self.scene, self.view_layer = context.scene, context.view_layer
         self.settings = self.scene.polygroups_model_preparation_settings
         self.report = report
-        self.plan = [entry for entry in STAGES if getattr(self.settings, entry[2])]
+        self.plan = selected_stages(self.settings)
         if self.settings.phase2_run_zbrush and self.settings.phase2_run_zbrush_at_end:
             # Cleanup deletes ZBrush sources, so keep it after the deferred job.
             tail = [entry for key in ('ZBRUSH', 'CLEANUP') for entry in self.plan if entry[0] == key]

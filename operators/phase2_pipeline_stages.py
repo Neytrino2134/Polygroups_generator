@@ -205,6 +205,12 @@ def render(run, context):
         p.phase2_auto_render_running = False
 
 
+def selected_stages(settings):
+    """Enabled passes in run order; Return to Blender and Cleanup belongs to Export ZBrush."""
+    return [entry for entry in STAGES if getattr(settings, entry[2])
+            and (entry[0] != 'CLEANUP' or settings.phase2_run_zbrush)]
+
+
 STAGES = (
     ('RESTORE', 'Restore and Processing', 'phase2_run_restore', restore),
     ('PREPARE', 'Prepare LODs / Rename', 'phase2_run_prepare', prepare),

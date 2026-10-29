@@ -49,7 +49,8 @@ def draw_start(layout, context, p):
                            or p.phase2_relod_running or context.scene.polygroups_mesh_finalization_settings.smart_lods_is_running)
     start = layout.column(align=True)
     start.enabled = controls_enabled
-    start.operator('object.polygroups_start_phase2', text='Start Phase 2 Process', icon='PLAY')
+    start.operator_context = 'INVOKE_DEFAULT'
+    start.operator('object.polygroups_phase2_confirm_start', text='Start Phase 2 Process', icon='PLAY').then = 'PHASE2'
     recovery = layout.row()
     recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
     from ..ui_panels.common import draw_collapsible_box
@@ -99,16 +100,18 @@ def draw_start(layout, context, p):
 
 
 def draw_process_settings(options, context, p):
+    """Shared by Start Phase 2 and Import Processing stage 13; every control edits the live Phase 2 settings."""
+    from ..operators.phase2_start_dialog import draw_start_presets
+    draw_start_presets(options, p)
+    options.separator(type='LINE')
     options.prop(p, 'phase2_run_restore')
     sub = options.column(align=True)
     sub.enabled = p.phase2_run_restore
     sub.label(text='Restore Mode')
     modes = sub.row(align=True)
     for value, label in (('IMPORT', 'Import Only'), ('REBAKE', 'Import + Rebake')):
-        mode = modes.operator('wm.context_set_enum', text=label,
-                              depress=(p.phase2_run_mode == 'IMPORT') == (value == 'IMPORT'))
-        mode.data_path = 'scene.polygroups_model_preparation_settings.phase2_run_mode'
-        mode.value = value
+        modes.operator('object.polygroups_phase2_processing_preset', text=label,
+                       depress=(p.phase2_run_mode == 'IMPORT') == (value == 'IMPORT')).preset = value
     sub.prop(p, 'phase2_run_mid')
     resculpt = sub.column(align=True)
     resculpt.enabled = p.phase2_run_mode != 'IMPORT'
@@ -141,12 +144,19 @@ def draw_process_settings(options, context, p):
     highpoly = sub.row()
     highpoly.enabled = p.phase2_blend_export_generated
     highpoly.prop(p, 'phase2_blend_export_highpoly')
-    options.prop(p, 'phase2_run_zbrush')
+    retopo = sub.row()
+    retopo.enabled = highpoly.enabled and p.phase2_blend_export_highpoly
+    retopo.prop(p, 'phase2_blend_export_retopo01')
     from ..localization import t
+    # ZBrush works on Resculpting_01; without Retopo_01 resculpting the whole group stays inactive.
+    zbrush_available = p.phase2_run_resculpt_retopo01 or p.phase2_run_zbrush
+    zbrush_toggle = options.row()
+    zbrush_toggle.enabled = zbrush_available
+    zbrush_toggle.prop(p, 'phase2_run_zbrush')
     zbrush = options.column(align=True)
-    zbrush.enabled = p.phase2_run_zbrush
+    zbrush.enabled = zbrush_available and p.phase2_run_zbrush
     zbrush.prop(p, 'phase2_run_zbrush_at_end', text=t(context, 'phase2_zbrush_at_end'))
-    options.prop(p, 'phase2_run_cleanup')
+    zbrush.prop(p, 'phase2_run_cleanup')
     options.separator(type='LINE')
     options.prop(p, 'phase2_run_render')
     sub = options.column(align=True)

@@ -9,7 +9,8 @@ bpy.context.preferences.use_preferences_save=False
 addon_utils.enable(ROOT.name,default_set=False)
 from polygroups_generator.operators import phase2_processing as phase
 ctx=bpy.context;p=ctx.scene.polygroups_model_preparation_settings
-assert not p.phase2_autosave and p.phase2_autosave_every==1
+assert p.phase2_autosave and p.phase2_autosave_every==1
+p.phase2_autosave=False
 for obj in list(bpy.data.objects):bpy.data.objects.remove(obj,do_unlink=True)
 for col in list(bpy.data.collections):bpy.data.collections.remove(col)
 def collection(index):
@@ -22,7 +23,7 @@ def collection(index):
 real=bpy
 with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_phase2_autosave_') as folder:
  path=Path(folder)/'Working.blend';bpy.ops.wm.save_as_mainfile(filepath=str(path))
- p.phase2_autosave=True;p.phase2_autosave_every=2;p.phase2_delete_high_after_bake=True
+ p.phase2_autosave=True;p.phase2_autosave_every=2;p.phase2_delete_high_after_bake=True;p.phase2_blend_export_generated=False
  errors=[False,True,False,False,True,False,False]
  q=phase.Phase2Queue(ctx,[('source',f'Generated.{i:03d}') for i in range(1,8)],True,False,lambda *args:None)
  q.begin();saves=[];current=[]

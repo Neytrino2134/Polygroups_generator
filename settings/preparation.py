@@ -22,6 +22,78 @@ def _auto_skip_scene_update(self, context):
         self.phase2_auto_transparent = self.phase2_run_transparent = True
 
 
+# Start Phase 2 (phase2_run_*) and Restore / Batch Finalization / Render share one state:
+# every pair below is kept equal in both directions. A running pipeline overrides the
+# manual values temporarily, so mirroring is paused then.
+def _assign(settings, name, value):
+    if getattr(settings, name) != value:
+        setattr(settings, name, value)
+
+
+def _paired(source, other, factory, **options):
+    """Create the ``source`` property of a pair; a change copies its value into ``other``."""
+    def update(self, context):
+        if not self.phase2_pipeline_running:
+            _assign(self, other, getattr(self, source))
+    return factory(update=update, **options)
+
+
+def _mode_update(self, context):
+    if not self.phase2_pipeline_running:
+        _assign(self, "phase2_auto_bake", self.phase2_run_mode != "IMPORT")
+
+
+def _auto_bake_update(self, context):
+    if self.phase2_pipeline_running:
+        return
+    if not self.phase2_auto_bake:
+        _assign(self, "phase2_run_mode", "IMPORT")
+    elif self.phase2_run_mode == "IMPORT":
+        _assign(self, "phase2_run_mode", "REBAKE")
+
+
+def _run_engine_update(self, context):
+    if self.phase2_pipeline_running:
+        return
+    engine = self.phase2_run_engine
+    _assign(self, "phase2_export_engine", engine)
+    _assign(self, "phase2_final_rename_engine", engine)
+    _assign(self, "phase2_final_lod_engine", "UNITY" if engine == "UNITY" else "UNREAL")
+
+
+def _export_engine_follow_update(self, context):
+    if not self.phase2_pipeline_running:
+        _assign(self, "phase2_run_engine", self.phase2_export_engine)
+
+
+def _rename_engine_follow_update(self, context):
+    if not self.phase2_pipeline_running:
+        _assign(self, "phase2_run_engine", self.phase2_final_rename_engine)
+
+
+def _lod_engine_follow_update(self, context):
+    if not self.phase2_pipeline_running:
+        _assign(self, "phase2_run_engine", "UNITY" if self.phase2_final_lod_engine == "UNITY" else "FAB")
+
+
+_PREPARE_SYNC = []
+
+
+def _run_prepare_update(self, context):
+    if not self.phase2_pipeline_running:
+        _PREPARE_SYNC.append(True)
+        try:
+            _assign(self, "phase2_final_lods", self.phase2_run_prepare)
+            _assign(self, "phase2_final_rename", self.phase2_run_prepare)
+        finally:
+            _PREPARE_SYNC.pop()
+
+
+def _prepare_follow_update(self, context):
+    if not self.phase2_pipeline_running and not _PREPARE_SYNC:
+        _assign(self, "phase2_run_prepare", self.phase2_final_lods or self.phase2_final_rename)
+
+
 class POLYGROUPS_PG_rebake_queue_item(bpy.types.PropertyGroup):
     target: bpy.props.PointerProperty(type=bpy.types.Object)
     state: bpy.props.StringProperty(default='PENDING', options={'SKIP_SAVE'})
@@ -221,37 +293,40 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_rebake_export_selected: bpy.props.BoolProperty(name="Export Selected FBX / Blend", default=False,
         description="After manual ReBake and Create LODs, select the current asset meshes and replace their FBX and Blend exports")
     phase2_run_restore: bpy.props.BoolProperty(name="Restore from Separated", default=True)
-    phase2_run_mode: bpy.props.EnumProperty(name="Restore Mode", items=(
+    phase2_run_mode: bpy.props.EnumProperty(name="Restore Mode", update=_mode_update, items=(
         ('IMPORT', 'Import Only', ''), ('REBAKE', 'Import + Rebake', ''),
         ('RESCULPT', 'Import + Rebake + Retopo_01 Resculpting (Legacy)',
          'Kept for saved scenes; use the separate Resculpt Retopo_01 option')), default='RESCULPT')
-    phase2_run_mid: bpy.props.BoolProperty(name="MID Remesh", default=True)
-    phase2_run_resculpt_retopo01: bpy.props.BoolProperty(
-        name="Resculpt Retopo_01", default=True,
+    phase2_run_mid: _paired("phase2_run_mid", "phase2_mid_remesh", bpy.props.BoolProperty, name="MID Remesh", default=True)
+    phase2_run_resculpt_retopo01: _paired("phase2_run_resculpt_retopo01", "phase2_resculpt_retopo01", bpy.props.BoolProperty,
+        name="Resculpt Retopo_01", default=False,
         description="After the primary bake, run the selected Retopo_01 resculpting steps",
     )
-    phase2_run_high_remesh: bpy.props.BoolProperty(
-        name="High Remesh Before Resculpting", default=True,
+    phase2_run_high_remesh: _paired("phase2_run_high_remesh", "phase2_high_remesh_before_resculpting", bpy.props.BoolProperty,
+        name="High Remesh Before Resculpting", default=False,
         description="Remesh Retopo_01 with HIGH and new Smart Seams before Setup Resculpting",
     )
-    phase2_run_repair_resculpt: bpy.props.BoolProperty(
+    phase2_run_repair_resculpt: _paired("phase2_run_repair_resculpt", "phase2_repair_after_resculpt", bpy.props.BoolProperty,
         name="Auto Repair After Resculpting", default=True,
         description="Repair the new Resculpting_01 mesh before its optional bake",
     )
-    phase2_run_bake_resculpt: bpy.props.BoolProperty(
-        name="Auto Bake Resculpting_01", default=True,
+    phase2_run_bake_resculpt: _paired("phase2_run_bake_resculpt", "phase2_autobake_retopo01", bpy.props.BoolProperty,
+        name="Auto Bake Resculpting_01", default=False,
         description="Bake the new Resculpting_01 mesh after resculpting and optional repair",
     )
-    phase2_run_prepare: bpy.props.BoolProperty(name="Batch Finalization: Prepare LODs / Rename", default=True)
-    phase2_run_engine: bpy.props.EnumProperty(name="Pipeline", items=(('FAB', 'Unreal (FAB)', ''), ('UNITY', 'Unity', '')), default='FAB')
+    phase2_run_prepare: bpy.props.BoolProperty(name="Batch Finalization: Prepare LODs / Rename", default=True,
+        update=_run_prepare_update)
+    phase2_run_engine: bpy.props.EnumProperty(name="Pipeline", update=_run_engine_update, items=(('FAB', 'Unreal (FAB)', ''), ('UNITY', 'Unity', '')), default='FAB')
     phase2_run_export: bpy.props.BoolProperty(name="Export Prepared GLB / FBX", default=True)
     phase2_run_blend: bpy.props.BoolProperty(name="Export Blend", default=True)
-    phase2_run_zbrush: bpy.props.BoolProperty(name="Export ZBrush ZTL", default=True)
+    phase2_run_zbrush: bpy.props.BoolProperty(name="Export ZBrush ZTL", default=False)
     phase2_run_zbrush_at_end: bpy.props.BoolProperty(name='Run at End', default=False,
         description='Run ZBrush export after rendering; defer temporary collection cleanup until ZBrush finishes')
-    phase2_run_cleanup: bpy.props.BoolProperty(name="Return to Blender and Cleanup", default=True)
+    phase2_run_cleanup: _paired("phase2_run_cleanup", "phase2_zbrush_cleanup_on_success", bpy.props.BoolProperty,
+        name="Return to Blender and Cleanup", default=True)
     phase2_run_render: bpy.props.BoolProperty(name="Auto Render", default=True)
-    phase2_run_transparent: bpy.props.BoolProperty(name="Render Transparent", default=True)
+    phase2_run_transparent: _paired("phase2_run_transparent", "phase2_auto_transparent", bpy.props.BoolProperty,
+        name="Render Transparent", default=True)
     phase2_pipeline_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_pipeline_paused: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_pipeline_state: bpy.props.StringProperty(default='', options={'SKIP_SAVE'})
@@ -270,17 +345,17 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_show_restore: bpy.props.BoolProperty(name="Restore and Processing", default=True)
     phase2_show_finalization: bpy.props.BoolProperty(name="Batch Finalization", default=True)
     phase2_show_lods_rename: bpy.props.BoolProperty(name="Prepare LODs / Rename", default=True)
-    phase2_final_lods: bpy.props.BoolProperty(name="Prepare LODs", default=True)
-    phase2_final_lod_engine: bpy.props.EnumProperty(name="LOD Pipeline",
+    phase2_final_lods: bpy.props.BoolProperty(name="Prepare LODs", default=True, update=_prepare_follow_update)
+    phase2_final_lod_engine: bpy.props.EnumProperty(name="LOD Pipeline", update=_lod_engine_follow_update,
         items=(("UNREAL", "Unreal", ""), ("UNITY", "Unity", "")), default='UNREAL')
-    phase2_final_rename: bpy.props.BoolProperty(name="Rename", default=True)
-    phase2_final_rename_engine: bpy.props.EnumProperty(name="Rename Pipeline",
+    phase2_final_rename: bpy.props.BoolProperty(name="Rename", default=True, update=_prepare_follow_update)
+    phase2_final_rename_engine: bpy.props.EnumProperty(name="Rename Pipeline", update=_rename_engine_follow_update,
         items=(("FAB", "FAB", "Unreal LOD Rename"), ("UNITY", "Unity", "Unity Prepare")), default='FAB')
     phase2_final_cleanup_generated: bpy.props.BoolProperty(name="Delete Generated.N after Successful Rename", default=False)
     phase2_show_export: bpy.props.BoolProperty(name="Export Prepared Models", default=True)
-    phase2_export_engine: bpy.props.EnumProperty(name="Pipeline", items=(("FAB", "Unreal / FAB", ""), ("UNITY", "Unity", "")), default='FAB')
-    phase2_export_fbx: bpy.props.BoolProperty(name="FBX", default=False)
-    phase2_export_glb: bpy.props.BoolProperty(name="GLB", default=True)
+    phase2_export_engine: bpy.props.EnumProperty(name="Pipeline", update=_export_engine_follow_update, items=(("FAB", "Unreal / FAB", ""), ("UNITY", "Unity", "")), default='FAB')
+    phase2_export_fbx: bpy.props.BoolProperty(name="FBX", default=True)
+    phase2_export_glb: bpy.props.BoolProperty(name="GLB", default=False)
     phase2_export_gltf: bpy.props.BoolProperty(name="GLTF", default=False)
     phase2_export_sort: bpy.props.EnumProperty(name="Sort By", items=(("LODS", "LODs", "Asset / Format"), ("LODS_FORMAT", "LODs / Format", "Format / Assets with shared textures")), default='LODS_FORMAT')
     phase2_export_json: bpy.props.BoolProperty(name="Mesh Info JSON", default=True)
@@ -295,12 +370,17 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_blend_export_generated: bpy.props.BoolProperty(
         name="Export Generated.N Collections",
         description="Also export each Generated.N collection (Retopo / Resculpting meshes) as its own blend with packed textures",
-        default=False)
+        default=True)
     phase2_blend_export_highpoly: bpy.props.BoolProperty(
         name="Include Highpoly_Generated.N",
         description=("Keep Highpoly_Generated.N after a successful bake so each Generated.N blend holds it next to "
                      "Resculpting_01; overrides Delete Highpoly After Successful Bake while Generated.N export is on"),
-        default=False)
+        default=True)
+    phase2_blend_export_retopo01: bpy.props.BoolProperty(
+        name="Include Retopo_01 if No Resculpting",
+        description=("When Resculpting_01 is not made or not found, keep Retopo_01 in the Generated.N blend next to "
+                     "Highpoly_Generated.N; applies while Generated.N export includes the highpoly"),
+        default=True)
     phase2_blend_export_status: bpy.props.StringProperty(default="Not exported")
     phase2_show_export_zbrush: bpy.props.BoolProperty(name="Export ZBrush", default=True)
     phase2_show_zbrush_folder_launch: bpy.props.BoolProperty(name="Folder Export / Launch", default=False)
@@ -319,16 +399,17 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Folder with Generated.N.blend files for the batch export. Empty: the folder of the current blend")
     phase2_zbrush_launch: bpy.props.BoolProperty(
         name="Launch ZBrush", default=True, description="Start ZBrush and build the ZTL files after the export")
-    phase2_zbrush_cleanup_on_success: bpy.props.BoolProperty(
-        name="Return to Blender and Cleanup after ZBrush", default=False,
+    phase2_zbrush_cleanup_on_success: _paired("phase2_zbrush_cleanup_on_success", "phase2_run_cleanup", bpy.props.BoolProperty,
+        name="Return to Blender and Cleanup after ZBrush", default=True,
         description="After Export All succeeds in ZBrush, delete exported Generated.N collections and temporary OBJ files; keep ZTL files")
     phase2_zbrush_status: bpy.props.StringProperty(default="Not exported")
     phase2_final_is_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
     phase2_show_auto_render: bpy.props.BoolProperty(name="Auto Render", default=True)
     phase2_auto_render_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
-    phase2_auto_transparent: bpy.props.BoolProperty(name="Render Transparent PNG (Without Scene)", default=True)
-    phase2_auto_skip_scene: bpy.props.BoolProperty(name="Skip Renders with Scene", default=False,
+    phase2_auto_transparent: _paired("phase2_auto_transparent", "phase2_run_transparent", bpy.props.BoolProperty,
+        name="Render Transparent PNG (Without Scene)", default=True)
+    phase2_auto_skip_scene: bpy.props.BoolProperty(name="Skip Renders with Scene", default=True,
         description="Render only transparent mesh images; skip the scene/background pass",
         update=_auto_skip_scene_update)
     phase2_auto_scene_prefix: bpy.props.StringProperty(name="Prefix Scene", default="Scene",
@@ -365,23 +446,26 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Clear Current Generated.N Collections", default=True,
         description="Remove existing Generated.N collections before restoring the scanned files",
     )
-    phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True)
-    phase2_mid_remesh: bpy.props.BoolProperty(name="MID Remesh Before Repack", default=True,
+    phase2_auto_bake: bpy.props.BoolProperty(name="Auto Bake", default=True, update=_auto_bake_update)
+    phase2_mid_remesh: _paired("phase2_mid_remesh", "phase2_run_mid", bpy.props.BoolProperty, name="MID Remesh Before Repack", default=True,
         description="Clear all seams/pins, generate Smart Seams at 22 degrees, remesh the highest Retopo using MID, unwrap and repack the next stage")
-    phase2_repair_after_resculpt: bpy.props.BoolProperty(name="Auto Repair After Resculpting", default=True)
+    phase2_repair_after_resculpt: _paired("phase2_repair_after_resculpt", "phase2_run_repair_resculpt", bpy.props.BoolProperty,
+        name="Auto Repair After Resculpting", default=True)
     phase2_skip_retopo_backups: bpy.props.BoolProperty(name="Skip Retopo Backup Objects", default=True,
         description="Do not restore Backup_Retopo or Backup_Resculpting objects from saved collections during Phase 2 processing")
-    phase2_autosave: bpy.props.BoolProperty(name="Autosave Completed Collections", default=False,
+    phase2_autosave: bpy.props.BoolProperty(name="Autosave Completed Collections", default=True,
         description="Save the current blend after every N successfully completed collection pipelines")
     phase2_autosave_every: bpy.props.IntProperty(name="Successful Collections per Save", default=1, min=1)
     phase2_autosave_status: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
-    phase2_resculpt_retopo01: bpy.props.BoolProperty(name="Resculpting Retopo_01", default=False,
+    phase2_resculpt_retopo01: _paired("phase2_resculpt_retopo01", "phase2_run_resculpt_retopo01", bpy.props.BoolProperty,
+        name="Resculpting Retopo_01", default=False,
         description="Run Setup Resculpting on Retopo_01 after the highest Retopo finishes baking")
-    phase2_high_remesh_before_resculpting: bpy.props.BoolProperty(
+    phase2_high_remesh_before_resculpting: _paired("phase2_high_remesh_before_resculpting", "phase2_run_high_remesh", bpy.props.BoolProperty,
         name="High Remesh Before Resculpting", default=False,
         description="Clear seams and pins, create Smart Seams at 22 degrees and remesh Retopo_01 with HIGH before Setup Resculpting; use the new Resculpting_01 mesh",
     )
-    phase2_autobake_retopo01: bpy.props.BoolProperty(name="Autobake Retopo_01", default=False,
+    phase2_autobake_retopo01: _paired("phase2_autobake_retopo01", "phase2_run_bake_resculpt", bpy.props.BoolProperty,
+        name="Autobake Retopo_01", default=False,
         description="Repair and rebake Retopo_01 before highpoly cleanup; enabled UV repacking always runs")
     phase2_mesh_auto_repair: bpy.props.BoolProperty(
         name="Auto Repair Mesh", default=True,

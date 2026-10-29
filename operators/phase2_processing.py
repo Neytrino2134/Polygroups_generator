@@ -184,6 +184,16 @@ def keep_highpoly_for_blend(settings):
     return settings.phase2_blend_export_generated and settings.phase2_blend_export_highpoly
 
 
+def keep_retopo01_for_blend(settings, collection):
+    """Generated.N blend carries Retopo_01 next to Highpoly_Generated.N when there is no Resculpting_01."""
+    if not (keep_highpoly_for_blend(settings) and settings.phase2_blend_export_retopo01):
+        return False
+    if not settings.phase2_resculpt_retopo01:
+        return True
+    return not any(obj.type == 'MESH' and obj.name.lower().startswith('resculpting_01')
+                   for obj in collection.all_objects)
+
+
 def delete_highpoly_after_bake(settings):
     return settings.phase2_delete_high_after_bake and not keep_highpoly_for_blend(settings)
 
@@ -396,7 +406,8 @@ class Phase2Queue:
                             if obj.type == 'MESH' and obj.name.lower().startswith('retopo_')
                             and (match := LOW.fullmatch(obj.name))
                             and int(match.group(1)) < stage
-                            and not (self.settings.phase2_keep_retopo01 and int(match.group(1)) == 1))
+                            and not ((self.settings.phase2_keep_retopo01 or keep_retopo01_for_blend(self.settings, self.collection))
+                                 and int(match.group(1)) == 1))
                     # Preserve objects linked outside the completed collection tree.
                     tree = set()
                     def visit(col):
@@ -974,6 +985,8 @@ class OBJECT_OT_polygroups_phase2_processing_preset(bpy.types.Operator):
             if enabled:
                 for name in ('phase2_auto_bake', 'phase2_mesh_auto_repair', 'phase2_repack_after_repair', 'phase2_repair_artifacts'):
                     setattr(p, name, True)
+            if self.preset == 'REBAKE':
+                p.phase2_mid_remesh = True
             if self.preset == 'RESCULPT':
                 p.phase2_resculpt_retopo01 = p.phase2_autobake_retopo01 = enabled
         return {'FINISHED'}

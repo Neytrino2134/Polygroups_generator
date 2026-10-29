@@ -168,3 +168,22 @@ Multires без редактирования исходного меша. По �
 замена, отказ при конфликте имён, остановка/ошибка с откатом и вложенность UI.
 Проверка `Containers_01_01.blend` без сохранения исходника пересоздала пять LOD:
 2878 / 1490 / 1000 / 498 / 148 треугольников; MID и его UV остались неизменными.
+
+
+## Start Phase 2 presets, shared settings and confirmation
+
+- `Process Settings` (and Import Processing stage 13) show the same live settings as Restore and Processing,
+  Batch Finalization and Auto Render. Pairs are mirrored in both directions by update callbacks in
+  `settings/preparation.py` (`phase2_run_mid` <-> `phase2_mid_remesh`, resculpt options, cleanup, transparent,
+  restore mode <-> `phase2_auto_bake`, pipeline engine, prepare). Mirroring pauses while the pipeline runs,
+  because the pipeline overrides the manual values temporarily.
+- Presets `Unreal Export` and `Unreal Export + ZBrush` (`operators/phase2_start_dialog.py`). Unreal Export
+  keeps MID remesh, rebake, FBX, Blend and render, and switches off Retopo_01 resculpting, ZBrush and cleanup.
+  Unreal Export + ZBrush enables the whole pipeline. `Return to Blender and Cleanup` belongs to Export ZBrush
+  and only runs together with it.
+- `Include Retopo_01 if No Resculpting` keeps Retopo_01 next to Highpoly_Generated.N in the Generated.N blend
+  when Resculpting_01 is not made or not found (`keep_retopo01_for_blend`).
+- `Start Phase 2 Process` and the Phase 1-2 import buttons (stage 13 on) open a confirmation dialog with the
+  asset name (translate and Load from File buttons), indices, pipeline and GLB/FBX before starting.
+- Defaults: Autosave Completed Collections, FBX export, Export Generated.N with highpoly and Retopo_01,
+  ZBrush Return to Blender and Cleanup, Skip Renders with Scene.

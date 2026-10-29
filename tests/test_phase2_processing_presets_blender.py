@@ -20,7 +20,7 @@ def verify_ui():
  p.phase2_show_restore=True
  model=capture(ctx,1);assert not model.errors,model.errors
  buttons=[node for node in walk(model.node) if node.get('kind')=='button'
-          and 'polygroups_phase2_processing_preset' in node.get('id','')]
+          and 'phase2_show_restore' in node.get('id','') and 'polygroups_phase2_processing_preset' in node.get('id','')]
  assert len(buttons)==3,buttons
  assert buttons[0].get('depress')==(not any((p.phase2_auto_bake,p.phase2_mesh_auto_repair,p.phase2_mid_remesh,p.phase2_repack_after_repair)))
  assert buttons[1].get('depress')==p.phase2_auto_bake

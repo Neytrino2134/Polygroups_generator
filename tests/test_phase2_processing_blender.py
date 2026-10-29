@@ -19,6 +19,7 @@ context = bpy.context
 settings = context.scene.polygroups_model_preparation_settings
 # This fixture exercises direct separated-file scanning and baking, not MID remesh.
 settings.phase2_mid_remesh = False
+settings.phase2_blend_export_generated = False  # Keep-highpoly-for-blend is a default now.
 settings.phase2_scan_subfolders = False
 bake = context.scene.polygroups_baking_settings
 assert settings.phase2_auto_bake and settings.phase2_repair_artifacts

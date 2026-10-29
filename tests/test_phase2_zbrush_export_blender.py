@@ -57,6 +57,8 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_zbrush_export_') as dire
     materials_before = len(bpy.data.materials)
 
     p.phase2_zbrush_launch = False
+    assert p.phase2_zbrush_cleanup_on_success  # on by default; its watcher would block the exports below
+    p.phase2_zbrush_cleanup_on_success = False
     p.phase2_zbrush_build = 'PROJECT'
     assert bpy.ops.object.polygroups_phase2_export_zbrush(scope='ALL') == {'FINISHED'}, p.phase2_zbrush_status
     out = base / '!Blend' / '!ZBrush'   # default output: !ZBrush beside the saved blend file

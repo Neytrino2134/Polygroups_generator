@@ -7,7 +7,7 @@ bpy.context.preferences.use_preferences_save=False
 addon_utils.enable(ROOT.name,default_set=True)
 from polygroups_generator.operators import phase2_processing as phase
 context=bpy.context;s=context.scene.polygroups_model_preparation_settings
-s.phase2_delete_high_after_bake=s.phase2_delete_lower_retopo=True
+s.phase2_delete_high_after_bake=s.phase2_delete_lower_retopo=True;s.phase2_blend_export_generated=False
 
 def fixture(index):
  col=bpy.data.collections.new(f'Generated.{index:03d}');context.scene.collection.children.link(col)

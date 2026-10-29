@@ -15,7 +15,8 @@ from polygroups_generator.operators import sequential_jobs as jobs
 context=bpy.context;scene=context.scene;p=scene.polygroups_model_preparation_settings;s=scene.polygroups_render_settings
 assert all((p.phase2_auto_scene,p.phase2_auto_camera,p.phase2_auto_selection,p.phase2_auto_freestyle,p.phase2_auto_freestyle_pass,p.phase2_auto_multiview,p.phase2_auto_mv_hero,p.phase2_auto_textures))
 assert p.phase2_auto_mv_offset==1 and p.phase2_auto_mv_angle=='-30'
-assert p.phase2_auto_transparent and not p.phase2_auto_skip_scene
+assert p.phase2_auto_transparent and p.phase2_auto_skip_scene
+p.phase2_auto_skip_scene=False
 p.phase2_auto_transparent=False  # Retain the original scene-pass regression below.
 assert abs(p.phase2_auto_freestyle_color[0]-.80695226)<1e-6
 for obj in list(bpy.data.objects):bpy.data.objects.remove(obj,do_unlink=True)
