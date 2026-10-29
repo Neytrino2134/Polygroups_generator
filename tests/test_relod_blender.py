@@ -88,6 +88,18 @@ try:bpy.ops.object.polygroups_relod()
 except RuntimeError:pass
 assert before=={o.name:o.as_pointer() for o in c.scene.objects}
 bpy.data.objects.remove(collision,do_unlink=True);s.smart_lods_count=2
+# Swapped pack (MID named _LOD0, its LOD0 named _MID) is refused before any deletion.
+real=source('SM_Swap_01_01_LOD0');fake=source('SM_Swap_01_01_MID')
+bm=bmesh.new();bmesh.ops.create_icosphere(bm,subdivisions=1,radius=1);bm.to_mesh(fake.data);bm.free()
+for variant in ('tagged','untagged'):
+ if variant=='tagged':fake[LOD_SOURCE]=real.name;fake[LOD_INDEX]=0
+ else:del fake[LOD_SOURCE];del fake[LOD_INDEX]
+ before={o.name:o.as_pointer() for o in c.scene.objects}
+ try:bpy.ops.object.polygroups_relod()
+ except RuntimeError:pass
+ assert ('generated LOD0' if variant=='tagged' else 'looks like the real source') in p.phase2_relod_status,p.phase2_relod_status
+ assert before=={o.name:o.as_pointer() for o in c.scene.objects}
+for o in (real,fake):bpy.data.objects.remove(o,do_unlink=True)
 # UI capture: all bars and statuses disappear when nested Status is collapsed.
 p.phase2_pipeline_state='DONE';p.phase2_show_start=True;p.phase2_show_status=True;p.phase2_show_relod=True
 panel=capture(c,1);assert not panel.errors,panel.errors

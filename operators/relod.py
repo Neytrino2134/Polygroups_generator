@@ -25,6 +25,10 @@ def scene_sources(context):
     return sorted(families.values(), key=lambda obj: obj.name.casefold())
 
 
+def triangles(obj):
+    return sum(len(polygon.vertices) - 2 for polygon in obj.data.polygons)
+
+
 def selected_sources(context, sources):
     """Scene sources owning the selection: a selected MID/HIGH or any of its LODs."""
     families = {lod_base(src.name, 'UNREAL').casefold(): src for src in sources}
@@ -69,6 +73,16 @@ class ReLODPlan:
                     and (pattern.fullmatch(obj.name) or
                          (isinstance(obj.get(LOD_SOURCE), str) and family.fullmatch(obj[LOD_SOURCE])
                           and isinstance(obj.get(LOD_INDEX), int) and obj[LOD_INDEX] >= 0))}
+        # A swapped pack (old rename by polygon count) names the real source
+        # _LOD0 and a generated LOD _MID. Rebuilding would delete the source.
+        if isinstance(source.get(LOD_SOURCE), str) and isinstance(source.get(LOD_INDEX), int):
+            raise ValueError(f'ReLOD: {source.name} is a generated LOD{source[LOD_INDEX]} of '
+                             f'{source[LOD_SOURCE]}; restore the real source name first')
+        size = triangles(source)
+        for obj in self.old:
+            if not isinstance(obj.get(LOD_INDEX), int) and triangles(obj) > size:
+                raise ValueError(f'ReLOD: {obj.name} is larger than {source.name} and not a generated LOD; '
+                                 'it looks like the real source, rename it first')
         if self.old and not delete_current:
             raise ValueError('ReLOD: enable Delete Current LODs for ' + source.name)
         replacement = LODReplacement(context, self.old)
