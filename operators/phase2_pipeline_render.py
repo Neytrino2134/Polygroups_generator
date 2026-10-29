@@ -2,6 +2,7 @@
 import re
 import bpy
 from ..core.render_progress import RenderProgressPreview
+from ..core.render_window import close_render_windows
 
 
 class PipelineRenderPreview(RenderProgressPreview):
@@ -53,3 +54,4 @@ class PipelineRenderPreview(RenderProgressPreview):
                 for handlers, callback in callbacks:
                     if callback in handlers:
                         handlers.remove(callback)
+                close_render_windows()

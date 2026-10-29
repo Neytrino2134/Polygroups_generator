@@ -13,7 +13,8 @@ from polygroups_generator.custom_ui.schema import capture
 
 context=bpy.context;scene=context.scene
 p=scene.polygroups_model_preparation_settings;s=scene.polygroups_render_settings
-assert p.phase2_auto_transparent and not p.phase2_auto_skip_scene
+assert p.phase2_auto_transparent and p.phase2_auto_skip_scene
+p.phase2_auto_skip_scene=False
 p.phase2_auto_multiview=False;p.phase2_auto_freestyle=False;p.phase2_auto_textures=False
 for obj in list(bpy.data.objects):bpy.data.objects.remove(obj,do_unlink=True)
 collection=bpy.data.collections.new('Transparent_00_01_Collection');scene.collection.children.link(collection)

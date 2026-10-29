@@ -1244,8 +1244,12 @@ class OBJECT_OT_polygroups_render_current_state(bpy.types.Operator):
 
 
 def _render_single_job(context, settings, job):
-    for options in _render_single_job_steps(context, settings, job):
-        bpy.ops.render.render(**options)
+    from ..core.render_window import close_render_windows
+    try:
+        for options in _render_single_job_steps(context, settings, job):
+            bpy.ops.render.render(**options)
+    finally:
+        close_render_windows()
 
 
 def _render_single_job_steps(context, settings, job):
@@ -1326,6 +1330,8 @@ def _render_texture_job(context, settings, job):
         view.gamma = 1
         _configure_render(scene, settings, job, file_format='PNG')
         bpy.ops.render.render(write_still=True)
+        from ..core.render_window import close_render_windows
+        close_render_windows()
     finally:
         for node, original, copy in image_overrides:
             node.image = original
@@ -1335,8 +1341,12 @@ def _render_texture_job(context, settings, job):
 
 
 def _render_current_job(context, settings, job):
-    for options in _render_current_job_steps(context, settings, job):
-        bpy.ops.render.render(**options)
+    from ..core.render_window import close_render_windows
+    try:
+        for options in _render_current_job_steps(context, settings, job):
+            bpy.ops.render.render(**options)
+    finally:
+        close_render_windows()
 
 
 def job_output_paths(settings, job):
