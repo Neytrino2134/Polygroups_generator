@@ -15,6 +15,7 @@ chart, then the charts are rebuilt:
 import heapq
 import itertools
 import math
+import time
 from collections import deque, namedtuple
 
 from .chart_topology import charts, classify, chart_kind, is_cut, significant_loops
@@ -23,8 +24,8 @@ from .chart_topology import charts, classify, chart_kind, is_cut, significant_lo
 GuardOptions = namedtuple("GuardOptions", (
     "fix_handles fix_annuli fix_closed fix_necks hole_ratio lip_angle max_flare "
     "sharp_preference neck_angle neck_elongation neck_max_share tube_tolerance "
-    "cup_min_height max_passes fix_bridges bridge_max_edges bridge_min_share"
-))
+    "cup_min_height max_passes fix_bridges bridge_max_edges bridge_min_share deadline"
+), defaults=(0.0,))   # deadline: time.monotonic() value after which the guard stops, 0 = never
 
 DEFAULT_OPTIONS = GuardOptions(
     fix_handles=True, fix_annuli=True, fix_closed=True, fix_necks=True,
@@ -35,8 +36,8 @@ DEFAULT_OPTIONS = GuardOptions(
 )
 
 # ``knots`` counts collapsed mesh knots; the geometry step fills it in.
-GuardResult = namedtuple("GuardResult", "rings longitudinal before after passes bridges knots",
-                         defaults=(0,))
+GuardResult = namedtuple("GuardResult", "rings longitudinal before after passes bridges knots timed_out",
+                         defaults=(0, False))
 
 
 # --------------------------------------------------------------------------- graphs
@@ -617,10 +618,14 @@ def topology_guard(bm, faces=None, options=DEFAULT_OPTIONS, protected=()):
     passes = 0
     # Seams are only ever added, so a chart that needed no cut stays settled.
     settled = set()
+    timed_out = False
     for passes in range(1, options.max_passes + 1):
         changed = False
         necks_allowed = options.fix_necks
         for chart in charts(bm, pool):
+            if options.deadline and time.monotonic() > options.deadline:
+                timed_out = True
+                break
             key = frozenset(chart)
             if key in settled:
                 continue
@@ -652,10 +657,11 @@ def topology_guard(bm, faces=None, options=DEFAULT_OPTIONS, protected=()):
                 changed = True
             else:
                 settled.add(key)
-        if not changed:
+        if not changed or timed_out:
             break
-    after = analyze_charts(bm, pool, options.hole_ratio)
-    return GuardResult(rings, longitudinal, before, after, passes, bridges)
+    # The final analysis is a single cheap pass; skip it when time ran out.
+    after = before if timed_out else analyze_charts(bm, pool, options.hole_ratio)
+    return GuardResult(rings, longitudinal, before, after, passes, bridges, timed_out=timed_out)
 
 
 def kind_counts(entries):

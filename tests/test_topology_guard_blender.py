@@ -381,3 +381,16 @@ elif meshes:
     print("Torus/Sphere/Chair/Retopo_02 reference pairs missing; those checks skipped")
 
 print("TOPOLOGY GUARD PASSED")
+
+# Time limit: an expired deadline stops the guard and reports it; no limit never does.
+import time as _time
+from polygroups_generator.core.chart_cuts import topology_guard as _guard, DEFAULT_OPTIONS as _opts
+from polygroups_generator.core.chart_topology import charts as _charts
+import bmesh as _bmesh
+_bm = _bmesh.new()
+_bmesh.ops.create_cube(_bm, size=1.0)
+_late = _guard(_bm, None, _opts._replace(deadline=_time.monotonic() - 1))
+assert _late.timed_out and _late.after is _late.before
+assert not _guard(_bm, None, _opts).timed_out
+assert settings.topology_guard_time_limit == 120
+_bm.free()

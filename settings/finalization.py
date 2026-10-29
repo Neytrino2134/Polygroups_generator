@@ -108,6 +108,11 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         name="Min Split Share", default=0.05, min=0.0, max=0.5, subtype="FACTOR",
         description="Each of the two new islands must hold at least this share of the original island's faces",
     )
+    topology_guard_time_limit: bpy.props.IntProperty(
+        name="Time Limit (s)", default=120, min=0, max=3600,
+        description=("Stop Topology Guard on one mesh after this many seconds and keep the seams found so far, "
+                     "so a hard mesh cannot freeze Blender for minutes. 0 = no limit"),
+    )
     topology_guard_collapse_knots: bpy.props.BoolProperty(
         name="Collapse Mesh Knots", default=True,
         description=("Merge tiny tangles into one point: holes whose rim was welded to one vertex, "

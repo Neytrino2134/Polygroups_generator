@@ -1,4 +1,6 @@
 """Topology Guard: automatic Boundary + Longitudinal seams for non-disk charts."""
+import time
+
 import bmesh
 import bpy
 
@@ -9,7 +11,7 @@ from ..core.smart_seam_routing import route_seams
 from ..pin_edges import pin_layer, set_pinned
 
 
-def guard_options(settings):
+def guard_options(settings, deadline=0.0):
     return GuardOptions(
         fix_handles=settings.topology_guard_fix_handles,
         fix_annuli=settings.topology_guard_fix_annuli,
@@ -28,6 +30,7 @@ def guard_options(settings):
         fix_bridges=settings.topology_guard_fix_bridges,
         bridge_max_edges=settings.topology_guard_bridge_max_edges,
         bridge_min_share=settings.topology_guard_bridge_min_share,
+        deadline=deadline,
     )
 
 
@@ -43,13 +46,13 @@ def scope_faces(bm, selected_only):
     return touched
 
 
-def run_guard(bm, faces, settings, pin=None):
+def run_guard(bm, faces, settings, pin=None, deadline=0.0):
     """Mark guard seams on ``faces`` and smooth them. Returns (result, created_edges, generated)."""
     initial = {e for e in bm.edges if e.seam}
-    result = topology_guard(bm, faces, guard_options(settings))
+    result = topology_guard(bm, faces, guard_options(settings, deadline))
     created = 0
     generated = result.rings | result.longitudinal | result.bridges
-    if generated and settings.topology_guard_create_edges:
+    if generated and settings.topology_guard_create_edges and not result.timed_out:
         routed = set(result.longitudinal)
         if settings.topology_guard_smooth_rings:
             routed |= result.rings
@@ -67,7 +70,7 @@ def run_guard(bm, faces, settings, pin=None):
             # Smoothing must never reopen a chart; re-check the split faces as well.
             pool = {f for f in bm.faces if not f.hide and (f in faces or any(
                 e.seam and e not in initial for e in f.edges))}
-            topology_guard(bm, pool, guard_options(settings)._replace(fix_necks=False))
+            topology_guard(bm, pool, guard_options(settings, deadline)._replace(fix_necks=False))
     generated = {e for e in bm.edges if e.seam and e not in initial}
     if generated and (settings.topology_guard_pin_generated if pin is None else pin):
         bm.edges.index_update()
@@ -132,12 +135,14 @@ def collapse_scope_knots(bm, settings, selected_only):
 
 def apply_topology_guard(context, obj, settings, selected_only, unwrap=True, pin=None):
     """Edit Mode entry point shared with Smart UV Repair. Returns (result, created, generated_count)."""
+    limit = getattr(settings, "topology_guard_time_limit", 0)
+    deadline = time.monotonic() + limit if limit else 0.0
     bm = bmesh.from_edit_mesh(obj.data)
     bm.faces.index_update()
     bm.normal_update()
     knots = collapse_scope_knots(bm, settings, selected_only)
     faces = scope_faces(bm, selected_only)
-    result, created, generated = run_guard(bm, faces, settings, pin)
+    result, created, generated = run_guard(bm, faces, settings, pin, deadline)
     result = result._replace(knots=knots)
     bm.faces.index_update()
     bm.edges.index_update()

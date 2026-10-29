@@ -376,6 +376,9 @@ class QueueProcessingMixin:
                 context, obj, guard, selected_only=False, unwrap=False)
         finally:
             bpy.ops.object.mode_set(mode="OBJECT")
+        if result.timed_out:
+            self.report({"WARNING"}, f"{obj.name}: Topology Guard stopped at its time limit; "
+                                     "the remaining charts were left as they are")
         if generated or result.knots:
             self.report({"INFO"}, f"{obj.name}: Topology Guard collapsed {result.knots} knot(s), "
                                   f"added {generated} seam edge(s)")

@@ -338,7 +338,7 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
             column.separator()
             column.label(text=t(context, "topology_guard_cleanup"), icon="AUTOMERGE_OFF")
             for name in ("fix_bridges", "bridge_max_edges", "bridge_min_share",
-                         "collapse_knots", "knot_max_verts"):
+                         "collapse_knots", "knot_max_verts", "time_limit"):
                 column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
             column.separator()
             column.label(text=t(context, "topology_guard_shape"), icon="MESH_CYLINDER")
