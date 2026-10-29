@@ -194,12 +194,13 @@ def move_to_lod_collection(context, obj, lod):
 
 
 def polygon_count(obj, depsgraph):
-    evaluated = obj.evaluated_get(depsgraph)
-    mesh = evaluated.to_mesh()
-    try:
-        return len(mesh.polygons)
-    finally:
-        evaluated.to_mesh_clear()
+    from .unreal_lod_rename import polygon_count as triangles
+    return triangles(obj, depsgraph)
+
+
+def lod_order(obj, depsgraph):
+    from .unreal_lod_rename import lod_order as order
+    return order(obj, depsgraph)
 
 
 class OBJECT_OT_polygroups_unity_random_color_tag(bpy.types.Operator):
@@ -245,7 +246,7 @@ class OBJECT_OT_polygroups_prepare_unity(bpy.types.Operator):
                 if not 1 <= len(meshes) <= 6:
                     raise ValueError("Select 1–6 meshes for LOD0–LOD5")
                 depsgraph = context.evaluated_depsgraph_get()
-                meshes.sort(key=lambda item: (-polygon_count(item, depsgraph), item.name))
+                meshes.sort(key=lambda item: (*lod_order(item, depsgraph), item.name))
             lods = [f"LOD{i}" if self.auto_lods else self.lod
                      for i in range(len(meshes))]
             names = [unity_name(settings, lod) for lod in lods]

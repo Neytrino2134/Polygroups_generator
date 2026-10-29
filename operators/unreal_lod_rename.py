@@ -31,12 +31,23 @@ def isolate_groups(tree):
 
 
 def polygon_count(obj, depsgraph):
+    """Triangle count: a quad source must outrank its triangulated LOD0.
+
+    Counting polygons ranked a 2755-quad MID below its 2900-triangle LOD0 and
+    swapped their names."""
     evaluated = obj.evaluated_get(depsgraph)
     mesh = evaluated.to_mesh()
     try:
-        return len(mesh.polygons)
+        return sum(len(polygon.vertices) - 2 for polygon in mesh.polygons)
     finally:
         evaluated.to_mesh_clear()
+
+
+def lod_order(obj, depsgraph):
+    """Sort key: untagged source first, generated LODs by their own index."""
+    index = obj.get('polygroups_lod_index')
+    rank = index + 1 if isinstance(index, int) and index >= 0 else 0
+    return rank, -polygon_count(obj, depsgraph)
 
 
 def prepare_materials(meshes, base, copy_textures):
@@ -153,7 +164,7 @@ class OBJECT_OT_polygroups_unreal_lod_rename(bpy.types.Operator):
             for offset, (source_collection, objects) in enumerate(groups):
                 version = str(int(s.unreal_lod_version_index) + offset).zfill(width)
                 base = f'{name}_{s.unreal_lod_name_index.zfill(2)}_{version}'
-                meshes = sorted(objects, key=lambda obj: (-polygon_count(obj, depsgraph),
+                meshes = sorted(objects, key=lambda obj: (*lod_order(obj, depsgraph),
                     obj.get('unreal_lod_index', 0), obj.name))
                 names = [f'SM_{base}' + (suffix if s.unreal_lod_keep_high and index == 0
                          else f'_LOD{index - int(s.unreal_lod_keep_high)}') for index in range(len(meshes))]

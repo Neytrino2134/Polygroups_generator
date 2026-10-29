@@ -28,13 +28,13 @@ def finalization_packs(context):
             return [int(p) if p.isdigit() else p.lower() for p in re.split(r'(\d+)', item[0].name)]
         return sorted(packs, key=natural)
     # Explicit selection also supports manually prepared collections.
-    from .unreal_lod_rename import collection_packs, polygon_count
+    from .unreal_lod_rename import collection_packs, lod_order
     if not any(obj.type == 'MESH' for obj in context.selected_objects):
         raise ValueError('No Generated Retopo collections or selected mesh packs found')
     depsgraph = context.evaluated_depsgraph_get()
     for col, objects in collection_packs(context):
         meshes = list(objects)
-        source = max(meshes, key=lambda obj: polygon_count(obj, depsgraph))
+        source = min(meshes, key=lambda obj: lod_order(obj, depsgraph))
         packs.append((col, source, meshes))
     return packs
 
