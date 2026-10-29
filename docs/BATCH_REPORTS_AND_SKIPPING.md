@@ -40,3 +40,7 @@ An unfinished collection is still imported, but:
 
 A collection that fails inside Phase 2 is marked the same way, and the run continues. The run only
 fails when no collection was processed at all.
+
+## Pause before Phase 2
+
+When Phase 1 had failed files and Phase 2 is enabled, a dialog lists the failed Generated.N collections and counts down 15 s (also shown in the panel) before Phase 2 starts. Pause holds Phase 2; the Phase 1, 2 import button and Start Phase 2 Process then read Resume Phase 2. Reset State clears the hold.

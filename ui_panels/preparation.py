@@ -404,7 +404,13 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 operator_row = group.row(align=True)
                 operator_row.enabled = not settings.batch_is_running and settings.batch_import_format != "BLEND"
                 operator_row.operator_context = "EXEC_DEFAULT"
-                if settings.batch_phase2_enabled:
+                from ..operators import phase_gate
+                phase_gate.draw_status(group)
+                if phase_gate.active():
+                    operator_row.enabled = True
+                    operator_row.operator("object.polygroups_phase2_gate", text="Resume Phase 2",
+                                          icon="PLAY").action = "CONTINUE"
+                elif settings.batch_phase2_enabled:
                     # Phase 2 follows the import, so confirm its asset name, indices and format first.
                     operator_row.operator_context = "INVOKE_DEFAULT"
                     operator_row.operator(

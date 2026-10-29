@@ -1080,7 +1080,14 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             # Failed files do not stop the run: Phase 2 reads their logs and skips them.
             from ..core import run_progress
             run_progress.finish_phase1(self.settings.batch_elapsed_seconds)
-            schedule_phase2(self.scene, self.view_layer, self.report)
+            if self.settings.batch_failed_count and self.batch_report is not None and not bpy.app.background:
+                # Give the user 15 s (or a pause) to fix the failed files before Phase 2 starts.
+                from . import phase_gate
+                from ..core.batch_report import FAILURE_STATUSES
+                phase_gate.begin(self.scene, self.view_layer, self.report,
+                                 self.batch_report.problems(FAILURE_STATUSES))
+            else:
+                schedule_phase2(self.scene, self.view_layer, self.report)
         else:
             from ..core import run_progress
             run_progress.end_combined()

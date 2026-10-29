@@ -66,10 +66,16 @@ def draw_start(layout, context, p):
     controls_enabled = not (p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
                            or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running
                            or p.phase2_relod_running or context.scene.polygroups_mesh_finalization_settings.smart_lods_is_running)
+    from ..operators import phase_gate
+    phase_gate.draw_status(layout)
     start = layout.column(align=True)
     start.enabled = controls_enabled
-    start.operator_context = 'INVOKE_DEFAULT'
-    start.operator('object.polygroups_phase2_confirm_start', text='Start Phase 2 Process', icon='PLAY').then = 'PHASE2'
+    if phase_gate.active():
+        # Waiting after Phase 1 errors: Start continues the held run instead of starting a new one.
+        start.operator('object.polygroups_phase2_gate', text='Resume Phase 2 Process', icon='PLAY').action = 'CONTINUE'
+    else:
+        start.operator_context = 'INVOKE_DEFAULT'
+        start.operator('object.polygroups_phase2_confirm_start', text='Start Phase 2 Process', icon='PLAY').then = 'PHASE2'
     recovery = layout.row()
     recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
     from ..ui_panels.common import draw_collapsible_box

@@ -135,6 +135,8 @@ def reset_phase2_state(context):
         if bpy.app.timers.is_registered(zbrush_cleanup.poll_success):
             attempt('ZBrush cleanup timer', lambda:bpy.app.timers.unregister(zbrush_cleanup.poll_success))
 
+    from . import phase_gate
+    phase_gate.clear()
     p = context.scene.polygroups_model_preparation_settings
     for prop in p.bl_rna.properties:
         if prop.identifier.startswith('phase2_pipeline_'):

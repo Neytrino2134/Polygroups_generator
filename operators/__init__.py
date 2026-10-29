@@ -244,6 +244,7 @@ from .phase2_pipeline import OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygr
 from .phase2_reset import OBJECT_OT_polygroups_phase2_reset_state
 from .phase2_start_dialog import CLASSES as PHASE2_START_DIALOG_CLASSES
 from .index_step import CLASSES as INDEX_STEP_CLASSES
+from .phase_gate import CLASSES as PHASE_GATE_CLASSES
 from .final_cleanup import CLASSES as FINAL_CLEANUP_CLASSES
 from .relod import OBJECT_OT_polygroups_relod
 from .rebake_queue import CLASSES as REBAKE_QUEUE_CLASSES
@@ -256,7 +257,7 @@ from .phase2_zbrush_export import (
 CLASSES = (
     OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control,
     OBJECT_OT_polygroups_phase2_reset_state,
-    *PHASE2_START_DIALOG_CLASSES, *INDEX_STEP_CLASSES, *FINAL_CLEANUP_CLASSES,
+    *PHASE2_START_DIALOG_CLASSES, *INDEX_STEP_CLASSES, *PHASE_GATE_CLASSES, *FINAL_CLEANUP_CLASSES,
     *REBAKE_QUEUE_CLASSES,
     OBJECT_OT_polygroups_relod,
     OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj,
