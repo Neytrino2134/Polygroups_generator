@@ -44,3 +44,7 @@ fails when no collection was processed at all.
 ## Pause before Phase 2
 
 When Phase 1 had failed files and Phase 2 is enabled, a dialog lists the failed Generated.N collections and counts down 15 s (also shown in the panel) before Phase 2 starts. Pause holds Phase 2; the Phase 1, 2 import button and Start Phase 2 Process then read Resume Phase 2. Reset State clears the hold.
+
+## Fixing a failed file by hand
+
+Open the failed `<name>_Generated_NNN.blend`, finish the collection and save it. Phase 2 compares the file's save time with the Phase 1 record (more than 5 s later means edited) and, when the Phase 1 log is missing, with the stamp inside the file (more than 2 min later). A repaired file is processed like a normal one, its stamp is removed from the restored collection and the Phase 2 report row gets `repaired_after_phase1: true`.

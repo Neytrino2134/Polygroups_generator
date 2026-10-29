@@ -159,7 +159,8 @@ class OBJECT_OT_polygroups_phase2_gate_dialog(bpy.types.Operator):
             layout.label(text=f'Phase 2 starts in {seconds_left():.0f} s', icon='TIME')
         layout.label(text='These Generated.N files did not finish; Phase 2 will skip them:')
         draw_failures(layout.column(align=True))
-        layout.label(text='Fix the files now, or pause Phase 2.')
+        layout.label(text='Fix a file and save it: Phase 2 then treats it as finished.')
+        layout.label(text='Pause Phase 2 to get more time.')
         if not paused():
             layout.operator('object.polygroups_phase2_gate', text='Pause Phase 2', icon='PAUSE').action = 'PAUSE'
 

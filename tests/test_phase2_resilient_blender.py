@@ -1,4 +1,4 @@
-"""Phase 2 starts despite Phase 1 failures: reads Phase 1 logs, marks unfinished collections, writes reports."""
+﻿"""Phase 2 starts despite Phase 1 failures: reads Phase 1 logs, marks unfinished collections, writes reports."""
 import json
 import sys
 import tempfile
@@ -156,6 +156,29 @@ with tempfile.TemporaryDirectory(dir=ROOT, prefix='test_resilient_') as director
     holder = bpy.data.collections.new('Generated.002')
     skip_marks.mark(holder, 'x')
     assert asset_slots([(one, None, None), (three, None, None)]) == [0, 2]
+    # Fixed by hand: the failed file saved again after the failure is processed like any other.
+    import os
+    stamped_only = root / 'Pack_Generated_005.blend'
+    source_file(stamped_only, 'Generated.005', failed=True)
+    later = time.time() + 1000
+    for fixed in (bad, stamped_only):
+        os.utime(fixed, (later, later))
+    queue = phase2.Phase2Queue(ctx, [(str(bad), 'Generated.002'), (str(stamped_only), 'Generated.005')],
+                               False, False, quiet)
+    results = []
+    queue.on_result = results.append
+    queue.begin()
+    for _ in range(50):
+        queue.step(ctx)
+        if queue.finished:
+            break
+    assert queue.finished and p.phase2_done_count == 2 and p.phase2_skipped_count == 0, queue.results
+    assert [r['status'] for r in results] == ['success', 'success']
+    assert results[0].get('repaired_after_phase1') and results[1].get('repaired_after_phase1'), results
+    fixed_cols = [col for col in bpy.data.collections if col.name in {r['restored_as'] for r in results}]
+    assert len(fixed_cols) == 2 and not any(skip_marks.is_marked(col) or col.get(skip_marks.FAILED_KEY)
+                                            for col in fixed_cols)
+
     # Files edited by hand after the failure are no longer treated as failed.
     stale = {phase1_logs._key(bad): dict(failures[phase1_logs._key(bad)], finished=time.time() - 3600)}
     assert phase1_logs.failure_for(bad, stale) is None

@@ -5,8 +5,9 @@ from pathlib import Path
 
 from .batch_report import FAILURE_STATUSES, FOLDER
 
-# A file saved this long after its failure was edited by hand, so it is treated as repaired.
-REPAIR_GRACE_SECONDS = 120.0
+# The failed file is written before its record is finished, so any later save is a manual fix.
+# Only clock jitter (network drives, sync tools) needs a margin.
+REPAIR_GRACE_SECONDS = 5.0
 
 
 def _key(path):
@@ -54,6 +55,11 @@ def failed_outputs(directory):
             else:
                 result.pop(key, None)
     return result
+
+
+def has_record(path, failures):
+    """True when Phase 1 logged this file as unfinished, even if it was fixed since."""
+    return _key(path) in failures
 
 
 def failure_for(path, failures):

@@ -254,6 +254,7 @@ class Phase2Queue:
         self.skipped = []          # (entry, reason) of collections left untouched
         self.on_result = None      # callback(record dict) for the Phase 2 report
         self.phase1_failures = {}
+        self.repaired = False      # Phase 1 failed this file but it was fixed by hand afterwards
         self.entry_started = time.monotonic()
 
     def begin(self):
@@ -455,11 +456,14 @@ class Phase2Queue:
 
     def notify(self, status, error='', failed_stage=None, phase1=None):
         """Describe the finished entry for the Phase 2 report."""
+        repaired, self.repaired = self.repaired, False
         if self.on_result is None:
             return
         path, name = self.entries[self.index]
         record = dict(file=path, collection=name, status=status, finished=time.time(),
                       seconds=round(time.monotonic() - self.entry_started, 2))
+        if repaired:
+            record['repaired_after_phase1'] = True
         if self.collection is not None:
             record['restored_as'] = self.collection.name
         if error:
@@ -527,10 +531,15 @@ class Phase2Queue:
                 self.view_layer.update()
                 # Phase 1 did not finish this file: import it, mark it, process nothing.
                 phase1 = phase1_logs.failure_for(path, self.phase1_failures)
-                stamped = '' if phase1 else skip_marks.stamped_failure(self.collection, file_mtime(path))
+                # The log is authoritative when it knows the file; the stamp is the fallback without logs.
+                stamped = '' if phase1 or phase1_logs.has_record(path, self.phase1_failures) else skip_marks.stamped_failure(self.collection, file_mtime(path))
                 if phase1 or stamped:
                     self.skip(phase1['reason'] if phase1 else stamped, phase1)
                     return
+                # Saved again after the failure: the user finished it by hand, so process it normally.
+                self.repaired = (phase1_logs.has_record(path, self.phase1_failures)
+                                 or bool(self.collection.get(skip_marks.FAILED_KEY)))
+                skip_marks.clear_stamp(self.collection)
                 if self.auto_bake and (self.settings.phase2_resculpt_retopo01 or self.settings.phase2_autobake_retopo01):
                     candidates = [obj for obj in self.collection.all_objects if obj.type == 'MESH'
                         and (match := LOW.fullmatch(obj.name)) and int(match.group(1)) == 1]

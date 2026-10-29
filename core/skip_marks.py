@@ -46,6 +46,13 @@ def mark_failed_file(collection, error=''):
     collection[FAILED_AT_KEY] = time.time()
 
 
+def clear_stamp(collection):
+    """Drop the Phase 1 failure stamp once the file was fixed by hand."""
+    for key in (FAILED_KEY, FAILED_AT_KEY, REASON_KEY):
+        if collection is not None and key in collection and not collection.get(SKIP_KEY):
+            del collection[key]
+
+
 def stamped_failure(collection, file_mtime, grace=120.0):
     """Reason stored by Phase 1, or '' when the file was edited after the failure."""
     if collection is None or not collection.get(FAILED_KEY):
