@@ -146,6 +146,8 @@ class VIEW3D_PT_polygroups_render(bpy.types.Panel):
             freestyle_column = freestyle_box.column(align=True)
             freestyle_column.enabled = settings.freestyle_edges
             freestyle_column.prop(settings, "freestyle_as_render_pass", text=t(context, "render_freestyle_as_pass"))
+            freestyle_column.prop(settings, "clear_freestyle_after_render",
+                                  text=t(context, "render_clear_freestyle_after_render"))
             freestyle_column.prop(settings, "freestyle_line_thickness", text=t(context, "render_freestyle_thickness"))
             color_row = freestyle_column.row(align=True)
             color_row.prop(settings, "freestyle_line_color", text=t(context, "render_freestyle_color"))

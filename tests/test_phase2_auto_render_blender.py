@@ -57,6 +57,8 @@ def inspect_render(ctx,settings,job):
   return real_render(ctx,settings,job)
  ctx.view_layer.update()
  source=bpy.data.objects[job['object']]
+ if settings.freestyle_edges:
+  assert all(item.value for item in source.data.attributes['freestyle_edge'].data)
  origin=source.matrix_world.translation
  for role,_label,position,_energy,_size in studio.LIGHT_DEFAULTS:
   light=getattr(s,'studio_'+role)
@@ -99,6 +101,14 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_auto_render_') as directo
  assert not s.is_running and not p.phase2_auto_render_running
  assert [image.colorspace_settings.name for image in images]==image_spaces
  for obj in sources:assert obj.matrix_world==originals[obj]
+ # Clear Freestyle After Render (default on) removes the marks Auto Render added.
+ assert s.clear_freestyle_after_render
+ for obj in sources:assert not any(item.value for item in obj.data.attributes['freestyle_edge'].data),obj.name
+ rq._mark_freestyle_edges(sources,True);s.clear_freestyle_after_render=False
+ assert rq.clear_freestyle_after_render(s,[obj.name for obj in sources])==(0,0)
+ assert all(item.value for obj in sources for item in obj.data.attributes['freestyle_edge'].data)
+ s.clear_freestyle_after_render=True
+ assert rq.clear_freestyle_after_render(s,[obj.name for obj in sources]+['Missing'])[1]==len(sources)
  cameras=len(bpy.data.cameras);lights=len(bpy.data.lights)
  # Per-asset preparation uses the same studio and paired texture output.
  for prop,kind in auto.MANAGED_STUDIO.values():setattr(s,prop,None)

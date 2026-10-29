@@ -403,6 +403,14 @@ def _mark_freestyle_edges(objects, enabled=True):
     return marked, changed_objects
 
 
+def clear_freestyle_after_render(settings, object_names):
+    """Clear marks a render run added, if Clear Freestyle After Render is on."""
+    if not settings.clear_freestyle_after_render or not object_names:
+        return 0, 0
+    objects = [bpy.data.objects.get(name) for name in object_names]
+    return _mark_freestyle_edges([obj for obj in objects if obj is not None], False)
+
+
 def _apply_render_engine(scene, settings, freestyle=False):
     if settings.render_engine == "CYCLES" and not freestyle:
         scene.render.engine = "CYCLES"
@@ -1565,8 +1573,11 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
             self.report({"ERROR"}, settings.status)
             return {"CANCELLED"}
 
+        self._freestyle_objects = []
         if settings.freestyle_edges:
-            marked_edges, marked_objects = _mark_freestyle_edges(_queue_objects(_load_queue(settings)), True)
+            freestyle_objects = _queue_objects(_load_queue(settings))
+            marked_edges, marked_objects = _mark_freestyle_edges(freestyle_objects, True)
+            self._freestyle_objects = [obj.name for obj in freestyle_objects]
             settings.status = f"Marked {marked_edges} Freestyle edge(s) on {marked_objects} object(s)"
 
         settings.is_running = True
@@ -1650,6 +1661,9 @@ class OBJECT_OT_polygroups_start_render_queue(bpy.types.Operator):
         if self._visibility_snapshot is not None:
             _restore_visibility(self._visibility_snapshot)
             self._visibility_snapshot = None
+        # Clear once after the whole queue: an object's views span several jobs.
+        clear_freestyle_after_render(settings, getattr(self, "_freestyle_objects", None))
+        self._freestyle_objects = []
         settings.is_running = False
         settings.stop_requested = False
         _sync_progress(settings)

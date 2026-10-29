@@ -289,6 +289,11 @@ class POLYGROUPS_PG_render_settings(bpy.types.PropertyGroup):
         description="Save Freestyle edges as a separate pass image instead of compositing them into the asset render",
         default=True,
     )
+    clear_freestyle_after_render: bpy.props.BoolProperty(
+        name="Clear Freestyle After Render",
+        description="When the render queue or Phase 2 Auto Render ends, clear the Freestyle edge marks it added to the rendered meshes",
+        default=True,
+    )
     animation_views_freestyle_dual: bpy.props.BoolProperty(
         name="Views With and Without Freestyle",
         description="Save clean and Freestyle versions of each of the four views",

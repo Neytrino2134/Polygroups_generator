@@ -230,7 +230,9 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                 obj.hide_viewport = obj.hide_render = obj.hide_select = False
                 obj.hide_set(False)
                 obj.select_set(True)
+        freestyle_objects = []
         if s.freestyle_edges:
+            freestyle_objects = [obj.name for col, sources in assets for obj in sources]
             rq._mark_freestyle_edges([obj for col, sources in assets for obj in sources], True)
         snapshot = rq._snapshot_visibility()
         done, history = 0, []
@@ -298,6 +300,7 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
             s.status = f'Auto Render complete: {done} jobs / {len(assets)} assets'
         finally:
             rq._restore_visibility(snapshot)
+            rq.clear_freestyle_after_render(s, freestyle_objects)
             if completed:
                 studio.position_studio_at_origin(context, Vector((0, 0, 0)))
             s.is_running = False

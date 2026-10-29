@@ -110,7 +110,9 @@ with TemporaryDirectory() as directory:
         assert not unrelated.hide_render and not unrelated.hide_viewport
         # Scan must not pick up the multiview duplicates created by rendering.
         assert len(rq._scan_render_queue(s)[0]) == 4
-    assert all(item.value for key in ('HIGH', 'LOD0') for item in objects[key].data.attributes['freestyle_edge'].data)
+    # Clear Freestyle After Render (default on) removes the queue's marks at the end.
+    assert s.clear_freestyle_after_render
+    assert not any(item.value for key in ('HIGH', 'LOD0') for item in objects[key].data.attributes['freestyle_edge'].data)
     assert objects['LOD1'].data.attributes.get('freestyle_edge') is None
     s.multiview_render = False
     s.freestyle_edges = False

@@ -667,6 +667,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 sub.enabled = settings.phase2_auto_freestyle
                 sub.prop(settings, "phase2_auto_freestyle_pass")
                 sub.prop(settings, "phase2_auto_freestyle_color")
+                sub.prop(context.scene.polygroups_render_settings, "clear_freestyle_after_render",
+                         text=t(context, "render_clear_freestyle_after_render"))
                 multiview = config.box()
                 multiview.prop(settings, "phase2_auto_multiview")
                 sub = multiview.column(align=True)
