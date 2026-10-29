@@ -286,7 +286,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 icon="ALIGN_CENTER",
             )
 
-        content = draw_topic(layout, context, "batch_3", t(context, "import_group_run"), "PLAY")
+        content = draw_topic(layout, context, "batch_3",
+                             t(context, "import_group_run_phase2" if settings.batch_phase2_enabled
+                               else "import_group_run"), "PLAY")
         if content is not None:
             group = draw_collapsible_box(content, settings, "show_batch_start_file", t(context, "batch_start_save_reset_group"), "FILE_BLEND")
             if group is not None:
@@ -391,7 +393,9 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 )
                 group.separator(type="LINE")
 
-            group = draw_collapsible_box(content, settings, "show_batch_start_mode", t(context, "batch_start_mode_group"), "PLAY")
+            group = draw_collapsible_box(content, settings, "show_batch_start_mode",
+                                          t(context, "batch_start_mode_group_phase2" if settings.batch_phase2_enabled
+                                            else "batch_start_mode_group"), "PLAY")
             if group is not None:
                 group.separator(type="LINE")
                 heading = group.row(align=True)
