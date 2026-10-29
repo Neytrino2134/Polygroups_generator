@@ -236,6 +236,21 @@ class VIEW3D_PT_polygroups_generator(bpy.types.Panel):
                 )
                 show_autosave.filepath = save_status["autosave_path"]
 
+                # One entry per existing .blendAutosaveN and previous version .blendN of this file.
+                for entry in custom_autosave.saved_versions(getattr(bpy.data, "filepath", "")):
+                    modified = time.strftime("%d.%m %H:%M", time.localtime(entry["modified"]))
+                    autosave_kind = entry["kind"] == "AUTOSAVE"
+                    version_row = autosave_group.row(align=True)
+                    load = version_row.operator(
+                        "wm.airetopo_open_recent_autosave",
+                        text=t(context, "load_autosave_n" if autosave_kind else "load_prev_version_n",
+                               value=entry["number"]) + f"  ·  {modified}",
+                        icon="RECOVER_LAST" if autosave_kind else "FILE_BACKUP",
+                    )
+                    load.filepath = entry["filepath"]
+                    show_version = version_row.operator("wm.airetopo_show_file_in_browser", text="", icon="FILE_FOLDER")
+                    show_version.filepath = entry["filepath"]
+
                 recovery = custom_autosave.recovery_snapshot()
                 if recovery["active"]:
                     autosave_group.separator()

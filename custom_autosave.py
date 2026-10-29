@@ -1,7 +1,9 @@
 """Versioned autosaves that live beside the current blend file."""
 
 from pathlib import Path
+import glob
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -152,9 +154,49 @@ def recent_autosaves(limit=8, refresh=False):
     return _RECENT_CACHE[:max(0, int(limit))]
 
 
+def _backup_version(path):
+    """N of a Blender ``name.blendN`` previous-version file, else None."""
+    match = re.search(r"\.blend(\d+)$", Path(path).name, re.IGNORECASE)
+    return int(match.group(1)) if match and int(match.group(1)) > 0 else None
+
+
+def saved_versions(filepath):
+    """Existing autosaves (``X.blendAutosaveN``) and previous versions (``X.blendN``) of a saved blend."""
+    if not filepath:
+        return []
+    source = Path(filepath)
+    entries = []
+    try:
+        candidates = list(source.parent.glob(f"{glob.escape(source.name)}*"))
+    except OSError:
+        return []
+    for candidate in candidates:
+        name = candidate.name
+        if name == source.name or not name.startswith(source.name):
+            continue
+        suffix = name[len(source.name):]
+        if suffix.lower().startswith("autosave") and suffix[8:].isdigit():
+            kind, number = "AUTOSAVE", int(suffix[8:])
+        elif suffix.isdigit():
+            kind, number = "VERSION", int(suffix)
+        else:
+            continue
+        try:
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                entries.append({"kind": kind, "number": number, "filepath": str(candidate), "name": name,
+                                "modified": candidate.stat().st_mtime})
+        except OSError:
+            continue
+    entries.sort(key=lambda entry: (entry["kind"], entry["number"]))
+    return entries
+
+
 def _original_path_for_autosave(filepath):
     autosave = Path(filepath).resolve()
     version = _autosave_version(autosave)
+    backup = _backup_version(autosave)
+    if version is None and backup is not None and not _path_is_within(autosave, _temp_root()):
+        return autosave.with_name(autosave.name[:-len(str(backup))])
     if version is None or _path_is_within(autosave, _temp_root()):
         return None
     suffix = f"Autosave{version}"
