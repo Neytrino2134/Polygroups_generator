@@ -53,6 +53,14 @@ assert bpy.ops.object.polygroups_relod()=={'FINISHED'}
 for index in range(2):
  xs=[bpy.data.objects[src.name[:-4]+'_LOD'+str(index)].matrix_world.translation.x for src in sources]
  assert abs(xs[0]-xs[1])<1e-5,xs
+# ReBake keeps an arranged row: grid X only, the MID's own Y.
+keep=SmartArrangeGrid(c,sources,s.smart_lods_spacing,keep_rows=True)
+probe=bpy.data.objects[sources[1].name[:-4]+'_LOD0']
+sources[1].location.y+=3.7;c.view_layer.update()
+keep.place(probe,sources[1],1)
+assert abs(probe.matrix_world.translation.y-sources[1].matrix_world.translation.y)<1e-5
+assert abs(probe.matrix_world.translation.x-(keep.origin.x+keep.x_step))<1e-5
+sources[1].location.y-=3.7;keep.place(probe,sources[1],1);c.view_layer.update()
 # Phase 1 group translations must not destroy the shared columns.
 for obj in c.scene.objects:
  if obj.type=='MESH' and obj.get(LOD_SOURCE)==sources[1].name:obj.location.x+=99

@@ -3,7 +3,10 @@ from mathutils import Vector
 
 
 class SmartArrangeGrid:
-    def __init__(self, context, sources, spacing_y=1.0, gap_x=.1):
+    def __init__(self, context, sources, spacing_y=1.0, gap_x=.1, keep_rows=False):
+        # keep_rows: an already arranged scene (ReBake) keeps each source's own
+        # row; only the LOD columns follow the grid along X.
+        self.keep_rows = keep_rows
         self.sources = list(dict.fromkeys(sources))
         if not self.sources:
             raise ValueError('Smart Arrange needs at least one source')
@@ -27,7 +30,8 @@ class SmartArrangeGrid:
     def place(self, obj, source, column):
         matrix = obj.matrix_world.copy()
         matrix.translation.x = self.origin.x + column*self.x_step
-        matrix.translation.y = self.origin.y + self.rows[source]*self.y_step
+        matrix.translation.y = (source.matrix_world.translation.y if self.keep_rows
+                                else self.origin.y + self.rows[source]*self.y_step)
         obj.matrix_world = matrix
 
     def arrange_sources(self, context):
