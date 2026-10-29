@@ -98,4 +98,18 @@ queue.pass_index = len(queue.passes)
 queue.stage = 'PASS_SETUP'
 queue.advance(ctx)
 assert queue.stage == 'COMPLETE', queue.stage
+
+# Completing a resumed collection clears its failure stamp and does not export a Generated.N blend.
+from polygroups_generator.core import skip_marks  # noqa: E402
+skip_marks.mark_failed_file(col, 'boom')
+saved = []
+queue.save_generated_separately = True
+queue.save_and_clear_completed_collection = lambda *a, **k: saved.append(1)
+queue.file_record = {}
+queue.result_meshes = []
+queue.complete_file = lambda *a, **k: None
+queue.auto_save_successful_meshes = lambda: None
+queue.pass_sources = [second]
+queue.advance(ctx)
+assert not saved and not col.get(skip_marks.FAILED_KEY) and queue.stage == 'COMPLETE'
 print('resume selected ok')

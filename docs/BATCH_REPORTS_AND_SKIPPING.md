@@ -51,4 +51,5 @@ Open the failed `<name>_Generated_NNN.blend`, finish the collection and save it.
 
 ## Resume Selected
 
-Select a `Retopo_` / `Retopo_NN_Highpoly_Generated.N` mesh in its Generated.N collection and press Resume Selected (Phase 1 start group, below Do Selected). `Retopo_` or `Retopo_01` = first remesh pass done: resumes at 3. Narrow Island Splitter and runs the second and third remesh passes. `Retopo_02` resumes at 6. and runs the third pass. `Retopo_03` is the end of Phase 1: the button is disabled (is finished). The run ends at stage 8 even when 13. Phase 2 is on, and it never starts Phase 2. A finished collection loses its failure stamp, and a saved result clears the failure in the Phase 1 report.
+Select a `Retopo_` / `Retopo_NN_Highpoly_Generated.N` mesh in its Generated.N collection and press Resume Selected (Phase 1 start group, below Do Selected). `Retopo_` or `Retopo_01` = first remesh pass done: resumes at 3. Narrow Island Splitter and runs the second and third remesh passes. `Retopo_02` resumes at 6. and runs the third pass. `Retopo_03` is the end of Phase 1: the button is disabled (is finished). The run ends at stage 8 even when 13. Phase 2 is on, and it never starts Phase 2. A finished collection loses its failure stamp. Resume Selected works in the open file and does not export a Generated.N blend; save the file yourself.
+

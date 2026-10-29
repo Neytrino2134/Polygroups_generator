@@ -726,7 +726,9 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 clear_all(self.collection)
             self.file_record["output_tris"] = self.count_tris((self.pass_sources or self.meshes) + self.result_meshes)
             completed_object_count = len(self.meshes)
-            if self.save_generated_separately:
+            if self.resume is not None:
+                pass  # Resume Selected works inside the file that already holds the collection.
+            elif self.save_generated_separately:
                 self.save_and_clear_completed_collection()
             else:
                 self.groups.append((self.meshes[0], list(self.file_objects)))
