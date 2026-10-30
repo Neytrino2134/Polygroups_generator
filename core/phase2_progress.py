@@ -207,7 +207,11 @@ def draw_rebake(layout, context, p):
         or p.phase2_pipeline_running or p.batch_is_running or p.phase2_is_running
         or p.phase2_final_is_running or p.phase2_auto_render_running or p.phase2_rebake_queue_running
         or p.phase2_relod_running or context.scene.polygroups_mesh_finalization_settings.smart_lods_is_running)
-    rebake = manual.operator('object.polygroups_rebake_final_mesh', text='ReBake Selected Final Mesh', icon='FILE_REFRESH')
+    from ..operators.rebake_final import rebake_dispatch
+    # The label follows what the button will actually run: the queue, or the selected MID.
+    queued = rebake_dispatch(context, True)[0]
+    rebake = manual.operator('object.polygroups_rebake_final_mesh', icon='FILE_REFRESH',
+                             text='ReBake Queue Final Meshes' if queued else 'ReBake Selected Final Mesh')
     rebake.create_lods = p.phase2_rebake_create_lods
     rebake.export_selected = p.phase2_rebake_create_lods and p.phase2_rebake_export_selected
     rebake.repair_mesh = p.phase2_rebake_repair_mesh
