@@ -40,6 +40,10 @@ def export_rebaked_asset(context, target, generated, collection, engine, report,
             meshes.add(obj)
     meshes.add(target)
     meshes = sorted(meshes, key=lambda obj: obj.name.casefold())
+    # FBX / Blend reference the exact T_ / M_ names: fold .001 / _Old leftovers first,
+    # so every exported material gets one BaseColor and one Normal.
+    from ..core.datablock_names import merge_stale_copies
+    merge_stale_copies()
     if context.object and context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
     for obj in meshes:
