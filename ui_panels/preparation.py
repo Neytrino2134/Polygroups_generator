@@ -536,6 +536,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls.prop(settings, "fold_repair_dangling", text=t(context, "fold_repair_dangling"))
                 controls.prop(settings, 'phase2_remove_loose_parts')
                 controls.prop(settings, 'phase2_topology_guard_highest')
+                if settings.phase2_mid_remesh:
+                    controls.prop(settings, 'phase2_fix_source_before_mid')
                 controls.prop(settings, 'phase2_mid_remesh')
                 if settings.phase2_mid_remesh:
                     controls.label(text='Clear seams + pins | Smart Seams 22 degrees | MID', icon='INFO')

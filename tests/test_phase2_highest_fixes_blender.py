@@ -24,6 +24,7 @@ for preset in ('UNREAL', 'UNREAL_ZBRUSH'):
     dialog.apply_start_preset(p, preset)
     assert p.phase2_mesh_auto_repair and p.phase2_remove_loose_parts and p.phase2_topology_guard_highest, preset
     assert not p.phase2_topology_guard_retopo01, preset
+    assert p.phase2_run_fix_source and p.phase2_fix_source_before_mid, preset  # double fix is on by default
 
 # Remove Small Loose Parts hits only the highest Retopo_XX.
 collection = bpy.data.collections.new('Generated.001')

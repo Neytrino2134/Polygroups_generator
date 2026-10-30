@@ -26,6 +26,7 @@ pairs = (('phase2_run_mid', 'phase2_mid_remesh'), ('phase2_run_resculpt_retopo01
          ('phase2_run_topology_guard', 'phase2_topology_guard_retopo01'),
          ('phase2_run_guard_highest', 'phase2_topology_guard_highest'),
          ('phase2_run_loose_parts', 'phase2_remove_loose_parts'),
+         ('phase2_run_fix_source', 'phase2_fix_source_before_mid'),
          ('phase2_run_cleanup', 'phase2_zbrush_cleanup_on_success'), ('phase2_run_transparent', 'phase2_auto_transparent'))
 for run_name, manual_name in pairs:
     for value in (True, False):

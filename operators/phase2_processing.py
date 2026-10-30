@@ -609,7 +609,10 @@ class Phase2Queue:
                         raise ValueError(f'{self.collection.name}: expected exactly one Retopo_01 / Resculpting_01 mesh')
                     self.retopo01 = candidates[0]
                 self.remove_loose_parts(context)
-                self.repair_mesh(context,repack=False)
+                # Double fix: the source before the MID remesh (optional) and its result afterwards.
+                self.repair_mesh(context,repack=False,
+                                 enabled=self.settings.phase2_mesh_auto_repair
+                                 and (self.settings.phase2_fix_source_before_mid or not self.settings.phase2_mid_remesh))
                 if self.settings.phase2_mid_remesh:
                     from .phase2_mid_remesh import Phase2MidRemesh
                     self.mid_remesh=Phase2MidRemesh(context,self.collection,self.report)

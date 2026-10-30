@@ -334,6 +334,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Topology Guard Highest Retopo", default=True,
         description="Fix non-disk UV charts of the highest Retopo_XX (the MID remesh result) before it is unwrapped and baked",
     )
+    phase2_run_fix_source: _paired("phase2_run_fix_source", "phase2_fix_source_before_mid", bpy.props.BoolProperty,
+        name="Repair Source Before MID", default=True,
+        description="Second fix pass: also repair the source Retopo_XX before the MID remesh (the MID result is always repaired)",
+    )
     phase2_run_loose_parts: _paired("phase2_run_loose_parts", "phase2_remove_loose_parts", bpy.props.BoolProperty,
         name="Remove Small Loose Parts", default=True,
         description="Remove small loose parts of the highest Retopo_XX before repair and remesh (uses the Stage 8 metric and threshold)",
@@ -505,6 +509,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_topology_guard_highest: _paired("phase2_topology_guard_highest", "phase2_run_guard_highest", bpy.props.BoolProperty,
         name="Topology Guard Highest Retopo", default=True,
         description="Fix non-disk UV charts of the highest Retopo_XX (the MID remesh result) before it is unwrapped and baked",
+    )
+    phase2_fix_source_before_mid: _paired("phase2_fix_source_before_mid", "phase2_run_fix_source", bpy.props.BoolProperty,
+        name="Repair Source Before MID", default=True,
+        description="Second fix pass: also repair the source Retopo_XX before the MID remesh (the MID result is always repaired)",
     )
     phase2_remove_loose_parts: _paired("phase2_remove_loose_parts", "phase2_run_loose_parts", bpy.props.BoolProperty,
         name="Remove Small Loose Parts", default=True,

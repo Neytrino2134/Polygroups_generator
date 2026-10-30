@@ -13,7 +13,8 @@ HIGHPOLY_OPTIONS = ('phase2_run_resculpt_retopo01', 'phase2_run_high_remesh', 'p
 SHARED_ON = ('phase2_run_restore', 'phase2_run_prepare', 'phase2_run_export', 'phase2_run_blend',
              'phase2_run_render', 'phase2_run_mid', 'phase2_export_fbx', 'phase2_blend_export_generated',
              'phase2_blend_export_highpoly', 'phase2_blend_export_retopo01', 'phase2_autosave',
-             'phase2_auto_skip_scene', 'phase2_run_guard_highest', 'phase2_run_loose_parts')
+             'phase2_auto_skip_scene', 'phase2_run_guard_highest', 'phase2_run_loose_parts',
+             'phase2_run_fix_source')
 
 
 def apply_start_preset(p, preset):
@@ -114,6 +115,7 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         fixes = layout.column(align=True)
         fixes.prop(p, 'phase2_run_loose_parts')
         fixes.prop(p, 'phase2_run_guard_highest')
+        fixes.prop(p, 'phase2_run_fix_source')
         if active_start_preset(p) == 'UNREAL_ZBRUSH':
             options = layout.column(align=True)
             options.prop(p, 'phase2_run_skip_rebake', icon='FF')
