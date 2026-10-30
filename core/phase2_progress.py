@@ -76,6 +76,10 @@ def draw_start(layout, context, p):
     else:
         start.operator_context = 'INVOKE_DEFAULT'
         start.operator('object.polygroups_phase2_confirm_start', text='Start Phase 2 Process', icon='PLAY').then = 'PHASE2'
+    saves = layout.column(align=True)
+    saves.enabled = controls_enabled
+    saves.prop(p, 'phase2_autosave')
+    saves.prop(p, 'phase2_autosave_after_finish')
     recovery = layout.row()
     recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
     from ..ui_panels.common import draw_collapsible_box

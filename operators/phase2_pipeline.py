@@ -276,6 +276,20 @@ class Phase2Pipeline:
                 self.timer = None
             if ACTIVE_PIPELINE is self:
                 ACTIVE_PIPELINE = None
+            if state in {'COMPLETED', 'FAILED'}:
+                self.autosave_after_finish(context)
+
+    def autosave_after_finish(self, context):
+        if not self.settings.phase2_autosave_after_finish or not bpy.data.filepath:
+            return
+        try:
+            context.view_layer.update()
+            if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath, check_existing=False):
+                raise RuntimeError('Blender did not finish saving the working file')
+            self.settings.phase2_autosave_status = 'Autosaved after Phase 2 finished'
+        except Exception as error:
+            self.settings.phase2_autosave_status = f'Autosave after finish failed: {error}'
+            self.report({'WARNING'}, self.settings.phase2_autosave_status)
 
 
 @persistent

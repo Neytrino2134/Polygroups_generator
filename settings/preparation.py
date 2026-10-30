@@ -494,6 +494,8 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Do not restore Backup_Retopo or Backup_Resculpting objects from saved collections during Phase 2 processing")
     phase2_autosave: bpy.props.BoolProperty(name="Autosave Completed Collections", default=True,
         description="Save the current blend after every N successfully completed collection pipelines")
+    phase2_autosave_after_finish: bpy.props.BoolProperty(name="Autosave After Finish", default=True,
+        description="Save the working blend when the Phase 2 process finishes (completed or failed, not when stopped)")
     phase2_autosave_every: bpy.props.IntProperty(name="Successful Collections per Save", default=1, min=1)
     phase2_autosave_status: bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
     phase2_resculpt_retopo01: _paired("phase2_resculpt_retopo01", "phase2_run_resculpt_retopo01", bpy.props.BoolProperty,

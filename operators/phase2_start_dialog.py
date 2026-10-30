@@ -112,6 +112,9 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         layout = self.layout
         layout.use_property_split = False
         draw_start_presets(layout, p)
+        saves = layout.column(align=True)
+        saves.prop(p, 'phase2_autosave')
+        saves.prop(p, 'phase2_autosave_after_finish')
         fixes = layout.column(align=True)
         fixes.prop(p, 'phase2_run_loose_parts')
         fixes.prop(p, 'phase2_run_guard_highest')
