@@ -63,6 +63,16 @@ def _auto_bake_update(self, context):
         _assign(self, "phase2_run_mode", "REBAKE")
 
 
+# Smart LODs triangle budgets (LOD0..LOD4) written when the Start Phase 2 pipeline is chosen.
+ENGINE_LOD_TRIS = {"FAB": (3000, 1500, 1000, 500, 250), "UNITY": (2900, 1500, 1000, 500, 150)}
+
+
+def apply_engine_lod_tris(settings):
+    finalization = settings.id_data.polygroups_mesh_finalization_settings
+    for index, tris in enumerate(ENGINE_LOD_TRIS[settings.phase2_run_engine], 1):
+        _assign(finalization, f"smart_lods_target_{index}", tris)
+
+
 def _run_engine_update(self, context):
     if self.phase2_pipeline_running:
         return
@@ -70,6 +80,7 @@ def _run_engine_update(self, context):
     _assign(self, "phase2_export_engine", engine)
     _assign(self, "phase2_final_rename_engine", engine)
     _assign(self, "phase2_final_lod_engine", "UNITY" if engine == "UNITY" else "UNREAL")
+    apply_engine_lod_tris(self)
 
 
 def _export_engine_follow_update(self, context):

@@ -43,6 +43,12 @@ p.phase2_auto_bake = False
 assert p.phase2_run_mode == 'IMPORT'
 p.phase2_run_engine = 'UNITY'
 assert p.phase2_export_engine == p.phase2_final_rename_engine == 'UNITY' and p.phase2_final_lod_engine == 'UNITY'
+lod_tris = lambda: [getattr(ctx.scene.polygroups_mesh_finalization_settings, f'smart_lods_target_{i}') for i in range(1, 6)]
+assert lod_tris() == [2900, 1500, 1000, 500, 150], lod_tris()
+p.phase2_run_engine = 'FAB'
+assert lod_tris() == [3000, 1500, 1000, 500, 250], lod_tris()
+p.phase2_run_engine = 'UNITY'
+assert lod_tris() == [2900, 1500, 1000, 500, 150], lod_tris()
 p.phase2_export_engine = 'FAB'
 assert p.phase2_run_engine == 'FAB' and p.phase2_final_rename_engine == 'FAB'
 p.phase2_run_prepare = False
@@ -59,6 +65,7 @@ assert p.phase2_mid_remesh and p.phase2_run_mid and p.phase2_auto_bake
 # Presets.
 assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL') == {'FINISHED'}
 assert dialog.active_start_preset(p) == 'UNREAL'
+assert lod_tris() == [3000, 1500, 1000, 500, 250], lod_tris()
 assert not any(getattr(p, name) for name in dialog.HIGHPOLY_OPTIONS)
 assert not p.phase2_run_zbrush and not p.phase2_run_cleanup and not p.phase2_resculpt_retopo01
 assert p.phase2_run_mid and p.phase2_run_blend and p.phase2_run_export and p.phase2_run_render

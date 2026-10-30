@@ -2,6 +2,7 @@
 import bpy
 
 from ..core.asset_names import asset_name
+from ..settings.preparation import apply_engine_lod_tris
 
 PRESETS = (
     ('UNREAL', 'Unreal Export', 'MID / LOW FBX, Blend and render only: no highpoly resculpting and no ZBrush'),
@@ -25,6 +26,7 @@ def apply_start_preset(p, preset):
     for name in SHARED_ON:
         setattr(p, name, True)
     p.phase2_run_engine = 'FAB'
+    apply_engine_lod_tris(p)  # also when FAB was already chosen
     p.phase2_export_glb = False
     for name in HIGHPOLY_OPTIONS:
         setattr(p, name, zbrush)
