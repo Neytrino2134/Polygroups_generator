@@ -1,0 +1,18 @@
+{
+  "phase": 2,
+  "status": "STOPPED",
+  "total_files": 0,
+  "successful_files": 0,
+  "failed_files": 0,
+  "interrupted_files": 0,
+  "skipped_files": 0,
+  "unprocessed_files": 0,
+  "input_tris": 0,
+  "successful_input_tris": 0,
+  "output_tris": 0,
+  "successful_collections": [],
+  "failed_collections": [],
+  "skipped_collections": [],
+  "files_index": "files.json",
+  "events": "events.jsonl"
+}

@@ -29,7 +29,20 @@ run.report = lambda *args: None
 with patch.object(pipeline, 'bpy', SimpleNamespace(data=proxy.data, ops=proxy.ops, context=ctx)):
     run.autosave_after_finish(ctx)
     assert saves == ['D:/work/a.blend'] and 'finished' in p.phase2_autosave_status
+    # Every finished stage saves before the next one starts; the last one is left to the finish save.
+    events = []
+    run.log_event = lambda event, data: events.append(data['moment'])
+    run.plan = [('RESTORE', 'Restore', None, None), ('PREPARE', 'Create LODs', None, None),
+                ('RENDER', 'Render', None, None)]
+    for index in (1, 2, 3):
+        run.index = index
+        run.autosave_after_stage(ctx)
+    assert len(saves) == 3, saves
+    assert events == ['after Restore, before Create LODs', 'after Create LODs, before Render'], events
+    assert p.phase2_autosave_status == 'Autosaved after Create LODs, before Render'
     p.phase2_autosave_after_finish = False
     run.autosave_after_finish(ctx)
-    assert len(saves) == 1
+    run.index = 1
+    run.autosave_after_stage(ctx)
+    assert len(saves) == 3
 print('phase2 autosave finish ok')

@@ -1,0 +1,3 @@
+{"time": "2026-10-30T16:28:25.789087", "event": "begin", "data": {"files": [], "phase": 2}}
+{"time": "2026-10-30T16:28:25.800462", "event": "plan", "data": {"stages": ["RESTORE", "PREPARE", "EXPORT", "BLEND", "RENDER"]}}
+{"time": "2026-10-30T16:28:25.804014", "event": "finish", "data": {"status": "STOPPED", "error": "", "done": 0, "failed": 0, "skipped": 0}}

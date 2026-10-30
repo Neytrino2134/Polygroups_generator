@@ -66,6 +66,8 @@ class Phase2Pipeline:
         from ..core.phase2_progress import PipelineOverlay
         self.overlay = PipelineOverlay(context)
         self.start_log()
+        # The Phase 1 result is saved before any Phase 2 stage changes the scene.
+        self.autosave(context, f'before {self.plan[0][1]} (Phase 1 result)')
         self.publish(context)
 
     def start_log(self):
@@ -201,6 +203,7 @@ class Phase2Pipeline:
                 self.iterator = None
                 self.index += 1
                 self.fraction = 0
+                self.autosave_after_stage(context)
                 if self.stop_after_stage:
                     self.finish(context, 'STOPPED')
                     return
@@ -279,17 +282,30 @@ class Phase2Pipeline:
             if state in {'COMPLETED', 'FAILED'}:
                 self.autosave_after_finish(context)
 
-    def autosave_after_finish(self, context):
+    def autosave(self, context, moment, log=True):
+        """Save the working blend at a stage boundary; a failed save warns and never stops the run."""
         if not self.settings.phase2_autosave_after_finish or not bpy.data.filepath:
             return
         try:
             context.view_layer.update()
             if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath, check_existing=False):
                 raise RuntimeError('Blender did not finish saving the working file')
-            self.settings.phase2_autosave_status = 'Autosaved after Phase 2 finished'
+            self.settings.phase2_autosave_status = 'Autosaved ' + moment
+            if log:
+                self.log_event('autosave', {'moment': moment})
         except Exception as error:
-            self.settings.phase2_autosave_status = f'Autosave after finish failed: {error}'
+            self.settings.phase2_autosave_status = f'Autosave {moment} failed: {error}'
             self.report({'WARNING'}, self.settings.phase2_autosave_status)
+
+    def autosave_after_stage(self, context):
+        """After every finished stage, before the next one starts (Restore -> LODs -> Export -> Render ...)."""
+        if self.index >= len(self.plan):
+            return  # the last stage is saved by autosave_after_finish
+        self.autosave(context, f'after {self.plan[self.index - 1][1]}, before {self.plan[self.index][1]}')
+
+    def autosave_after_finish(self, context):
+        # The report already ended with its 'finish' event.
+        self.autosave(context, 'after Phase 2 finished', log=False)
 
 
 @persistent
