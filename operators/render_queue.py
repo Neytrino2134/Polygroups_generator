@@ -1077,6 +1077,32 @@ def _clear_multiview_setups():
     return removed_objects, removed_collections
 
 
+def isolate_render_collection(context, current):
+    """Exclude every collection except the rendered one (with its children), the studio
+    (Scene / Camera / Light collections and ones holding cameras or lights) and their parents.
+    The caller's visibility snapshot restores the original values after the whole render."""
+    scene = context.scene
+    keep = {current, *current.children_recursive}
+    for collection in scene.collection.children_recursive:
+        if is_render_support_collection(scene, collection) or any(
+                obj.type in {'CAMERA', 'LIGHT'} or obj.get('polygroups_studio_role')
+                for obj in collection.objects):
+            keep.update((collection, *collection.children_recursive))
+
+    def required(layer):
+        return layer.collection in keep or any(required(child) for child in layer.children)
+
+    def visit(layer):
+        # Top-down: a parent is enabled before its children are decided.
+        for child in layer.children:
+            needed = required(child)
+            if child.exclude == needed:
+                child.exclude = not needed
+            if needed:
+                visit(child)
+    visit(context.view_layer.layer_collection)
+
+
 def _prepare_scene_for_job(job):
     # Texture previews must never leak into mesh, Hero or Multiview renders.
     for plane in texture_planes():
@@ -1096,6 +1122,7 @@ def _prepare_scene_for_job(job):
     for collection in queue_collections:
         is_current = collection == current_collection
         _set_asset_collection_enabled(collection, is_current)
+    isolate_render_collection(bpy.context, current_collection)
 
     for obj in _collection_objects_recursive(current_collection):
         is_current = obj == current_object or obj.name in job.get("texture_objects", [])

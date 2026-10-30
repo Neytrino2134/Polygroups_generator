@@ -219,25 +219,27 @@ class OBJECT_OT_polygroups_phase2_auto_render(SequentialJob, bpy.types.Operator)
                 raise RuntimeError('Scene Setup failed')
         if context.scene.camera is None:
             raise ValueError('The scene needs an active camera')
-        from .rename_objects import ensure_collection_visible_in_view_layer
-        for col, sources in assets:
-            if not ensure_collection_visible_in_view_layer(context, col):
-                raise ValueError('Cannot enable ' + col.name)
-        rq.ensure_render_support_visible(context)
-        bpy.ops.object.select_all(action='DESELECT')
-        for col, sources in assets:
-            for obj in sources:
-                obj.hide_viewport = obj.hide_render = obj.hide_select = False
-                obj.hide_set(False)
-                obj.select_set(True)
-        freestyle_objects = []
-        if s.freestyle_edges:
-            freestyle_objects = [obj.name for col, sources in assets for obj in sources]
-            rq._mark_freestyle_edges([obj for col, sources in assets for obj in sources], True)
+        # Snapshot before anything is enabled: every collection gets its own value back
+        # after the whole render, while each asset renders isolated (isolate_render_collection).
         snapshot = rq._snapshot_visibility()
+        freestyle_objects = []
         done, history = 0, []
         completed = False
         try:
+            from .rename_objects import ensure_collection_visible_in_view_layer
+            for col, sources in assets:
+                if not ensure_collection_visible_in_view_layer(context, col):
+                    raise ValueError('Cannot enable ' + col.name)
+            rq.ensure_render_support_visible(context)
+            bpy.ops.object.select_all(action='DESELECT')
+            for col, sources in assets:
+                for obj in sources:
+                    obj.hide_viewport = obj.hide_render = obj.hide_select = False
+                    obj.hide_set(False)
+                    obj.select_set(True)
+            if s.freestyle_edges:
+                freestyle_objects = [obj.name for col, sources in assets for obj in sources]
+                rq._mark_freestyle_edges([obj for col, sources in assets for obj in sources], True)
             s.is_running, s.stop_requested = True, False
             if p.phase2_auto_textures and p.phase2_auto_texture_prepare == 'ALL':
                 prepare_textures(context, [col for col, sources in assets])
