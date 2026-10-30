@@ -195,8 +195,9 @@ with tempfile.TemporaryDirectory() as directory:
     try:final.FinalRebakeSession(bpy.context,target,settings,export_selected=True)
     except ValueError as error:assert 'Enable Create LODs' in str(error)
     else:raise AssertionError('Export without Create LODs accepted')
-    assert not preparation.phase2_rebake_export_selected
-    assert not preparation.phase2_rebake_create_lods
+    assert preparation.phase2_rebake_export_selected
+    assert preparation.phase2_rebake_create_lods and preparation.phase2_rebake_delete_current_lods
+    assert preparation.phase2_rebake_repack_uv
     preparation.phase2_rebake_create_lods=True
     phase2_tree=capture(bpy.context,1)
     assert not phase2_tree.errors,phase2_tree.errors

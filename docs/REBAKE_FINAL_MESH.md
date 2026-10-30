@@ -93,7 +93,7 @@ Batch AutoBake output and separate blend reopening.
 ## Manual Phase 2 button and optional LODs
 
 A second ReBake Final Mesh button is directly below **Start Phase 2 Process**.
-Its **Create LODs** checkbox is off by default. This is a separate manual action:
+Its **Create LODs** checkbox is on by default. This is a separate manual action:
 it is not a stage of the automatic Phase 2 run and does not change its queue.
 The Baking-section ReBake button retains its bake-only default.
 
@@ -120,7 +120,7 @@ the previous repair is already applied. The marker clears after successful packi
 
 ### Manual model queue
 
-**Delete Current LODs Before ReBake** is an independent, off-by-default option.
+**Delete Current LODs Before ReBake** is an independent, on-by-default option.
 After read-only preflight, before Repair Mesh and baking, it removes the current
 scene's exact `SM_<asset>_LOD<number>` meshes for the selected MID. For example,
 `SM_Asset_00_12_MID` matches `SM_Asset_00_12_LOD0` and `SM_Asset_00_12_LOD7`, including
@@ -215,7 +215,7 @@ Phase 2 naming defaults. The automatic Phase 2 pipeline remains unchanged.
 ## Export Selected FBX / Blend after manual ReBake
 
 Under Create LODs in **Start Phase 2**, the new **Export Selected FBX / Blend**
-checkbox is off by default and available only with Create LODs enabled. The
+checkbox is on by default and available only with Create LODs enabled. The
 manual button passes this option explicitly; the Baking-section button and
 automatic Phase 2 run retain their previous behavior.
 

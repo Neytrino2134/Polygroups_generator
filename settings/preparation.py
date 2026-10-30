@@ -288,10 +288,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_rename_blend: bpy.props.BoolProperty(name='Reexport Blend', default=False)
     phase2_rename_json: bpy.props.BoolProperty(name='Export / Update JSON', default=True)
     phase2_rename_status: bpy.props.StringProperty(default='Ready')
-    phase2_rebake_create_lods: bpy.props.BoolProperty(name="Create LODs", default=False,
+    phase2_rebake_create_lods: bpy.props.BoolProperty(name="Create LODs", default=True,
         description="After manual ReBake Final Mesh, create LODs using the pipeline and asset settings above; not part of Start Phase 2")
     phase2_rebake_repair_mesh: bpy.props.BoolProperty(name="Repair Mesh", default=True)
-    phase2_rebake_delete_current_lods: bpy.props.BoolProperty(name="Delete Current LODs Before ReBake", default=False,
+    phase2_rebake_delete_current_lods: bpy.props.BoolProperty(name="Delete Current LODs Before ReBake", default=True,
         description="Before repair and baking, delete this MID's SM_<asset>_LOD<number> meshes and their LOD labels from the current scene")
     phase2_rebake_repack_uv: bpy.props.BoolProperty(name="Repack UV If Repair Changed UV", default=True)
     phase2_rebake_repair_folds: bpy.props.BoolProperty(name="Repair Folded Pockets", default=True)
@@ -302,7 +302,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_rebake_queue_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_rebake_queue_status: bpy.props.StringProperty(default='Ready', options={'SKIP_SAVE'})
     phase2_rebake_queue_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
-    phase2_rebake_export_selected: bpy.props.BoolProperty(name="Export Selected FBX / Blend", default=False,
+    phase2_rebake_export_selected: bpy.props.BoolProperty(name="Export Selected FBX / Blend", default=True,
         description="After manual ReBake and Create LODs, select the current asset meshes and replace their FBX and Blend exports")
     phase2_run_restore: bpy.props.BoolProperty(name="Restore from Separated", default=True)
     phase2_run_mode: bpy.props.EnumProperty(name="Restore Mode", update=_mode_update, items=(

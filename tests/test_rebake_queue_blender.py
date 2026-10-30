@@ -84,7 +84,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_rebake_queue_') as direct
     assert bpy.ops.object.polygroups_rebake_queue_edit(action='REMOVE',index=1)=={'FINISHED'}
     assert len(p.phase2_rebake_queue)==1
     assert bpy.ops.object.polygroups_rebake_queue_edit(action='ADD')=={'FINISHED'}
-    assert not p.phase2_rebake_delete_current_lods
+    assert p.phase2_rebake_delete_current_lods
     p.phase2_rebake_delete_current_lods=True
     panel=capture(context,1);assert not panel.errors,panel.errors
     props={binding[2] for binding in panel.bindings.values() if binding[0]=='property'}
