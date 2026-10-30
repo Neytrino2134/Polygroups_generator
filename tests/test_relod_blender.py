@@ -110,7 +110,7 @@ def walk(node):
  yield node
  for child in node.get('children',[]):yield from walk(child)
 groups={n.get('text'):n for n in walk(panel.node) if n['kind']=='group'}
-start=groups['Start Phase 2'];status=groups['Status and Statistics'];relod=groups['ReLOD']
+start=groups['Start Phase 2'];status=groups['Status and Statistics'];relod=groups['ReLOD Final Mesh']
 assert status in start['children'] and relod in start['children']
 assert start['children'].index(relod)<start['children'].index(status)
 assert any(n['kind']=='progress' for n in walk(status))

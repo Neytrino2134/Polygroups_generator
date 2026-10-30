@@ -94,6 +94,24 @@ def draw_start(layout, context, p):
     rebake = draw_collapsible_box(layout, p, 'phase2_show_rebake', 'Rebake Final Mesh', 'FILE_REFRESH')
     if rebake is not None:
         draw_rebake(rebake, context, p)
+    relod = draw_collapsible_box(layout, p, 'phase2_show_relod', 'ReLOD Final Mesh', 'MOD_DECIM')
+    if relod is not None:
+        controls = relod.column(align=True)
+        controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
+        controls.prop(p, 'phase2_relod_delete_current_lods')
+        controls.prop(p, 'phase2_relod_reexport')
+        controls.prop(p, 'phase2_relod_json')
+        controls.prop(context.scene.polygroups_mesh_finalization_settings, 'smart_lods_smart_arrange')
+        controls.prop(p, 'phase2_relod_method')
+        if p.phase2_relod_method == 'UV_PRESERVE':
+            controls.prop(p, 'phase2_relod_seam_mode')
+        controls.label(text='All _MID / _HIGH meshes in scene (MID preferred)', icon='INFO')
+        controls.label(text='Triangle budgets follow the pipeline switch: '
+                       + ('Unity' if unity else 'Unreal / FAB'))
+        buttons = controls.row(align=True)
+        buttons.operator('object.polygroups_relod', text='Re-create LODs', icon='FILE_REFRESH')
+        buttons.operator('object.polygroups_relod', text='Re-create Selected',
+                         icon='RESTRICT_SELECT_OFF').selected_only = True
     rename = draw_collapsible_box(layout, p, 'phase2_show_rename_final', 'Rename Final Mesh', 'SORTALPHA')
     if rename is not None:
         controls = rename.column(align=True)
@@ -108,23 +126,6 @@ def draw_start(layout, context, p):
         controls.prop(p, 'phase2_rename_json')
         rename.label(text='Export pipeline: ' + ('Unity' if unity else 'Unreal / FAB'))
         controls.operator('object.polygroups_rename_final_meshes', text='Rename Final Meshes', icon='SORTALPHA')
-    relod = draw_collapsible_box(layout, p, 'phase2_show_relod', 'ReLOD', 'MOD_DECIM')
-    if relod is not None:
-        controls = relod.column(align=True)
-        controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
-        controls.prop(p, 'phase2_relod_delete_current_lods')
-        controls.prop(p, 'phase2_relod_reexport')
-        controls.prop(p, 'phase2_relod_json')
-        controls.prop(context.scene.polygroups_mesh_finalization_settings, 'smart_lods_smart_arrange')
-        controls.prop(p, 'phase2_relod_method')
-        if p.phase2_relod_method == 'UV_PRESERVE':
-            controls.prop(p, 'phase2_relod_seam_mode')
-        controls.label(text='All _MID / _HIGH meshes in scene (MID preferred)', icon='INFO')
-        controls.label(text='Uses Smart LOD count and triangle budgets')
-        buttons = controls.row(align=True)
-        buttons.operator('object.polygroups_relod', text='Re-create LODs', icon='FILE_REFRESH')
-        buttons.operator('object.polygroups_relod', text='Re-create Selected',
-                         icon='RESTRICT_SELECT_OFF').selected_only = True
     status = draw_collapsible_box(layout, p, 'phase2_show_status', 'Status and Statistics', 'INFO')
     if status is not None:
         draw_start_status(status, context, p)
