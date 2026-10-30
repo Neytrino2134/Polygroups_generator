@@ -658,16 +658,22 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
         review = self._rebake_review
-        layout.label(text='Очередь ReBake' if review['queued'] else 'Выбранный объект', icon='OUTLINER_OB_MESH')
-        for index, item in enumerate(review['rows'], 1):
-            box = layout.box()
-            box.label(text=f'{index}. {item["target"]}', icon='MESH_DATA')
-            if item['source']:
-                box.label(text='Highpoly: ' + item['source'])
+        rows = review['rows']
+        # The mesh / Highpoly source list is collapsed by default; errors stay visible below.
+        header, body = layout.panel('polygroups_rebake_review_sources', default_closed=True)
+        header.label(text=('Очередь ReBake' if review['queued'] else 'Выбранный объект')
+                     + f': исходные файлы для запечки ({len(rows)})', icon='OUTLINER_OB_MESH')
+        if body is not None:
+            for index, item in enumerate(rows, 1):
+                box = body.box()
+                box.label(text=f'{index}. {item["target"]}', icon='MESH_DATA')
+                if item['source']:
+                    box.label(text='Highpoly: ' + item['source'])
+        for index, item in enumerate(rows, 1):
             if item['error']:
-                row = box.row()
+                row = layout.row()
                 row.alert = True
-                row.label(text=item['error'], icon='ERROR')
+                row.label(text=f'{index}. {item["target"]}: {item["error"]}', icon='ERROR')
         layout.label(text='Существующие текстуры будут перезаписаны.', icon='ERROR')
         for enabled, text in ((self.repair_mesh, 'Исправление меша перед ReBake'),
                 (self.delete_current_lods, 'Удаление текущих LOD перед ReBake'),

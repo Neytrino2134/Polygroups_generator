@@ -17,6 +17,10 @@ class Layout:
     def label(self,**kwargs):labels.append(kwargs['text'])
     def box(self):return self
     def row(self):return self
+    def panel(self,idname,default_closed=False):
+        # The source list is a collapsible section, closed by default.
+        assert default_closed;panels.append(idname);return self,self
+panels=[]
 def operator():
     return SimpleNamespace(use_queue=True,create_lods=False,export_selected=False,
         repair_mesh=False,delete_current_lods=False,layout=Layout(),
@@ -50,6 +54,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert set(bpy.data.objects)==before and [item[0] for item in calls]==['dialog']
         assert calls[-1][1]['confirm_text']=='Запустить'
         Operator.draw(op,c)
+        assert panels==['polygroups_rebake_review_sources']
         assert any(targets[0].name in text for text in labels)
         assert any(sources[0].name in text for text in labels)
         assert Operator.execute(op,c)=={'FINISHED'} and calls[-1][0]=='bake'
