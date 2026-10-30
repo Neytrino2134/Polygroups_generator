@@ -10,7 +10,7 @@ addon_utils.enable(ROOT.name,default_set=False)
 from polygroups_generator.operators.rebake_clear import clear_before_rebake
 ctx=bpy.context
 p=ctx.scene.polygroups_model_preparation_settings
-assert not p.phase2_rebake_clear_materials
+assert p.phase2_rebake_clear_materials  # on by default
 
 
 def mesh(name,material=None,image=None):
