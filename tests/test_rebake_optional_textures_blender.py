@@ -81,3 +81,17 @@ with tempfile.TemporaryDirectory() as directory:
     bsdf=material.node_tree.nodes.get('Principled BSDF')
     assert bsdf.inputs['Base Color'].links[0].from_node.image.name==f'T_{ASSET}_BaseColor'
     print('REBAKE_WITHOUT_MATERIAL_OK')
+    # 3. Clear Before ReBake: old material / textures / folder are wiped, then ReBake rebuilds them.
+    clear(target,high,generated)
+    target,high,generated=make_pair()
+    old=bpy.data.materials.new('M_Stale');old.use_nodes=True;target.data.materials.append(old)
+    stale=bpy.data.images.new(f'T_{ASSET}_BaseColor_Old',8,8);old.node_tree.nodes.new('ShaderNodeTexImage').image=stale
+    (folder/f'T_{ASSET}_BaseColor_Old.png').write_bytes(b'x')
+    assert bpy.ops.object.polygroups_rebake_final_mesh(clear_materials=True)=={'FINISHED'},settings.bake_task_message
+    assert settings.bake_task_stage=='DONE',settings.bake_task_message
+    assert 'M_Stale' not in bpy.data.materials and f'T_{ASSET}_BaseColor_Old' not in bpy.data.images
+    assert [m.name for m in target.data.materials]==[f'M_{ASSET}']
+    written=sorted(p.name for p in folder.iterdir())
+    assert {f'T_{ASSET}_BaseColor.png',f'T_{ASSET}_Normal.png'}<=set(written),written
+    assert not [name for name in written if '_Old' in name or '.0' in name],written
+    print('REBAKE_CLEAR_THEN_BAKE_OK')

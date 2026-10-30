@@ -311,6 +311,10 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_rebake_delete_current_lods: bpy.props.BoolProperty(name="Delete Current LODs Before ReBake", default=True,
         description="Before repair and baking, delete this MID's SM_<asset>_LOD<number> meshes and their LOD labels from the current scene")
     phase2_rebake_repack_uv: bpy.props.BoolProperty(name="Repack UV If Repair Changed UV", default=True)
+    phase2_rebake_clear_materials: bpy.props.BoolProperty(name="Clear Materials and Textures Before ReBake", default=False,
+        description="Before ReBake, remove every material of the rebaked _MID / _HIGH meshes (selected or queued) "
+                    "with its textures, delete Textures/<asset> and the asset's textures in !Unreal/<format>/Textures, "
+                    "and purge unused data; ReBake then creates the material and textures from scratch")
     phase2_rebake_repair_folds: bpy.props.BoolProperty(name="Repair Folded Pockets", default=True)
     phase2_rebake_repair_coincident: bpy.props.BoolProperty(name="Merge Coincident Vertices", default=True)
     phase2_rebake_repair_zero_area: bpy.props.BoolProperty(name="Repair Zero Area / Preserve UV Seams", default=True)

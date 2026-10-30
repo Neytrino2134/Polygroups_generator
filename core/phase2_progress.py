@@ -217,6 +217,7 @@ def draw_rebake(layout, context, p):
     rebake.repair_mesh = p.phase2_rebake_repair_mesh
     rebake.use_queue = True
     rebake.delete_current_lods = p.phase2_rebake_delete_current_lods
+    rebake.clear_materials = p.phase2_rebake_clear_materials
     queue = manual.box()
     queue.label(text=f'ReBake Queue: {len(p.phase2_rebake_queue)} mesh(es)')
     controls = queue.row(align=True)
@@ -240,6 +241,7 @@ def draw_rebake(layout, context, p):
         if p.phase2_rebake_repair_stretched:
             repair.prop(p,'fold_repair_stretch_ratio')
         repair.prop(p,'phase2_rebake_repack_uv')
+    manual.prop(p, 'phase2_rebake_clear_materials')
     manual.prop(p, 'phase2_rebake_delete_current_lods')
     manual.prop(p, 'phase2_rebake_create_lods')
     exports = manual.column(align=True)

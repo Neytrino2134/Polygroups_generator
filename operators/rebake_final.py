@@ -613,6 +613,8 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
         description='After Create LODs, select current asset meshes and replace their FBX and Blend exports')
     repair_mesh: bpy.props.BoolProperty(name='Repair Mesh', default=False, options={'SKIP_SAVE'})
     delete_current_lods: bpy.props.BoolProperty(name='Delete Current LODs Before ReBake', default=False, options={'SKIP_SAVE'})
+    clear_materials: bpy.props.BoolProperty(name='Clear Materials and Textures Before ReBake', default=False,
+                                            options={'SKIP_SAVE'})
     use_queue: bpy.props.BoolProperty(default=False, options={'HIDDEN','SKIP_SAVE'})
 
     @classmethod
@@ -639,7 +641,16 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
                     raise ValueError('; '.join(errors))
                 if current['signature'] != reviewed['signature']:
                     raise ValueError('ReBake selection, queue or Highpoly changed; reopen the confirmation window')
-            queued, _targets = rebake_dispatch(context, self.use_queue)
+            queued, targets = rebake_dispatch(context, self.use_queue)
+            if self.clear_materials:
+                # Everything is checked above; only now wipe the old materials / textures.
+                from .rebake_clear import clear_before_rebake
+                summary = clear_before_rebake(context, [target for target in targets if target])
+                self.report({'WARNING'} if summary['errors'] else {'INFO'},
+                    f"Cleared {summary['materials']} materials, {summary['images']} textures, "
+                    f"{summary['folders']} folders, {summary['files']} export textures")
+                for error in summary['errors'][:5]:
+                    self.report({'WARNING'}, error)
             if queued:
                 return bpy.ops.object.polygroups_rebake_queue_run('EXEC_DEFAULT',
                     repair_mesh=self.repair_mesh, create_lods=self.create_lods, export_selected=self.export_selected,
@@ -677,7 +688,9 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
                 row.alert = True
                 row.label(text=f'{index}. {item["target"]}: {item["error"]}', icon='ERROR')
         layout.label(text='Существующие текстуры будут перезаписаны.', icon='ERROR')
-        for enabled, text in ((self.repair_mesh, 'Исправление меша перед ReBake'),
+        for enabled, text in ((self.clear_materials,
+                               'Очистка материалов, текстур, папок Textures и Unused Data перед ReBake'),
+                (self.repair_mesh, 'Исправление меша перед ReBake'),
                 (self.delete_current_lods, 'Удаление текущих LOD перед ReBake'),
                 (self.create_lods, 'Создание LOD после ReBake'),
                 (self.export_selected, 'Перезапись экспорта FBX / Blend')):

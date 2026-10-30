@@ -23,7 +23,7 @@ class Layout:
 panels=[]
 def operator():
     return SimpleNamespace(use_queue=True,create_lods=False,export_selected=False,
-        repair_mesh=False,delete_current_lods=False,layout=Layout(),
+        repair_mesh=False,delete_current_lods=False,clear_materials=False,layout=Layout(),
         report=lambda level,message:reports.append(message))
 def dialog(op,**kwargs):
     calls.append(('dialog',kwargs));return {'RUNNING_MODAL'}
