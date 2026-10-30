@@ -435,6 +435,12 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Export Generated.N Collections",
         description="Also export each Generated.N collection (Retopo / Resculpting meshes) as its own blend with packed textures",
         default=True)
+    phase2_blend_delete_generated: bpy.props.BoolProperty(
+        name="Delete Generated.N Collections",
+        description=("After a Generated.N collection is exported to its own blend successfully, delete it (with its "
+                     "objects) from the current file. In Start Phase 2 with Export ZBrush the deletion is left to "
+                     "Cleanup, because ZBrush still needs Resculpting_01"),
+        default=True)
     phase2_blend_export_highpoly: bpy.props.BoolProperty(
         name="Include Highpoly_Generated.N",
         description=("Keep Highpoly_Generated.N after a successful bake so each Generated.N blend holds it next to "

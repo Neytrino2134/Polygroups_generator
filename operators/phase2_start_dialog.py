@@ -13,6 +13,7 @@ HIGHPOLY_OPTIONS = ('phase2_run_resculpt_retopo01', 'phase2_run_high_remesh', 'p
                     'phase2_run_bake_resculpt')
 SHARED_ON = ('phase2_run_restore', 'phase2_run_prepare', 'phase2_run_export', 'phase2_run_blend',
              'phase2_run_render', 'phase2_run_mid', 'phase2_export_fbx', 'phase2_blend_export_generated',
+             'phase2_blend_delete_generated',
              'phase2_blend_export_highpoly', 'phase2_blend_export_retopo01', 'phase2_autosave',
              'phase2_auto_skip_scene', 'phase2_run_guard_highest', 'phase2_run_loose_parts',
              'phase2_run_fix_source', 'phase2_run_uv_repair')

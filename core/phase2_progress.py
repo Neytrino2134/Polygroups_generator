@@ -180,6 +180,9 @@ def draw_process_settings(options, context, p):
     retopo = sub.row()
     retopo.enabled = highpoly.enabled and p.phase2_blend_export_highpoly
     retopo.prop(p, 'phase2_blend_export_retopo01')
+    delete = sub.row()
+    delete.enabled = p.phase2_blend_export_generated
+    delete.prop(p, 'phase2_blend_delete_generated')
     from ..localization import t
     # ZBrush works on Resculpting_01; without Retopo_01 resculpting the whole group stays inactive.
     zbrush_available = p.phase2_run_resculpt_retopo01 or p.phase2_run_zbrush

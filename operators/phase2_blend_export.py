@@ -327,7 +327,11 @@ class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
             p.phase2_blend_export_status = 'Export failed: collection file names collide'
             self.report({'ERROR'}, p.phase2_blend_export_status)
             return {'CANCELLED'}
-        done = 0
+        done = deleted = 0
+        # Only the whole Generated.N collection is deleted, never one exported as a selected subset.
+        generated = (set(generated_collections(context.scene))
+                     if p.phase2_blend_export_generated and p.phase2_blend_delete_generated
+                     and not self.selected_only else set())
         try:
             folder.mkdir(exist_ok=True)
             for collection, name in zip(collections, names):
@@ -340,11 +344,16 @@ class OBJECT_OT_polygroups_phase2_export_blend(bpy.types.Operator):
                 else:
                     export_collection_blend(collection, str(destination), p.phase2_blend_export_pack, reset_y=reset_y)
                 done += 1
+                if collection in generated:
+                    from .zbrush_cleanup import delete_generated
+                    delete_generated([collection])
+                    deleted += 1
         except (RuntimeError, ValueError, OSError) as error:
             p.phase2_blend_export_status = f'Export failed after {done}/{len(collections)}: {error}'
             self.report({'ERROR'}, p.phase2_blend_export_status)
             return {'CANCELLED'}
-        p.phase2_blend_export_status = f'Exported {done} blend file(s) to {BLEND_FOLDER}'
+        p.phase2_blend_export_status = f'Exported {done} blend file(s) to {BLEND_FOLDER}' + (
+            f' | deleted {deleted} Generated.N' if deleted else '')
         self.report({'INFO'}, p.phase2_blend_export_status)
         return {'FINISHED'}
 

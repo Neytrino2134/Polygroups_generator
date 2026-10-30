@@ -126,11 +126,20 @@ def export_blend(run, context):
         raise ValueError('Blend export file names collide')
     folder = Path(bpy.data.filepath).parent / '!Blend'
     folder.mkdir(exist_ok=True)
+    generated = set(generated_collections(context.scene)) if p.phase2_blend_export_generated else set()
+    # Export ZBrush (later in this run) still reads Resculpting_01 from Generated.N; Cleanup deletes it then.
+    delete = p.phase2_blend_delete_generated and not any(key == 'ZBRUSH' for key, *_ in run.plan)
+    deleted = 0
     for i, (col, name) in enumerate(zip(collections, names)):
         yield i/len(names), f'Export Blend {i+1}/{len(names)}: {name}', False
         export_collection_blend(col, str(folder / (name + '.blend')), p.phase2_blend_export_pack,
             reset_y=p.phase2_blend_export_reset_y and col.name.endswith('_Collection'))
-        p.phase2_blend_export_status = f'Exported {i+1}/{len(names)} Blend files'
+        if delete and col in generated:
+            from .zbrush_cleanup import delete_generated
+            delete_generated([col])
+            deleted += 1
+        p.phase2_blend_export_status = f'Exported {i+1}/{len(names)} Blend files' + (
+            f' | deleted {deleted} Generated.N' if deleted else '')
         yield (i+1)/len(names), p.phase2_blend_export_status, True
 
 
