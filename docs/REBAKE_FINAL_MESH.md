@@ -17,7 +17,7 @@ indices, linked data and shared mesh datablocks are rejected explicitly.
 The operator runs the existing staged Bake Task (Base Color, tangent Normal,
 configured AutoCage/Smart Cage, projection diagnostics and artifact autofill).
 Enabled passes, margins and cage options come from the usual Bake Settings.
-It forces selected-to-active, uses existing final texture resolution, retains
+It forces selected-to-active, uses existing final texture resolution when present, retains
 final UVs by default (the Phase 2 Repair Mesh option can conditionally repack changed UVs), and suppresses Generated renaming and the
 ordinary temporary Bake texture save path.
 
@@ -36,11 +36,18 @@ ordinary temporary Bake texture save path.
 
 ## Outputs
 
-Existing final material image nodes own the output paths. Stale object
-`polygroups_bake_*` properties referencing `Bake_Temp_*` do not override them.
-Base Color and Normal require existing local square PNGs of matching size.
-ReBake writes each enabled map to its existing filename and directory, reuses
-its existing image datablock and refreshes other material users of that image.
+The MID's current textures and materials are optional: ReBake overwrites them,
+so preflight never rejects missing, duplicated, packed-only or non-PNG images.
+Stale object `polygroups_bake_*` properties referencing `Bake_Temp_*` are ignored.
+When a material references a local PNG named `T_<asset>_<channel>`, ReBake
+writes that map to the same file, reuses its image datablock and refreshes
+other material users; the exact name wins over a `.001` copy, and every other
+copy of that channel in the MID materials is remapped to the new image.
+A missing map is written as `T_<asset>_<channel>.png` beside the other final
+textures, or into `Textures/<asset>` next to the saved blend, and wired into the
+first material's Principled BSDF (a MID without materials gets `M_<asset>`).
+Resolution follows the existing square Base Color / Normal when they agree,
+otherwise the Bake Settings resolution.
 
 For asset 02 the verified paths are:
 

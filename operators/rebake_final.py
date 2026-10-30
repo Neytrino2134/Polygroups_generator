@@ -70,44 +70,91 @@ def resolve_final_source(context, target, use_selection=True):
     return source
 
 
+def _image_path(image):
+    return Path(bpy.path.abspath(image.filepath, library=image.library)).resolve()
+
+
+def _channel_images(target, expected):
+    """Every image in the MID materials that stands for one final channel."""
+    images = set()
+    for material in target.data.materials:
+        if material and material.node_tree:
+            for node in material.node_tree.nodes:
+                image = node.image if node.type == 'TEX_IMAGE' else None
+                if image and (image.name == expected or (image.filepath and _image_path(image).stem == expected)):
+                    images.add(image)
+    return images
+
+
+def _reusable(image):
+    path = _image_path(image) if image.filepath else None
+    return (not image.library and image.source in {'FILE', 'GENERATED'} and path is not None
+            and path.suffix.lower() == '.png' and path.is_file())
+
+
 def final_texture_outputs(target, settings):
-    """Material references own final paths; stale Bake_Temp ID properties do not."""
+    """Pick final output paths; the MID's current textures are optional.
+
+    ReBake overwrites the final textures and rewires the material, so missing,
+    duplicated, packed-only or non-PNG images never block it. A reusable PNG
+    keeps its file and folder; otherwise T_<asset>_<channel>.png is written
+    next to the other final textures or into Textures/<asset> of the blend.
+    """
     asset, _ = final_asset_name(target)
-    outputs = {}
+    if not (settings.bake_base_color or settings.bake_normal):
+        raise ValueError('Enable Base Color or Normal before ReBake')
+    if not target.data.uv_layers.active:
+        raise ValueError('Final mesh needs an existing UV map')
+    found = {}
     for channel in CHANNELS:
         expected = f'T_{asset}_{channel}'
-        matches = set()
-        for material in target.data.materials:
-            if material and material.node_tree:
-                for node in material.node_tree.nodes:
-                    image = node.image if node.type == 'TEX_IMAGE' else None
-                    if image and (image.name == expected or Path(bpy.path.abspath(image.filepath, library=image.library)).stem == expected):
-                        matches.add(image)
-        required = ((channel == 'BaseColor' and settings.bake_base_color)
-                    or (channel == 'Normal' and settings.bake_normal))
-        if len(matches) > 1 or (required and not matches):
-            raise ValueError(f'{expected}: expected one existing image referenced by the final material')
-        if matches:
-            image = matches.pop()
-            path = Path(bpy.path.abspath(image.filepath, library=image.library)).resolve()
-            if image.library or image.source not in {'FILE', 'GENERATED'} or not image.filepath or not path.is_file():
-                raise ValueError(f'{expected}: save the existing final texture to a local file first')
-            if path.suffix.lower() != '.png':
-                raise ValueError(f'{expected}: final rebake currently requires PNG textures')
-            outputs[channel] = (image, path)
-    enabled = [outputs[channel] for channel, flag in
-               (('BaseColor', settings.bake_base_color), ('Normal', settings.bake_normal)) if flag]
-    if not enabled:
-        raise ValueError('Enable Base Color or Normal before ReBake')
-    sizes = {tuple(image.size) for image, _ in enabled}
-    if len(sizes) != 1 or any(w != h or w < 16 for w, h in sizes):
-        raise ValueError('Final bake textures must have matching square resolutions of at least 16 pixels')
-    if not target.data.uv_layers.active or not target.data.materials:
-        raise ValueError('Final mesh needs an existing UV map and material')
-    folder = enabled[0][1].parent
-    for channel in ('MergeMask', 'ArtifactMask'):
-        outputs.setdefault(channel, (None, folder / f'T_{asset}_{channel}.png'))
-    return outputs, next(iter(sizes))[0]
+        reusable = sorted((image for image in _channel_images(target, expected) if _reusable(image)),
+                          key=lambda image: (image.name != expected, image.name))
+        if reusable:
+            found[channel] = reusable[0]
+    if found:
+        folder = _image_path(next(iter(found.values()))).parent
+    elif bpy.data.filepath:
+        folder = Path(bpy.data.filepath).parent / 'Textures' / asset
+    else:
+        raise ValueError('Save the blend file before ReBake: final textures need a folder')
+    outputs = {channel: (found[channel], _image_path(found[channel])) if channel in found
+               else (None, folder / f'T_{asset}_{channel}.png') for channel in CHANNELS}
+    sizes = {tuple(found[channel].size) for channel in ('BaseColor', 'Normal') if channel in found}
+    sizes = {size for size in sizes if size[0] == size[1] and size[0] >= 16}
+    resolution = next(iter(sizes))[0] if len(sizes) == 1 else settings.bake_resolution
+    return outputs, resolution
+
+
+def final_material(target, asset):
+    """The MID's first material; a MID without one gets a fresh node material."""
+    material = target.data.materials[0] if target.data.materials else None
+    if material is None:
+        material = bpy.data.materials.new(f'M_{asset}')
+        if target.data.materials:
+            target.data.materials[0] = material
+        else:
+            target.data.materials.append(material)
+    material.use_nodes = True
+    return material
+
+
+def wire_channel(material, node, channel):
+    """Connect a newly created final texture to the Principled BSDF."""
+    tree = material.node_tree
+    bsdf = next((n for n in tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+    if bsdf is None:
+        bsdf = tree.nodes.new('ShaderNodeBsdfPrincipled')
+        output = next((n for n in tree.nodes if n.type == 'OUTPUT_MATERIAL'), None) \
+            or tree.nodes.new('ShaderNodeOutputMaterial')
+        tree.links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+    if channel == 'BaseColor':
+        tree.links.new(node.outputs['Color'], bsdf.inputs['Base Color'])
+    elif channel == 'Normal':
+        normal_map = tree.nodes.get('PolyGroups Bake Normal Map') or tree.nodes.new('ShaderNodeNormalMap')
+        normal_map.name = 'PolyGroups Bake Normal Map'
+        tree.links.new(node.outputs['Color'], normal_map.inputs['Color'])
+        tree.links.new(normal_map.outputs['Normal'], bsdf.inputs['Normal'])
 
 
 class FinalRebakeSession:
@@ -128,6 +175,10 @@ class FinalRebakeSession:
         if repair_mesh and target.data.shape_keys:
             raise ValueError('ReBake Repair Mesh requires a mesh without shape keys')
         self.outputs, self.resolution = final_texture_outputs(target, settings)
+        asset = final_asset_name(target)[0]
+        # Duplicates / unusable copies of a channel get remapped to the new image.
+        self.stale_images = {channel: _channel_images(target, f'T_{asset}_{channel}') - {image}
+                             for channel, (image, _) in self.outputs.items()}
         if delete_current_lods:
             from .rebake_lods import current_asset_lods
             current_asset_lods(context, target)  # Read-only ownership preflight.
@@ -362,8 +413,7 @@ class FinalRebakeSession:
                 if work is None:
                     raise ValueError(f'ReBake did not produce {channel}')
                 original, path = self.outputs[channel]
-                if not path.parent.is_dir():
-                    raise ValueError(f'Texture directory is unavailable: {path.parent}')
+                path.parent.mkdir(parents=True, exist_ok=True)
                 folder = Path(tempfile.mkdtemp(prefix='.rebake-', dir=str(path.parent)))
                 temporary, backup = folder / path.name, folder / 'original.png'
                 staged.append((path, temporary, backup, folder))
@@ -451,12 +501,19 @@ class FinalRebakeSession:
                     target[prop] = image.name
                     if source_prop:
                         target[source_prop] = image.name
-                    material = target.data.materials[0]
+                    material = final_material(target, asset)
                     node = material.node_tree.nodes.get(node_name)
                     if node is None:
                         node = material.node_tree.nodes.new('ShaderNodeTexImage')
                         node.name = node_name
                     node.image = image
+                    if original is None:
+                        wire_channel(material, node, channel)
+                    stale = self.stale_images.get(channel, set())
+                    for slot in target.data.materials:
+                        for other in (slot.node_tree.nodes if slot and slot.node_tree else ()):
+                            if other.type == 'TEX_IMAGE' and other.image in stale:
+                                other.image = image
                 if run:
                     target['polygroups_projection_run'] = run
                 if target.data.materials and target.data.materials[0]:
