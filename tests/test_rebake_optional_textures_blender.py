@@ -46,6 +46,10 @@ with tempfile.TemporaryDirectory() as directory:
     base.filepath_raw=str(directory/(base.name+'.png'));base.file_format='PNG';base.save()
     duplicate=bpy.data.images.load(base.filepath_raw,check_existing=False)
     assert duplicate!=base
+    duplicate_name=duplicate.name
+    # A leftover numbered copy on disk from an earlier run is removed after ReBake.
+    numbered=directory/f'T_{ASSET}_BaseColor.001.png'
+    numbered.write_bytes(Path(base.filepath_raw).read_bytes())
     for image in (base,duplicate):
         material.node_tree.nodes.new('ShaderNodeTexImage').image=image
     outputs,resolution=final.final_texture_outputs(target,settings)
@@ -55,14 +59,16 @@ with tempfile.TemporaryDirectory() as directory:
     assert settings.bake_task_stage=='DONE',settings.bake_task_message
     assert (directory/f'T_{ASSET}_Normal.png').is_file()
     images={node.image for node in material.node_tree.nodes if node.type=='TEX_IMAGE'}
-    assert duplicate not in images and base in images,images
+    assert duplicate_name not in bpy.data.images and base in images,images
+    assert not any('.0' in image.name for image in bpy.data.images if image.name.startswith('T_')),list(bpy.data.images)
+    assert not numbered.exists()
     normal=bpy.data.images.get(f'T_{ASSET}_Normal')
     bsdf=material.node_tree.nodes.get('Principled BSDF')
     assert bsdf.inputs['Normal'].links and normal in images
     clear(target,high,generated)
     print('REBAKE_DUPLICATE_AND_MISSING_TEXTURES_OK')
     # 2. MID without any material: textures go to Textures/<asset>, material is created.
-    bpy.data.images.remove(base);bpy.data.images.remove(duplicate);bpy.data.images.remove(normal)
+    bpy.data.images.remove(base);bpy.data.images.remove(normal)
     target,high,generated=make_pair()
     assert not target.data.materials
     outputs,resolution=final.final_texture_outputs(target,settings)

@@ -9,6 +9,7 @@ from bpy.app.handlers import persistent
 import bpy
 
 from ..localization import t
+from ..core.datablock_names import drop_unused, remove_numbered_files, take_name
 
 
 SOURCE_TEXTURE_GROUP_LABEL = "Source Texture Group"
@@ -399,6 +400,7 @@ def _copy_and_rename_material_textures(material, settings, asset_name, asset_ind
     suffix_counts = {}
     copied_count = 0
     renamed_count = 0
+    aside = []
     ungrouped_count = _ungroup_source_texture_nodes(material)
 
     if settings.fab_copy_textures and output_dir is None and report:
@@ -411,7 +413,7 @@ def _copy_and_rename_material_textures(material, settings, asset_name, asset_ind
         suffix_name = suffix if suffix_counts[suffix] == 1 else f"{suffix}_{suffix_counts[suffix]}"
         texture_name = f"{texture_base_name}_{suffix_name}"
 
-        image.name = texture_name
+        take_name(bpy.data.images, image, texture_name, aside=aside)
         renamed_count += 1
 
         if not settings.fab_copy_textures or output_dir is None:
@@ -431,11 +433,13 @@ def _copy_and_rename_material_textures(material, settings, asset_name, asset_ind
             image.filepath_raw = bpy.path.relpath(destination_filepath)
             if image.packed_file is not None:
                 image.unpack(method='REMOVE')
+            remove_numbered_files(destination_filepath)
             copied_count += 1
         except OSError as error:
             if report:
                 report({"WARNING"}, f"{image.name}: {error}")
 
+    drop_unused(aside)
     return renamed_count, copied_count, ungrouped_count
 
 

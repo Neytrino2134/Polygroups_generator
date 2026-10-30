@@ -12,6 +12,7 @@ from pathlib import Path
 import bpy
 
 from . import bake_constants as C
+from ..core.datablock_names import remove_numbered_files, take_name
 
 MID_PATTERN = re.compile(r'^SM_(.+_(\d+))_MID$', re.IGNORECASE)
 CHANNELS = {
@@ -489,7 +490,17 @@ class FinalRebakeSession:
                         image.unpack(method='REMOVE')
                     image.filepath_raw = bpy.path.relpath(str(path))
                     image.reload()
-                    image.name = f'T_{asset}_{channel}'
+                    # The new final texture replaces every stale copy of this channel
+                    # (T_<asset>_<channel>.001 ...): users are remapped, the copies removed.
+                    for stale in self.stale_images.get(channel, set()) - {image}:
+                        try:
+                            if stale.library is None:
+                                stale.user_remap(image)
+                                bpy.data.images.remove(stale)
+                        except ReferenceError:
+                            pass
+                    take_name(bpy.data.images, image, f'T_{asset}_{channel}', replace=True)
+                    remove_numbered_files(path)
                     if channel != 'BaseColor':
                         image.colorspace_settings.name = 'Non-Color'
                     image.filepath_raw = bpy.path.relpath(str(path))
@@ -509,11 +520,6 @@ class FinalRebakeSession:
                     node.image = image
                     if original is None:
                         wire_channel(material, node, channel)
-                    stale = self.stale_images.get(channel, set())
-                    for slot in target.data.materials:
-                        for other in (slot.node_tree.nodes if slot and slot.node_tree else ()):
-                            if other.type == 'TEX_IMAGE' and other.image in stale:
-                                other.image = image
                 if run:
                     target['polygroups_projection_run'] = run
                 if target.data.materials and target.data.materials[0]:

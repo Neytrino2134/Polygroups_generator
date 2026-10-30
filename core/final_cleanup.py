@@ -166,6 +166,105 @@ def delete(result):
     return deleted_files, deleted_bytes, errors
 
 
+# Clear All Files: Start from Scratch (ALL) and Clear Phase 2 Files (PHASE2).
+# Source folders (01_ ... 20_) and the working blend are never touched.
+RESET_CATEGORIES = (
+    ('final_folder', '! folders (!Blend, !Unreal, !Unity, !Renders, !ZBrush ...)'),
+    ('textures', 'Textures folders'),
+    ('temp_folder', 'Bakes / batch_reports folders'),
+    ('blend_beside', 'Other .blend beside the working file'),
+    ('blend_other', 'Other .blend in other folders'),
+    ('backup', 'Backup saves (.blend1 / .blendN / Autosave)'),
+)
+RESET_KEEP = {'PHASE2': {'temp_folder', 'blend_beside', 'blend_other', 'backup'}, 'ALL': set()}
+
+
+def reset_totals(result):
+    totals = {key: (0, 0) for key, _label in RESET_CATEGORIES}
+    for item in result.items:
+        files, size = totals[item.category]
+        totals[item.category] = (files + item.count, size + item.size)
+    return totals
+
+
+def scan_reset(root, current, mode):
+    """Find what Start from Scratch (ALL) or Clear Phase 2 Files (PHASE2) would delete."""
+    root, current = check_root(root), Path(current)
+    skip = RESET_KEEP[mode]
+    result = Scan(root, current)
+
+    def add(category, path, folder=False):
+        if category in skip:
+            return
+        try:
+            if folder:
+                count, size = folder_totals(path)
+                result.items.append(Item(category, path, size, count))
+            else:
+                stat = path.stat()
+                result.items.append(Item(category, path, stat.st_size, 1, stat.st_mtime_ns))
+        except OSError as error:
+            result.errors.append(f'{path.name}: {error}')
+
+    for folder, directories, files in os.walk(root):
+        folder_path = Path(folder)
+        kept = []
+        for name in directories:
+            path = folder_path / name
+            lowered = name.lower()
+            if is_link(path) or SOURCE_FOLDER.match(name):
+                continue
+            if name.startswith('!'):
+                add('final_folder', path, True)
+            elif lowered in KEEP_FOLDERS:
+                add('textures', path, True)
+            elif lowered in TEMP_FOLDERS:
+                if 'temp_folder' in skip:
+                    continue  # kept whole, nothing inside is touched
+                add('temp_folder', path, True)
+            else:
+                kept.append(name)
+        directories[:] = kept
+        for name in files:
+            path = folder_path / name
+            if is_link(path) or path == current:
+                continue
+            if BACKUP_SAVE.search(name):
+                add('backup', path)
+            elif BLEND_FILE.search(name):
+                add('blend_beside' if path.parent == root else 'blend_other', path)
+    return result
+
+
+def delete_reset(result):
+    """Delete a scan_reset result after re-checking every path; returns (files, bytes, errors)."""
+    root = check_root(result.root).resolve()
+    folders = {'final_folder': lambda name: name.startswith('!'),
+               'textures': lambda name: name.lower() in KEEP_FOLDERS,
+               'temp_folder': lambda name: name.lower() in TEMP_FOLDERS}
+    deleted_files = deleted_bytes = 0
+    errors = list(result.errors)
+    for item in result.items:
+        path = item.path
+        try:
+            if is_link(path) or path == result.current or not path.resolve().is_relative_to(root) \
+                    or path.resolve() == root:
+                raise ValueError('path is not safe to delete')
+            if item.category in folders:
+                if not folders[item.category](path.name) or not path.is_dir():
+                    raise ValueError('unexpected folder')
+                shutil.rmtree(path)
+            else:
+                if not (BACKUP_SAVE.search(path.name) or BLEND_FILE.search(path.name)):
+                    raise ValueError('unexpected file')
+                path.unlink()
+            deleted_files += item.count
+            deleted_bytes += item.size
+        except (ValueError, OSError) as error:
+            errors.append(f'{path.name}: {error}')
+    return deleted_files, deleted_bytes, errors
+
+
 @dataclass
 class GeneratedFile:
     name: str

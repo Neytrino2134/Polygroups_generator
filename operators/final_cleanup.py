@@ -1,4 +1,5 @@
 """Clear Temp Files: scan and check the final asset folder, then delete its temporary files."""
+import re
 from pathlib import Path
 
 import bpy
@@ -113,6 +114,121 @@ class OBJECT_OT_polygroups_final_cleanup_clear(bpy.types.Operator):
         return {'FINISHED'}
 
 
+GENERATED_COLLECTION = re.compile(r'^Generated\.\d+$')
+
+
+def asset_collections(scene):
+    """Final asset (<name>_Collection) and Generated.N collections of the scene, outermost first."""
+    found = [col for col in scene.collection.children_recursive
+             if col.name.endswith('_Collection') or GENERATED_COLLECTION.match(col.name)]
+    nested = {child for col in found for child in col.children_recursive}
+    return [col for col in found if col not in nested]
+
+
+def clear_asset_collections(scene):
+    """Delete those collections with their objects and nested collections; returns (collections, objects)."""
+    collections = asset_collections(scene)
+    nested = {child for col in collections for child in col.children_recursive}
+    objects = {obj for col in collections for obj in col.all_objects}
+    bpy.data.batch_remove(objects)
+    removed = set(collections) | nested
+    bpy.data.batch_remove(removed)
+    return len(removed), len(objects)
+
+
+def purge_all_unused():
+    before = sum(len(collection) for collection in (bpy.data.meshes, bpy.data.materials, bpy.data.images,
+                                                     bpy.data.textures, bpy.data.node_groups))
+    bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+    after = sum(len(collection) for collection in (bpy.data.meshes, bpy.data.materials, bpy.data.images,
+                                                    bpy.data.textures, bpy.data.node_groups))
+    return before - after
+
+
+RESET_MODES = (
+    ('ALL', 'Start from Scratch',
+     'Delete every ! folder, Textures, Bakes, batch_reports, backup saves and other .blend files beside or below '
+     'the working blend; remove _Collection / Generated.N collections and all unused data. '
+     'Source folders 01_ ... 20_ and the working blend stay'),
+    ('PHASE2', 'Clear Phase 2 Files',
+     'Delete All Final Files: every ! folder and Textures folder; keep Bakes and other .blend files. '
+     'Remove _Collection / Generated.N collections and all unused data'),
+)
+
+
+class OBJECT_OT_polygroups_clear_all_files(bpy.types.Operator):
+    bl_idname = 'object.polygroups_clear_all_files'
+    bl_label = 'Clear All Files'
+    bl_options = {'REGISTER', 'UNDO'}
+    mode: bpy.props.EnumProperty(items=RESET_MODES, options={'SKIP_SAVE'})
+
+    @classmethod
+    def description(cls, context, properties):
+        return next(text for key, _label, text in RESET_MODES if key == properties.mode)
+
+    @classmethod
+    def poll(cls, context):
+        return bool(bpy.data.filepath) and not busy(context)
+
+    def scan(self):
+        current = Path(bpy.data.filepath)
+        return core.scan_reset(current.parent, current, self.mode)
+
+    def invoke(self, context, event):
+        try:
+            self.result = self.scan()
+        except (ValueError, OSError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        label = next(label for key, label, _text in RESET_MODES if key == self.mode)
+        return context.window_manager.invoke_props_dialog(self, width=460, title=label, confirm_text='Delete')
+
+    def draw(self, context):
+        column = self.layout.column(align=True)
+        column.label(text=str(Path(bpy.data.filepath).parent), icon='FILE_FOLDER')
+        totals = core.reset_totals(self.result)
+        for key, label in core.RESET_CATEGORIES:
+            if key in core.RESET_KEEP[self.mode]:
+                column.label(text=f'Keep: {label}', icon='CHECKMARK')
+            else:
+                files, size = totals[key]
+                column.label(text=f'{label}: {files} files | {core.megabytes(size)}', icon='TRASH')
+        collections = asset_collections(context.scene)
+        column.label(text=f'Collections _Collection / Generated.N: {len(collections)} (with their objects)',
+                     icon='OUTLINER_COLLECTION')
+        column.label(text='All unused data in this blend is purged', icon='ORPHAN_DATA')
+        column.label(text='Files are deleted permanently; the working blend is not saved', icon='ERROR')
+
+    def execute(self, context):
+        try:
+            result = self.scan()
+        except (ValueError, OSError) as error:
+            self.report({'ERROR'}, str(error))
+            return {'CANCELLED'}
+        if context.object and context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        collections, objects = clear_asset_collections(context.scene)
+        purged = purge_all_unused()
+        files, size, errors = core.delete_reset(result)
+        reset_state()
+        STATE['status'] = (f'Deleted {files} files | {core.megabytes(size)} | {collections} collections, '
+                           f'{objects} objects | purged {purged} unused | {len(errors)} errors')
+        for error in errors[:5]:
+            self.report({'WARNING'}, error)
+        self.report({'WARNING'} if errors else {'INFO'}, STATE['status'])
+        return {'FINISHED'}
+
+
+def draw_clear_all_files(layout, context):
+    """Clear All Files group under Clear Temp Files in Save and Cleanup."""
+    box = layout.box().column(align=True)
+    box.label(text='Clear All Files', icon='ERROR')
+    row = box.row(align=True)
+    row.enabled = bool(bpy.data.filepath) and not busy(context)
+    row.operator('object.polygroups_clear_all_files', text='Start from Scratch', icon='TRASH').mode = 'ALL'
+    row.operator('object.polygroups_clear_all_files', text='Clear Phase 2 Files', icon='TRASH').mode = 'PHASE2'
+
+
 def draw_final_cleanup(layout, context):
     """Clear Temp Files controls; the same block is used in Save and Cleanup, Phase 1 and Phase 2."""
     column = layout.column(align=True)
@@ -152,4 +268,5 @@ def draw_final_cleanup(layout, context):
         layout.label(text=STATE['status'], icon='INFO')
 
 
-CLASSES = (OBJECT_OT_polygroups_final_cleanup_scan, OBJECT_OT_polygroups_final_cleanup_clear)
+CLASSES = (OBJECT_OT_polygroups_final_cleanup_scan, OBJECT_OT_polygroups_final_cleanup_clear,
+           OBJECT_OT_polygroups_clear_all_files)

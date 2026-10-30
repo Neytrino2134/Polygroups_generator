@@ -7,6 +7,7 @@ from array import array
 
 import bpy
 from ..core.asset_names import asset_name
+from ..core.datablock_names import drop_unused, remove_numbered_files, take_name
 
 from .fab_preparation import _texture_suffix, _ungroup_source_texture_nodes
 from .mesh_export import (
@@ -95,6 +96,7 @@ def save_textures(obj, directory):
             image.save(filepath=path)
             # Persist against the blend, not the original workstation folder.
             image.filepath_raw = bpy.path.relpath(path)
+            remove_numbered_files(path)
             # Prepared pixel copies must reopen from the newly written file,
             # rather than regenerating a blank image after reloading the blend.
             if image.source == 'GENERATED':
@@ -134,12 +136,13 @@ def prepare_unity(obj, name, asset_name=None, shared_material=None):
         polygon.material_index = 0
     image_copies = {}
     used_names = {}
+    aside = []
     for index, source in enumerate(tuple(obj.data.materials)):
         if source is None:
             continue
         material = source.copy() if source.users > 1 else source
         obj.data.materials[index] = material
-        material.name = asset_name
+        take_name(bpy.data.materials, material, asset_name, aside=aside)
         material["unity_asset_name"] = asset_name
         if material.node_tree is None:
             continue
@@ -171,9 +174,10 @@ def prepare_unity(obj, name, asset_name=None, shared_material=None):
                 if pixels:
                     image.pixels.foreach_set(pixels)
                     image.update()
-                image.name = target
+                take_name(bpy.data.images, image, target, aside=aside)
                 image_copies[source_image] = image
             node.image = image_copies[source_image]
+    drop_unused(aside)
     obj["unity_prepared"] = True
 
 

@@ -2,6 +2,7 @@
 import re
 from array import array
 import bpy
+from ..core.datablock_names import take_name
 from ..core.generated_index import bake_output_name, fix_object_generated_index
 from .bake_constants import (
     BAKE_ALPHA_IMAGE_PROP,
@@ -130,15 +131,18 @@ def _ensure_target_image(
         image = bpy.data.images.get(image_name)
 
     desired_name = _bake_data_name(settings, target, suffix)
+    # A re-created bake image replaces the previous one of this target/channel
+    # instead of becoming <name>.001.
     if not _image_matches_resolution(image, resolution):
         image = _make_image(
             desired_name,
             resolution,
             colorspace,
         )
+        take_name(bpy.data.images, image, desired_name, replace=True)
         target[prop_name] = image.name
     elif image.name != desired_name:
-        image.name = desired_name
+        take_name(bpy.data.images, image, desired_name, replace=True)
         target[prop_name] = image.name
 
     if source_prop_name is not None:
@@ -160,10 +164,13 @@ def _ensure_target_bake_material(target, settings):
 
     desired_name = _bake_data_name(settings, target, "Material")
     if material is None:
-        material = bpy.data.materials.new(desired_name)
+        # Reuse this target's previous bake material rather than creating <name>.001.
+        existing = bpy.data.materials.get(desired_name)
+        material = existing if existing is not None and existing.library is None \
+            else bpy.data.materials.new(desired_name)
         target[BAKE_TARGET_MATERIAL_PROP] = material.name
     elif material.name != desired_name:
-        material.name = desired_name
+        take_name(bpy.data.materials, material, desired_name, replace=True)
         target[BAKE_TARGET_MATERIAL_PROP] = material.name
 
     return material

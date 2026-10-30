@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import random
 from ..core.asset_names import asset_name
+from ..core.datablock_names import drop_unused, remove_numbered_files, take_name
 import bpy
 from .mesh_export import _safe_path_token
 from .fab_preparation import _texture_suffix
@@ -56,13 +57,13 @@ def prepare_materials(meshes, base, copy_textures):
     external_materials = {mat for obj in bpy.data.objects if obj.type == 'MESH' and obj not in meshes
                           for mat in obj.data.materials if mat}
     external_images = {node.image for mat in external_materials for node in image_nodes(mat.node_tree)}
-    materials, images, suffix_counts = {}, {}, {}
+    materials, images, suffix_counts, aside = {}, {}, {}, []
     for index, source in enumerate(sorted(sources, key=lambda mat: mat.name)):
         own = source.get('unreal_lod_asset') == base and source not in external_materials
         mat = source if own else source.copy()
         if not own:
             isolate_groups(mat.node_tree)
-        mat.name = f'M_{base}' + (f'_{index + 1}' if index else '')
+        take_name(bpy.data.materials, mat, f'M_{base}' + (f'_{index + 1}' if index else ''), aside=aside)
         mat['unreal_lod_asset'] = base
         materials[source] = mat
         for node in image_nodes(mat.node_tree):
@@ -84,7 +85,7 @@ def prepare_materials(meshes, base, copy_textures):
                     image.alpha_mode = source_image.alpha_mode
                     image.pixels.foreach_set(pixels)
                     image.update()
-                image.name = name
+                take_name(bpy.data.images, image, name, aside=aside)
                 image['unreal_lod_asset'] = base
                 images[source_image] = image
             node.image = images[source_image]
@@ -92,6 +93,7 @@ def prepare_materials(meshes, base, copy_textures):
         for index, source in enumerate(tuple(obj.data.materials)):
             if source:
                 obj.data.materials[index] = materials[source]
+    drop_unused(aside)
     if copy_textures:
         directory = Path(bpy.data.filepath).parent / 'Textures' / base
         directory.mkdir(parents=True, exist_ok=True)
@@ -100,6 +102,7 @@ def prepare_materials(meshes, base, copy_textures):
             image.file_format = 'PNG'
             image.save(filepath=str(path))
             image.filepath_raw = bpy.path.relpath(str(path))
+            remove_numbered_files(path)
             if image.source == 'GENERATED':
                 image.source = 'FILE'
 
