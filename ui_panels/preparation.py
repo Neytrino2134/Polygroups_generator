@@ -536,6 +536,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 controls.prop(settings, "fold_repair_dangling", text=t(context, "fold_repair_dangling"))
                 controls.prop(settings, 'phase2_remove_loose_parts')
                 controls.prop(settings, 'phase2_topology_guard_highest')
+                controls.prop(settings, 'phase2_smart_uv_repair')
                 if settings.phase2_mid_remesh:
                     controls.prop(settings, 'phase2_fix_source_before_mid')
                 controls.prop(settings, 'phase2_mid_remesh')
@@ -552,8 +553,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                         if settings.phase2_high_remesh_before_resculpting:
                             controls.label(text='Clear seams + pins | Smart Seams 22 degrees | HIGH', icon='INFO')
                         controls.prop(settings, 'phase2_repair_after_resculpt')
-                    if settings.phase2_resculpt_retopo01:
-                        controls.prop(settings, 'phase2_topology_guard_retopo01')
+                    if settings.phase2_resculpt_retopo01 and settings.phase2_high_remesh_before_resculpting:
+                        guard = controls.row()
+                        guard.enabled = settings.phase2_autobake_retopo01
+                        guard.prop(settings, 'phase2_topology_guard_retopo01')
                     controls.prop(settings, 'phase2_autobake_retopo01')
                     delete_high = controls.row()
                     # Export Blend > Include Highpoly_Generated.N keeps the source for the Generated.N blend.

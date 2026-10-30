@@ -21,6 +21,7 @@ bake = context.scene.polygroups_baking_settings
 assert settings.phase2_mesh_auto_repair
 settings.phase2_mid_remesh = False
 settings.phase2_topology_guard_highest = settings.phase2_remove_loose_parts = False
+settings.phase2_smart_uv_repair = False
 
 bm = bmesh.new()
 bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1)

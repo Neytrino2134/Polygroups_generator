@@ -19,11 +19,12 @@ from polygroups_generator.operators import phase2_start_dialog as dialog
 ctx = bpy.context
 p = ctx.scene.polygroups_model_preparation_settings
 
-# Both start presets turn the highest Retopo_XX fixes on and leave the Retopo_01 Topology Guard off.
+# Both start presets turn the MID fixes on; only ZBrush guards its (rebaked) HIGH remesh.
 for preset in ('UNREAL', 'UNREAL_ZBRUSH'):
     dialog.apply_start_preset(p, preset)
     assert p.phase2_mesh_auto_repair and p.phase2_remove_loose_parts and p.phase2_topology_guard_highest, preset
-    assert not p.phase2_topology_guard_retopo01, preset
+    assert p.phase2_smart_uv_repair, preset
+    assert p.phase2_topology_guard_retopo01 == (preset == 'UNREAL_ZBRUSH'), preset
     assert p.phase2_run_fix_source and p.phase2_fix_source_before_mid, preset  # double fix is on by default
 
 # Remove Small Loose Parts hits only the highest Retopo_XX.

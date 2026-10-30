@@ -27,6 +27,7 @@ pairs = (('phase2_run_mid', 'phase2_mid_remesh'), ('phase2_run_resculpt_retopo01
          ('phase2_run_guard_highest', 'phase2_topology_guard_highest'),
          ('phase2_run_loose_parts', 'phase2_remove_loose_parts'),
          ('phase2_run_fix_source', 'phase2_fix_source_before_mid'),
+         ('phase2_run_uv_repair', 'phase2_smart_uv_repair'),
          ('phase2_run_cleanup', 'phase2_zbrush_cleanup_on_success'), ('phase2_run_transparent', 'phase2_auto_transparent'))
 for run_name, manual_name in pairs:
     for value in (True, False):
@@ -68,10 +69,11 @@ assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL_ZBRUSH') == 
 assert dialog.active_start_preset(p) == 'UNREAL_ZBRUSH'
 assert all(getattr(p, name) for name in dialog.HIGHPOLY_OPTIONS)
 assert p.phase2_resculpt_retopo01 and p.phase2_autobake_retopo01 and p.phase2_run_zbrush and p.phase2_run_cleanup
-# Both presets fix the highest Retopo_XX; the Retopo_01 Topology Guard is not part of them.
+# Both presets fix the MID source and result; ZBrush also guards its rebaked HIGH remesh.
 assert p.phase2_run_guard_highest and p.phase2_topology_guard_highest
 assert p.phase2_run_loose_parts and p.phase2_remove_loose_parts
-assert not p.phase2_topology_guard_retopo01 and not p.phase2_run_skip_rebake
+assert p.phase2_run_uv_repair and p.phase2_smart_uv_repair
+assert p.phase2_topology_guard_retopo01 and not p.phase2_run_skip_rebake
 assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL') == {'FINISHED'}
 assert p.phase2_run_guard_highest and p.phase2_run_loose_parts and not p.phase2_run_topology_guard
 assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL_ZBRUSH') == {'FINISHED'}
@@ -83,6 +85,7 @@ assert not p.phase2_run_topology_guard and not p.phase2_topology_guard_retopo01
 assert p.phase2_resculpt_retopo01 and p.phase2_run_high_remesh and p.phase2_run_zbrush
 assert dialog.active_start_preset(p) == 'UNREAL_ZBRUSH'
 p.phase2_run_skip_rebake = False
+# Re-enabling the rebake does not silently bring the guard back.
 assert p.phase2_autobake_retopo01 and not p.phase2_topology_guard_retopo01
 p.phase2_autobake_retopo01 = False
 assert p.phase2_run_skip_rebake

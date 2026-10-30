@@ -28,6 +28,7 @@ settings.phase2_mesh_auto_repair = False
 settings.phase2_repair_after_resculpt = False
 settings.phase2_topology_guard_retopo01 = False
 settings.phase2_topology_guard_highest = settings.phase2_remove_loose_parts = False
+settings.phase2_smart_uv_repair = False
 settings.phase2_repack_after_repair = False
 context.scene.polygroups_resculpting_settings.multires_levels = 0
 settings.phase2_show_restore = True

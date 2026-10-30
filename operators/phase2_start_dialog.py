@@ -14,7 +14,7 @@ SHARED_ON = ('phase2_run_restore', 'phase2_run_prepare', 'phase2_run_export', 'p
              'phase2_run_render', 'phase2_run_mid', 'phase2_export_fbx', 'phase2_blend_export_generated',
              'phase2_blend_export_highpoly', 'phase2_blend_export_retopo01', 'phase2_autosave',
              'phase2_auto_skip_scene', 'phase2_run_guard_highest', 'phase2_run_loose_parts',
-             'phase2_run_fix_source')
+             'phase2_run_fix_source', 'phase2_run_uv_repair')
 
 
 def apply_start_preset(p, preset):
@@ -28,8 +28,9 @@ def apply_start_preset(p, preset):
     p.phase2_export_glb = False
     for name in HIGHPOLY_OPTIONS:
         setattr(p, name, zbrush)
-    # Both presets fix the highest Retopo_XX; the Retopo_01 Topology Guard is an opt-in extra.
-    p.phase2_run_topology_guard = False
+    # Both presets fix the MID source and result; ZBrush also guards its HIGH remesh
+    # (rebaked there). Retopo_01 itself is never guarded.
+    p.phase2_run_topology_guard = zbrush
     p.phase2_run_zbrush = zbrush
     p.phase2_run_cleanup = zbrush
 
@@ -118,6 +119,7 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         fixes = layout.column(align=True)
         fixes.prop(p, 'phase2_run_loose_parts')
         fixes.prop(p, 'phase2_run_guard_highest')
+        fixes.prop(p, 'phase2_run_uv_repair')
         fixes.prop(p, 'phase2_run_fix_source')
         if active_start_preset(p) == 'UNREAL_ZBRUSH':
             options = layout.column(align=True)

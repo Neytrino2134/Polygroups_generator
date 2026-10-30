@@ -17,6 +17,7 @@ p.phase2_keep_retopo01=True
 p.phase2_mid_remesh=False
 real=bpy
 p.phase2_topology_guard_retopo01=False;p.phase2_topology_guard_highest=p.phase2_remove_loose_parts=False
+p.phase2_smart_uv_repair=False
 p.phase2_mesh_auto_repair=True;p.phase2_repack_after_repair=True
 p.phase2_delete_high_after_bake=True;p.phase2_delete_lower_retopo=True;p.phase2_blend_export_generated=False
 ctx.scene.polygroups_resculpting_settings.multires_levels=1
@@ -98,14 +99,16 @@ def run(resculpt,rebake,failure='',stop_when=''):
  return events
 for resculpt,rebake in ((True,True),(True,False),(False,True)):
  events=run(resculpt,rebake)
+ # Retopo_01 is repaired once after the primary bake, before Multires.
+ assert events[3]==('repair','Retopo_01_Highpoly_Generated.001'),events
  if resculpt and rebake:
-  assert [kind for kind,name in events]==['repair','pack','bake','sculpt','repair','pack','bake']
-# Topology Guard fixes Retopo_01 UV before its Multires and bake, then the UV is repacked.
+  assert [kind for kind,name in events]==['repair','pack','bake','repair','sculpt','repair','pack','bake'],events
+ if not resculpt:
+  assert [kind for kind,name in events]==['repair','pack','bake','repair','pack','bake'],events
+# Retopo_01 itself is never guarded: only a HIGH remesh result is (test_phase2_high_resculpt).
 p.phase2_topology_guard_retopo01=True
-events=run(True,True)
-assert [kind for kind,name in events]==['repair','pack','bake','guard','pack','sculpt','repair','pack','bake'],events
-events=run(False,True)
-assert [kind for kind,name in events]==['repair','pack','bake','guard','pack','repair','pack','bake'],events
+for resculpt in (True,False):
+ assert 'guard' not in [kind for kind,name in run(resculpt,True)]
 p.phase2_topology_guard_retopo01=False
 run(True,True,'bake');run(False,True,'pack')
 run(True,True,stop_when='RETOPO01_RESCULPT')

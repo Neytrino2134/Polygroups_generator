@@ -327,20 +327,24 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Bake the new Resculpting_01 mesh after resculpting and optional repair",
     )
     phase2_run_topology_guard: _paired("phase2_run_topology_guard", "phase2_topology_guard_retopo01", bpy.props.BoolProperty,
-        name="Topology Guard Retopo_01", default=False,
-        description="Fix non-disk UV charts of Retopo_01 and repack its UV before High Remesh, Multires and the bake",
+        name="Topology Guard HIGH Remesh", default=False,
+        description="Fix non-disk UV charts of the HIGH remesh result before Setup Resculpting. Only with the Resculpting_01 rebake; Retopo_01 itself is never guarded",
     )
     phase2_run_guard_highest: _paired("phase2_run_guard_highest", "phase2_topology_guard_highest", bpy.props.BoolProperty,
         name="Topology Guard Highest Retopo", default=True,
-        description="Fix non-disk UV charts of the highest Retopo_XX (the MID remesh result) before it is unwrapped and baked",
+        description="Fix non-disk UV charts of the MID source and of the MID remesh result (before and after its unwrap)",
+    )
+    phase2_run_uv_repair: _paired("phase2_run_uv_repair", "phase2_smart_uv_repair", bpy.props.BoolProperty,
+        name="Smart UV Repair", default=True,
+        description="Run Smart UV Repair (Stage 4 thresholds) on the MID source and result, and on Retopo_01 / HIGH remesh when Resculpting_01 is rebaked",
     )
     phase2_run_fix_source: _paired("phase2_run_fix_source", "phase2_fix_source_before_mid", bpy.props.BoolProperty,
-        name="Repair Source Before MID", default=True,
-        description="Second fix pass: also repair the source Retopo_XX before the MID remesh (the MID result is always repaired)",
+        name="Fix Source Before MID", default=True,
+        description="Second fix pass: loose parts, Auto Repair, Topology Guard and Smart UV Repair also on the source Retopo_XX before the MID remesh (the MID result always gets them)",
     )
     phase2_run_loose_parts: _paired("phase2_run_loose_parts", "phase2_remove_loose_parts", bpy.props.BoolProperty,
         name="Remove Small Loose Parts", default=True,
-        description="Remove small loose parts of the highest Retopo_XX before repair and remesh (uses the Stage 8 metric and threshold)",
+        description="Remove small loose parts before and after the MID remesh and on Retopo_01 / HIGH remesh (Stage 8 metric and threshold)",
     )
     phase2_run_skip_rebake: bpy.props.BoolProperty(
         name="Skip Rebake", get=_skip_rebake_get, set=_skip_rebake_set,
@@ -521,8 +525,12 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Remove small loose parts of the highest Retopo_XX before repair and remesh (uses the Stage 8 metric and threshold)",
     )
     phase2_topology_guard_retopo01: _paired("phase2_topology_guard_retopo01", "phase2_run_topology_guard", bpy.props.BoolProperty,
-        name="Topology Guard Retopo_01", default=False,
-        description="Fix non-disk UV charts of Retopo_01 and repack its UV before High Remesh, Multires and the bake",
+        name="Topology Guard HIGH Remesh", default=False,
+        description="Fix non-disk UV charts of the HIGH remesh result before Setup Resculpting. Only with the Resculpting_01 rebake; Retopo_01 itself is never guarded",
+    )
+    phase2_smart_uv_repair: _paired("phase2_smart_uv_repair", "phase2_run_uv_repair", bpy.props.BoolProperty,
+        name="Smart UV Repair", default=True,
+        description="Run Smart UV Repair (Stage 4 thresholds) on the MID source and result, and on Retopo_01 / HIGH remesh when Resculpting_01 is rebaked",
     )
     phase2_mesh_auto_repair: bpy.props.BoolProperty(
         name="Auto Repair Mesh", default=True,
