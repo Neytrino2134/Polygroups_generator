@@ -24,7 +24,8 @@ context = bpy.context
 p = context.scene.polygroups_model_preparation_settings
 bake = context.scene.polygroups_baking_settings
 events = []
-FIX = ['loose', 'repair', 'guard', 'uv', 'repair']
+# Topology Guard is always followed by a UVPackmaster PACK.
+FIX = ['loose', 'repair', 'guard', 'pack', 'uv', 'repair']
 
 
 def fixture():

@@ -362,6 +362,15 @@ class QueueProcessingMixin:
         self.mesh_index = 0
         return "TOPOLOGY_GUARD" if self.topology_guard_enabled() else "UNWRAP_PASS"
 
+    def pack_sources(self, context):
+        """UVPackmaster PACK of every current pass mesh (stage 5, and always after Topology Guard)."""
+        for obj in self.pass_sources:
+            self.select_source(context, obj)
+            if obj.data.uv_layers.active is None:
+                raise RuntimeError(f"No UV map to pack on {obj.name}")
+            if "FINISHED" not in bpy.ops.object.polygroups_uvpackmaster_pack():
+                raise RuntimeError(f"UVPackmaster Pack failed for {obj.name}")
+
     def topology_guard_fix(self, context, obj):
         """Collapse mesh knots and fix non-disk charts with the 09 UV Preparation settings."""
         self.select_source(context, obj)

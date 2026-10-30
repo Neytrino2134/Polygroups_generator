@@ -175,8 +175,8 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         description="Relax generated seam paths on the mesh surface; this can move mesh vertices",
     )
     topology_guard_unwrap: bpy.props.BoolProperty(
-        name="Unwrap Fixed Charts", default=True,
-        description="Unwrap the processed charts with Angle Based after adding seams",
+        name="Unwrap After Guard", default=True,
+        description="When all Topology Guard operations finish, re-unwrap every face in scope with Angle Based",
     )
     topology_guard_pack: bpy.props.BoolProperty(
         name="Average and Pack", default=False,

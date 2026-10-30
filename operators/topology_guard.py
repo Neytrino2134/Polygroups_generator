@@ -83,14 +83,6 @@ def run_guard(bm, faces, settings, pin=None, deadline=0.0):
     return result, created, generated
 
 
-def guard_charts(bm, generated, faces):
-    """Faces of the charts that received generated seams (diagonal splits included)."""
-    pool = {f for f in bm.faces if not f.hide and (f in faces or any(
-        e in generated for e in f.edges))}
-    return {f for chart in charts(bm, pool) if any(e in generated for f2 in chart for e in f2.edges)
-            for f in chart}
-
-
 def unwrap_faces(context, obj, face_indices, pack=False):
     """Angle Based unwrap of the given faces, keeping the edit selection."""
     if obj.data.uv_layers.active is None:
@@ -146,7 +138,6 @@ def apply_topology_guard(context, obj, settings, selected_only, unwrap=True, pin
     result = result._replace(knots=knots)
     bm.faces.index_update()
     bm.edges.index_update()
-    fixed = {f.index for f in guard_charts(bm, generated, faces)} if generated else set()
     generated_indices = {e.index for e in generated}
     changed = bool(created or knots)
     bmesh.update_edit_mesh(obj.data, loop_triangles=changed, destructive=changed)
@@ -159,8 +150,14 @@ def apply_topology_guard(context, obj, settings, selected_only, unwrap=True, pin
                     prep.seam_relax_protection_radius, prep.seam_relax_use_corner_angle,
                     select_result=False,
                     relax_edges={target.edges[i] for i in generated_indices})
-    if unwrap and fixed:
-        unwrap_faces(context, obj, fixed, pack=settings.topology_guard_pack)
+    if unwrap:
+        # After every guard operation re-unwrap the whole scope with Angle Based,
+        # whether or not the guard changed seams: knots and relax also move UVs.
+        live = bmesh.from_edit_mesh(obj.data)
+        live.faces.index_update()
+        scope = {f.index for f in scope_faces(live, selected_only)}
+        if scope:
+            unwrap_faces(context, obj, scope, pack=settings.topology_guard_pack)
     return result, created, len(generated_indices)
 
 

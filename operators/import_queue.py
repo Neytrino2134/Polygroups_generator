@@ -306,6 +306,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.pass_index = 0
             self.mesh_index = 0
             self.second_cleanup_done = False
+            self.guard_ran = False
             self.bake_snapshot = None
             self.collection = None
             settings.batch_current_file = os.path.basename(self.files[self.index])
@@ -415,12 +416,17 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 self.mesh_index = 0
                 self.stage = self.second_cleanup_stage()
             elif self.resume is not None and self.pass_index >= len(self.passes):
-                # Resume Selected ends with the third remesh pass (stage 8); packing, bake and
+                # Resume Selected ends with the third remesh pass (stage 8); bake and
                 # finalization are not part of it, and Phase 2 is never chained.
+                # Topology Guard is still always followed by a UVPackmaster PACK.
+                if getattr(self, "guard_ran", False):
+                    self.pack_sources(context)
                 self.mesh_index = 0
                 self.stage = "COMPLETE"
             elif self.pass_index >= len(self.passes):
-                if self.batch_stages and settings.batch_stage_5_enabled:
+                # Topology Guard is always followed by a UVPackmaster PACK, even when
+                # stage 5 packing is off.
+                if self.batch_stages and (settings.batch_stage_5_enabled or getattr(self, "guard_ran", False)):
                     self.stage = "PACK"
                 else:
                     self.mesh_index = 0
@@ -526,6 +532,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         elif self.stage == "TOPOLOGY_GUARD":
             targets = self.pass_outputs or self.pass_sources
             self.topology_guard_fix(context, targets[self.mesh_index])
+            self.guard_ran = True
             self.mesh_index += 1
             if self.mesh_index >= len(targets):
                 self.mesh_index = 0
@@ -687,12 +694,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.stage = ("SECOND_SMALL_ISLANDS" if self.mesh_index < len(self.pass_sources)
                           else "PASS_SETUP")
         elif self.stage == "PACK":
-            for obj in self.pass_sources:
-                self.select_source(context, obj)
-                if obj.data.uv_layers.active is None:
-                    raise RuntimeError(f"No UV map to pack on {obj.name}")
-                if "FINISHED" not in bpy.ops.object.polygroups_uvpackmaster_pack():
-                    raise RuntimeError(f"UVPackmaster Pack failed for {obj.name}")
+            self.pack_sources(context)
             self.mesh_index = 0
             self.stage = "BAKE_SETUP" if settings.batch_autobake_enabled else self.finalization_stage()
         elif self.stage == "BAKE_SETUP":

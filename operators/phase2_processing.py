@@ -323,16 +323,20 @@ class Phase2Queue:
 
     def repack_mesh(self, context, low=None):
         if self.settings.phase2_repack_after_repair:
-            low = low if low is not None else bake_pair(self.collection)[1]
-            if context.object and context.object.mode != 'OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
-            for obj in context.selected_objects:obj.select_set(False)
-            low.hide_viewport=low.hide_render=low.hide_select=False
-            low.hide_set(False);low.select_set(True);self.view_layer.objects.active=low
-            if low.data.uv_layers.active is None:
-                raise ValueError(f'{low.name}: UV repack requires a UV map')
-            result = bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT')
-            if 'FINISHED' not in result:
-                raise RuntimeError(f'UVPackmaster PACK failed for {low.name}; processing skipped')
+            self.pack_mesh(context, low)
+
+    def pack_mesh(self, context, low=None):
+        """UVPackmaster PACK of one mesh, unconditionally."""
+        low = low if low is not None else bake_pair(self.collection)[1]
+        if context.object and context.object.mode != 'OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
+        for obj in context.selected_objects:obj.select_set(False)
+        low.hide_viewport=low.hide_render=low.hide_select=False
+        low.hide_set(False);low.select_set(True);self.view_layer.objects.active=low
+        if low.data.uv_layers.active is None:
+            raise ValueError(f'{low.name}: UV repack requires a UV map')
+        result = bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT')
+        if 'FINISHED' not in result:
+            raise RuntimeError(f'UVPackmaster PACK failed for {low.name}; processing skipped')
 
     def highest_mesh(self):
         lows = [(int(match.group(1)), obj) for obj in self.collection.all_objects
@@ -351,7 +355,7 @@ class Phase2Queue:
         self.remove_loose_parts(context, low)
         self.repair_mesh(context, low=low, repack=False, enabled=repair and self.settings.phase2_mesh_auto_repair)
         if guard:
-            self.guard_mesh(context, low, repack=False)
+            self.guard_mesh(context, low)
         if uv_repair:
             self.smart_uv_repair(context, low)
             self.repair_mesh(context, low=low, repack=False,
@@ -422,7 +426,8 @@ class Phase2Queue:
         self.fix_mesh(context, low, uv_repair=rebake,
                       guard=rebake and high_remesh and self.settings.phase2_topology_guard_retopo01)
 
-    def guard_mesh(self, context, low, repack=True):
+    def guard_mesh(self, context, low):
+        """Topology Guard (ends with an Angle Based re-unwrap), then always UVPackmaster PACK."""
         guard = self.scene.polygroups_seam_finalization_settings
         if low.data.uv_layers.active is None or any(
                 mod.type == 'MULTIRES' and mod.total_levels for mod in low.modifiers):
@@ -448,8 +453,7 @@ class Phase2Queue:
         if generated or result.knots:
             self.report({'INFO'}, f'{low.name}: Topology Guard collapsed {result.knots} knot(s), '
                                   f'added {generated} seam edge(s)')
-            if repack:
-                self.repack_mesh(context, low)
+        self.pack_mesh(context, low)
 
     def start_bake(self, context, target=None):
         from .rename_objects import ensure_collection_visible_in_view_layer

@@ -91,9 +91,12 @@ class Phase2MidRemesh:
         if len(meshes)!=1:raise RuntimeError(f'{self.preset} Remesh must produce one mesh')
         result=meshes[0]
         smart_seams_22(context,result)
-        self.topology_guard(context,result)
+        guarded=self.topology_guard(context,result)
         if 'FINISHED' not in bpy.ops.object.polygroups_unwrap_angle_based('EXEC_DEFAULT'):
             raise RuntimeError(f'{self.preset} Remesh UV unwrap failed')
+        if guarded and 'FINISHED' not in bpy.ops.object.polygroups_uvpackmaster_pack('EXEC_DEFAULT'):
+            # Topology Guard is always followed by unwrap + UVPackmaster PACK.
+            raise RuntimeError(f'{self.preset} Remesh UVPackmaster PACK failed')
         if self.result_name:
             result.name = self.result_name
             if result.name != self.result_name:
@@ -105,7 +108,7 @@ class Phase2MidRemesh:
     def topology_guard(self, context, result):
         """Make the new seams disks before the unwrap; only for the Unreal MID result, not the HIGH highpoly."""
         if self.preset != 'MID' or not context.scene.polygroups_model_preparation_settings.phase2_topology_guard_highest:
-            return
+            return False
         if context.object and context.object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
         bpy.ops.object.select_all(action='DESELECT')
@@ -123,6 +126,7 @@ class Phase2MidRemesh:
         elif generated or found.knots:
             self.report({'INFO'}, f'{result.name}: Topology Guard collapsed {found.knots} knot(s), '
                                   f'added {generated} seam edge(s)')
+        return True
 
     def restore(self):
         for settings,name,value in self.saved:setattr(settings,name,value)

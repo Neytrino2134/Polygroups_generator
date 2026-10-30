@@ -28,6 +28,8 @@ seams.smart_seam_angle_limit=math.radians(47);seams.smart_seam_pin_generated=Fal
 qsettings=ctx.scene.qremesher;qsettings.target_count=789
 p.phase2_mesh_auto_repair=False;p.phase2_mid_remesh=True;p.phase2_repack_after_repair=True
 p.remesh_pregenerate_polygroups=False
+# Topology Guard always ends with a UVPackmaster PACK, which is not installed here.
+p.phase2_topology_guard_highest=False
 queue=phase2.Phase2Queue(ctx,[('test',col.name)],False,False,print)
 packed=[]
 def pack(context,low=None):
