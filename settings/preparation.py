@@ -43,9 +43,10 @@ def _skip_rebake_get(self):
 
 
 def _skip_rebake_set(self, value):
-    # Skipping the Resculpting_01 rebake also drops the expensive Topology Guard pass.
+    # Skipping the Resculpting_01 rebake also drops the expensive Retopo_01 Topology Guard pass.
     self.phase2_run_bake_resculpt = not value
-    self.phase2_run_topology_guard = not value
+    if value:
+        self.phase2_run_topology_guard = False
 
 
 def _mode_update(self, context):
@@ -326,8 +327,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         description="Bake the new Resculpting_01 mesh after resculpting and optional repair",
     )
     phase2_run_topology_guard: _paired("phase2_run_topology_guard", "phase2_topology_guard_retopo01", bpy.props.BoolProperty,
-        name="Topology Guard Retopo_01", default=True,
+        name="Topology Guard Retopo_01", default=False,
         description="Fix non-disk UV charts of Retopo_01 and repack its UV before High Remesh, Multires and the bake",
+    )
+    phase2_run_guard_highest: _paired("phase2_run_guard_highest", "phase2_topology_guard_highest", bpy.props.BoolProperty,
+        name="Topology Guard Highest Retopo", default=True,
+        description="Fix non-disk UV charts of the highest Retopo_XX (the MID remesh result) before it is unwrapped and baked",
+    )
+    phase2_run_loose_parts: _paired("phase2_run_loose_parts", "phase2_remove_loose_parts", bpy.props.BoolProperty,
+        name="Remove Small Loose Parts", default=True,
+        description="Remove small loose parts of the highest Retopo_XX before repair and remesh (uses the Stage 8 metric and threshold)",
     )
     phase2_run_skip_rebake: bpy.props.BoolProperty(
         name="Skip Rebake", get=_skip_rebake_get, set=_skip_rebake_set,
@@ -493,8 +502,16 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_autobake_retopo01: _paired("phase2_autobake_retopo01", "phase2_run_bake_resculpt", bpy.props.BoolProperty,
         name="Autobake Retopo_01", default=False,
         description="Repair and rebake Retopo_01 before highpoly cleanup; enabled UV repacking always runs")
+    phase2_topology_guard_highest: _paired("phase2_topology_guard_highest", "phase2_run_guard_highest", bpy.props.BoolProperty,
+        name="Topology Guard Highest Retopo", default=True,
+        description="Fix non-disk UV charts of the highest Retopo_XX (the MID remesh result) before it is unwrapped and baked",
+    )
+    phase2_remove_loose_parts: _paired("phase2_remove_loose_parts", "phase2_run_loose_parts", bpy.props.BoolProperty,
+        name="Remove Small Loose Parts", default=True,
+        description="Remove small loose parts of the highest Retopo_XX before repair and remesh (uses the Stage 8 metric and threshold)",
+    )
     phase2_topology_guard_retopo01: _paired("phase2_topology_guard_retopo01", "phase2_run_topology_guard", bpy.props.BoolProperty,
-        name="Topology Guard Retopo_01", default=True,
+        name="Topology Guard Retopo_01", default=False,
         description="Fix non-disk UV charts of Retopo_01 and repack its UV before High Remesh, Multires and the bake",
     )
     phase2_mesh_auto_repair: bpy.props.BoolProperty(

@@ -24,6 +24,8 @@ pairs = (('phase2_run_mid', 'phase2_mid_remesh'), ('phase2_run_resculpt_retopo01
          ('phase2_run_repair_resculpt', 'phase2_repair_after_resculpt'),
          ('phase2_run_bake_resculpt', 'phase2_autobake_retopo01'),
          ('phase2_run_topology_guard', 'phase2_topology_guard_retopo01'),
+         ('phase2_run_guard_highest', 'phase2_topology_guard_highest'),
+         ('phase2_run_loose_parts', 'phase2_remove_loose_parts'),
          ('phase2_run_cleanup', 'phase2_zbrush_cleanup_on_success'), ('phase2_run_transparent', 'phase2_auto_transparent'))
 for run_name, manual_name in pairs:
     for value in (True, False):
@@ -65,15 +67,22 @@ assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL_ZBRUSH') == 
 assert dialog.active_start_preset(p) == 'UNREAL_ZBRUSH'
 assert all(getattr(p, name) for name in dialog.HIGHPOLY_OPTIONS)
 assert p.phase2_resculpt_retopo01 and p.phase2_autobake_retopo01 and p.phase2_run_zbrush and p.phase2_run_cleanup
-assert p.phase2_topology_guard_retopo01 and not p.phase2_run_skip_rebake
+# Both presets fix the highest Retopo_XX; the Retopo_01 Topology Guard is not part of them.
+assert p.phase2_run_guard_highest and p.phase2_topology_guard_highest
+assert p.phase2_run_loose_parts and p.phase2_remove_loose_parts
+assert not p.phase2_topology_guard_retopo01 and not p.phase2_run_skip_rebake
+assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL') == {'FINISHED'}
+assert p.phase2_run_guard_highest and p.phase2_run_loose_parts and not p.phase2_run_topology_guard
+assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL_ZBRUSH') == {'FINISHED'}
 # Skip Rebake drops the Resculpting_01 rebake and its Topology Guard, keeps the resculpting itself.
+p.phase2_run_topology_guard = True
 p.phase2_run_skip_rebake = True
 assert not p.phase2_run_bake_resculpt and not p.phase2_autobake_retopo01
 assert not p.phase2_run_topology_guard and not p.phase2_topology_guard_retopo01
 assert p.phase2_resculpt_retopo01 and p.phase2_run_high_remesh and p.phase2_run_zbrush
 assert dialog.active_start_preset(p) == 'UNREAL_ZBRUSH'
 p.phase2_run_skip_rebake = False
-assert p.phase2_autobake_retopo01 and p.phase2_topology_guard_retopo01
+assert p.phase2_autobake_retopo01 and not p.phase2_topology_guard_retopo01
 p.phase2_autobake_retopo01 = False
 assert p.phase2_run_skip_rebake
 p.phase2_autobake_retopo01 = True

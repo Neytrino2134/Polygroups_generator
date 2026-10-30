@@ -334,12 +334,41 @@ class Phase2Queue:
             if 'FINISHED' not in result:
                 raise RuntimeError(f'UVPackmaster PACK failed for {low.name}; processing skipped')
 
+    def highest_mesh(self):
+        lows = [(int(match.group(1)), obj) for obj in self.collection.all_objects
+                if obj.type == 'MESH' and (match := LOW.fullmatch(obj.name))]
+        if not lows:
+            raise ValueError(f'{self.collection.name}: requires a numbered Retopo')
+        return max(lows, key=lambda item: item[0])[1]
+
+    def remove_loose_parts(self, context):
+        """Drop small loose parts of the highest Retopo_XX (Stage 8 metric and threshold) before repair/remesh."""
+        if not self.settings.phase2_remove_loose_parts:
+            return
+        from .small_loose_parts import remove_small_loose_parts
+        low = self.highest_mesh()
+        if context.object and context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        if low.data.users > 1:
+            low.data = low.data.copy()
+        result = remove_small_loose_parts(
+            low, metric=self.settings.batch_stage_4_small_loose_part_metric,
+            threshold_percent=self.settings.batch_stage_4_small_loose_part_threshold_percent)
+        if result['part_count']:
+            self.report({'INFO'}, f"{low.name}: removed {result['part_count']} small loose part(s)")
+
+    def guard_highest(self, context):
+        """Topology Guard + UV repack for the highest Retopo_XX when no MID remesh unwraps it afterwards."""
+        if self.settings.phase2_topology_guard_highest:
+            self.guard_mesh(context, self.highest_mesh())
+
     def guard_retopo01(self, context):
         """Topology Guard + UV repack for Retopo_01 before its High remesh, Multires and bake (optional)."""
+        if self.settings.phase2_topology_guard_retopo01:
+            self.guard_mesh(context, self.retopo01)
+
+    def guard_mesh(self, context, low):
         guard = self.scene.polygroups_seam_finalization_settings
-        low = self.retopo01
-        if not self.settings.phase2_topology_guard_retopo01:
-            return
         if low.data.uv_layers.active is None or any(
                 mod.type == 'MULTIRES' and mod.total_levels for mod in low.modifiers):
             return
@@ -579,6 +608,7 @@ class Phase2Queue:
                     if len(candidates) != 1:
                         raise ValueError(f'{self.collection.name}: expected exactly one Retopo_01 / Resculpting_01 mesh')
                     self.retopo01 = candidates[0]
+                self.remove_loose_parts(context)
                 self.repair_mesh(context,repack=False)
                 if self.settings.phase2_mid_remesh:
                     from .phase2_mid_remesh import Phase2MidRemesh
@@ -586,6 +616,7 @@ class Phase2Queue:
                     self.mid_remesh.start(context)
                     self.stage='MID_REMESH_WAIT'
                 else:
+                    self.guard_highest(context)
                     self.repack_mesh(context)
                     if self.auto_bake:self.stage='BAKE_START'
                     else:self.complete()
@@ -594,6 +625,8 @@ class Phase2Queue:
                 self.settings.phase2_status=f'{self.index+1}/{len(self.entries)}: {name} / MID Remesh {progress*100:.0f}%'
                 if done:
                     self.mid_remesh.finish(context);self.mid_remesh=None
+                    # The remesh result is a new mesh: repair it too (its Topology Guard ran before the unwrap).
+                    self.repair_mesh(context,repack=False)
                     self.repack_mesh(context)
                     if self.auto_bake:self.stage='BAKE_START'
                     else:self.complete()

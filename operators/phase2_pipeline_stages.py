@@ -22,6 +22,8 @@ def restore(run, context):
             phase2_repair_after_resculpt=resculpt and p.phase2_run_repair_resculpt,
             phase2_autobake_retopo01=resculpt and p.phase2_run_bake_resculpt,
             phase2_topology_guard_retopo01=resculpt and p.phase2_run_topology_guard,
+            phase2_topology_guard_highest=rebake and p.phase2_run_guard_highest,
+            phase2_remove_loose_parts=rebake and p.phase2_run_loose_parts,
             phase2_mid_remesh=p.phase2_run_mid).items():
         run.override(p, name, value)
     entries = phase.scan(context, run.report)

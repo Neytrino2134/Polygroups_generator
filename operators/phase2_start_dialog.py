@@ -9,11 +9,11 @@ PRESETS = (
 )
 # Highpoly options that only the ZBrush pipeline needs.
 HIGHPOLY_OPTIONS = ('phase2_run_resculpt_retopo01', 'phase2_run_high_remesh', 'phase2_run_repair_resculpt',
-                    'phase2_run_bake_resculpt', 'phase2_run_topology_guard')
+                    'phase2_run_bake_resculpt')
 SHARED_ON = ('phase2_run_restore', 'phase2_run_prepare', 'phase2_run_export', 'phase2_run_blend',
              'phase2_run_render', 'phase2_run_mid', 'phase2_export_fbx', 'phase2_blend_export_generated',
              'phase2_blend_export_highpoly', 'phase2_blend_export_retopo01', 'phase2_autosave',
-             'phase2_auto_skip_scene')
+             'phase2_auto_skip_scene', 'phase2_run_guard_highest', 'phase2_run_loose_parts')
 
 
 def apply_start_preset(p, preset):
@@ -27,6 +27,8 @@ def apply_start_preset(p, preset):
     p.phase2_export_glb = False
     for name in HIGHPOLY_OPTIONS:
         setattr(p, name, zbrush)
+    # Both presets fix the highest Retopo_XX; the Retopo_01 Topology Guard is an opt-in extra.
+    p.phase2_run_topology_guard = False
     p.phase2_run_zbrush = zbrush
     p.phase2_run_cleanup = zbrush
 
@@ -109,6 +111,9 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         layout = self.layout
         layout.use_property_split = False
         draw_start_presets(layout, p)
+        fixes = layout.column(align=True)
+        fixes.prop(p, 'phase2_run_loose_parts')
+        fixes.prop(p, 'phase2_run_guard_highest')
         if active_start_preset(p) == 'UNREAL_ZBRUSH':
             options = layout.column(align=True)
             options.prop(p, 'phase2_run_skip_rebake', icon='FF')

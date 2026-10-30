@@ -1,4 +1,4 @@
-﻿"""Secondary Retopo_01 stages: ordering, forced repack and deferred cleanup."""
+"""Secondary Retopo_01 stages: ordering, forced repack and deferred cleanup."""
 import sys,tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +16,7 @@ assert not p.phase2_keep_retopo01 and not p.phase2_high_remesh_before_resculptin
 p.phase2_keep_retopo01=True
 p.phase2_mid_remesh=False
 real=bpy
-p.phase2_topology_guard_retopo01=False
+p.phase2_topology_guard_retopo01=False;p.phase2_topology_guard_highest=p.phase2_remove_loose_parts=False
 p.phase2_mesh_auto_repair=True;p.phase2_repack_after_repair=True
 p.phase2_delete_high_after_bake=True;p.phase2_delete_lower_retopo=True;p.phase2_blend_export_generated=False
 ctx.scene.polygroups_resculpting_settings.multires_levels=1

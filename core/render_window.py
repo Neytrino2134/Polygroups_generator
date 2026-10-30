@@ -23,10 +23,20 @@ def close_render_windows():
     for window in list(manager.windows):
         if not is_render_window(window):
             continue
-        try:
-            with bpy.context.temp_override(window=window, screen=window.screen):
-                bpy.ops.wm.window_close()
+        if close_window(window):
             closed += 1
-        except (RuntimeError, ReferenceError):
-            pass
     return closed
+
+
+def close_window(window):
+    """Blender 5.x refuses to override the context with a temporary screen (TypeError); try the
+    plain window override, and when Blender still refuses leave the window open: a window that
+    cannot be closed must never stop the render queue."""
+    for override in (dict(window=window), dict(window=window, screen=window.screen)):
+        try:
+            with bpy.context.temp_override(**override):
+                bpy.ops.wm.window_close()
+            return True
+        except Exception:
+            continue
+    return False

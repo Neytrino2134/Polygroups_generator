@@ -6,6 +6,7 @@ from ..core.remesh_job import RemeshJob, remesh_backend
 from ..core.remesh_defaults import get_remesh_preset_counts
 from ..pin_edges import pin_layer
 from ..core.mesh_ngons import ngon_count, triangulated_ngon_copy
+from .topology_guard import apply_topology_guard
 
 
 def smart_seams_22(context, obj):
@@ -90,6 +91,7 @@ class Phase2MidRemesh:
         if len(meshes)!=1:raise RuntimeError(f'{self.preset} Remesh must produce one mesh')
         result=meshes[0]
         smart_seams_22(context,result)
+        self.topology_guard(context,result)
         if 'FINISHED' not in bpy.ops.object.polygroups_unwrap_angle_based('EXEC_DEFAULT'):
             raise RuntimeError(f'{self.preset} Remesh UV unwrap failed')
         if self.result_name:
@@ -99,6 +101,28 @@ class Phase2MidRemesh:
         self.finished=True
         self.restore()
         return result
+
+    def topology_guard(self, context, result):
+        """Make the new seams disks before the unwrap; only for the Unreal MID result, not the HIGH highpoly."""
+        if self.preset != 'MID' or not context.scene.polygroups_model_preparation_settings.phase2_topology_guard_highest:
+            return
+        if context.object and context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+        result.select_set(True)
+        context.view_layer.objects.active = result
+        bpy.ops.object.mode_set(mode='EDIT')
+        try:
+            found, _created, generated = apply_topology_guard(
+                context, result, context.scene.polygroups_seam_finalization_settings,
+                selected_only=False, unwrap=False)
+        finally:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        if found.timed_out:
+            self.report({'WARNING'}, f'{result.name}: Topology Guard stopped at its time limit')
+        elif generated or found.knots:
+            self.report({'INFO'}, f'{result.name}: Topology Guard collapsed {found.knots} knot(s), '
+                                  f'added {generated} seam edge(s)')
 
     def restore(self):
         for settings,name,value in self.saved:setattr(settings,name,value)
