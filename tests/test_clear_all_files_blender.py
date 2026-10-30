@@ -64,16 +64,23 @@ assert new.name=='T_X_BaseColor' and node.image==new and len([i for i in bpy.dat
 holder=bpy.data.meshes.new('holder');holder.materials.append(mat)
 aside=[];copy=bpy.data.materials.new('tmp')
 take_name(bpy.data.materials,copy,'M_X',aside=aside)
-assert copy.name=='M_X' and mat.name=='M_X_Old' and aside==[mat]
+assert copy.name=='M_X' and len(aside)==1  # deferred while the caller still reads the old one
 drop_unused(aside)
-assert 'M_X_Old' in bpy.data.materials  # still used
-holder.materials[0]=copy
-drop_unused(aside)
-assert 'M_X_Old' not in bpy.data.materials  # unused stale material removed
+# The stale material is replaced permanently: no _Old / .001 kept, its users moved over.
+assert [m.name for m in bpy.data.materials if m.name.startswith('M_X')]==['M_X'] and holder.materials[0]==copy
+# Leftovers of earlier runs fold into the exact name.
+keep=bpy.data.images.new('T_Y_Normal',4,4);stale=bpy.data.images.new('T_Y_Normal_Old',4,4)
+lone=bpy.data.images.new('T_Z_Normal.001',4,4)
+user=bpy.data.materials.new('User');user.use_fake_user=True
+node=user.node_tree.nodes.new('ShaderNodeTexImage');node.image=stale
+from polygroups_generator.core.datablock_names import merge_stale_copies
+merge_stale_copies()
+assert node.image==keep and 'T_Y_Normal_Old' not in bpy.data.images and lone.name=='T_Z_Normal'
 with tempfile.TemporaryDirectory() as directory:
     folder=Path(directory)
-    for name in ('T_X_BaseColor.png','T_X_BaseColor.001.png','T_X_BaseColor.002.png','T_X_Normal.001.png'):
+    for name in ('T_X_BaseColor.png','T_X_BaseColor.001.png','T_X_BaseColor.002.png','T_X_BaseColor_Old.png',
+                 'T_X_Normal.001.png'):
         (folder/name).write_bytes(b'x')
-    assert remove_numbered_files(folder/'T_X_BaseColor.png')==2
+    assert remove_numbered_files(folder/'T_X_BaseColor.png')==3
     assert sorted(p.name for p in folder.iterdir())==['T_X_BaseColor.png','T_X_Normal.001.png']
 print('EXACT_DATABLOCK_NAMES_OK')

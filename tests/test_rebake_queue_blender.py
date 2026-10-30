@@ -1,4 +1,5 @@
 """Real queue: all repairs, changed-UV packing, Cycles, LODs and final exports."""
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -125,6 +126,12 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_rebake_queue_') as direct
         assert (root/'!Blend'/(asset+'.blend')).is_file()
         assert list((root/'!Unreal').rglob(target.name+'.fbx'))
         assert high.hide_viewport and high.hide_render
+    # ReBake + LODs + export keep one texture / material per name: no _Old or .001 copies.
+    stale=re.compile(r'(?:_Old|\.\d{3})$',re.I)
+    names=[item.name for item in (*bpy.data.images,*bpy.data.materials) if item.name[:2] in ('T_','M_')]
+    assert not [name for name in names if stale.search(name)],names
+    exported=[path.name for path in (root/'!Unreal').rglob('*.png')]
+    assert exported and not [name for name in exported if stale.search(Path(name).stem)],exported
     print('REBAKE_QUEUE_REPAIR_PACK_CYCLES_LODS_EXPORT_OK',flush=True)
 
     # Unchanged UV skips packing on a second run; only this toggle controls repair.

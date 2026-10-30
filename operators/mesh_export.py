@@ -11,6 +11,7 @@ from contextlib import contextmanager
 import bpy
 
 from ..sound import play_operation_done_sound
+from ..core.datablock_names import remove_numbered_files
 from .fab_preparation import _fab_image_source, _write_fab_image_source
 
 
@@ -299,6 +300,8 @@ def _copy_export_textures(objects, root_dir):
             _write_fab_image_source(source, destination)
             image.filepath = destination
             image.filepath_raw = destination
+            # Exports keep one file per texture: drop <name>.001 / <name>_Old leftovers.
+            remove_numbered_files(destination)
     except Exception:
         for image, (filepath, filepath_raw) in originals.items():
             image.filepath = filepath

@@ -12,7 +12,7 @@ from pathlib import Path
 import bpy
 
 from . import bake_constants as C
-from ..core.datablock_names import remove_numbered_files, take_name
+from ..core.datablock_names import merge_stale_copies, remove_numbered_files, take_name
 
 MID_PATTERN = re.compile(r'^SM_(.+_(\d+))_MID$', re.IGNORECASE)
 CHANNELS = {
@@ -481,6 +481,8 @@ class FinalRebakeSession:
             if success:
                 from ..core.bake_projection import seal_mask
                 asset, _ = final_asset_name(target)
+                # Fold .001 / _Old leftovers of earlier runs: one texture per channel stays.
+                merge_stale_copies()
                 for channel, (work, original, path) in self.results.items():
                     image = original or bpy.data.images.load(str(path), check_existing=True)
                     packed = (self.packed_outputs[channel] if original else

@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import random
 from ..core.asset_names import asset_name
-from ..core.datablock_names import drop_unused, remove_numbered_files, take_name
+from ..core.datablock_names import drop_unused, merge_stale_copies, remove_numbered_files, take_name
 import bpy
 from .mesh_export import _safe_path_token
 from .fab_preparation import _texture_suffix
@@ -53,17 +53,22 @@ def lod_order(obj, depsgraph):
 
 def prepare_materials(meshes, base, copy_textures):
     """Preserve slots and share copies only where the source materials were shared."""
+    # One BaseColor / Normal / material per asset: fold leftover .001 / _Old copies first.
+    merge_stale_copies()
     sources = {mat for obj in meshes for mat in obj.data.materials if mat}
     external_materials = {mat for obj in bpy.data.objects if obj.type == 'MESH' and obj not in meshes
                           for mat in obj.data.materials if mat}
     external_images = {node.image for mat in external_materials for node in image_nodes(mat.node_tree)}
     materials, images, suffix_counts, aside = {}, {}, {}, []
     for index, source in enumerate(sorted(sources, key=lambda mat: mat.name)):
-        own = source.get('unreal_lod_asset') == base and source not in external_materials
+        mat_name = f'M_{base}' + (f'_{index + 1}' if index else '')
+        # A material already named for this asset (the MID's after ReBake) is shared, never copied.
+        own = source.name == mat_name or (source.get('unreal_lod_asset') == base
+                                          and source not in external_materials)
         mat = source if own else source.copy()
         if not own:
             isolate_groups(mat.node_tree)
-        take_name(bpy.data.materials, mat, f'M_{base}' + (f'_{index + 1}' if index else ''), aside=aside)
+        take_name(bpy.data.materials, mat, mat_name, aside=aside)
         mat['unreal_lod_asset'] = base
         materials[source] = mat
         for node in image_nodes(mat.node_tree):
@@ -74,7 +79,9 @@ def prepare_materials(meshes, base, copy_textures):
                 suffix = _texture_suffix(source_image, node)
                 suffix_counts[suffix] = suffix_counts.get(suffix, 0) + 1
                 name = f'T_{base}_{suffix}' + (f'_{suffix_counts[suffix]}' if suffix_counts[suffix] > 1 else '')
-                if source_image.get('unreal_lod_asset') == base and source_image not in external_images:
+                # The asset's exact final texture (the MID's after ReBake) is shared, never copied.
+                if source_image.name == name or (source_image.get('unreal_lod_asset') == base
+                                                 and source_image not in external_images):
                     image = source_image
                 else:
                     pixels = array('f', [0.0]) * len(source_image.pixels)

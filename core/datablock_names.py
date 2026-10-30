@@ -1,54 +1,65 @@
-"""Exact datablock names and texture files: a re-created texture or material replaces the old one
-instead of becoming T_..._BaseColor.001 / M_....001 (and T_..._BaseColor.001.png on disk)."""
+"""Exact datablock names and texture files: a re-created texture or material permanently replaces
+the old one. Nothing is kept as T_..._BaseColor.001 / _Old, in the blend or on disk."""
 import re
 from pathlib import Path
 
 import bpy
 
-NUMBERED = re.compile(r'(?:\.\d{3})+$')
+# Stale copies of the toolkit's own final names: T_<asset>_<channel> / M_<asset> + .001 / _Old.
+STALE = re.compile(r'^([TM]_.+?)(?:_Old|\.\d{3})+$')
 
 
 def take_name(collection, item, name, replace=False, aside=None):
-    """Give ``item`` exactly ``name``.
+    """Give ``item`` exactly ``name``; the datablock that already holds it is the stale version.
 
-    The local datablock that already holds the name is the stale previous version:
-    with ``replace`` its users are remapped to ``item`` and it is removed; otherwise
-    it is removed when unused, or renamed aside and appended to ``aside`` so the
-    caller can drop it once its last users are gone (see ``drop_unused``).
+    With ``replace`` (or when ``aside`` is None) its users are remapped to ``item`` and it is
+    removed at once. With an ``aside`` list the remap is deferred (the caller may still be
+    reading the old one): ``drop_unused(aside)`` remaps and removes it afterwards.
     """
     other = collection.get(name)
     if other is not None and other != item and other.library is None:
-        if replace:
+        if replace or aside is None:
             other.user_remap(item)
-        if replace or other.users == 0:
             collection.remove(other)
         else:
-            other.name = name + '_Old'
-            if aside is not None:
-                aside.append(other)
+            other.name = name + '__stale'
+            aside.append((collection, other, item))
     item.name = name
     return item
 
 
-def drop_unused(items):
-    """Remove the aside datablocks that nothing uses any more (materials first frees their images)."""
-    kinds = (bpy.types.Material, bpy.types.Image)
-    for kind in kinds:
-        for item in list(items):
-            try:
-                if isinstance(item, kind) and item.users == 0 and not item.use_fake_user:
-                    (bpy.data.materials if kind is bpy.types.Material else bpy.data.images).remove(item)
-                    items.remove(item)
-            except ReferenceError:
-                items.remove(item)
+def drop_unused(aside):
+    """Finish deferred take_name calls: every stale holder is remapped to its replacement and removed."""
+    for collection, other, item in aside:
+        try:
+            other.user_remap(item)
+            collection.remove(other)
+        except ReferenceError:
+            pass
+    aside.clear()
+
+
+def merge_stale_copies():
+    """Fold leftover T_/M_ copies (.001, _Old) into the exact name: remap and remove, or rename back."""
+    for collection in (bpy.data.materials, bpy.data.images):
+        for item in sorted(collection, key=lambda item: item.name):
+            match = STALE.match(item.name) if item.library is None else None
+            if not match:
+                continue
+            base = collection.get(match.group(1))
+            if base is None:
+                item.name = match.group(1)
+            elif base != item and base.library is None:
+                item.user_remap(base)
+                collection.remove(item)
 
 
 def remove_numbered_files(path):
-    """Delete <stem>.001.png, <stem>.002.png ... beside ``path`` unless an image still reads them."""
+    """Delete <stem>.001.png, <stem>_Old.png ... beside ``path`` unless an image still reads them."""
     path = Path(path)
     if not path.parent.is_dir():
         return 0
-    pattern = re.compile(re.escape(path.stem) + r'(?:\.\d{3})+' + re.escape(path.suffix) + '$', re.IGNORECASE)
+    pattern = re.compile(re.escape(path.stem) + r'(?:_Old|\.\d{3})+' + re.escape(path.suffix) + '$', re.IGNORECASE)
     used = set()
     for image in bpy.data.images:
         if image.users and image.filepath and image.library is None:
