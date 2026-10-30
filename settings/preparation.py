@@ -67,10 +67,16 @@ def _auto_bake_update(self, context):
 ENGINE_LOD_TRIS = {"FAB": (3000, 1500, 1000, 500, 250), "UNITY": (2900, 1500, 1000, 500, 150)}
 
 
+def engine_lod_targets(settings):
+    """``smart_lods_target_N`` budgets of the Start Phase 2 pipeline switch (ReBake / ReLOD read these)."""
+    return {f"smart_lods_target_{index}": tris
+            for index, tris in enumerate(ENGINE_LOD_TRIS[settings.phase2_run_engine], 1)}
+
+
 def apply_engine_lod_tris(settings):
     finalization = settings.id_data.polygroups_mesh_finalization_settings
-    for index, tris in enumerate(ENGINE_LOD_TRIS[settings.phase2_run_engine], 1):
-        _assign(finalization, f"smart_lods_target_{index}", tris)
+    for name, tris in engine_lod_targets(settings).items():
+        _assign(finalization, name, tris)
 
 
 def _run_engine_update(self, context):

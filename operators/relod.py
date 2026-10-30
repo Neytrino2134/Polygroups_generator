@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import bpy
 
 from ..core.lod_naming import lod_base, lod_name
+from ..settings.preparation import engine_lod_targets
 from .rebake_lods import LODReplacement
 from .sequential_jobs import SequentialJob
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods, LOD_SOURCE, LOD_INDEX
@@ -99,7 +100,8 @@ class ReLODPlan:
                         and prop.identifier not in {'smart_lods_is_running', 'smart_lods_progress', 'smart_lods_status'}}
         self.options.update(smart_lods_prepare_mode='UNREAL',
                             smart_lods_decimate_method=p.phase2_relod_method,
-                            smart_lods_uv_seam_mode=p.phase2_relod_seam_mode)
+                            smart_lods_uv_seam_mode=p.phase2_relod_seam_mode,
+                            **engine_lod_targets(p))
         self.names = {lod_name(source.name, i, 'UNREAL') for i in range(s.smart_lods_count)}
         for name in self.names:
             collision = bpy.data.objects.get(name)

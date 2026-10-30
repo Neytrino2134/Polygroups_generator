@@ -7,6 +7,7 @@ import bpy
 
 from ..core.asset_names import asset_name
 from ..core.lod_naming import lod_name
+from ..settings.preparation import engine_lod_targets
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods, LOD_SOURCE, LOD_INDEX, LOD_LABEL
 from .unity_preparation import unity_name
 
@@ -28,6 +29,7 @@ class FinalRebakeLODs:
                 self.options[name] = tuple(value) if getattr(prop, 'is_array', False) else value
         self.options['smart_lods_prepare_mode'] = self.engine
         self.options['unreal_lod_keep_high'] = False
+        self.options.update(engine_lod_targets(p))
         # A manual rebake updates an existing asset, so stale Phase 2 identity
         # defaults must not redirect LOD replacement to another asset number.
         identity = re.fullmatch(r'SM_(.+)_(\d+)_(\d+)_MID', target.name, re.IGNORECASE)
