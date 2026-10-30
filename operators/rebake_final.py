@@ -601,7 +601,7 @@ def rebake_review(context, operator):
 
 class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
     bl_idname = 'object.polygroups_rebake_final_mesh'
-    bl_label = 'ReBake Final Mesh'
+    bl_label = 'ReBake Selected Final Mesh'
     bl_description = 'Rebake selected Highpoly onto the active MID, or find Highpoly in Generated.N locally and then in !Blend'
     bl_options = {'REGISTER', 'UNDO'}
 
