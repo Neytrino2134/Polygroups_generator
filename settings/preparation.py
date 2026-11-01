@@ -201,7 +201,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     file_import_small_loose_part_threshold_percent: bpy.props.FloatProperty(
         name="Remove Below",
-        default=8.0,
+        default=2.0,
         min=0.0,
         max=100.0,
         soft_max=25.0,
@@ -678,7 +678,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     small_loose_part_threshold_percent: bpy.props.FloatProperty(
         name="Small Part Threshold",
         description="Delete disconnected parts smaller than this percentage of the largest part",
-        default=8.0,
+        default=2.0,
         min=0.0,
         max=100.0,
         soft_max=25.0,
@@ -826,7 +826,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     batch_first_small_loose_part_threshold_percent: bpy.props.FloatProperty(
         name="Remove Below",
-        default=8.0,
+        default=2.0,
         min=0.0,
         max=100.0,
         soft_max=25.0,
@@ -914,7 +914,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     batch_stage_3_small_loose_part_threshold_percent: bpy.props.FloatProperty(
         name="Remove Below",
-        default=8.0,
+        default=2.0,
         min=0.0,
         max=100.0,
         soft_max=25.0,
@@ -1035,7 +1035,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     )
     batch_stage_4_small_loose_part_threshold_percent: bpy.props.FloatProperty(
         name="Remove Below",
-        default=8.0,
+        default=2.0,
         min=0.0,
         max=100.0,
         soft_max=25.0,

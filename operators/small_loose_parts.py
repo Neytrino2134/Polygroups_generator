@@ -163,7 +163,7 @@ def small_part_candidates(parts, threshold_percent):
     return candidates
 
 
-def remove_small_loose_parts(obj, metric="BOUNDING_BOX", threshold_percent=8.0):
+def remove_small_loose_parts(obj, metric="BOUNDING_BOX", threshold_percent=2.0):
     """Delete qualifying parts in Object Mode and return removal statistics."""
     parts = analyze_loose_parts(obj, metric)
     candidates = small_part_candidates(parts, threshold_percent)

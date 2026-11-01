@@ -44,7 +44,7 @@ def build_test_mesh():
 obj = build_test_mesh()
 settings = bpy.context.scene.polygroups_model_preparation_settings
 assert settings.small_loose_part_metric == "BOUNDING_BOX"
-assert settings.small_loose_part_threshold_percent == 8.0
+assert settings.small_loose_part_threshold_percent == 2.0
 
 parts = analyze_loose_parts(obj, "BOUNDING_BOX")
 assert len(parts) == 4
