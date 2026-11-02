@@ -71,3 +71,12 @@ two assets, custom High, shared textures, JSON, legacy formats, no-format
 validation and injected failure), test_unity_gltf_modes_blender.py and
 test_selected_gltf_export.py. The Unity test fixture now saves its temporary
 blend to meet the existing safe texture-refresh contract.
+
+MeshInfo JSON also records `Path` (the absolute directory containing that JSON),
+`AssetName`, and `NameIndex` (a string preserving leading zeroes). These fields
+are shared by Unreal, Unity, Phase 2, rendering and ReLOD JSON exports.
+Prepared mesh identities take precedence over unrelated current UI defaults;
+unnumbered meshes use the relevant engine preparation settings. Each mesh and
+asset record includes its identity too. In a mixed-pack document, a top-level
+identity field is empty when the records do not share a single value.
+ReLOD records the final output directory rather than its temporary staging folder.

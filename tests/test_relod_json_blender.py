@@ -33,6 +33,8 @@ with tempfile.TemporaryDirectory(prefix='test_relod_json_',dir=ROOT) as director
     info_path=root/'!Unreal'/'MeshInfo.json'
     info=json.loads(info_path.read_text(encoding='utf-8'))
     assert info['totals']['meshes']==6 and len(info['assets'])==2
+    assert info['Path']==str(info_path.parent.resolve())
+    assert info['AssetName']=='JSON' and info['NameIndex']=='01'
     assert not list(root.rglob('*.fbx')) and not (root/'!Blend').exists()
     assert info['totals']['triangles']==sum(row['triangles'] for row in info['meshes'])
     updated=media.validate(Path(gallery.saved_filepath).read_text(encoding='utf-8'))

@@ -5,6 +5,7 @@ import json
 import base64
 import mimetypes
 import tempfile
+from pathlib import Path
 from urllib.parse import unquote
 from contextlib import contextmanager
 
@@ -213,7 +214,28 @@ def _export_polygon_statistics(entries):
     }
 
 
-def _write_export_mesh_info(root_dir, export_format, entries, engine=None):
+def _mesh_info_identity(entry, engine):
+    """Read prepared identity first; export UI defaults may belong to another pack."""
+    settings = getattr(bpy.context.scene, 'polygroups_mesh_finalization_settings', None)
+    prefix = 'unity_' if engine == 'Unity' else 'unreal_lod_'
+    from ..core.asset_names import asset_name
+    configured_name = asset_name(getattr(settings, prefix + 'asset_name', ''))
+    configured_index = str(getattr(settings, prefix + 'name_index', '')).zfill(2)
+    name = entry.get('asset') or entry.get('name', '')
+    name = re.sub(r'^SM_', '', name, flags=re.I)
+    name = re.sub(r'[._](?:LOD[._]?\d+|MID|HIGH|LOW)$', '', name, flags=re.I)
+    # Match the exact configured prefix before numeric parsing: Unity permits
+    # a free-form suffix, including digits, after the asset/version indices.
+    configured = configured_name + '_' + configured_index + '_'
+    if configured_name and name.casefold().startswith(configured.casefold()):
+        return dict(AssetName=configured_name, NameIndex=configured_index)
+    match = re.fullmatch(r'(.+)_(\d+)_(\d+)(?:_[^\d].*)?', name)
+    if match:
+        return dict(AssetName=match[1], NameIndex=match[2])
+    return dict(AssetName=configured_name, NameIndex=configured_index)
+
+
+def _write_export_mesh_info(root_dir, export_format, entries, engine=None, *, output_directory=None):
     if export_format == "NONE":
         return
     totals = {
@@ -222,9 +244,16 @@ def _write_export_mesh_info(root_dir, export_format, entries, engine=None):
         "triangles": sum(item["triangles"] for item in entries),
     }
     if export_format == "JSON":
+        entries = [dict(item, **_mesh_info_identity(item, engine)) for item in entries]
+        def common(items, key):
+            values = {item[key] for item in items}
+            return next(iter(values)) if len(values) == 1 else ''
         filepath = os.path.join(root_dir, "MeshInfo.json")
         with open(filepath, "w", encoding="utf-8") as output:
-            document = {"meshes": entries, "totals": totals}
+            document = {"Path": str(Path(bpy.path.abspath(str(output_directory or root_dir))).resolve()),
+                        "AssetName": common(entries, 'AssetName'),
+                        "NameIndex": common(entries, 'NameIndex'),
+                        "meshes": entries, "totals": totals}
             if engine is not None:
                 document['Engine'] = engine
             if engine in {'Unity', 'Unreal'}:
@@ -237,6 +266,7 @@ def _write_export_mesh_info(root_dir, export_format, entries, engine=None):
                 for item in entries:
                     assets.setdefault(item['asset'], []).append(item)
                 document['assets'] = [dict(name=name, meshes=items,
+                    AssetName=common(items, 'AssetName'), NameIndex=common(items, 'NameIndex'),
                     lods=[item['name'] for item in items if item.get('role') == 'LOD'],
                     high=[item['name'] for item in items if item.get('role') == 'HIGH'])
                     for name, items in assets.items()]

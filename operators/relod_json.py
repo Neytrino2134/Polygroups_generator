@@ -63,7 +63,7 @@ def update_json(context, plans, untouched=()):
         gallery_content = media.dumps(document)
     root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.relod-json-', dir=root) as temporary:
-        _write_export_mesh_info(temporary, 'JSON', entries, 'Unreal')
+        _write_export_mesh_info(temporary, 'JSON', entries, 'Unreal', output_directory=root)
         os.replace(Path(temporary) / 'MeshInfo.json', root / 'MeshInfo.json')
     if document is not None:
         gallery_path.parent.mkdir(parents=True, exist_ok=True)
