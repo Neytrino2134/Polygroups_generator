@@ -673,6 +673,8 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
             column = content.column(align=True)
             formats = column.row(align=True)
             formats.prop(settings, "mesh_export_fbx")
+            if settings.mesh_export_fbx:
+                column.prop(settings, "unreal_fbx_normal_maps")
             formats.prop(settings, "mesh_export_glb")
             formats.prop(settings, "mesh_export_gltf")
             column.prop(settings, "mesh_export_sort", text=t(context, "mesh_export_sort"))

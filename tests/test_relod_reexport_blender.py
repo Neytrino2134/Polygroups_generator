@@ -22,7 +22,7 @@ for index in (1,2):
     preview=bpy.data.objects.new(col.name+'_Texture_BaseColor',source.data.copy());col.objects.link(preview)
     preview['polygroups_texture_plane']='BaseColor'
 snapshot={obj:(obj.data,obj.matrix_world.copy(),tuple(tuple(v.co) for v in obj.data.vertices)) for obj in sources}
-assert not p.phase2_relod_reexport
+p.phase2_relod_reexport=p.phase2_relod_json=False
 with tempfile.TemporaryDirectory(prefix='test_relod_reexport_',dir=ROOT) as directory:
     root=Path(directory);main=root/'Working.blend'
     bpy.ops.wm.save_as_mainfile(filepath=str(main));working_hash=hashlib.sha256(main.read_bytes()).hexdigest()

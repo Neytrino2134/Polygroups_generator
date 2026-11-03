@@ -13,6 +13,9 @@ bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=Fals
 s.smart_lods_count=2;s.smart_lods_target_1=50;s.smart_lods_target_2=20;s.smart_lods_create_text=True
 s.smart_lods_auto_arrange=True;s.smart_lods_decimate_method='SMART_DECIMATE'
 assert p.phase2_relod_method=='UV_PRESERVE'
+assert p.phase2_relod_delete_current_lods and p.phase2_relod_reexport and p.phase2_relod_json
+p.phase2_relod_delete_current_lods=False
+p.phase2_relod_reexport=p.phase2_relod_json=False
 
 def source(name):
  bm=bmesh.new();bmesh.ops.create_icosphere(bm,subdivisions=2,radius=1)

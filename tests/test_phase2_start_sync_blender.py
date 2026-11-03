@@ -1,6 +1,7 @@
 """Start Phase 2 settings stay in sync with Restore / Finalization / Render; presets, defaults, Retopo_01 keep, dialog."""
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import bpy, addon_utils
 ROOT = Path(__file__).resolve().parents[1]; sys.path.insert(0, str(ROOT.parent))
 bpy.context.preferences.use_preferences_save = False
@@ -127,6 +128,15 @@ assert dialog.asset_fields(p)[0] == 'unreal_lod_asset_name'
 p.phase2_run_engine = 'UNITY'
 assert dialog.asset_fields(p)[0] == 'unity_asset_name'
 assert hasattr(bpy.types, 'OBJECT_OT_polygroups_phase2_confirm_start')
+
+# Expected import errors must return CANCELLED without a nested bpy.ops traceback.
+with TemporaryDirectory() as directory:
+    bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory) / 'Start.blend'))
+    p.batch_import_format = 'OBJ'
+    for folder in ('', str(Path(directory) / 'missing'), directory):
+        p.batch_import_directory = folder
+        assert bpy.ops.object.polygroups_phase2_confirm_start(then='IMPORT') == {'CANCELLED'}
+        assert not p.batch_is_running
 
 # Index arrows step by 01 and keep the zero padding.
 fs = ctx.scene.polygroups_mesh_finalization_settings

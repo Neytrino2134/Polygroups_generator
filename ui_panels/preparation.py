@@ -17,6 +17,17 @@ from .common import (
 )
 
 
+def draw_import_folder(layout, context, settings):
+    row = layout.row(align=True)
+    row.label(text=t(context, "folder"))
+    browse = row.row(align=True)
+    browse.enabled = not settings.batch_is_running
+    browse.operator_context = "INVOKE_DEFAULT"
+    browse.operator("object.polygroups_select_import_folder", text="", icon="FILE_FOLDER")
+    path = settings.batch_import_directory or t(context, "no_folder_selected")
+    layout.label(text=path, icon="FILE_FOLDER")
+
+
 class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
     bl_label = "03 |"
     bl_text_key = "section_model_preparation"
@@ -215,12 +226,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
 
         content = draw_topic(layout, context, "batch_0", t(context, "import_group_source"), "FILE_FOLDER")
         if content is not None:
-            folder_row = content.row(align=True)
-            folder_row.label(text=t(context, "folder"))
-            folder_row.operator("object.polygroups_select_import_folder", text="", icon="FILE_FOLDER")
-
-            folder_path = settings.batch_import_directory or t(context, "no_folder_selected")
-            content.label(text=folder_path, icon="FILE_FOLDER")
+            draw_import_folder(content, context, settings)
             content.prop(settings, "batch_import_format", text=t(context, "format"))
             subfolders_row = content.row()
             subfolders_row.enabled = not settings.batch_is_running
@@ -397,6 +403,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                                           t(context, "batch_start_mode_group_phase2" if settings.batch_phase2_enabled
                                             else "batch_start_mode_group"), "PLAY")
             if group is not None:
+                draw_import_folder(group, context, settings)
                 group.separator(type="LINE")
                 heading = group.row(align=True)
                 heading.alignment = "CENTER"
@@ -638,6 +645,8 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                         controls.prop(final_settings, 'unity_gltf_mode')
                         controls.prop(final_settings, 'unity_glb_mode')
                     else:
+                        if settings.phase2_export_fbx:
+                            controls.prop(final_settings, 'unreal_fbx_normal_maps')
                         if settings.phase2_export_glb:
                             controls.prop(final_settings, 'unreal_glb_mode')
                         if settings.phase2_export_gltf:

@@ -76,12 +76,12 @@ def draw_start(layout, context, p):
     else:
         start.operator_context = 'INVOKE_DEFAULT'
         start.operator('object.polygroups_phase2_confirm_start', text='Start Phase 2 Process', icon='PLAY').then = 'PHASE2'
+    recovery = layout.row()
+    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
     saves = layout.column(align=True)
     saves.enabled = controls_enabled
     saves.prop(p, 'phase2_autosave')
     saves.prop(p, 'phase2_autosave_after_finish')
-    recovery = layout.row()
-    recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
     from ..ui_panels.common import draw_collapsible_box
     from ..localization import t
     process = draw_collapsible_box(layout, p, 'phase2_show_process_settings',
@@ -100,6 +100,9 @@ def draw_start(layout, context, p):
         controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
         controls.prop(p, 'phase2_relod_delete_current_lods')
         controls.prop(p, 'phase2_relod_reexport')
+        normal_maps = controls.row()
+        normal_maps.enabled = p.phase2_relod_reexport
+        normal_maps.prop(context.scene.polygroups_mesh_finalization_settings, 'unreal_fbx_normal_maps')
         controls.prop(p, 'phase2_relod_json')
         controls.prop(context.scene.polygroups_mesh_finalization_settings, 'smart_lods_smart_arrange')
         controls.prop(p, 'phase2_relod_method')
@@ -108,8 +111,8 @@ def draw_start(layout, context, p):
         controls.label(text='All _MID / _HIGH meshes in scene (MID preferred)', icon='INFO')
         controls.label(text='Triangle budgets follow the pipeline switch: '
                        + ('Unity' if unity else 'Unreal / FAB'))
-        buttons = controls.row(align=True)
-        buttons.operator('object.polygroups_relod', text='Re-create LODs', icon='FILE_REFRESH')
+        buttons = controls.column(align=True)
+        buttons.operator('object.polygroups_relod', text='Re-create All LODs', icon='FILE_REFRESH')
         buttons.operator('object.polygroups_relod', text='Re-create Selected',
                          icon='RESTRICT_SELECT_OFF').selected_only = True
     rename = draw_collapsible_box(layout, p, 'phase2_show_rename_final', 'Rename Final Mesh', 'SORTALPHA')
@@ -250,6 +253,10 @@ def draw_rebake(layout, context, p):
     exports = manual.column(align=True)
     exports.enabled = p.phase2_rebake_create_lods
     exports.prop(p, 'phase2_rebake_export_selected')
+    if p.phase2_run_engine != 'UNITY':
+        normal_maps = exports.row()
+        normal_maps.enabled = p.phase2_rebake_export_selected
+        normal_maps.prop(context.scene.polygroups_mesh_finalization_settings, 'unreal_fbx_normal_maps')
 
 
 def draw_start_status(layout, context, p):

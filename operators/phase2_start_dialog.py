@@ -1,4 +1,6 @@
 """Phase 2 start presets (Unreal Export / Unreal Export + ZBrush) and the start confirmation dialog."""
+import os
+
 import bpy
 
 from ..core.asset_names import asset_name
@@ -95,6 +97,10 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         p = context.scene.polygroups_model_preparation_settings
         s = context.scene.polygroups_mesh_finalization_settings
         found = []
+        if self.then == 'IMPORT':
+            directory = p.batch_import_directory
+            if not directory.strip() or not os.path.isdir(bpy.path.abspath(directory)):
+                found.append('Choose an existing folder with mesh files in Import Folder.')
         if p.phase2_run_prepare:
             asset, name_index, version_index = (getattr(s, field) for field in asset_fields(p))
             if not asset_name(asset):
@@ -115,6 +121,8 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         s = context.scene.polygroups_mesh_finalization_settings
         layout = self.layout
         layout.use_property_split = False
+        if self.then == 'IMPORT':
+            layout.prop(p, 'batch_import_directory', text='Import Folder')
         draw_start_presets(layout, p)
         saves = layout.column(align=True)
         saves.prop(p, 'phase2_autosave')
@@ -149,13 +157,15 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
             row.label(text='Export Format')
             row.prop(p, 'phase2_export_fbx', toggle=True)
             row.prop(p, 'phase2_export_glb', toggle=True)
+            if p.phase2_run_engine != 'UNITY' and p.phase2_export_fbx:
+                layout.prop(s, 'unreal_fbx_normal_maps')
         for problem in self.problems(context):
             layout.label(text=problem, icon='ERROR')
 
     def execute(self, context):
         problems = self.problems(context)
         if problems:
-            self.report({'ERROR'}, problems[0])
+            self.report({'WARNING'}, problems[0])
             return {'CANCELLED'}
         p = context.scene.polygroups_model_preparation_settings
         s = context.scene.polygroups_mesh_finalization_settings
@@ -164,8 +174,12 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
             setattr(s, field, asset_name(getattr(s, field)))
         if self.then == 'PHASE2':
             return bpy.ops.object.polygroups_start_phase2('INVOKE_DEFAULT')
-        return bpy.ops.object.polygroups_batch_import(
-            'EXEC_DEFAULT', use_file_selection=False, do_selected=self.then == 'IMPORT_SELECTED')
+        try:
+            return bpy.ops.object.polygroups_batch_import(
+                'EXEC_DEFAULT', use_file_selection=False, do_selected=self.then == 'IMPORT_SELECTED')
+        except RuntimeError as error:
+            self.report({'WARNING'}, str(error).strip().removeprefix('Error: '))
+            return {'CANCELLED'}
 
 
 CLASSES = (OBJECT_OT_polygroups_phase2_start_preset, OBJECT_OT_polygroups_phase2_confirm_start)

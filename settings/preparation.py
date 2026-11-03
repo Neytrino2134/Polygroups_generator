@@ -283,11 +283,11 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_show_start: bpy.props.BoolProperty(name="Start Phase 2", default=True)
     phase2_show_process_settings: bpy.props.BoolProperty(name='Process Settings', default=False)
     phase2_show_relod: bpy.props.BoolProperty(name='ReLOD Final Mesh', default=True)
-    phase2_relod_delete_current_lods: bpy.props.BoolProperty(name='Delete Current LODs', default=False,
+    phase2_relod_delete_current_lods: bpy.props.BoolProperty(name='Delete Current LODs', default=True,
         description='Replace existing LODs and their labels; restore them if generation fails')
-    phase2_relod_reexport: bpy.props.BoolProperty(name='Re-export FBX / Blend', default=False,
+    phase2_relod_reexport: bpy.props.BoolProperty(name='Re-export FBX / Blend', default=True,
         description='After recreating each asset LOD set, replace its FBX and Blend exports using the ReBake export workflow')
-    phase2_relod_json: bpy.props.BoolProperty(name='Export / Update JSON', default=False,
+    phase2_relod_json: bpy.props.BoolProperty(name='Export / Update JSON', default=True,
         description='After ReLOD finishes, update MeshInfo.json for all rebuilt assets and measured fields in an existing FAB Media JSON; works without FBX / Blend export')
     phase2_relod_method: bpy.props.EnumProperty(name='Decimate Method', items=DECIMATE_METHOD_ITEMS, default='UV_PRESERVE')
     phase2_relod_seam_mode: bpy.props.EnumProperty(name='Seams', items=SEAM_MODE_ITEMS, default='LOCK')

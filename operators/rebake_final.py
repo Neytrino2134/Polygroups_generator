@@ -688,6 +688,9 @@ class OBJECT_OT_polygroups_rebake_final_mesh(bpy.types.Operator):
                 row.alert = True
                 row.label(text=f'{index}. {item["target"]}: {item["error"]}', icon='ERROR')
         layout.label(text='Существующие текстуры будут перезаписаны.', icon='ERROR')
+        p = context.scene.polygroups_model_preparation_settings
+        if self.create_lods and self.export_selected and p.phase2_run_engine != 'UNITY':
+            layout.prop(context.scene.polygroups_mesh_finalization_settings, 'unreal_fbx_normal_maps')
         for enabled, text in ((self.clear_materials,
                                'Очистка материалов, текстур, папок Textures и Unused Data перед ReBake'),
                 (self.repair_mesh, 'Исправление меша перед ReBake'),

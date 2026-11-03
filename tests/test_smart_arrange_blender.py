@@ -49,6 +49,7 @@ for src in sources:
   assert left>=right+.0999,(a.name,b.name,right,left)
 # Sequential ReLOD receives a scene-wide grid, not a separate width for each source.
 p.phase2_relod_delete_current_lods=True
+p.phase2_relod_reexport=p.phase2_relod_json=False
 assert bpy.ops.object.polygroups_relod()=={'FINISHED'}
 for index in range(2):
  xs=[bpy.data.objects[src.name[:-4]+'_LOD'+str(index)].matrix_world.translation.x for src in sources]

@@ -31,6 +31,7 @@ def update_json(context, plans, untouched=()):
     from ..services import fab_media as media
     from .mesh_export import _evaluated_mesh_counts, _write_export_mesh_info, _safe_path_token
     from .unreal_lod_export import lod_identity
+    from .unreal_export_textures import exported_fbx_texture_manifest
     from .smart_lods import LOD_INDEX
     root = Path(bpy.data.filepath).parent / '!Unreal'
     meshes = {obj for plan in plans for obj in [plan.source, *plan.generated]}
@@ -42,6 +43,8 @@ def update_json(context, plans, untouched=()):
     document, gallery_path = gallery_document(context)
     generated = {obj: (lod_identity(plan.source, 'Unreal')[0], 'LOD', obj[LOD_INDEX])
                  for plan in plans for obj in plan.generated}
+    reexported = {lod_identity(plan.source, 'Unreal')[0] for plan in plans if plan.reexport}
+    normal_mode = context.scene.polygroups_mesh_finalization_settings.unreal_fbx_normal_maps
     entries = []
     with media._evaluation_visibility(context):
         graph = context.evaluated_depsgraph_get()
@@ -56,6 +59,9 @@ def update_json(context, plans, untouched=()):
             path = folder / (_safe_path_token(obj.name) + '.fbx')
             if path.is_file():
                 entry['file'] = entry['files']['FBX'] = path.relative_to(root).as_posix()
+                if base in reexported:
+                    texture_folder = folder if format_first else folder.parent
+                    entry['textures'] = exported_fbx_texture_manifest(obj, texture_folder, normal_mode)
             entries.append(entry)
     if document is not None:
         measured = media.measured_fields(media.inventory(context))

@@ -16,7 +16,7 @@ for index in (1,2):
     obj=c.object;obj.name=f'SM_JSON_01_{index:02d}_MID'
     for owner in list(obj.users_collection):owner.objects.unlink(obj)
     collection.objects.link(obj)
-assert not p.phase2_relod_json and not p.phase2_relod_reexport
+p.phase2_relod_json=p.phase2_relod_reexport=False
 with tempfile.TemporaryDirectory(prefix='test_relod_json_',dir=ROOT) as directory:
     root=Path(directory);bpy.ops.wm.save_as_mainfile(filepath=str(root/'Working.blend'))
     gallery=c.scene.airetopo_fab_media_settings

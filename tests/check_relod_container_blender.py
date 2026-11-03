@@ -6,6 +6,7 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT.parent));add
 p=bpy.context.scene.polygroups_model_preparation_settings
 s=bpy.context.scene.polygroups_mesh_finalization_settings
 p.phase2_relod_delete_current_lods=True
+p.phase2_relod_reexport=p.phase2_relod_json=False
 p.phase2_relod_method='UV_PRESERVE'
 s.smart_lods_count=5
 for i,value in enumerate((2900,1500,1000,500,150),1):setattr(s,'smart_lods_target_'+str(i),value)

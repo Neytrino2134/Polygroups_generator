@@ -245,12 +245,17 @@ def _write_export_mesh_info(root_dir, export_format, entries, engine=None, *, ou
     }
     if export_format == "JSON":
         entries = [dict(item, **_mesh_info_identity(item, engine)) for item in entries]
+        directory = Path(bpy.path.abspath(str(output_directory or root_dir))).resolve()
+        for item in entries:
+            if 'textures' in item:
+                item['textures'] = [dict(texture, path=Path(os.path.relpath(Path(texture['path']).resolve(), directory)).as_posix())
+                                    for texture in item['textures']]
         def common(items, key):
             values = {item[key] for item in items}
             return next(iter(values)) if len(values) == 1 else ''
         filepath = os.path.join(root_dir, "MeshInfo.json")
         with open(filepath, "w", encoding="utf-8") as output:
-            document = {"Path": str(Path(bpy.path.abspath(str(output_directory or root_dir))).resolve()),
+            document = {"Path": str(directory),
                         "AssetName": common(entries, 'AssetName'),
                         "NameIndex": common(entries, 'NameIndex'),
                         "meshes": entries, "totals": totals}
@@ -310,12 +315,14 @@ def _export_texture_images(objects):
                         yield node.image
 
 
-def _copy_export_textures(objects, root_dir):
+def _copy_export_textures(objects, root_dir, skip_images=()):
     """Copy texture files and temporarily point image datablocks at the export."""
     originals = {}
     destinations = set()
     try:
         for image in _export_texture_images(objects):
+            if image in skip_images:
+                continue
             if image.source != "FILE":
                 raise ValueError(f"Unsupported FAB texture source: {image.name} ({image.source})")
             source = _fab_image_source(image)
@@ -596,47 +603,40 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
 
         exported_count = 0
         mesh_info = []
-        original_image_paths = {}
         detached_alpha_maps = {}
+        from .unreal_export_textures import export_texture_scope
         try:
-            original_image_paths = _copy_export_textures(mesh_objects, root_dir)
             detached_alpha_maps = _detach_export_alpha_maps(mesh_objects)
-            for obj, filepath, format in filepaths:
-                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            with export_texture_scope(mesh_objects, root_dir, formats, settings.unreal_fbx_normal_maps) as (bind, manifest):
+                for obj, filepath, format in filepaths:
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    bind(format)
+                    bpy.ops.object.select_all(action="DESELECT")
+                    obj.select_set(True)
+                    context.view_layer.objects.active = obj
 
-                bpy.ops.object.select_all(action="DESELECT")
-                obj.select_set(True)
-                context.view_layer.objects.active = obj
-
-                with _export_at_world_origin(obj, context.view_layer):
-                    result = _export_selected_object(filepath, format)
-                if "FINISHED" in result:
+                    with _export_at_world_origin(obj, context.view_layer):
+                        result = _export_selected_object(filepath, format)
+                    if "FINISHED" not in result:
+                        raise RuntimeError(f"FAB export failed: {obj.name}")
                     exported_count += 1
-                    if settings.mesh_export_info_format != "NONE":
-                        vertices, triangles = _evaluated_mesh_counts(
-                            obj, context.evaluated_depsgraph_get())
-                        entry = next((item for item in mesh_info if item['name'] == obj.name), None)
-                        if entry is None:
-                            entry = {
-                                "name": obj.name,
-                                "file": os.path.relpath(filepath, root_dir).replace(os.sep, "/"),
-                                "vertices": vertices,
-                                "triangles": triangles,
-                                "files": {},
-                            }
-                            mesh_info.append(entry)
-                        entry['files'][format] = os.path.relpath(filepath, root_dir).replace(os.sep, '/')
-                else:
-                    raise RuntimeError(f"FAB export failed: {obj.name}")
+                    if settings.mesh_export_info_format == "NONE":
+                        continue
+                    relative = os.path.relpath(filepath, root_dir).replace(os.sep, '/')
+                    entry = next((item for item in mesh_info if item['name'] == obj.name), None)
+                    if entry is None:
+                        vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
+                        entry = dict(name=obj.name, file=relative, vertices=vertices, triangles=triangles, files={})
+                        mesh_info.append(entry)
+                    entry['files'][format] = relative
+                    if format == 'FBX':
+                        entry['textures'] = manifest(obj)
             _write_export_mesh_info(root_dir, settings.mesh_export_info_format, mesh_info, engine='Unreal')
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
         finally:
             _restore_export_alpha_maps(detached_alpha_maps)
-            for image, (filepath, filepath_raw) in original_image_paths.items():
-                image.filepath = filepath
-                image.filepath_raw = filepath_raw
             bpy.ops.object.select_all(action="DESELECT")
             for obj in original_selection:
                 if obj.name in context.view_layer.objects:

@@ -592,6 +592,15 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         default="FBX",
     )
     mesh_export_fbx: bpy.props.BoolProperty(name="FBX", default=True)
+    unreal_fbx_normal_maps: bpy.props.EnumProperty(
+        name="FBX Normal Maps",
+        items=(
+            ('OPENGL', 'OpenGL', 'Export OpenGL normals; Unreal must flip the green channel on import'),
+            ('DIRECTX', 'DirectX', 'Export DirectX normals ready to import into Unreal'),
+            ('BOTH', 'Both', 'Export both conventions and reference DirectX in the FBX'),
+        ),
+        default='DIRECTX',
+    )
     mesh_export_glb: bpy.props.BoolProperty(name="GLB", default=False)
     mesh_export_gltf: bpy.props.BoolProperty(name="GLTF", default=False)
     unreal_glb_mode: bpy.props.EnumProperty(name="GLB Mode", items=(

@@ -80,3 +80,19 @@ unnumbered meshes use the relevant engine preparation settings. Each mesh and
 asset record includes its identity too. In a mixed-pack document, a top-level
 identity field is empty when the records do not share a single value.
 ReLOD records the final output directory rather than its temporary staging folder.
+
+**FBX Normal Maps** supports OpenGL, DirectX (default) and Both. Files end
+in `_OpenGL` or `_DirectX`. Both references DirectX from the FBX and provides
+OpenGL as an alternate. Untagged input is treated as OpenGL. A source ending
+in `_DX` or `_DirectX` is recognized as DirectX. Conversion writes a separate
+PNG with the green channel inverted. In a combined FBX and GLB/glTF export,
+the GLB/glTF material keeps the OpenGL convention.
+
+For automated Unreal import, read `meshes[].textures[]` from the MeshInfo
+for an FBX export. Resolve each `path` relative to the JSON's `Path`.
+`material_slot` is zero-based. Select the `role == "Normal"` record with
+`preferred == true` for that slot. `fbx_reference` identifies files the
+Blender FBX exporter links to a supported material socket. Apply the normal
+record's `unreal.srgb`, `unreal.compression_settings` and
+`unreal.flip_green_channel` to the imported texture. Avoid a second flip
+in the import pipeline when using a DirectX variant.
