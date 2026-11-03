@@ -759,6 +759,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 sub.enabled = settings.phase2_auto_textures
                 sub.prop(settings, "phase2_auto_texture_prepare", expand=True)
                 sub.label(text="Base Color + Normal | Texture Render Mode: Together")
+                config.operator("object.polygroups_reload_all_textures", text="Reload All Textures", icon="FILE_REFRESH")
                 config.operator("object.polygroups_phase2_auto_render", text="Start Render", icon="RENDER_STILL")
                 if settings.phase2_auto_render_running:
                     auto.operator("object.polygroups_stop_lod_job", text="Stop Render", icon="CANCEL")

@@ -90,6 +90,14 @@ def draw_start(layout, context, p):
         controls = process.column(align=True)
         controls.enabled = controls_enabled
         draw_process_settings(controls, context, p)
+    rerender = draw_collapsible_box(layout, p, 'phase2_show_rerender', 'Rerender', 'RENDER_STILL')
+    if rerender is not None:
+        buttons = rerender.column(align=True)
+        buttons.enabled = controls_enabled
+        buttons.operator('object.polygroups_reload_all_textures', text='Reload All Textures', icon='FILE_REFRESH')
+        buttons.operator('object.polygroups_phase2_auto_render', text='Start Render', icon='RENDER_STILL')
+        if p.phase2_auto_render_running:
+            rerender.operator('object.polygroups_stop_lod_job', text='Stop Render', icon='CANCEL')
     unity = p.phase2_run_engine == 'UNITY'
     rebake = draw_collapsible_box(layout, p, 'phase2_show_rebake', 'Rebake Final Mesh', 'FILE_REFRESH')
     if rebake is not None:
@@ -204,6 +212,7 @@ def draw_process_settings(options, context, p):
     mode.enabled = not p.phase2_auto_skip_scene
     mode.prop(p, 'phase2_run_transparent')
     sub.prop(p, 'phase2_auto_skip_scene')
+    options.operator('object.polygroups_reload_all_textures', text='Reload All Textures', icon='FILE_REFRESH')
 
 
 def draw_rebake(layout, context, p):

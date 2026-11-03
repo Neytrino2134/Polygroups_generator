@@ -476,6 +476,7 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     phase2_final_is_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_final_progress: bpy.props.FloatProperty(default=0, min=0, max=100, options={'SKIP_SAVE'})
     phase2_show_auto_render: bpy.props.BoolProperty(name="Auto Render", default=True)
+    phase2_show_rerender: bpy.props.BoolProperty(name="Rerender", default=True)
     phase2_auto_render_running: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     phase2_auto_transparent: _paired("phase2_auto_transparent", "phase2_run_transparent", bpy.props.BoolProperty,
         name="Render Transparent PNG (Without Scene)", default=True)
