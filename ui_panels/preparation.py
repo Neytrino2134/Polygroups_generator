@@ -434,8 +434,10 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     start_import.use_file_selection = False
                 from ..operators.batch_import import completed_generated_count
                 imported, _gaps = completed_generated_count()
+                from ..core.import_manifest import cached_counts
+                manifest_counts = cached_counts(bpy.data.filepath)
                 resume_work_row = group.row(align=True)
-                resume_work_row.enabled = operator_row.enabled and imported > 0
+                resume_work_row.enabled = operator_row.enabled and (imported > 0 or bool(manifest_counts))
                 if settings.batch_phase2_enabled:
                     resume_work_row.operator_context = "INVOKE_DEFAULT"
                     resume_work_row.operator("object.polygroups_phase2_confirm_start",
@@ -447,7 +449,11 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     work.use_file_selection = False
                     work.resume_work = True
                 group.operator("object.polygroups_phase2_reset_state", text="Reset State", icon="FILE_REFRESH")
-                if imported:
+                if manifest_counts:
+                    group.label(text="Manifest: " + ", ".join(
+                        f"{count} {status.replace('_', ' ')}" for status, count in sorted(manifest_counts.items())),
+                        icon="INFO")
+                elif imported:
                     group.label(text=t(context, "batch_resume_work_hint", count=imported, next=imported + 1),
                                 icon="INFO")
                 group.separator(type="LINE")

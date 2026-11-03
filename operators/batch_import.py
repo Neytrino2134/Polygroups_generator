@@ -325,6 +325,63 @@ def resume_files(files):
     return done, files[done:]
 
 
+def scene_generated_numbers():
+    return {int(match.group(1)) for collection in bpy.data.collections
+            if (match := GENERATED_COLLECTION_PATTERN.fullmatch(collection.name)) and match.group(1)}
+
+
+def wipe_generated_collection(name):
+    """Remove the unfinished Generated.N collection of a file that is imported again."""
+    collection = bpy.data.collections.get(name)
+    if collection is None:
+        return
+    for obj in list(collection.all_objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.data.collections.remove(collection)
+
+
+def prepare_manifest(report, files, directory, resume):
+    """Write the import manifest beside the blend; for Resume Work return only the files still to import.
+
+    The manifest says which files are completed / failed / in process. A file counts as done only when its
+    Generated.N collection is in the open blend and, with separate saving, its Generated_NNN.blend exists.
+    Without a usable manifest the old rule applies: skip as many files as Generated.N collections exist."""
+    from ..core import import_manifest as manifests
+    from .queue_storage import generated_collection_files
+
+    blend = bpy.data.filepath
+    previous = manifests.ImportManifest.load(blend) if resume else None
+    manifest = manifests.ImportManifest.build(blend, directory, files, previous)
+    if resume:
+        if previous is not None:
+            saved = {number for number, _digits, _path in generated_collection_files(blend)}
+            plan = manifests.plan_resume(manifest, files, scene_generated_numbers(), saved)
+            if not plan.files:
+                raise RuntimeError(f"All {len(files)} file(s) of the folder are already imported")
+            for note in plan.notes:
+                report({"INFO"}, "Resume Work: " + note)
+            for name in plan.wipe:
+                wipe_generated_collection(name)
+            for path in plan.files:
+                manifest.entry_for(path).update(status="pending", collection="", output="", error="",
+                                                started=None, finished=None)
+            done, files = plan.done, plan.files
+        else:
+            # No manifest yet (an import from before it existed): the collections stand for the first files.
+            done, files = resume_files(files)
+            for entry in manifest.entries[:done]:
+                entry.update(status="completed", collection=f"Generated.{entry['index']:03d}")
+            report({"WARNING"}, "Resume Work: no import manifest found, counted the Generated.N collections")
+        report({"INFO"}, f"Resume Work: {done} file(s) done, continuing with {os.path.basename(files[0])} "
+                         f"({len(files)} left)")
+    try:
+        manifest.save()
+        report({"INFO"}, f"Import manifest: {manifest.path}")
+    except OSError as error:
+        report({"WARNING"}, f"Cannot write the import manifest: {error}")
+    return files, manifest
+
+
 def _source_generated_collection_names(filepath):
     with bpy.data.libraries.load(filepath, link=False) as (source, _target):
         names = [
@@ -589,7 +646,11 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
                              directory, settings.batch_import_format, settings.batch_include_subfolders))
             if not files:
                 raise RuntimeError("No supported mesh files found")
-            if getattr(self, "resume_work", False) and redo_collection is None:
+            manifest = None
+            if redo_collection is None and not file_selection and bpy.data.filepath:
+                files, manifest = prepare_manifest(
+                    self.report, files, directory, getattr(self, "resume_work", False))
+            elif getattr(self, "resume_work", False) and redo_collection is None:
                 done, files = resume_files(files)
                 self.report({"INFO"}, f"Resume Work: {done} file(s) already imported, "
                                       f"continuing with {os.path.basename(files[0])} ({len(files)} left)")
@@ -602,7 +663,8 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
                     context, files, True, self.report, automatic_processing=True,
                 )
             else:
-                self._queue = import_queue.ImportQueue(context, files, file_selection, self.report)
+                self._queue = import_queue.ImportQueue(context, files, file_selection, self.report,
+                                                       manifest=manifest)
         except Exception as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}

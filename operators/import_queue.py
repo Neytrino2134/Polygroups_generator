@@ -85,8 +85,9 @@ def save_current_blend_file():
 
 class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
     def __init__(self, context, files, file_selection, report, redo_collection=None,
-                 automatic_processing=False, resume=None):
+                 automatic_processing=False, resume=None, manifest=None):
         self.resume = resume   # resume_state() of a Retopo mesh: continue after its finished remesh pass
+        self.manifest = manifest   # ImportManifest beside the blend: per-file status for Resume Work
         self.scene = context.scene
         self.view_layer = context.view_layer
         self.settings = self.scene.polygroups_model_preparation_settings
@@ -296,6 +297,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 "input_tris": None, "output_tris": None, "stages": [],
                 "started": time.time(),
             }
+            self.manifest_update(status="in_progress", started=time.time(), finished=None, error="", collection="")
             self.last_logged_stage = None
             self.pass_number = None
             self.file_objects = []
@@ -389,6 +391,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 self.owned_collections.add(self.collection)
                 self.scene.collection.children.link(self.collection)
                 move_to_collection(self.file_objects, self.collection)
+                self.manifest_update(collection=self.collection.name)
             self.stage = "RENAME"
         elif self.stage == "RENAME":
             if self.rename:
@@ -749,6 +752,14 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             name = None
         if name and not self.file_record.get("collection"):
             self.file_record["collection"] = name
+        if name:
+            self.manifest_update(collection=name)
+
+    def manifest_update(self, **fields):
+        """Record the current file's progress in the manifest (Resume Work reads it)."""
+        if self.manifest is None or self.redo_mode or not self.files or self.index >= len(self.files):
+            return
+        self.manifest.update(self.files[self.index], **fields)
 
     def write_batch_report(self, event, data):
         if self.batch_report is not None:
@@ -810,6 +821,11 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         if self.file_record is not None:
             self.file_record.update(status="success" if success else "failed", finished=time.time())
             self.record_collection()
+            if self.file_record.get("collection"):
+                self.manifest_update(collection=self.file_record["collection"])
+            self.manifest_update(status="completed" if success else "failed", finished=time.time(),
+                                 error="" if success else str(self.file_record.get("error") or ""),
+                                 output=self.file_record.get("output_file", ""))
             self.write_batch_report("file_complete", self.file_record)
             self.file_record = None
         self.timing.complete_file(success)
@@ -1071,6 +1087,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.file_record.update(status="cancelled" if rollback else "interrupted",
                                     failed_stage=self.stage, finished=time.time())
             self.record_collection()
+            self.manifest_update(status="interrupted", finished=time.time(), error=f"stopped at {self.stage}")
             self.write_batch_report("file_complete", self.file_record)
             self.file_record = None
         self.write_batch_report("finish", {"status": status})
