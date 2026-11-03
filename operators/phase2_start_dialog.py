@@ -87,17 +87,19 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
     bl_options = {'INTERNAL'}
     then: bpy.props.EnumProperty(items=(
         ('PHASE2', 'Start Phase 2', ''), ('IMPORT', 'Import then Phase 2', ''),
-        ('IMPORT_SELECTED', 'Import selected then Phase 2', '')), options={'SKIP_SAVE'})
+        ('IMPORT_SELECTED', 'Import selected then Phase 2', ''),
+        ('RESUME', 'Resume import then Phase 2', '')), options={'SKIP_SAVE'})
 
     def invoke(self, context, event):
-        text = 'Start Phase 2' if self.then == 'PHASE2' else 'Import + Phase 2'
+        text = ('Start Phase 2' if self.then == 'PHASE2' else
+                'Resume + Phase 2' if self.then == 'RESUME' else 'Import + Phase 2')
         return context.window_manager.invoke_props_dialog(self, width=460, confirm_text=text)
 
     def problems(self, context):
         p = context.scene.polygroups_model_preparation_settings
         s = context.scene.polygroups_mesh_finalization_settings
         found = []
-        if self.then == 'IMPORT':
+        if self.then in {'IMPORT', 'RESUME'}:
             directory = p.batch_import_directory
             if not directory.strip() or not os.path.isdir(bpy.path.abspath(directory)):
                 found.append('Choose an existing folder with mesh files in Import Folder.')
@@ -121,7 +123,7 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         s = context.scene.polygroups_mesh_finalization_settings
         layout = self.layout
         layout.use_property_split = False
-        if self.then == 'IMPORT':
+        if self.then in {'IMPORT', 'RESUME'}:
             layout.prop(p, 'batch_import_directory', text='Import Folder')
         draw_start_presets(layout, p)
         saves = layout.column(align=True)
@@ -177,7 +179,8 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
             return bpy.ops.object.polygroups_start_phase2('INVOKE_DEFAULT')
         try:
             return bpy.ops.object.polygroups_batch_import(
-                'EXEC_DEFAULT', use_file_selection=False, do_selected=self.then == 'IMPORT_SELECTED')
+                'EXEC_DEFAULT', use_file_selection=False, do_selected=self.then == 'IMPORT_SELECTED',
+                resume_work=self.then == 'RESUME')
         except RuntimeError as error:
             self.report({'WARNING'}, str(error).strip().removeprefix('Error: '))
             return {'CANCELLED'}

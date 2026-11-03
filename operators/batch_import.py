@@ -301,6 +301,30 @@ def _next_generated_collection_index():
     return max(indices, default=0) + 1
 
 
+def completed_generated_count():
+    """(highest N, missing numbers) of the Generated.N collections in the open file.
+
+    Phase 1 numbers collections consecutively from 1, so the highest N is how many files of the
+    folder are already imported; a gap means the numbering no longer matches the file order."""
+    indices = {int(match.group(1)) for collection in bpy.data.collections
+               if (match := GENERATED_COLLECTION_PATTERN.fullmatch(collection.name)) and match.group(1)}
+    highest = max(indices, default=0)
+    return highest, [number for number in range(1, highest + 1) if number not in indices]
+
+
+def resume_files(files):
+    """Files still to import: skip as many as the open file already holds as Generated.N collections."""
+    done, missing = completed_generated_count()
+    if not done:
+        raise RuntimeError("No Generated.N collection in this file: nothing to resume, use Start Import")
+    if missing:
+        raise RuntimeError("Generated." + ", Generated.".join(f"{number:03d}" for number in missing[:5])
+                           + " is missing; Resume Work needs consecutive collections from Generated.001")
+    if done >= len(files):
+        raise RuntimeError(f"All {len(files)} file(s) of the folder are already imported")
+    return done, files[done:]
+
+
 def _source_generated_collection_names(filepath):
     with bpy.data.libraries.load(filepath, link=False) as (source, _target):
         names = [
@@ -475,6 +499,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
     redo_collection_name: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
     do_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     resume_selected: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    resume_work: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     directory: bpy.props.StringProperty(
         subtype="DIR_PATH",
         options={"HIDDEN"},
@@ -564,6 +589,10 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
                              directory, settings.batch_import_format, settings.batch_include_subfolders))
             if not files:
                 raise RuntimeError("No supported mesh files found")
+            if getattr(self, "resume_work", False) and redo_collection is None:
+                done, files = resume_files(files)
+                self.report({"INFO"}, f"Resume Work: {done} file(s) already imported, "
+                                      f"continuing with {os.path.basename(files[0])} ({len(files)} left)")
             if redo_collection is not None:
                 self._queue = import_queue.ImportQueue(
                     context, files, False, self.report, redo_collection=redo_collection, resume=resume,
@@ -590,7 +619,7 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
         from ..core.remesh_cursor import update_remesh_cursor
         update_remesh_cursor(context, event)
         if (self.use_file_selection and not self.redo_collection_name
-                and not self.do_selected and not self.resume_selected):
+                and not self.do_selected and not self.resume_selected and not self.resume_work):
             return ImportHelper.invoke_popup(self, context)
         return self.execute(context)
 

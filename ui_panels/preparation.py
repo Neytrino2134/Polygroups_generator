@@ -432,6 +432,23 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                         icon="PLAY",
                     )
                     start_import.use_file_selection = False
+                from ..operators.batch_import import completed_generated_count
+                imported, _gaps = completed_generated_count()
+                resume_work_row = group.row(align=True)
+                resume_work_row.enabled = operator_row.enabled and imported > 0
+                if settings.batch_phase2_enabled:
+                    resume_work_row.operator_context = "INVOKE_DEFAULT"
+                    resume_work_row.operator("object.polygroups_phase2_confirm_start",
+                                             text=t(context, "batch_resume_work"), icon="FILE_REFRESH").then = "RESUME"
+                else:
+                    resume_work_row.operator_context = "EXEC_DEFAULT"
+                    work = resume_work_row.operator("object.polygroups_batch_import",
+                                                    text=t(context, "batch_resume_work"), icon="FILE_REFRESH")
+                    work.use_file_selection = False
+                    work.resume_work = True
+                if imported:
+                    group.label(text=t(context, "batch_resume_work_hint", count=imported, next=imported + 1),
+                                icon="INFO")
                 group.separator(type="LINE")
                 heading = group.row(align=True)
                 heading.alignment = "CENTER"
