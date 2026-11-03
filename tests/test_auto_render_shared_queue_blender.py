@@ -26,6 +26,7 @@ scene.world.use_nodes=True
 scene.world.node_tree.nodes.get('Background').inputs['Strength'].default_value=0
 p.phase2_auto_scene=False;p.phase2_auto_camera=True
 p.phase2_auto_textures=False;p.phase2_auto_freestyle=False;p.phase2_auto_transparent=False
+p.phase2_auto_skip_scene=False  # Compare the opaque Auto Render and manual images.
 s.skip_existing=False;s.max_samples=8
 config=auto.configure_auto_render;render=rq._render_current_job
 seen=[];frames=[];records=[]

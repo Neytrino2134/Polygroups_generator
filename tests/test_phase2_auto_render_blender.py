@@ -35,7 +35,7 @@ for kind,color in (('BaseColor',(.2,.5,.8,1)),('Normal',(.5,.5,1,1))):
  else:
   normal=mat.node_tree.nodes.new('ShaderNodeNormalMap');mat.node_tree.links.new(node.outputs['Color'],normal.inputs['Color']);mat.node_tree.links.new(normal.outputs['Normal'],shader.inputs['Normal'])
 sources=[]
-for index,origin,scale in ((1,(0,0,1),(1,1,1)),(2,(9,3,2),(2,.6,3))):
+for index,origin,scale in ((1,(0,0,1),(1,1,1)),(2,(9,75,2),(2,.6,3))):
  col=bpy.data.collections.new(f'Desert_Stones_01_{index:02d}_Collection');scene.collection.children.link(col)
  for suffix,delta in (('MID',0),('LOD0',4)):
   bpy.ops.mesh.primitive_cube_add(location=(origin[0]+delta,origin[1],origin[2]))
@@ -55,7 +55,32 @@ def small_render(ctx):
 
 def inspect_render(ctx,settings,job):
  if job.get('texture_kind'):
-  return real_render(ctx,settings,job)
+  camera=scene.camera
+  matrix=camera.matrix_world.copy()
+  planes=[bpy.data.objects[name] for name in job['texture_objects']]
+  transforms=[plane.matrix_world.copy() for plane in planes]
+  collection=bpy.data.collections[job['collection']]
+  collection.hide_render=True
+  try:
+   real_render(ctx,settings,job)
+   assert collection.hide_render
+  finally:
+   collection.hide_render=False
+  assert scene.camera==camera and camera.matrix_world==matrix
+  assert [plane.matrix_world for plane in planes]==transforms
+  image=bpy.data.images.load(job['output_path'],check_existing=False)
+  try:
+   width,height=image.size
+   def pixel(x,y):
+    start=(int(y*height)*width+int(x*width))*4
+    return tuple(image.pixels[start:start+4])
+   base,normal=pixel(.25,.5),pixel(.75,.5)
+   assert base[3]>.95 and normal[3]>.95,(job['collection'],base,normal)
+   assert max(base[:3])>.2 and normal[2]>normal[0]+.1,(base,normal)
+   assert pixel(.5,.5)[3]<.05
+  finally:
+   bpy.data.images.remove(image)
+  return
  ctx.view_layer.update()
  source=bpy.data.objects[job['object']]
  if settings.freestyle_edges:

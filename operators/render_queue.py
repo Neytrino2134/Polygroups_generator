@@ -1,11 +1,13 @@
 import json
 import os
 import re
+from array import array
 from contextlib import contextmanager
 from datetime import datetime
 from math import radians
 
 import bpy
+from mathutils import Vector
 
 from .render_textures import PLANE_TAG, texture_planes
 from ..sound import play_operation_done_sound
@@ -1320,12 +1322,57 @@ def _render_single_job_steps(context, settings, job):
     yield {'write_still': True}
 
 
+@contextmanager
+def _texture_render_camera(context, planes):
+    """Frame the texture cards independently of the asset's studio position."""
+    scene = context.scene
+    original_camera = scene.camera
+    original_border = scene.render.use_border
+    data = bpy.data.cameras.new('Texture Preview Camera')
+    camera = bpy.data.objects.new('Texture Preview Camera', data)
+    try:
+        scene.collection.objects.link(camera)
+        rotation = planes[0].matrix_world.to_quaternion()
+        inverse = rotation.inverted()
+        points = [inverse @ (plane.matrix_world @ Vector(corner))
+                  for plane in planes for corner in plane.bound_box]
+        minimum = Vector(tuple(min(point[axis] for point in points) for axis in range(3)))
+        maximum = Vector(tuple(max(point[axis] for point in points) for axis in range(3)))
+        size = maximum - minimum
+        center = (minimum + maximum) * .5
+        center.z = maximum.z + max(1., size.x, size.y)
+        camera.rotation_mode = 'QUATERNION'
+        camera.rotation_quaternion = rotation
+        camera.location = rotation @ center
+        data.type = 'ORTHO'
+        data.ortho_scale = 1.
+        frame = data.view_frame(scene=scene)
+        width = max(v.x for v in frame) - min(v.x for v in frame)
+        height = max(v.y for v in frame) - min(v.y for v in frame)
+        data.ortho_scale = max(size.x / width, size.y / height, .01) * 1.15
+        data.clip_end = max(data.clip_end, center.z - minimum.z + 1.)
+        scene.render.use_border = False
+        scene.camera = camera
+        context.view_layer.update()
+        yield
+    finally:
+        scene.camera = original_camera
+        scene.render.use_border = original_border
+        bpy.data.objects.remove(camera, do_unlink=True)
+        bpy.data.cameras.remove(data)
+        context.view_layer.update()
+
+
 def _render_texture_job(context, settings, job):
     snapshot = _snapshot_visibility()
     scene = context.scene
     view = scene.view_settings
     transform = (view.view_transform, view.look, view.exposure, view.gamma)
-    visible_names = set(job.get("texture_objects", [job["object"]]))
+    names = job.get("texture_objects") or [job["object"]]
+    planes = [scene.objects.get(name) for name in names]
+    if any(plane is None or not plane.get(PLANE_TAG) for plane in planes):
+        raise ValueError('Missing texture preview card for ' + job['collection'])
+    visible_names = set(names)
     image_overrides = []
     try:
         if job.get("texture_kind") == "Combined":
@@ -1343,10 +1390,28 @@ def _render_texture_job(context, settings, job):
                             copy = original.copy()
                             image_overrides.append((node, original, copy))
                             copy.colorspace_settings.name = "sRGB"
+                            if original.source == 'GENERATED' or original.is_dirty:
+                                # Blender's image copy can lose unsaved pixel edits.
+                                pixels = array('f', [0.]) * len(original.pixels)
+                                original.pixels.foreach_get(pixels)
+                                copy.pixels.foreach_set(pixels)
+                                copy.update()
                             node.image = copy
         for other in scene.objects:
             if other.type not in {"CAMERA", "LIGHT"}:
                 other.hide_render = other.name not in visible_names
+        from .rename_objects import layer_collection_paths
+        collection = bpy.data.collections.get(job['collection'])
+        for plane in planes:
+            plane.hide_viewport = False
+            for owner in plane.users_collection:
+                for path in layer_collection_paths(context.view_layer.layer_collection, owner):
+                    if not any(layer.collection == collection for layer in path):
+                        continue
+                    for layer in path:
+                        layer.exclude = layer.hide_viewport = False
+                        layer.collection.hide_render = layer.collection.hide_viewport = False
+        context.view_layer.update()
         scene.render.film_transparent = True
         _disable_freestyle(context)
         scene.render.use_compositing = False
@@ -1356,7 +1421,8 @@ def _render_texture_job(context, settings, job):
         view.exposure = 0
         view.gamma = 1
         _configure_render(scene, settings, job, file_format='PNG')
-        bpy.ops.render.render(write_still=True)
+        with _texture_render_camera(context, planes):
+            bpy.ops.render.render(write_still=True)
         from ..core.render_window import close_render_windows
         close_render_windows()
     finally:
