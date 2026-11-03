@@ -446,6 +446,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                                                     text=t(context, "batch_resume_work"), icon="FILE_REFRESH")
                     work.use_file_selection = False
                     work.resume_work = True
+                group.operator("object.polygroups_phase2_reset_state", text="Reset State", icon="FILE_REFRESH")
                 if imported:
                     group.label(text=t(context, "batch_resume_work_hint", count=imported, next=imported + 1),
                                 icon="INFO")
@@ -453,14 +454,16 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 heading = group.row(align=True)
                 heading.alignment = "CENTER"
                 heading.label(text="--  " + t(context, "batch_heading_settings") + "  --")
-                import_mode_row = group.row(align=True)
-                import_mode_row.enabled = not settings.batch_is_running
-                import_mode_row.prop(
-                    settings,
-                    "batch_import_mode",
-                    text=t(context, "batch_import_mode"),
-                    expand=True,
-                )
+                if not settings.batch_phase2_enabled:
+                    # With Phase 2 the mode is chosen in the start dialog; Phase 1 alone has no dialog.
+                    import_mode_row = group.row(align=True)
+                    import_mode_row.enabled = not settings.batch_is_running
+                    import_mode_row.prop(
+                        settings,
+                        "batch_import_mode",
+                        text=t(context, "batch_import_mode"),
+                        expand=True,
+                    )
 
                 from ..operators.import_queue import active_highpoly_collection
 

@@ -125,6 +125,9 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         layout.use_property_split = False
         if self.then in {'IMPORT', 'RESUME'}:
             layout.prop(p, 'batch_import_directory', text='Import Folder')
+        if self.then != 'PHASE2':
+            from ..localization import t
+            layout.prop(p, 'batch_import_mode', text=t(context, 'batch_import_mode'), expand=True)
         draw_start_presets(layout, p)
         saves = layout.column(align=True)
         saves.prop(p, 'phase2_autosave')
