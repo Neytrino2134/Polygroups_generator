@@ -393,6 +393,12 @@ def _detach_export_alpha_maps(objects):
     return detached
 
 
+def fbx_smoothing():
+    """FBX 'Smoothing' mode: groups are what keeps Unreal from warning about missing smoothing groups."""
+    settings = getattr(bpy.context.scene, "polygroups_mesh_finalization_settings", None)
+    return getattr(settings, "unreal_fbx_smoothing", "FACE")
+
+
 def _export_selected_object(filepath, export_format):
     if export_format == "FBX":
         return bpy.ops.export_scene.fbx(
@@ -401,6 +407,7 @@ def _export_selected_object(filepath, export_format):
             object_types={"MESH"},
             path_mode="RELATIVE",
             use_mesh_modifiers=True,
+            mesh_smooth_type=fbx_smoothing(),
             bake_anim=False,
         )
 

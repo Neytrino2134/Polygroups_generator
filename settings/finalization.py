@@ -601,6 +601,15 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         ),
         default='DIRECTX',
     )
+    unreal_fbx_smoothing: bpy.props.EnumProperty(
+        name="FBX Smoothing Groups",
+        items=(
+            ('FACE', 'Face', 'Write smoothing groups per face; Unreal imports without the missing smoothing group warning'),
+            ('EDGE', 'Edge', 'Write smoothing groups from sharp edges'),
+            ('OFF', 'Normals Only', 'Write no smoothing groups; Unreal warns about missing smoothing group information'),
+        ),
+        default='FACE',
+    )
     mesh_export_glb: bpy.props.BoolProperty(name="GLB", default=False)
     mesh_export_gltf: bpy.props.BoolProperty(name="GLTF", default=False)
     unreal_glb_mode: bpy.props.EnumProperty(name="GLB Mode", items=(

@@ -159,6 +159,7 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
             row.prop(p, 'phase2_export_glb', toggle=True)
             if p.phase2_run_engine != 'UNITY' and p.phase2_export_fbx:
                 layout.prop(s, 'unreal_fbx_normal_maps')
+                layout.prop(s, 'unreal_fbx_smoothing')
         for problem in self.problems(context):
             layout.label(text=problem, icon='ERROR')
 

@@ -108,9 +108,10 @@ def draw_start(layout, context, p):
         controls.enabled = controls_enabled and not context.scene.polygroups_baking_settings.bake_task_is_running
         controls.prop(p, 'phase2_relod_delete_current_lods')
         controls.prop(p, 'phase2_relod_reexport')
-        normal_maps = controls.row()
+        normal_maps = controls.column(align=True)
         normal_maps.enabled = p.phase2_relod_reexport
         normal_maps.prop(context.scene.polygroups_mesh_finalization_settings, 'unreal_fbx_normal_maps')
+        normal_maps.prop(context.scene.polygroups_mesh_finalization_settings, 'unreal_fbx_smoothing')
         controls.prop(p, 'phase2_relod_json')
         controls.prop(context.scene.polygroups_mesh_finalization_settings, 'smart_lods_smart_arrange')
         controls.prop(p, 'phase2_relod_method')
@@ -263,9 +264,10 @@ def draw_rebake(layout, context, p):
     exports.enabled = p.phase2_rebake_create_lods
     exports.prop(p, 'phase2_rebake_export_selected')
     if p.phase2_run_engine != 'UNITY':
-        normal_maps = exports.row()
+        normal_maps = exports.column(align=True)
         normal_maps.enabled = p.phase2_rebake_export_selected
         normal_maps.prop(context.scene.polygroups_mesh_finalization_settings, 'unreal_fbx_normal_maps')
+        normal_maps.prop(context.scene.polygroups_mesh_finalization_settings, 'unreal_fbx_smoothing')
 
 
 def draw_start_status(layout, context, p):

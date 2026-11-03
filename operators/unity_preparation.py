@@ -15,6 +15,7 @@ from .mesh_export import (
     _restore_export_alpha_maps,
     _evaluated_mesh_counts,
     _export_at_world_origin,
+    fbx_smoothing,
     _safe_path_token,
     _write_export_mesh_info,
     _export_gltf_asset,
@@ -897,6 +898,7 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
                                 result = bpy.ops.export_scene.fbx(
                                     filepath=filepath, use_selection=True, object_types={"MESH"},
                                     path_mode="RELATIVE", use_mesh_modifiers=True, bake_anim=False,
+                                    mesh_smooth_type=fbx_smoothing(),
                                 )
                         if "FINISHED" not in result:
                             raise RuntimeError(f"{export_format} export failed: {obj.name}")

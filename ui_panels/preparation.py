@@ -647,6 +647,7 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                     else:
                         if settings.phase2_export_fbx:
                             controls.prop(final_settings, 'unreal_fbx_normal_maps')
+                            controls.prop(final_settings, 'unreal_fbx_smoothing')
                         if settings.phase2_export_glb:
                             controls.prop(final_settings, 'unreal_glb_mode')
                         if settings.phase2_export_gltf:
