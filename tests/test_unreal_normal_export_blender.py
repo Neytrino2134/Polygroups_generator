@@ -91,6 +91,7 @@ with TemporaryDirectory() as directory:
             rgba = pixel(path)
             expected = list(original_pixel)
             if convention == 'DirectX':
+                assert path.read_bytes()[24] == 8  # PNG IHDR bit depth per channel.
                 expected[1] = 1.0 - expected[1]
             assert max(abs(a - b) for a, b in zip(rgba, expected)) < .005, (rgba, expected)
         for local_info in output.rglob('MeshInfo.json'):

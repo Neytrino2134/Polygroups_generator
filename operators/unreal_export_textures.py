@@ -121,7 +121,7 @@ def exported_fbx_texture_manifest(obj, folder, normal_mode):
 
 
 def _write_normal_png(path, pixels, width, height):
-    # PNG rows start at the top. Write raw 16-bit samples so the render
+    # PNG rows start at the top. Write raw 8-bit samples so the render
     # pipeline cannot apply a display transform or unpremultiply RGB.
     def chunk(stream, kind, data):
         stream.write(struct.pack('>I', len(data)))
@@ -132,9 +132,9 @@ def _write_normal_png(path, pixels, width, height):
     compressor = zlib.compressobj()
     with path.open('wb') as stream:
         stream.write(b'\x89PNG\r\n\x1a\n')
-        chunk(stream, b'IHDR', struct.pack('>IIBBBBB', width, height, 16, 6, 0, 0, 0))
+        chunk(stream, b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0))
         for row in pixels.reshape(height, width, 4)[::-1]:
-            samples = np.rint(np.clip(row, 0., 1.) * 65535.).astype('>u2')
+            samples = np.rint(np.clip(row, 0., 1.) * 255.).astype(np.uint8)
             data = compressor.compress(b'\0' + samples.tobytes())
             if data:
                 chunk(stream, b'IDAT', data)
