@@ -352,7 +352,7 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
                 column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
             column.separator()
             column.label(text=t(context, "topology_guard_auto"), icon="AUTO")
-            for name in ("after_smart_seams", "before_repair"):
+            for name in ("after_smart_seams", "before_repair", "repair_time_limit"):
                 column.prop(guard, "topology_guard_" + name, text=t(context, "topology_guard_" + name))
             column.separator()
             column.operator_context = 'EXEC_DEFAULT'

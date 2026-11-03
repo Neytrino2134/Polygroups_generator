@@ -113,6 +113,11 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
         description=("Stop Topology Guard on one mesh after this many seconds and keep the seams found so far, "
                      "so a hard mesh cannot freeze Blender for minutes. 0 = no limit"),
     )
+    topology_guard_repair_time_limit: bpy.props.IntProperty(
+        name="Smart UV Repair Time Limit (s)", default=180, min=0, max=3600,
+        description=("Stop Smart UV Repair on one mesh after this many seconds and keep the regions repaired so far, "
+                     "so a hard mesh cannot freeze Blender for minutes. 0 = no limit"),
+    )
     topology_guard_collapse_knots: bpy.props.BoolProperty(
         name="Collapse Mesh Knots", default=True,
         description=("Merge tiny tangles into one point: holes whose rim was welded to one vertex, "

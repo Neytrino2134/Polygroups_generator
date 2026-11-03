@@ -1,5 +1,6 @@
 """Detect compressed UV patches, isolate them and open a longitudinal cut."""
 import math
+import time
 
 import bmesh
 import bpy
@@ -163,6 +164,9 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
             self.report({'ERROR'}, 'An existing active UV map is required')
             return {'CANCELLED'}
         guard_settings = context.scene.polygroups_seam_finalization_settings
+        limit = getattr(guard_settings, 'topology_guard_repair_time_limit', 0)
+        deadline = time.monotonic() + limit if limit else 0.0
+        timed_out = False
         original = live.copy()
         bm = None
         committed = False
@@ -230,6 +234,9 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
             boundaries = set()
             count = 0
             for region_number, region in enumerate(regions, 1):
+                if deadline and time.monotonic() > deadline:
+                    timed_out = True
+                    break
                 boundary, cut = longitudinal_cut(bm, region, self.sharp_preference)
                 if not cut:
                     continue
@@ -250,7 +257,9 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
                     bpy.ops.object.mode_set(mode='EDIT')
                     self.report({'INFO'}, f'Fixed {artifact_fixed} tiny UV artifact island(s); stretch regions had no safe path')
                     return {'FINISHED'}
-                self.report({'WARNING'}, 'Detected regions have no safe longitudinal path; use Select Regions to inspect')
+                self.report({'WARNING'}, 'Smart UV Repair stopped at its time limit before any region was repaired'
+                            if timed_out else
+                            'Detected regions have no safe longitudinal path; use Select Regions to inspect')
                 return {'FINISHED'}
             for f in bm.faces:
                 f.select_set(False)
@@ -265,6 +274,9 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
             if self.merge_small_islands and self.small_island_threshold > 0.0:
                 generated_indices = {edge.index for edge in generated}
                 for region_number in range(1, len(regions) + 1):
+                    if deadline and time.monotonic() > deadline:
+                        timed_out = True
+                        break
                     local_faces = [face for face in bm.faces if face[region_layer] == region_number]
                     if not local_faces:
                         continue
@@ -348,6 +360,9 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
             if self.native_pack:
                 post_process.append('UV packed')
             suffix = f"; {', '.join(post_process)}" if post_process else '. Pack UV islands if needed'
+            if timed_out:
+                self.report({'WARNING'}, f'{obj.name}: Smart UV Repair stopped at its time limit; '
+                                         'the remaining regions were left as they are')
             self.report({'INFO'}, f'Repaired {count}/{len(regions)} regions; {len(generated_indices)} seam edges, '
                          f'{created} new edges, {merged_small} small islands merged, '
                          f'{artifact_fixed} UV artifacts fixed{suffix}')

@@ -82,6 +82,18 @@ obj = cylinder(True)
 bpy.ops.mesh.select_all(action='DESELECT')
 assert bpy.ops.mesh.polygroups_repair_uv_stretch(selected_only=True) == {'FINISHED'}
 assert not any(e.seam for e in bmesh.from_edit_mesh(obj.data).edges)
+# The Smart UV Repair time limit stops the region loop and leaves the mesh without generated seams.
+from unittest.mock import patch
+from polygroups_generator.operators import repair_uv_stretch as limited
+guard_limit = bpy.context.scene.polygroups_seam_finalization_settings
+assert guard_limit.topology_guard_repair_time_limit == 180
+guard_limit.topology_guard_repair_time_limit = 10
+obj = cylinder(True)
+clock = iter([0.0] + [1e9] * 1000)
+with patch.object(limited.time, 'monotonic', lambda: next(clock)):
+    assert bpy.ops.mesh.polygroups_repair_uv_stretch() == {'FINISHED'}
+assert not any(e.seam for e in bmesh.from_edit_mesh(obj.data).edges)
+guard_limit.topology_guard_repair_time_limit = 180
 print('UV_REPAIR_TESTS_PASSED')
 
 # Unaffected UVs, hidden faces and old seams must survive; exercise Smart Relax.
