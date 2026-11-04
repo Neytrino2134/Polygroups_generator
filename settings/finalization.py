@@ -303,6 +303,20 @@ class POLYGROUPS_PG_seam_finalization_settings(bpy.types.PropertyGroup):
     )
 
 
+def _smart_lods_preset_update(self, context):
+    """Choosing a preset by name writes its LOD count and budgets into the live Smart LODs fields."""
+    from ..core import smart_lod_presets as presets
+    preset = presets.find(self, self.smart_lods_preset_active)
+    if preset is not None:
+        presets.apply_values(self, preset.count, tuple(preset.targets))
+
+
+class POLYGROUPS_PG_smart_lod_preset(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(name="Name", default="Preset")
+    count: bpy.props.IntProperty(name="LOD Count", default=5, min=1, max=10)
+    targets: bpy.props.IntVectorProperty(name="LOD Tris", size=10, min=1, default=(1,) * 10)
+
+
 class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     show_fab_variant_rename: bpy.props.BoolProperty(name="HIGH / MID / LOW", default=True)
     show_unreal_lod_rename: bpy.props.BoolProperty(name="Unreal LOD Rename", default=True)
@@ -400,6 +414,11 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
         name="LOD Count", description="Number of generated LOD meshes",
         default=5, min=1, max=10,
     )
+    smart_lods_presets: bpy.props.CollectionProperty(type=POLYGROUPS_PG_smart_lod_preset)
+    smart_lods_presets_seeded: bpy.props.BoolProperty(default=False)
+    smart_lods_preset_active: bpy.props.StringProperty(
+        name="Preset", default="", update=_smart_lods_preset_update,
+        description="Smart LODs preset: LOD count and triangle budgets. Phase 2 picks Unreal or Unity by its pipeline switch")
     smart_lods_target_1: bpy.props.IntProperty(name="LOD0", default=2900, min=1, step=100)
     smart_lods_target_2: bpy.props.IntProperty(name="LOD1", step=100, default=1500, min=1)
     smart_lods_target_3: bpy.props.IntProperty(name="LOD2", step=100, default=1000, min=1)

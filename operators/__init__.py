@@ -210,6 +210,7 @@ from .uv_preserve_decimate import (
 from .sequential_jobs import OBJECT_OT_polygroups_stop_lod_job, stop_jobs
 from .auto_render import OBJECT_OT_polygroups_phase2_auto_render
 from .reload_textures import OBJECT_OT_polygroups_reload_all_textures
+from .smart_lod_presets import OBJECT_OT_polygroups_smart_lods_preset, seed_presets
 from .batch_finalization import OBJECT_OT_polygroups_batch_finalization
 from .smart_lods import OBJECT_OT_polygroups_generate_smart_lods
 from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
@@ -269,6 +270,7 @@ CLASSES = (
     OBJECT_OT_polygroups_phase2_open_zbrush_folder, OBJECT_OT_polygroups_phase2_export_zbrush_folder,
     OBJECT_OT_polygroups_stop_lod_job, OBJECT_OT_polygroups_batch_finalization,
     OBJECT_OT_polygroups_phase2_auto_render, OBJECT_OT_polygroups_reload_all_textures,
+    OBJECT_OT_polygroups_smart_lods_preset,
     *PHASE2_CLASSES,
     WM_OT_airetopo_relocate_project,
     OBJECT_OT_polygroups_unity_load_from_file,
@@ -538,6 +540,8 @@ def register():
     bpy.app.handlers.redo_pre.append(stop_phase2)
     bpy.app.timers.register(ensure_libraries, first_interval=0.0)
     bpy.app.handlers.load_post.append(ensure_libraries)
+    bpy.app.timers.register(seed_presets, first_interval=0.0)
+    bpy.app.handlers.load_post.append(seed_presets)
     bpy.app.handlers.load_pre.append(flush_library)
     bpy.app.handlers.load_pre.append(stop_remesh)
     bpy.app.handlers.undo_pre.append(stop_remesh)
@@ -568,6 +572,10 @@ def unregister():
         bpy.app.handlers.load_post.remove(ensure_libraries)
     if bpy.app.timers.is_registered(ensure_libraries):
         bpy.app.timers.unregister(ensure_libraries)
+    if seed_presets in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(seed_presets)
+    if bpy.app.timers.is_registered(seed_presets):
+        bpy.app.timers.unregister(seed_presets)
     from .narrow_cut_preview import clear_preview
     clear_preview()
     from .detached_groups import cleanup_windows

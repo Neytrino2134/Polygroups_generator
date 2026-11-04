@@ -426,6 +426,12 @@ class VIEW3D_PT_polygroups_mesh_finalization(bpy.types.Panel):
         settings = context.scene.polygroups_mesh_finalization_settings
         column = layout.column(align=True)
         column.enabled = not settings.smart_lods_is_running
+        presets = column.row(align=True)
+        presets.prop_search(settings, "smart_lods_preset_active", settings, "smart_lods_presets",
+                            text="Preset", icon="PRESET")
+        for action, icon, text in (("ADD", "ADD", "Add as New Preset"), ("SAVE", "FILE_TICK", "Save to Active Preset"),
+                                   ("REMOVE", "REMOVE", "Remove Active Preset")):
+            presets.operator("object.polygroups_smart_lods_preset", text="", icon=icon).action = action
         column.prop(settings, "smart_lods_count")
         for index in range(1, settings.smart_lods_count + 1):
             column.prop(settings, f"smart_lods_target_{index}", text=f"LOD{index-1} Tris")

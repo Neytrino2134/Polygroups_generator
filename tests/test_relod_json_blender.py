@@ -8,7 +8,7 @@ from polygroups_generator.operators import rebake_export,smart_lods
 from polygroups_generator.services import fab_media as media
 c=bpy.context;p=c.scene.polygroups_model_preparation_settings;s=c.scene.polygroups_mesh_finalization_settings
 bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
-s.smart_lods_count=2;s.smart_lods_target_1=200;s.smart_lods_target_2=100
+s.smart_lods_count=2;s.smart_lods_target_1=200;s.smart_lods_target_2=100;__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
 s.smart_lods_create_text=False;s.smart_lods_auto_arrange=False
 for index in (1,2):
     collection=bpy.data.collections.new(f'JSON_01_{index:02d}_Collection');c.scene.collection.children.link(collection)
@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='test_relod_json_',dir=ROOT) as director
     assert all(updated['fields'][key]==value for key,value in expected.items())
     assert media.validate(gallery.result_text.as_string())==updated
     # Changed LOD count replaces stale rows and refreshes actual evaluated counts.
-    s.smart_lods_count=1;s.smart_lods_target_1=80
+    s.smart_lods_count=1;s.smart_lods_target_1=80;__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
     assert bpy.ops.object.polygroups_relod()=={'FINISHED'}
     info=json.loads(info_path.read_text(encoding='utf-8'))
     assert info['totals']['meshes']==4 and not any(row['lod_index']==1 for row in info['meshes'])

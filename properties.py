@@ -69,6 +69,7 @@ from .settings.seams import (
 
 from .settings.finalization import (
     POLYGROUPS_PG_seam_finalization_settings,
+    POLYGROUPS_PG_smart_lod_preset,
     POLYGROUPS_PG_mesh_finalization_settings,
 )
 
@@ -106,6 +107,7 @@ CLASSES = (
     POLYGROUPS_PG_object_seam_cutter_settings,
     POLYGROUPS_PG_polygroups_settings,
     POLYGROUPS_PG_seam_finalization_settings,
+    POLYGROUPS_PG_smart_lod_preset,
     POLYGROUPS_PG_mesh_finalization_settings,
     POLYGROUPS_PG_render_settings,
     POLYGROUPS_PG_baking_settings,

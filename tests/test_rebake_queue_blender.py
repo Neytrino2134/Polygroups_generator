@@ -27,7 +27,7 @@ bake.bake_base_color=True;bake.bake_normal=False;bake.bake_artifact_mask=False;b
 bake.auto_pack_uv_before_bake=True;bake.use_auto_cage=True;bake.use_smart_cage=False
 bake.autogenerate_smart_cage=False;bake.bake_resolution=16
 p.phase2_run_engine='FAB';p.fold_repair_zero_area=False;p.fold_repair_stretched_triangles=False
-s.smart_lods_count=1;s.smart_lods_target_1=8;s.smart_lods_prepare_mode='UNREAL'
+s.smart_lods_count=1;s.smart_lods_target_1=8;s.smart_lods_prepare_mode='UNREAL';__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
 assert all(getattr(p,name) for name in ('phase2_rebake_repair_mesh','phase2_rebake_repair_folds',
     'phase2_rebake_repair_coincident','phase2_rebake_repair_zero_area','phase2_rebake_repair_stretched',
     'phase2_rebake_repack_uv'))

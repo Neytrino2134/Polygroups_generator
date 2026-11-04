@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT.parent));add
 from polygroups_generator.operators import rebake_export,relod,smart_lods,sequential_jobs
 c=bpy.context;p=c.scene.polygroups_model_preparation_settings;s=c.scene.polygroups_mesh_finalization_settings
 bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
-s.smart_lods_count=2;s.smart_lods_target_1=200;s.smart_lods_target_2=100
+s.smart_lods_count=2;s.smart_lods_target_1=200;s.smart_lods_target_2=100;__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
 s.smart_lods_create_text=False;s.smart_lods_auto_arrange=False
 p.phase2_export_sort='LODS_FORMAT';p.phase2_blend_export_pack=False
 p.phase2_export_fbx=False;p.phase2_export_glb=True;p.phase2_export_gltf=True

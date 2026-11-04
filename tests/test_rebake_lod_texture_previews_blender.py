@@ -55,7 +55,7 @@ uvs = tuple(tuple(l.uv) for l in target.data.uv_layers.active.data)
 p = c.scene.polygroups_model_preparation_settings
 s = c.scene.polygroups_mesh_finalization_settings
 p.phase2_run_engine = 'FAB'
-s.smart_lods_count = 2
+s.smart_lods_count = 2;__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
 s.smart_lods_target_1 = 500
 s.smart_lods_target_2 = 200
 s.smart_lods_create_text = False

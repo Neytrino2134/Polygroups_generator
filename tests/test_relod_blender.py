@@ -10,7 +10,7 @@ from polygroups_generator.operators import sequential_jobs
 from polygroups_generator.custom_ui.schema import capture
 c=bpy.context;p=c.scene.polygroups_model_preparation_settings;s=c.scene.polygroups_mesh_finalization_settings
 bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
-s.smart_lods_count=2;s.smart_lods_target_1=50;s.smart_lods_target_2=20;s.smart_lods_create_text=True
+s.smart_lods_count=2;s.smart_lods_target_1=50;s.smart_lods_target_2=20;s.smart_lods_create_text=True;__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
 s.smart_lods_auto_arrange=True;s.smart_lods_decimate_method='SMART_DECIMATE'
 assert p.phase2_relod_method=='UV_PRESERVE'
 assert p.phase2_relod_delete_current_lods and p.phase2_relod_reexport and p.phase2_relod_json
@@ -85,12 +85,12 @@ assert all(bpy.data.objects[name].as_pointer()==ptr for name,ptr in old.items())
 # Whole-list preflight must reject a later naming collision before replacing an earlier asset.
 collision=bpy.data.objects.new('SM_Box_01_01_LOD0',None)
 # Existing mesh owns that name; rename the unrelated object into the next planned level instead.
-collision.name='Other_LOD2';c.collection.objects.link(collision);s.smart_lods_count=3
+collision.name='Other_LOD2';c.collection.objects.link(collision);s.smart_lods_count=3;__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
 before={o.name:o.as_pointer() for o in c.scene.objects}
 try:bpy.ops.object.polygroups_relod()
 except RuntimeError:pass
 assert before=={o.name:o.as_pointer() for o in c.scene.objects}
-bpy.data.objects.remove(collision,do_unlink=True);s.smart_lods_count=2
+bpy.data.objects.remove(collision,do_unlink=True);s.smart_lods_count=2;__import__("polygroups_generator.core.smart_lod_presets",fromlist=["x"]).save_to_engine(bpy.context.scene.polygroups_mesh_finalization_settings,bpy.context.scene.polygroups_model_preparation_settings.phase2_run_engine)
 # Swapped pack (MID named _LOD0, its LOD0 named _MID) is refused before any deletion.
 real=source('SM_Swap_01_01_LOD0');fake=source('SM_Swap_01_01_MID')
 bm=bmesh.new();bmesh.ops.create_icosphere(bm,subdivisions=1,radius=1);bm.to_mesh(fake.data);bm.free()

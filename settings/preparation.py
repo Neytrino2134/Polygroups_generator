@@ -63,20 +63,21 @@ def _auto_bake_update(self, context):
         _assign(self, "phase2_run_mode", "REBAKE")
 
 
-# Smart LODs triangle budgets (LOD0..LOD4) written when the Start Phase 2 pipeline is chosen.
-ENGINE_LOD_TRIS = {"FAB": (3000, 1500, 1000, 500, 250), "UNITY": (2900, 1500, 1000, 500, 150)}
-
-
 def engine_lod_targets(settings):
-    """``smart_lods_target_N`` budgets of the Start Phase 2 pipeline switch (ReBake / ReLOD read these)."""
-    return {f"smart_lods_target_{index}": tris
-            for index, tris in enumerate(ENGINE_LOD_TRIS[settings.phase2_run_engine], 1)}
+    """LOD count and ``smart_lods_target_N`` budgets of the Unreal / Unity Smart LODs preset that the
+    Start Phase 2 pipeline switch selects (ReBake / ReLOD read these, not the live fields)."""
+    from ..core import smart_lod_presets as presets
+    finalization = settings.id_data.polygroups_mesh_finalization_settings
+    count, targets = presets.engine_values(finalization, settings.phase2_run_engine)
+    values = {f"smart_lods_target_{index}": tris for index, tris in enumerate(targets, 1)}
+    values["smart_lods_count"] = count
+    return values
 
 
 def apply_engine_lod_tris(settings):
-    finalization = settings.id_data.polygroups_mesh_finalization_settings
-    for name, tris in engine_lod_targets(settings).items():
-        _assign(finalization, name, tris)
+    """Select the engine's Smart LODs preset and write it into the live Smart LODs fields."""
+    from ..core import smart_lod_presets as presets
+    presets.select_engine_preset(settings.id_data.polygroups_mesh_finalization_settings, settings.phase2_run_engine)
 
 
 def _run_engine_update(self, context):
