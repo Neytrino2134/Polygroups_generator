@@ -1295,6 +1295,7 @@ class AIRETOPO_PG_panel_visibility_settings(bpy.types.PropertyGroup):
     topic_bake_2: bpy.props.BoolProperty(default=False)
     topic_bake_3: bpy.props.BoolProperty(default=False)
     topic_bake_4: bpy.props.BoolProperty(default=False)
+    topic_bake_5: bpy.props.BoolProperty(default=False)
     topic_uv_0: bpy.props.BoolProperty(default=False)
     topic_uv_1: bpy.props.BoolProperty(default=False)
     topic_uv_2: bpy.props.BoolProperty(default=False)

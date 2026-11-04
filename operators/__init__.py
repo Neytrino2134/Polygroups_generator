@@ -218,6 +218,7 @@ from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_unwrap
 from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
 from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
+from .uv_bake import OBJECT_OT_polygroups_uv_bake
 
 from .small_islands import (
     MESH_OT_polygroups_analyze_and_merge_seams,
@@ -404,6 +405,7 @@ CLASSES = (
     OBJECT_OT_polygroups_smart_uv_unwrap,
     OBJECT_OT_polygroups_average_islands_scale,
     OBJECT_OT_polygroups_uvpackmaster_pack,
+    OBJECT_OT_polygroups_uv_bake,
     OBJECT_OT_face_sets_to_materials,
     OBJECT_OT_clear_polygroups_materials,
     OBJECT_OT_polygroups_prepare_fab_variant,

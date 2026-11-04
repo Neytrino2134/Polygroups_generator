@@ -273,6 +273,36 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 icon="NODE_COMPOSITING",
             )
 
+        content = draw_topic(layout, context, "bake_5", 'UV Bake (Transfer to New UV)', "UV")
+        if content is not None:
+            column = content.column(align=True)
+            column.enabled = not settings.bake_task_is_running
+            obj = context.active_object
+            if obj is not None and obj.type == 'MESH':
+                column.prop_search(settings, "uv_bake_source_uv", obj.data, "uv_layers", text="From UV")
+                column.prop_search(settings, "uv_bake_target_uv", obj.data, "uv_layers", text="To UV")
+                from ..operators.uv_bake import resolve_uv_maps
+                try:
+                    source, target = resolve_uv_maps(obj.data, settings.uv_bake_source_uv, settings.uv_bake_target_uv)
+                    column.label(text=f"{source}  ->  {target}", icon="UV_DATA")
+                except (ValueError, StopIteration) as error:
+                    column.label(text=str(error), icon="ERROR")
+            else:
+                column.label(text="Select a mesh with two UV maps", icon="INFO")
+            row = column.row(align=True)
+            row.prop(settings, "uv_bake_base_color")
+            row.prop(settings, "uv_bake_normal")
+            column.prop(settings, "uv_bake_match_source")
+            if not settings.uv_bake_match_source:
+                column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
+            column.prop(settings, "uv_bake_duplicate")
+            column.label(text="New textures + MergeMask are saved to Bakes/<mesh>", icon="INFO")
+            bake_row = column.row(align=True)
+            bake_row.scale_y = 1.3
+            bake_row.operator("object.polygroups_uv_bake", text="UV Bake", icon="RENDER_RESULT")
+            if settings.uv_bake_status:
+                column.label(text=settings.uv_bake_status)
+
         content = draw_topic(layout, context, "bake_4", 'Cleanup', "TRASH")
         if content is not None:
             column = content.column(align=True)

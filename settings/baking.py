@@ -39,6 +39,31 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         ),
         default="EXTEND",
     )
+    # UV Bake: transfer the textures from one UV map of a mesh to another (repacked) one.
+    uv_bake_source_uv: bpy.props.StringProperty(
+        name="From UV",
+        description="UV map the current textures are laid out on; empty uses the Active Render UV map",
+        default="",
+    )
+    uv_bake_target_uv: bpy.props.StringProperty(
+        name="To UV",
+        description="New UV map to bake the textures onto; empty uses the other UV map",
+        default="",
+    )
+    uv_bake_duplicate: bpy.props.BoolProperty(
+        name="Duplicate Mesh (_UVBake)",
+        description=("Bake onto a copy named <mesh>_UVBake with its own new material and textures; the "
+                     "original mesh, its UV maps and materials stay unchanged"),
+        default=True,
+    )
+    uv_bake_base_color: bpy.props.BoolProperty(name="Base Color", default=True)
+    uv_bake_normal: bpy.props.BoolProperty(name="Normal", default=True)
+    uv_bake_match_source: bpy.props.BoolProperty(
+        name="Match Source Resolution",
+        description="Use the size of the largest current texture; off uses Bake Resolution",
+        default=True,
+    )
+    uv_bake_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     ray_distance: bpy.props.FloatProperty(
         name="Ray Distance",
         description="Maximum ray distance for selected-to-active baking",
