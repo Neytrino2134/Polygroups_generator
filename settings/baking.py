@@ -59,10 +59,15 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     )
     uv_bake_base_color: bpy.props.BoolProperty(name="Base Color", default=True)
     uv_bake_normal: bpy.props.BoolProperty(name="Normal", default=True)
-    uv_bake_match_source: bpy.props.BoolProperty(
-        name="Match Source Resolution",
-        description="Use the size of the largest current texture; off uses Bake Resolution",
-        default=True,
+    uv_bake_resolution: bpy.props.EnumProperty(
+        name="Output Resolution",
+        description="Size of the new textures (BaseColor, Normal, MergeMask)",
+        items=(
+            ("1024", "1K", "1024 x 1024 pixels"),
+            ("2048", "2K", "2048 x 2048 pixels"),
+            ("4096", "4K", "4096 x 4096 pixels"),
+        ),
+        default="2048",
     )
     uv_bake_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     ray_distance: bpy.props.FloatProperty(

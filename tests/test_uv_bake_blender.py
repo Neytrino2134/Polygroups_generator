@@ -12,6 +12,8 @@ ctx=bpy.context;scene=ctx.scene
 s=scene.polygroups_baking_settings
 s.bake_margin=1
 RES=16
+assert s.uv_bake_resolution=='2048'  # default 2K
+s.uv_bake_resolution='1024'  # smallest choice keeps the test light
 
 
 def source_mesh():
@@ -38,7 +40,9 @@ def source_mesh():
 
 
 def pixel(image,x,y):
-    values=list(image.pixels[(y*RES+x)*4:(y*RES+x)*4+4]);return values
+    # x, y on the RES grid of the source; the baked image is OUT pixels wide (Output Resolution).
+    size=image.size[0];x=int((x+.5)*size/RES);y=int((y+.5)*size/RES)
+    return list(image.pixels[(y*size+x)*4:(y*size+x)*4+4])
 
 
 with tempfile.TemporaryDirectory() as directory:
@@ -56,6 +60,7 @@ with tempfile.TemporaryDirectory() as directory:
     base=bpy.data.images['SM_Rock_01_01_MID_UVBake_BaseColor']
     normal=bpy.data.images['SM_Rock_01_01_MID_UVBake_Normal']
     mask=bpy.data.images['SM_Rock_01_01_MID_UVBake_MergeMask']
+    assert tuple(base.size)==tuple(normal.size)==tuple(mask.size)==(1024,1024),tuple(base.size)
     left,right=pixel(base,3,8),pixel(base,12,8)
     assert left[2]>.5 and left[0]<.2 and right[0]>.5 and right[2]<.2,(left,right)  # mirrored: left is blue now
     flat=pixel(normal,8,8)

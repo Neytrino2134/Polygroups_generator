@@ -292,9 +292,9 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             row = column.row(align=True)
             row.prop(settings, "uv_bake_base_color")
             row.prop(settings, "uv_bake_normal")
-            column.prop(settings, "uv_bake_match_source")
-            if not settings.uv_bake_match_source:
-                column.prop(settings, "bake_resolution", text=t(context, "bake_resolution"))
+            res_row = column.row(align=True)
+            res_row.label(text="Output Resolution")
+            res_row.prop(settings, "uv_bake_resolution", expand=True)
             column.prop(settings, "uv_bake_duplicate")
             column.label(text="New textures + MergeMask are saved to Bakes/<mesh>", icon="INFO")
             bake_row = column.row(align=True)

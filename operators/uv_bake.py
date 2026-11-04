@@ -59,19 +59,6 @@ def resolve_uv_maps(mesh, source_name='', target_name=''):
     return source.name, target.name
 
 
-def _material_images(material):
-    if material is None or material.node_tree is None:
-        return []
-    return [node.image for node in material.node_tree.nodes
-            if node.type == 'TEX_IMAGE' and node.image is not None]
-
-
-def source_resolution(obj, fallback):
-    sizes = [max(image.size) for slot in obj.material_slots for image in _material_images(slot.material)
-             if image.size[0] and image.size[1]]
-    return max(sizes) if sizes else fallback
-
-
 def _new_image(name, resolution, colorspace):
     # A working name: the final one may still belong to a texture the bake reads (see uv_bake).
     image = bpy.data.images.new('__uv_bake_' + name, width=resolution, height=resolution, alpha=True)
@@ -190,8 +177,7 @@ def uv_bake(context, obj, settings, report=print):
     source_uv, target_uv = resolve_uv_maps(obj.data, settings.uv_bake_source_uv, settings.uv_bake_target_uv)
     if context.object is not None and context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
-    resolution = (source_resolution(obj, settings.bake_resolution) if settings.uv_bake_match_source
-                  else settings.bake_resolution)
+    resolution = int(settings.uv_bake_resolution)
     target = make_target(context, obj, settings.uv_bake_duplicate)
     layers = target.data.uv_layers
     # The material samples the old UV map (image nodes without a UV input use Active Render).
