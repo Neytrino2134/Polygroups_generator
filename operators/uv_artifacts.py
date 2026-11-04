@@ -8,6 +8,7 @@ import bpy
 from .split_narrow_islands import island_graph
 from ..core.narrow_regions import components
 from ..core.double_walls import double_wall_groups
+from ..core.merge_target import best_vertex
 
 
 def _triangle_metrics(triangle, uv):
@@ -152,8 +153,10 @@ def apply_uv_artifacts(bm, artifacts, method):
             valid = [vert for vert in group if vert.is_valid]
             if len(valid) < 2:
                 continue
-            center = sum((vert.co for vert in valid), valid[0].co.copy() * 0.0) / len(valid)
-            bmesh.ops.pointmerge(bm, verts=valid, merge_co=center)
+            # Smart weld: land on the group's own vertex that disturbs the staying surface least, instead of
+            # the average position, which pulls the neighbouring surface inward.
+            target = best_vertex(valid, removed=faces)
+            bmesh.ops.pointmerge(bm, verts=valid, merge_co=target.co.copy())
     else:
         raise ValueError(f'Unknown artifact cleanup method: {method}')
     bm.normal_update()
@@ -163,7 +166,7 @@ def apply_uv_artifacts(bm, artifacts, method):
 class MESH_OT_polygroups_uv_artifact_cleanup(bpy.types.Operator):
     bl_idname = 'mesh.polygroups_uv_artifact_cleanup'
     bl_label = 'UV Artifact Cleanup'
-    bl_description = 'Find tiny malformed UV islands and select, delete, or collapse their mesh faces'
+    bl_description = 'Find tiny malformed UV islands and select, delete, or smart-weld their mesh faces'
     bl_options = {'REGISTER', 'UNDO'}
 
     action: bpy.props.EnumProperty(items=(
@@ -171,7 +174,7 @@ class MESH_OT_polygroups_uv_artifact_cleanup(bpy.types.Operator):
         ('APPLY', 'Apply Cleanup', 'Apply the selected cleanup method')))
     method: bpy.props.EnumProperty(name='Fix Method', items=(
         ('DELETE', 'Delete Faces', 'Delete artifact faces from the mesh'),
-        ('MERGE_CENTER', 'Merge to Center', 'Collapse each connected artifact to its center')),
+        ('MERGE_CENTER', 'Smart Weld', 'Weld each connected artifact into the vertex that keeps the surrounding surface and volume best')),
         default='MERGE_CENTER')
     max_faces: bpy.props.IntProperty(name='Maximum Island Faces', default=7, min=1, max=100)
     stretch_threshold: bpy.props.FloatProperty(name='Artifact Stretch', default=8.0, min=1.1, max=10000)

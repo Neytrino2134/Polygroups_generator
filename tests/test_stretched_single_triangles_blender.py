@@ -36,12 +36,17 @@ def fixture(scale=1.0, huge=True):
 
 for scale in (.001,1,1000):
     bm,top=fixture(scale)
+    corners={tuple(v.co) for v in top.verts}
     center=sum((v.co for v in top.verts),Vector((0,0,0)))/3
     other={v:tuple(v.co) for v in bm.verts if v not in set(top.verts)}
     result=repair_local_folds(bm,fix_folds=False,fix_degenerate=False,fix_stretched_triangles=True)
     assert result['stretched']==1 and result['affected']=={0},result
     assert (len(bm.verts),len(bm.edges),len(bm.faces))==(4,6,4)
-    assert min((v.co-center).length for v in bm.verts)<scale*1e-6
+    # Smart weld: the triangle collapses into one of its own corners, which keeps its position; the
+    # centroid is not used, because moving there pulls the whole fan inward and shrinks the volume.
+    survivors=[v for v in bm.verts if v not in other]
+    assert len(survivors)==1 and tuple(survivors[0].co) in corners,(survivors,corners)
+    assert (survivors[0].co-center).length>scale*1e-3
     assert all(tuple(v.co)==co for v,co in other.items())
     assert all(e.is_manifold for e in bm.edges)
     assert repair_local_folds(bm,fix_stretched_triangles=True)['stretched']==0

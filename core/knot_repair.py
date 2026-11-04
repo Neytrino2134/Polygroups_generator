@@ -14,6 +14,8 @@ would leave the mesh non-manifold is skipped.
 """
 import bmesh
 
+from .merge_target import best_vertex
+
 
 FOLD_DOT = -0.2       # face normal vs 1-ring normal
 SLIVER_AREA = 0.1     # share of the median face area
@@ -126,8 +128,10 @@ def _collapse(bm, indices, max_verts):
     """Merge verts ``indices`` at their center; pull in joints stacked on one edge."""
     bm.verts.ensure_lookup_table()
     points = [bm.verts[i] for i in indices]
-    center = sum((v.co for v in points), points[0].co * 0.0) / len(points)
-    survivor = _merge(bm, points, center)
+    # Smart weld: the knot lands on its own vertex that disturbs the staying surface least; the average
+    # position would pull the surrounding surface inward and shrink the volume.
+    anchor = best_vertex(points)
+    survivor = _merge(bm, points, anchor.co.copy())
     # Faces that shared the knot rim with the outer surface may now stack on one
     # edge; pull that edge in too, so the knot ends as one manifold point.
     for _step in range(max_verts):

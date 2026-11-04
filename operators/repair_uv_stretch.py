@@ -128,7 +128,7 @@ class MESH_OT_polygroups_repair_uv_stretch(bpy.types.Operator):
     cleanup_artifacts: bpy.props.BoolProperty(name='Clean UV Artifacts During Repair', default=True)
     artifact_method: bpy.props.EnumProperty(name='Artifact Fix Method', items=(
         ('DELETE', 'Delete Faces', 'Delete artifact faces from mesh geometry'),
-        ('MERGE_CENTER', 'Merge to Center', 'Collapse each connected artifact to its center')),
+        ('MERGE_CENTER', 'Smart Weld', 'Weld each connected artifact into the vertex that keeps the surrounding surface and volume best')),
         default='MERGE_CENTER')
     artifact_max_faces: bpy.props.IntProperty(name='Maximum Island Faces', default=7, min=1, max=100)
     artifact_stretch: bpy.props.FloatProperty(name='Artifact Stretch', default=8.0, min=1.1, max=10000)

@@ -10,6 +10,8 @@ import bmesh
 from mathutils import Vector
 from mathutils.geometry import tessellate_polygon
 
+from .merge_target import best_vertex
+
 
 def inspect_triangle_quality(bm, selected_only=False, thin_quality=0.01, uv_stretch=50.0):
     """Return face indices and scale-independent triangle/UV diagnostics.
@@ -471,47 +473,55 @@ def _stretched_single_triangle_plan(face, layers, tolerance, ratio, pin=None):
         return None
     if not _uv_outlier(face, layers, tolerance, ratio):
         return None
-    center = sum((vertex.co for vertex in sorted(vertices,key=lambda v:v.index)), Vector((0,0,0))) / 3
-    target = min(vertices, key=lambda vertex:vertex.index)
-    sentinel = target
-    face_keys, spokes = set(), {}
     surviving = touched - {face}
-    for other in surviving:
-        mapped = [sentinel if vertex in vertices else vertex for vertex in other.verts]
-        compact = [vertex for index,vertex in enumerate(mapped) if vertex != mapped[index-1]]
-        if len(compact) < 3 or len(set(compact)) != len(compact):
+
+    def contraction(sentinel):
+        """Weld the triangle into ``sentinel`` (one of its own vertices, which keeps its position):
+        the staying surface moves by the removed sliver only, unlike a move to the centroid, which pulls
+        the whole fan inward. Returns the staying faces when the result is a closed, well oriented fan."""
+        center = sentinel.co
+        face_keys, spokes = set(), {}
+        for other in surviving:
+            mapped = [sentinel if vertex in vertices else vertex for vertex in other.verts]
+            compact = [vertex for index,vertex in enumerate(mapped) if vertex != mapped[index-1]]
+            if len(compact) < 3 or len(set(compact)) != len(compact):
+                return None
+            key = frozenset(compact)
+            if key in face_keys:
+                return None
+            face_keys.add(key)
+            positions = [center if vertex == sentinel else vertex.co for vertex in compact]
+            origin = positions[0]
+            normal = sum(((a-origin).cross(b-origin) for a,b in zip(positions, positions[1:]+positions[:1])), Vector((0,0,0)))
+            if normal.length <= tolerance*tolerance or normal.normalized().dot(other.normal) <= .2:
+                return None
+            triangles = [[positions[item] if isinstance(item,int) else item for item in triangle]
+                         for triangle in tessellate_polygon([positions])]
+            if not triangles or any((b-a).cross(c-a).length <= tolerance*tolerance
+                    or (b-a).cross(c-a).normalized().dot(other.normal) <= .05 for a,b,c in triangles):
+                return None
+            index = compact.index(sentinel)
+            for vertex in (compact[index-1], compact[(index+1)%len(compact)]):
+                spokes.setdefault(vertex, []).append(other)
+        if any(len(faces) != 2 for faces in spokes.values()):
             return None
-        key = frozenset(compact)
-        if key in face_keys:
-            return None
-        face_keys.add(key)
-        positions = [center if vertex == sentinel else vertex.co for vertex in compact]
-        origin = positions[0]
-        normal = sum(((a-origin).cross(b-origin) for a,b in zip(positions, positions[1:]+positions[:1])), Vector((0,0,0)))
-        if normal.length <= tolerance*tolerance or normal.normalized().dot(other.normal) <= .2:
-            return None
-        triangles = [[positions[item] if isinstance(item,int) else item for item in triangle]
-                     for triangle in tessellate_polygon([positions])]
-        if not triangles or any((b-a).cross(c-a).length <= tolerance*tolerance
-                or (b-a).cross(c-a).normalized().dot(other.normal) <= .05 for a,b,c in triangles):
-            return None
-        index = compact.index(sentinel)
-        for vertex in (compact[index-1], compact[(index+1)%len(compact)]):
-            spokes.setdefault(vertex, []).append(other)
-    if any(len(faces) != 2 for faces in spokes.values()):
+        # One connected fan avoids creating a bow-tie/non-manifold vertex.
+        pending = [next(iter(surviving))]
+        visited = set()
+        while pending:
+            current = pending.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            pending.extend(other for faces in spokes.values() if current in faces for other in faces)
+        return surviving if visited == surviving else None
+
+    # Of the triangle's own vertices that give a valid fan, the one that disturbs the surface least.
+    valid = [vertex for vertex in sorted(vertices, key=lambda v:v.index) if contraction(vertex) is not None]
+    if not valid:
         return None
-    # One connected fan avoids creating a bow-tie/non-manifold vertex.
-    pending = [next(iter(surviving))]
-    visited = set()
-    while pending:
-        current = pending.pop()
-        if current in visited:
-            continue
-        visited.add(current)
-        pending.extend(other for faces in spokes.values() if current in faces for other in faces)
-    if visited != surviving:
-        return None
-    return vertices, target, center, surviving
+    target = best_vertex(sorted(vertices, key=lambda v:v.index), removed=(face,), allowed=set(valid))
+    return vertices, target, target.co.copy(), surviving
 
 
 def _merge_triangle_center(bm, plan, layers):
@@ -534,6 +544,7 @@ def _merge_triangle_center(bm, plan, layers):
             layouts[face][layer] = {loop.vert:loop[layer].uv.copy() for loop in face.loops
                                     if loop.vert not in vertices}
             layouts[face][layer][target] = sum(merged, Vector((0,0))) / len(merged)
+    # Smart weld: the other two vertices slide into ``target``, which keeps its own position.
     bmesh.ops.weld_verts(bm, targetmap={vertex:target for vertex in vertices if vertex != target})
     target.co = center
     for face,uvs in layouts.items():
