@@ -145,7 +145,7 @@ with tempfile.TemporaryDirectory(prefix="unity_export_test_") as directory:
     for lod, item in enumerate(reversed(batch)):
         assert item.name == ('Batch_02' if lod == 0 else f'Batch_02.LOD{lod}')
         assert len(item.users_collection) == 1
-        assert item.users_collection[0].name == f'Batch_02_LOD{lod}_Collection'
+        assert item.users_collection[0].name == 'Batch_02_Collection'
         assert item.users_collection[0].color_tag == settings.unity_collection_color_tag
         assert item.active_material == batch[-1].active_material
     assert batch[0].active_material.name == 'Batch_02'

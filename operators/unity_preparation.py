@@ -182,9 +182,12 @@ def prepare_unity(obj, name, asset_name=None, shared_material=None):
     obj["unity_prepared"] = True
 
 
-def move_to_lod_collection(context, obj, lod):
+def move_to_lod_collection(context, obj, lod=None):
+    """Put the object into the one collection of its asset: AssetName_Index_VersionIndex_Collection.
+
+    All LODs of an asset share it (``lod`` is kept only for call compatibility)."""
     base = re.sub(r"\.LOD\d+$", "", obj.name)
-    name = f"{base}_{lod}_Collection"
+    name = f"{base}_Collection"
     collection = bpy.data.collections.get(name)
     if collection is None:
         collection = bpy.data.collections.new(name)
@@ -370,8 +373,14 @@ class OBJECT_OT_polygroups_rename_unity_meshes(bpy.types.Operator):
                 obj.name = obj.data.name = name
                 obj['unity_prepared'] = True
                 for collection in obj.users_collection:
-                    if len(collection.objects) == 1 and collection.name.endswith('_Collection'):
-                        collection.name = f'{base}_LOD{lod}_Collection'
+                    if not collection.name.endswith('_Collection'):
+                        continue
+                    if re.search(r'_LOD\d+_Collection$', collection.name, re.IGNORECASE):
+                        # Legacy one-collection-per-LOD scene.
+                        if len(collection.objects) == 1:
+                            collection.name = f'{base}_LOD{lod}_Collection'
+                    elif all(item in meshes for item in collection.objects if item.type == 'MESH'):
+                        collection.name = f'{base}_Collection'
                 if any(child.get(UNITY_LABEL) for child in obj.children):
                     ensure_unity_label(context, obj, lod)
             for index, material in enumerate(sorted(materials, key=lambda mat: mat.name)):
@@ -509,14 +518,14 @@ class OBJECT_OT_polygroups_unity_collection_step(bpy.types.Operator):
         asset = _safe_path_token(asset_name(settings.unity_asset_name), 'Asset')
         suffix = _safe_path_token(settings.unity_asset_suffix.strip(), '')
         pattern = re.compile(r'^' + re.escape(asset) + '(?:_' + re.escape(settings.unity_name_index.zfill(2)) + ')?' + r'_(\d+)'  +
-                             (r'_' + re.escape(suffix) if suffix else '') + r'_LOD(\d+)_Collection$')
+                             (r'_' + re.escape(suffix) if suffix else '') + r'(?:_LOD(\d+))?_Collection$')
         groups = {}
         for collection in context.scene.collection.children_recursive:
             match = pattern.fullmatch(collection.name)
-            if match:
-                groups.setdefault(int(match.group(1)), []).append((collection, match.group(1), int(match.group(2))))
+            if match:   # one collection per asset, or legacy one per LOD
+                groups.setdefault(int(match.group(1)), []).append((collection, match.group(1), int(match.group(2) or 0)))
         if not groups:
-            self.report({'ERROR'}, f'No LOD collections matching {asset}_Index_LODN_Collection')
+            self.report({'ERROR'}, f'No asset collections matching {asset}_Index_VersionIndex_Collection')
             return {'CANCELLED'}
         indices = sorted(groups)
         visible = [index for index in indices if any(not col.hide_viewport for col, _, _ in groups[index])]

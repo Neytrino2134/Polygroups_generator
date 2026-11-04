@@ -35,4 +35,23 @@ assert bpy.ops.object.polygroups_unity_collection_step(delta=-1) == {'FINISHED'}
 check(2)
 assert bpy.ops.object.polygroups_unity_collection_step(delta=-1) == {'FINISHED'}
 check(1)
+# New scheme: one AssetName_Index_VersionIndex_Collection per asset holds every LOD.
+for col in list(bpy.data.collections):
+    bpy.data.collections.remove(col)
+for obj in list(bpy.data.objects):
+    bpy.data.objects.remove(obj)
+single = {}
+for index in (1, 2, 3):
+    col = bpy.data.collections.new(f'Tree_12_{index:02d}_Collection')
+    bpy.context.scene.collection.children.link(col)
+    for lod in (0, 1, 2):
+        col.objects.link(bpy.data.objects.new(f'Tree_12_{index:02d}' + (f'.LOD{lod}' if lod else ''),
+                                              bpy.data.meshes.new('Mesh')))
+    single[index] = col
+settings.unity_asset_index = '01'
+assert bpy.ops.object.polygroups_unity_collection_step(delta=1) == {'FINISHED'}
+assert settings.unity_asset_index == '02' and single[1].hide_viewport and not single[2].hide_viewport
+assert bpy.context.active_object.name == 'Tree_12_02'
+assert bpy.ops.object.polygroups_unity_collection_step(delta=-1) == {'FINISHED'}
+assert settings.unity_asset_index == '01' and not single[1].hide_viewport and single[2].hide_viewport
 print('UNITY_COLLECTION_NAVIGATION_PASSED')
