@@ -453,7 +453,7 @@ class QueueProcessingMixin:
             lod_settings = self.scene.polygroups_mesh_finalization_settings
             names = ["smart_lods_count", "smart_lods_final_decimate", "smart_lods_triangulate_all",
                      "smart_lods_decimate_method", "smart_lods_uv_seam_mode"]
-            names.extend(f"smart_lods_target_{i}" for i in range(1, 6))
+            names.extend(f"smart_lods_target_{i}" for i in range(1, 11))
             previous = {name: getattr(lod_settings, name) for name in names + ["smart_lods_auto_arrange"]}
             before = set(bpy.data.objects)
             try:

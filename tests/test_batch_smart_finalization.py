@@ -35,6 +35,14 @@ assert settings.batch_smart_lods_count == final.smart_lods_count == 5
 for group, prefix in ((settings, 'batch_smart_lods'), (final, 'smart_lods')):
     assert [getattr(group, f'{prefix}_target_{i}') for i in range(1, 6)] == [
         3000 if group == settings else 2900, 1500, 1000, 500, 150]
+# LOD Count is no longer capped at 5: up to 10 LODs, each with its own triangle budget.
+for group, prefix in ((settings, 'batch_smart_lods'), (final, 'smart_lods')):
+    setattr(group, f'{prefix}_count', 10)
+    assert getattr(group, f'{prefix}_count') == 10
+    setattr(group, f'{prefix}_count', 11)
+    assert getattr(group, f'{prefix}_count') == 10
+    assert all(getattr(group, f'{prefix}_target_{i}') > 0 for i in range(1, 11))
+    setattr(group, f'{prefix}_count', 5)
 
 # Use real seam-aware operators while avoiding the external Quad Remesher engine.
 settings.batch_save_generated_separately = True

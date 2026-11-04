@@ -1129,12 +1129,17 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_smart_lods_enabled: bpy.props.BoolProperty(
         name="Stage 12: Smart LODs", default=False, update=_update_batch_smart_lods,
     )
-    batch_smart_lods_count: bpy.props.IntProperty(name="LOD Count", default=5, min=1, max=5)
+    batch_smart_lods_count: bpy.props.IntProperty(name="LOD Count", default=5, min=1, max=10)
     batch_smart_lods_target_1: bpy.props.IntProperty(name="LOD0 Tris", default=3000, min=1)
     batch_smart_lods_target_2: bpy.props.IntProperty(name="LOD1 Tris", default=1500, min=1)
     batch_smart_lods_target_3: bpy.props.IntProperty(name="LOD2 Tris", default=1000, min=1)
     batch_smart_lods_target_4: bpy.props.IntProperty(name="LOD3 Tris", default=500, min=1)
     batch_smart_lods_target_5: bpy.props.IntProperty(name="LOD4 Tris", default=150, min=1)
+    batch_smart_lods_target_6: bpy.props.IntProperty(name="LOD5 Tris", default=100, min=1)
+    batch_smart_lods_target_7: bpy.props.IntProperty(name="LOD6 Tris", default=75, min=1)
+    batch_smart_lods_target_8: bpy.props.IntProperty(name="LOD7 Tris", default=50, min=1)
+    batch_smart_lods_target_9: bpy.props.IntProperty(name="LOD8 Tris", default=30, min=1)
+    batch_smart_lods_target_10: bpy.props.IntProperty(name="LOD9 Tris", default=20, min=1)
     batch_smart_lods_decimate_method: bpy.props.EnumProperty(
         name="Decimate Method", items=DECIMATE_METHOD_ITEMS, default="UV_PRESERVE")
     batch_smart_lods_uv_seam_mode: bpy.props.EnumProperty(
