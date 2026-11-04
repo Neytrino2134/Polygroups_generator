@@ -9,12 +9,15 @@ from ..core.mesh_ngons import ngon_count, triangulated_ngon_copy
 from .topology_guard import apply_topology_guard
 
 
-def smart_seams_22(context, obj):
-    smart_seams(context, obj, 22)
+def smart_seams_22(context, obj, polygroups=False):
+    smart_seams(context, obj, 22, polygroups)
 
 
-def smart_seams(context, obj, degrees):
-    """Clear every seam and pin of ``obj`` and generate new Smart Seams at the given surface angle."""
+def smart_seams(context, obj, degrees, polygroups=False):
+    """Clear every seam and pin of ``obj`` and generate new Smart Seams at the given surface angle.
+
+    ``polygroups``: also Generate PolyGroups from the new seams (materials + Face Sets), which is what
+    Quad Remesher reads when it is about to remesh the object; without it the old groups would be stale."""
     if context.object and context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.select_all(action='DESELECT')
@@ -46,6 +49,8 @@ def smart_seams(context, obj, degrees):
     finally:
         if context.object and context.object.mode != 'OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
         settings.smart_seam_angle_limit, settings.smart_seam_replace = saved
+    if polygroups and 'FINISHED' not in bpy.ops.object.generate_polygroups(remesh_preparation=True):
+        raise RuntimeError('Generate PolyGroups failed after Smart Seams')
 
 
 class Phase2MidRemesh:
@@ -77,7 +82,7 @@ class Phase2MidRemesh:
             self.source.data = prepared_mesh
             if original_mesh.users == 0 and not original_mesh.library:
                 bpy.data.meshes.remove(original_mesh)
-        smart_seams_22(context,self.source)
+        smart_seams_22(context,self.source,polygroups=True)   # the source is remeshed next: PolyGroups follow the seams
         p=context.scene.polygroups_model_preparation_settings;q=context.scene.qremesher
         for settings,name,value in ((q,'target_count',dict(get_remesh_preset_counts(context))[self.preset]),
                                     (q,'autodetect_hard_edges',False),(p,'remesh_auto_unwrap_checker',False)):

@@ -75,7 +75,9 @@ bm.to_mesh(source.data)
 bm.free()
 reseamed = queue(pass_number=2)
 assert reseamed.retry_remesh(RuntimeError('Quad Remesher failed (1)'), bpy.context)
-assert reseamed.file_record['retries'][0]['seams'] == 'regenerated, surface angle 25', reseamed.file_record
+assert reseamed.file_record['retries'][0]['seams'] == 'regenerated, surface angle 25, PolyGroups generated', reseamed.file_record
+# PolyGroups follow the new seams: the cube's 6 faces become 6 groups (material slots / Face Sets).
+assert len(source.data.materials) == 6, len(source.data.materials)
 seams = {e.index for e in source.data.edges if e.use_seam}
 assert len(seams) > 1, seams              # a cube's 90 degree edges exceed 25 degrees: all of them are seams
 settings.batch_remesh_retry_reseam = False

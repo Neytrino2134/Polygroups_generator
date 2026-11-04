@@ -410,8 +410,8 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         from .phase2_mid_remesh import smart_seams
         angle = self.settings.batch_remesh_retry_seam_angle
         try:
-            smart_seams(context, source, angle)
-            record["seams"] = f"regenerated, surface angle {angle}"
+            smart_seams(context, source, angle, polygroups=True)
+            record["seams"] = f"regenerated, surface angle {angle}, PolyGroups generated"
         except Exception as seam_error:
             record["seams"] = f"not regenerated: {seam_error}"
             self.report({"WARNING"}, f"Smart Seams before the retry failed ({seam_error}); remeshing with the existing seams")
