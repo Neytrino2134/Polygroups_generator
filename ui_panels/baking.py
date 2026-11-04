@@ -239,6 +239,16 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 text=t(context, "prepare_lowpoly_bake_material"),
                 icon="TEXTURE",
             )
+            # Same material toggle as Render > Material Settings.
+            active = context.active_object
+            material = active.active_material if active is not None and active.type == 'MESH' else None
+            backface_row = material_box.row()
+            backface_row.enabled = material is not None and (
+                material.library is None or material.override_library is not None)
+            if material is not None:
+                backface_row.prop(material, "use_backface_culling", text=t(context, "render_hide_backfaces"))
+            else:
+                backface_row.label(text=t(context, "render_hide_backfaces"), icon="HIDE_ON")
 
             bake_box = column.box()
             bake_box.enabled = not settings.bake_task_is_running
