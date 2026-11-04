@@ -239,6 +239,11 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 text=t(context, "prepare_lowpoly_bake_material"),
                 icon="TEXTURE",
             )
+            material_box.operator(
+                "object.polygroups_remove_unused_slots",
+                text=t(context, "remove_unused_slots"),
+                icon="X",
+            )
             # Same material toggle as Render > Material Settings.
             active = context.active_object
             material = active.active_material if active is not None and active.type == 'MESH' else None

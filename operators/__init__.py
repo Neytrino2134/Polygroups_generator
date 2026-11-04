@@ -66,6 +66,7 @@ from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_append_generated_blends
 from .batch_import import OBJECT_OT_polygroups_select_import_folder
 from .check_material_textures import OBJECT_OT_polygroups_check_material_textures
+from .remove_unused_slots import OBJECT_OT_polygroups_remove_unused_slots
 from .clear_materials import OBJECT_OT_clear_polygroups_materials
 from .clear_edges_seam import MESH_OT_polygroups_clear_selected_edges_seam
 from .clear_edges_seam import MESH_OT_polygroups_clear_inside_edges_seam
@@ -344,6 +345,7 @@ CLASSES = (
     OBJECT_OT_polygroups_arrange_batch_objects,
     OBJECT_OT_polygroups_rename_objects,
     OBJECT_OT_polygroups_check_material_textures,
+    OBJECT_OT_polygroups_remove_unused_slots,
     OBJECT_OT_polygroups_prepare_highpoly_bake_materials,
     OBJECT_OT_polygroups_prepare_lowpoly_bake_material,
     OBJECT_OT_polygroups_calculate_auto_cage,
