@@ -344,3 +344,10 @@ class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
                 text=t(context, "shrinkwrap"),
                 icon="MOD_SHRINKWRAP",
             )
+
+        content = draw_topic(layout, context, "sculpt_2", 'Reshape', "SHAPEKEY_DATA")
+        if content is not None:
+            column = content.column(align=True)
+            column.operator("object.polygroups_reshape", text="Reshape", icon="MOD_MULTIRES")
+            column.operator("object.polygroups_toggle_reshape", text="Show / Hide Reshape", icon="HIDE_OFF")
+            column.label(text="Setup Resculpting + Apply Base into a 'Reshape' shape key", icon="INFO")

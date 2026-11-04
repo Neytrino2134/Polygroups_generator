@@ -182,7 +182,7 @@ from .turnaround_animation import OBJECT_OT_polygroups_render_turnaround_animati
 from .turnaround_animation import OBJECT_OT_polygroups_render_turnaround_views
 from .resculpting import OBJECT_OT_polygroups_add_multires
 from .resculpting import OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly
-from .resculpting import OBJECT_OT_polygroups_setup_resculpting
+from .resculpting import OBJECT_OT_polygroups_setup_resculpting, OBJECT_OT_polygroups_reshape, OBJECT_OT_polygroups_toggle_reshape
 from .select_seam_tool import MESH_OT_polygroups_select_seam_tool
 from .seam_gap_detection import MESH_OT_polygroups_check_seam_gaps
 from .seam_gap_detection import MESH_OT_polygroups_check_and_close_seam_gaps
@@ -360,6 +360,8 @@ CLASSES = (
     OBJECT_OT_polygroups_add_multires,
     OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly,
     OBJECT_OT_polygroups_setup_resculpting,
+    OBJECT_OT_polygroups_reshape,
+    OBJECT_OT_polygroups_toggle_reshape,
     OBJECT_OT_polygroups_rename_and_apply_weld,
     MESH_OT_polygroups_delete_and_fill,
     OBJECT_OT_polygroups_checked_quad_remesh,

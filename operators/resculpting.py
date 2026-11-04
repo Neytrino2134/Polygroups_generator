@@ -149,11 +149,8 @@ class OBJECT_OT_polygroups_add_shrinkwrap_to_highpoly(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
-    bl_idname = "object.polygroups_setup_resculpting"
-    bl_label = "Setup Resculpting"
-    bl_description = "Auto-select the matching Generated highpoly, prepare the active lowpoly and disable the highpoly afterward"
-    bl_options = {"REGISTER", "UNDO"}
+class SetupResculptingMixin:
+    """Setup Resculpting logic shared by the registered operators (a registered operator is not subclassed)."""
 
     @classmethod
     def poll(cls, context):
@@ -212,10 +209,14 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             self.report({'ERROR'}, 'Select a highpoly mesh and make the lowpoly mesh active')
             return {'CANCELLED'}
 
-        target_name = resculpted_name(lowpoly.name)
+        target_name = resculpted_name(lowpoly.name) if self.rename_lowpoly else lowpoly.name
         existing = bpy.data.objects.get(target_name)
         if existing is not None and existing != lowpoly:
             self.report({'ERROR'}, 'Resculpting object already exists: ' + target_name)
+            return {'CANCELLED'}
+        refusal = self.before_setup(lowpoly)
+        if refusal:
+            self.report({'ERROR'}, refusal)
             return {'CANCELLED'}
 
         if ngon_count(lowpoly.data):
@@ -259,11 +260,120 @@ class OBJECT_OT_polygroups_setup_resculpting(bpy.types.Operator):
             context.view_layer.objects.active = lowpoly
             lowpoly.select_set(True)
             context.view_layer.update()
-        lowpoly.name = target_name
-        if lowpoly.data.users == 1:
-            lowpoly.data.name = target_name
+        if self.rename_lowpoly:
+            lowpoly.name = target_name
+            if lowpoly.data.users == 1:
+                lowpoly.data.name = target_name
         self.report(
             {"INFO"},
             f"Resculpting setup: {lowpoly.name} projects to {highpoly.name}",
         )
+        return self.after_setup(context, lowpoly)
+
+    # Hooks for variations of the setup (Reshape): the lowpoly keeps its name, and the result is processed.
+    rename_lowpoly = True
+
+    def before_setup(self, lowpoly):
+        """Return an error text to refuse the setup, or None."""
+        return None
+
+    def after_setup(self, context, lowpoly):
         return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_setup_resculpting(SetupResculptingMixin, bpy.types.Operator):
+    bl_idname = "object.polygroups_setup_resculpting"
+    bl_label = "Setup Resculpting"
+    bl_description = "Auto-select the matching Generated highpoly, prepare the active lowpoly and disable the highpoly afterward"
+    bl_options = {"REGISTER", "UNDO"}
+
+
+RESHAPE_KEY = "Reshape"
+
+
+def reshape_key(obj):
+    keys = getattr(getattr(obj, "data", None), "shape_keys", None)
+    return keys.key_blocks.get(RESHAPE_KEY) if keys else None
+
+
+class OBJECT_OT_polygroups_reshape(SetupResculptingMixin, bpy.types.Operator):
+    """Setup Resculpting, then bake the result into the base mesh as a ``Reshape`` shape key."""
+    bl_idname = "object.polygroups_reshape"
+    bl_label = "Reshape"
+    bl_description = ("Run Setup Resculpting, apply the Multires base and remove the modifier; the lowpoly keeps its "
+                      "original shape as Basis and the result as the Reshape shape key (a before / after slider)")
+    bl_options = {"REGISTER", "UNDO"}
+    rename_lowpoly = False
+
+    def before_setup(self, lowpoly):
+        if lowpoly.data.shape_keys:
+            return "Reshape needs a mesh without shape keys: remove them (or the old Reshape key) first"
+        if lowpoly.library or lowpoly.data.library:
+            return "Make the lowpoly mesh local before Reshape"
+        self._original = [vertex.co.copy() for vertex in lowpoly.data.vertices]
+        return None
+
+    def execute(self, context):
+        settings = context.scene.polygroups_resculpting_settings
+        saved = settings.apply_shrinkwrap
+        # The shrinkwrap result is what Reshape keeps, so it must be applied here.
+        settings.apply_shrinkwrap = True
+        try:
+            return super().execute(context)
+        finally:
+            settings.apply_shrinkwrap = saved
+
+    def after_setup(self, context, lowpoly):
+        modifier = lowpoly.modifiers.get(MULTIRES_MODIFIER_NAME)
+        if modifier is None or len(lowpoly.data.vertices) != len(self._original):
+            self.report({"ERROR"}, "Reshape: the Multires setup did not complete")
+            return {"CANCELLED"}
+        _set_object_mode(context)
+        context.view_layer.objects.active = lowpoly
+        if modifier.total_levels and "FINISHED" not in bpy.ops.object.multires_base_apply(modifier=modifier.name):
+            self.report({"ERROR"}, "Reshape: Apply Base failed")
+            return {"CANCELLED"}
+        lowpoly.modifiers.remove(modifier)
+        mesh = lowpoly.data
+        reshaped = [vertex.co.copy() for vertex in mesh.vertices]
+        # Basis = the shape before, Reshape = the result; the slider blends between them.
+        basis = lowpoly.shape_key_add(name="Basis", from_mix=False)
+        for vertex, key, before in zip(mesh.vertices, basis.data, self._original):
+            vertex.co = before
+            key.co = before
+        key = lowpoly.shape_key_add(name=RESHAPE_KEY, from_mix=False)
+        for point, after in zip(key.data, reshaped):
+            point.co = after
+        key.slider_min, key.slider_max, key.value = 0.0, 1.0, 1.0
+        lowpoly.active_shape_key_index = 1
+        mesh.update()
+        self.report({"INFO"}, f"Reshape: {lowpoly.name} has a '{RESHAPE_KEY}' shape key (0 = before, 1 = after)")
+        return {"FINISHED"}
+
+
+class OBJECT_OT_polygroups_toggle_reshape(bpy.types.Operator):
+    bl_idname = "object.polygroups_toggle_reshape"
+    bl_label = "Show / Hide Reshape"
+    bl_description = "Switch the Reshape shape key of the selected meshes between 0 (before) and 1 (after)"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return any(reshape_key(obj) for obj in _reshape_targets(context))
+
+    def execute(self, context):
+        targets = [obj for obj in _reshape_targets(context) if reshape_key(obj)]
+        # One decision for all meshes: hide when the active one shows the reshape, otherwise show.
+        lead = reshape_key(context.active_object) or reshape_key(targets[0])
+        value = 0.0 if lead.value > 0.5 else 1.0
+        for obj in targets:
+            reshape_key(obj).value = value
+        self.report({"INFO"}, f"Reshape {'shown' if value else 'hidden'} on {len(targets)} mesh(es)")
+        return {"FINISHED"}
+
+
+def _reshape_targets(context):
+    objects = list(context.selected_objects)
+    if context.active_object and context.active_object not in objects:
+        objects.append(context.active_object)
+    return [obj for obj in objects if obj.type == "MESH"]
