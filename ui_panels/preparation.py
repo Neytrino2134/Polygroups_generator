@@ -470,6 +470,12 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                         text=t(context, "batch_import_mode"),
                         expand=True,
                     )
+                retry = group.column(align=True)
+                retry.enabled = not settings.batch_is_running
+                retry.prop(settings, "batch_remesh_retry_enabled")
+                retry_percent = retry.row()
+                retry_percent.enabled = settings.batch_remesh_retry_enabled
+                retry_percent.prop(settings, "batch_remesh_retry_percent")
 
                 from ..operators.import_queue import active_highpoly_collection
 

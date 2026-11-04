@@ -1130,6 +1130,13 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
     batch_smart_lods_enabled: bpy.props.BoolProperty(
         name="Stage 12: Smart LODs", default=False, update=_update_batch_smart_lods,
     )
+    batch_remesh_retry_enabled: bpy.props.BoolProperty(
+        name="Retry Failed Remesh", default=True,
+        description=("When Quad Remesher fails or does not finish on a remesh pass, run that pass once more "
+                     "with a higher Quad Count before the file is given up"))
+    batch_remesh_retry_percent: bpy.props.IntProperty(
+        name="Retry Quad Count +%", default=50, min=1, max=300,
+        description="Quad Count increase of the repeated remesh, relative to the pass's configured count")
     batch_smart_lods_count: bpy.props.IntProperty(name="LOD Count", default=5, min=1, max=10)
     batch_smart_lods_target_1: bpy.props.IntProperty(name="LOD0 Tris", default=3000, min=1)
     batch_smart_lods_target_2: bpy.props.IntProperty(name="LOD1 Tris", default=1500, min=1)

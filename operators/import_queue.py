@@ -300,6 +300,8 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.manifest_update(status="in_progress", started=time.time(), finished=None, error="", collection="")
             self.last_logged_stage = None
             self.pass_number = None
+            self.remesh_count_override = None
+            self.remesh_output_ready = False
             self.file_objects = []
             self.meshes = []
             self.result_meshes = []
@@ -330,6 +332,10 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 self.write_batch_report("stage", event)
             self.advance(context)
         except Exception as error:
+            if self.retry_remesh(error):
+                self.update_progress()
+                self.update_timing()
+                return
             self.file_record.update(
                 error=str(error), error_type=type(error).__name__,
                 failed_stage=self.stage, failed_pass=getattr(self, "pass_number", None),
@@ -355,6 +361,47 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.complete_file(success=False)
         self.update_progress()
         self.update_timing()
+
+    # Quad Remesher problems that more polygons cannot fix: it is missing, unlicensed or not queue-capable.
+    remesh_count_override = None   # Quad Count of the repeated pass; None = the configured one
+    remesh_output_ready = False    # the current pass already produced its mesh
+    NOT_RETRYABLE = ("enable quad remesher", "not available", "does not support", "check its installation")
+
+    def retry_remesh(self, error):
+        """Repeat a failed Quad Remesher pass once with Quad Count raised by the configured percentage.
+
+        Complex topology often makes Quad Remesher fail or stall at the configured count. The pass of the
+        current mesh is started again (a failed stage 1 / 2 / 3 pass each get one retry); a second failure
+        goes the usual way: the file is marked, its data kept, and the queue goes on."""
+        settings = self.settings
+        key = (self.index, self.pass_number, self.mesh_index)
+        retried = self.__dict__.setdefault("remesh_retried", {})
+        if (self.stage not in {"REMESH", "WAIT_REMESH"} or self.pass_method != "QUAD"
+                or not settings.batch_remesh_retry_enabled or retried.get(key)
+                or self.remesh_output_ready or settings.batch_cancel_requested
+                or any(text in str(error).lower() for text in self.NOT_RETRYABLE)):
+            return False
+        base = self.remesh_count_override or self.pass_quad_count
+        count = max(base + 1, round(base * (1 + settings.batch_remesh_retry_percent / 100)))
+        retried[key] = True
+        record = {"pass": self.pass_number, "mesh_index": self.mesh_index, "error": str(error),
+                  "quad_count": base, "retry_quad_count": count, "time": time.time()}
+        self.file_record.setdefault("retries", []).append(record)
+        self.write_batch_report("remesh_retry", record)
+        self.report({"WARNING"}, f"{settings.batch_current_file}: Quad Remesher failed on pass {self.pass_number} "
+                                 f"({error}); repeating with Quad Count {count} (+{settings.batch_remesh_retry_percent}%)")
+        if self.job:
+            try:
+                self.job.abort()
+            finally:
+                self.job = None
+        if self.mesh_index < len(self.pass_sources):
+            self.pass_sources[self.mesh_index].hide_viewport = False
+            self.pass_sources[self.mesh_index].hide_set(False)
+        self.remesh_count_override = count
+        self.stage = "REMESH"
+        settings.batch_stage = self.stage
+        return True
 
     def advance(self, context):
         from .batch_import import find_import_operator
@@ -439,6 +486,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 self.pass_number, self.pass_method, self.pass_quad_count, self.pass_unwrap, self.pass_unwrap_method = self.passes[self.pass_index]
                 self.pass_outputs = []
                 self.mesh_index = 0
+                self.remesh_count_override = None
                 if self.pass_number >= 3 and self.pass_method == "QUAD":
                     remesh_backend(context)
                     self.saved_remesh_settings = (
@@ -463,9 +511,10 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             settings.batch_baking_progress = 0
             source = self.pass_sources[self.mesh_index]
             self.select_source(context, source)
+            self.remesh_output_ready = False
             if self.pass_method == "QUAD":
                 apply_quad_remesher_defaults_once(self.scene)
-                self.scene.qremesher.target_count = self.pass_quad_count
+                self.scene.qremesher.target_count = self.remesh_count_override or self.pass_quad_count
                 if self.pass_number >= 3:
                     self.scene.qremesher.use_materials = getattr(
                         settings, f"batch_stage_{self.pass_number}_use_materials"
@@ -497,6 +546,8 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
             self.select_source(context, source)
             before = set(self.owned_objects)
             self.tracked(lambda: self.job.finish(context))
+            self.remesh_output_ready = True   # later errors are not Quad Remesher's: no count retry
+            self.remesh_count_override = None
             outputs = list(self.owned_objects - before)
             output_meshes = [obj for obj in outputs if obj.type == "MESH"]
             if not output_meshes:
