@@ -598,10 +598,12 @@ class UnityRenderProgressMixin:
             self._window_manager.progress_begin(0, 100)
             self._progress_started = True
             self._timer = self._window_manager.event_timer_add(.1, window=context.window)
-            self._window_manager.modal_handler_add(self)
             self._start_next()
             if self._finished:
+                # Finished (e.g. refused by a check) before any modal work: never leave a modal
+                # handler behind an operator that returns CANCELLED/FINISHED - Blender crashes.
                 return self._result
+            self._window_manager.modal_handler_add(self)
             bpy.app.timers.register(self._watchdog, first_interval=.1)
             return {'RUNNING_MODAL'}
         except Exception as error:
@@ -711,6 +713,17 @@ class UnityRenderProgressMixin:
         return {'PASS_THROUGH'}
 
 
+def unprepared_meshes_error(context):
+    """Message when a selected mesh was not prepared (Generated LODs / Rename / Unity Prepare), else None."""
+    names = [obj.name for obj in context.selected_objects
+             if obj.type == "MESH" and not obj.get("unity_prepared")]
+    if not names:
+        return None
+    shown = ", ".join(names[:3]) + (f" and {len(names) - 3} more" if len(names) > 3 else "")
+    return (f"Meshes are not prepared for Unity export: {shown}. "
+            "Generate LODs, rename and run Unity Prepare on each selected mesh first")
+
+
 class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Operator):
     bl_idname = "object.polygroups_export_unity"
     bl_label = "Export Unity Assets"
@@ -724,6 +737,11 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
 
     def invoke(self, context, event):
         error = validate_unity_arp_selection(context)
+        if error:
+            context.scene.polygroups_mesh_finalization_settings.unity_export_status = error
+            self.report({'ERROR'}, error)
+            return {'CANCELLED'}
+        error = None if self.batch_prepared else unprepared_meshes_error(context)
         if error:
             context.scene.polygroups_mesh_finalization_settings.unity_export_status = error
             self.report({'ERROR'}, error)
@@ -771,6 +789,11 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
             settings.unity_export_status = error
             self.report({'ERROR'}, error)
             return {'CANCELLED'}
+        error = unprepared_meshes_error(context)
+        if error:
+            settings.unity_export_status = error
+            self.report({'ERROR'}, error)
+            return {'CANCELLED'}
         if settings.unity_export_all_renders and context.scene.camera is None:
             self.report({'ERROR'}, "Set a scene camera before exporting renders")
             return {'CANCELLED'}
@@ -785,9 +808,6 @@ class OBJECT_OT_polygroups_export_unity(UnityRenderProgressMixin, bpy.types.Oper
         root = bpy.path.abspath(directory)
         selected = tuple(context.selected_objects)
         meshes = [obj for obj in selected if obj.type == "MESH"]
-        if any(not obj.get("unity_prepared") for obj in meshes):
-            self.report({"ERROR"}, "Use Unity Prepare on each selected mesh first")
-            return {"CANCELLED"}
         active = context.view_layer.objects.active
         mode = active.mode if active else "OBJECT"
         rig = None
