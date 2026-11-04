@@ -6,6 +6,7 @@ from .callbacks import (
     _smart_cage_strength_set,
     bpy,
 )
+from ..core import foliage_card
 
 
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
@@ -309,3 +310,72 @@ class POLYGROUPS_PG_resculpting_settings(bpy.types.PropertyGroup):
         precision=4,
         unit="LENGTH",
     )
+
+    # Foliage Cards (07 Resculpting subsection) — see docs/FOLIAGE_CARD_SPEC.md
+    foliage_card_axis: bpy.props.EnumProperty(
+        name="Projection Axis", items=foliage_card.AXIS_ITEMS, default="AUTO",
+        description="Direction the card is projected along")
+    foliage_card_side: bpy.props.EnumProperty(
+        name="Side", items=foliage_card.SIDE_ITEMS, default="FRONT",
+        description="Which side of the highpoly the card faces")
+    foliage_card_margin: bpy.props.FloatProperty(
+        name="Frame Margin", default=0.02, min=0.0, max=0.5, subtype="FACTOR",
+        description="Extra border around the silhouette inside the UV frame")
+    foliage_card_resolution: bpy.props.EnumProperty(
+        name="Mask Resolution", default="512",
+        items=(("256", "256", ""), ("512", "512", ""), ("1024", "1024", ""), ("2048", "2048", "")),
+        description="Ray grid resolution for the silhouette mask")
+    foliage_card_gap_close: bpy.props.IntProperty(
+        name="Close Gaps (px)", default=0, min=0, soft_max=16,
+        description="Morphological closing; 0 keeps the gaps between leaf lobes")
+    foliage_card_min_island: bpy.props.FloatProperty(
+        name="Min Island", default=0.005, min=0.0, max=0.5, subtype="FACTOR",
+        description="Drop silhouette islands smaller than this fraction of the total area")
+    foliage_card_cut_holes: bpy.props.BoolProperty(
+        name="Cut Large Holes", default=False,
+        description="Cut holes bigger than Min Hole out of the card; otherwise alpha shows every hole")
+    foliage_card_min_hole: bpy.props.FloatProperty(
+        name="Min Hole", default=0.02, min=0.0, max=1.0, subtype="FACTOR",
+        description="Holes smaller than this fraction of the leaf area are always filled")
+    foliage_card_padding: bpy.props.IntProperty(
+        name="Padding (px)", default=2, min=0, soft_max=16,
+        description="Guaranteed outward margin of the card outline around the silhouette")
+    foliage_card_triangle_limit: bpy.props.IntProperty(
+        name="Triangle Limit", default=200, min=0, soft_max=2000,
+        description="Triangle budget for all cards; 0 uses only the tolerances")
+    foliage_card_outline_tolerance: bpy.props.FloatProperty(
+        name="Outline Tolerance (px)", default=1.5, min=0.25, soft_max=16.0,
+        description="Silhouette simplification error in mask pixels (raised automatically to fit the budget)")
+    foliage_card_depth_tolerance: bpy.props.FloatProperty(
+        name="Depth Tolerance", default=0.003, min=0.0, soft_max=0.05, precision=4, unit="LENGTH",
+        description="Add interior vertices where the card deviates from the leaf surface more than this")
+    foliage_card_depth_mode: bpy.props.EnumProperty(
+        name="Depth", items=foliage_card.DEPTH_MODE_ITEMS, default="DEPTH_MAP",
+        description="How card vertices follow the highpoly surface")
+    foliage_card_depth_smoothing: bpy.props.IntProperty(
+        name="Depth Smoothing", default=1, min=0, soft_max=10,
+        description="Smooth the depth map before sampling so fine relief does not jitter the card")
+    foliage_card_offset: bpy.props.FloatProperty(
+        name="Surface Offset", default=0.011, soft_min=0.0, soft_max=0.1, precision=4, unit="LENGTH",
+        description="Move the card toward the viewer from the leaf surface")
+    foliage_card_islands: bpy.props.EnumProperty(
+        name="Islands", items=foliage_card.ISLAND_ITEMS, default="JOIN",
+        description="One card object or one object per leaf")
+    foliage_card_hide_source: bpy.props.BoolProperty(
+        name="Hide Highpoly", default=False, description="Hide the highpoly after generating the card")
+    foliage_card_keep_mask: bpy.props.BoolProperty(
+        name="Keep Mask Image", default=False,
+        description="Store the silhouette mask as an Image for inspection")
+    foliage_card_auto_bake: bpy.props.BoolProperty(
+        name="Auto Bake", default=False,
+        description="Run Prepare And Bake (selected highpoly to card) right after generation")
+    foliage_card_pack_islands: bpy.props.BoolProperty(
+        name="Pack UV Islands", default=False,
+        description="Pack card UVs with UVPackmaster before baking; off keeps the front-view layout")
+    foliage_card_alpha_map: bpy.props.BoolProperty(
+        name="AlphaMap", default=True,
+        description="After baking, ray-cast an exact silhouette AlphaMap and plug it into the card material")
+    foliage_card_bake_resolution: bpy.props.IntProperty(
+        name="Bake Resolution", default=2048, min=64, soft_max=8192,
+        description="Texture size for the card bake")
+    foliage_card_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})

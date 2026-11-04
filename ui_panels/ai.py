@@ -351,3 +351,40 @@ class VIEW3D_PT_polygroups_resculpting(bpy.types.Panel):
             column.operator("object.polygroups_reshape", text="Reshape", icon="MOD_MULTIRES")
             column.operator("object.polygroups_toggle_reshape", text="Show / Hide Reshape", icon="HIDE_OFF")
             column.label(text="Setup Resculpting + Apply Base into a 'Reshape' shape key", icon="INFO")
+
+        content = draw_topic(layout, context, "sculpt_3", "Foliage Cards", "IMAGE_ALPHA")
+        if content is not None:
+            draw_foliage_cards(content, context, settings)
+
+
+def draw_foliage_cards(layout, context, settings):
+    column = layout.column(align=True)
+    row = column.row(align=True)
+    row.scale_y = 1.3
+    row.operator("object.polygroups_generate_foliage_card", text="Generate Card", icon="IMAGE_ALPHA")
+    row.operator("object.polygroups_bake_foliage_card", text="Bake Card", icon="RENDER_STILL")
+    if settings.foliage_card_status:
+        column.label(text=settings.foliage_card_status, icon="INFO")
+
+    groups = (
+        ("Projection", "VIEW_CAMERA", ("foliage_card_axis", "foliage_card_side", "foliage_card_margin")),
+        ("Silhouette Mask", "MOD_MASK", ("foliage_card_resolution", "foliage_card_gap_close",
+                                         "foliage_card_min_island", "foliage_card_cut_holes",
+                                         "foliage_card_min_hole", "foliage_card_padding")),
+        ("Shape", "MESH_DATA", ("foliage_card_triangle_limit", "foliage_card_outline_tolerance",
+                                "foliage_card_depth_tolerance", "foliage_card_islands")),
+        ("Surface", "MOD_SHRINKWRAP", ("foliage_card_depth_mode", "foliage_card_offset",
+                                       "foliage_card_depth_smoothing")),
+        ("UV / Bake", "RENDER_STILL", ("foliage_card_auto_bake", "foliage_card_alpha_map",
+                                       "foliage_card_pack_islands",
+                                       "foliage_card_bake_resolution", "foliage_card_hide_source",
+                                       "foliage_card_keep_mask")),
+    )
+    for title, icon, props in groups:
+        box = layout.box().column(align=True)
+        box.label(text=title, icon=icon)
+        for prop in props:
+            sub = box.row(align=True)
+            if prop == "foliage_card_min_hole":
+                sub.active = settings.foliage_card_cut_holes
+            sub.prop(settings, prop)
