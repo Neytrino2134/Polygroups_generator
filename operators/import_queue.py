@@ -332,7 +332,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
                 self.write_batch_report("stage", event)
             self.advance(context)
         except Exception as error:
-            if self.retry_remesh(error):
+            if self.retry_remesh(error, context):
                 self.update_progress()
                 self.update_timing()
                 return
@@ -367,7 +367,7 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
     remesh_output_ready = False    # the current pass already produced its mesh
     NOT_RETRYABLE = ("enable quad remesher", "not available", "does not support", "check its installation")
 
-    def retry_remesh(self, error):
+    def retry_remesh(self, error, context=None):
         """Repeat a failed Quad Remesher pass once with Quad Count raised by the configured percentage.
 
         Complex topology often makes Quad Remesher fail or stall at the configured count. The pass of the
@@ -398,10 +398,23 @@ class ImportQueue(QueueProcessingMixin, QueueRedoMixin):
         if self.mesh_index < len(self.pass_sources):
             self.pass_sources[self.mesh_index].hide_viewport = False
             self.pass_sources[self.mesh_index].hide_set(False)
+            if settings.batch_remesh_retry_reseam and context is not None:
+                self.reseam_for_retry(context, self.pass_sources[self.mesh_index], record)
         self.remesh_count_override = count
         self.stage = "REMESH"
         settings.batch_stage = self.stage
         return True
+
+    def reseam_for_retry(self, context, source, record):
+        """Complex seams can be what Quad Remesher chokes on: start the repeat from fresh Smart Seams."""
+        from .phase2_mid_remesh import smart_seams
+        angle = self.settings.batch_remesh_retry_seam_angle
+        try:
+            smart_seams(context, source, angle)
+            record["seams"] = f"regenerated, surface angle {angle}"
+        except Exception as seam_error:
+            record["seams"] = f"not regenerated: {seam_error}"
+            self.report({"WARNING"}, f"Smart Seams before the retry failed ({seam_error}); remeshing with the existing seams")
 
     def advance(self, context):
         from .batch_import import find_import_operator

@@ -10,6 +10,11 @@ from .topology_guard import apply_topology_guard
 
 
 def smart_seams_22(context, obj):
+    smart_seams(context, obj, 22)
+
+
+def smart_seams(context, obj, degrees):
+    """Clear every seam and pin of ``obj`` and generate new Smart Seams at the given surface angle."""
     if context.object and context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.select_all(action='DESELECT')
@@ -34,7 +39,7 @@ def smart_seams_22(context, obj):
                 for loop in face.loops:loop[uv].pin_uv = False
         bmesh.update_edit_mesh(obj.data)
         bpy.ops.mesh.select_all(action='SELECT')
-        settings.smart_seam_angle_limit = math.radians(22)
+        settings.smart_seam_angle_limit = math.radians(degrees)
         settings.smart_seam_replace = True
         if 'FINISHED' not in bpy.ops.mesh.polygroups_mark_smart_angle_seams('EXEC_DEFAULT'):
             raise RuntimeError('Smart Seams Generator failed')

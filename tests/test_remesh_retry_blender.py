@@ -63,6 +63,27 @@ for change in (dict(stage='UNWRAP_PASS'), dict(pass_method='VOXEL'), dict(remesh
 assert not queue(pass_number=2).retry_remesh(RuntimeError('Quad Remesher is not available'))
 settings.batch_remesh_retry_enabled = False
 assert not queue(pass_number=2).retry_remesh(RuntimeError('Quad Remesher failed (1)'))
+# Before the repeat all old seams are cleared and Smart Seams are generated at surface angle 25.
+settings.batch_remesh_retry_enabled = True
+assert settings.batch_remesh_retry_reseam and settings.batch_remesh_retry_seam_angle == 25
+import bmesh
+bm = bmesh.new()
+bm.from_mesh(source.data)
+for edge in bm.edges:
+    edge.seam = edge.index == 0          # one stray seam from the failed attempt
+bm.to_mesh(source.data)
+bm.free()
+reseamed = queue(pass_number=2)
+assert reseamed.retry_remesh(RuntimeError('Quad Remesher failed (1)'), bpy.context)
+assert reseamed.file_record['retries'][0]['seams'] == 'regenerated, surface angle 25', reseamed.file_record
+seams = {e.index for e in source.data.edges if e.use_seam}
+assert len(seams) > 1, seams              # a cube's 90 degree edges exceed 25 degrees: all of them are seams
+settings.batch_remesh_retry_reseam = False
+for edge in source.data.edges:
+    edge.use_seam = False
+assert queue(pass_number=3).retry_remesh(RuntimeError('x'), bpy.context)
+assert not any(e.use_seam for e in source.data.edges)
+settings.batch_remesh_retry_reseam = True
 settings.batch_remesh_retry_enabled = True
 settings.batch_remesh_retry_percent = 100
 assert queue(pass_number=2).retry_remesh(RuntimeError('x')) is True

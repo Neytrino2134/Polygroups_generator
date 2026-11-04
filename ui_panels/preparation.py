@@ -476,6 +476,12 @@ class VIEW3D_PT_polygroups_batch_import(bpy.types.Panel):
                 retry_percent = retry.row()
                 retry_percent.enabled = settings.batch_remesh_retry_enabled
                 retry_percent.prop(settings, "batch_remesh_retry_percent")
+                retry_seams = retry.column(align=True)
+                retry_seams.enabled = settings.batch_remesh_retry_enabled
+                retry_seams.prop(settings, "batch_remesh_retry_reseam")
+                retry_angle = retry_seams.row()
+                retry_angle.enabled = settings.batch_remesh_retry_reseam
+                retry_angle.prop(settings, "batch_remesh_retry_seam_angle")
 
                 from ..operators.import_queue import active_highpoly_collection
 

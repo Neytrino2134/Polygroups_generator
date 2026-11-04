@@ -1134,6 +1134,12 @@ class POLYGROUPS_PG_model_preparation_settings(bpy.types.PropertyGroup):
         name="Retry Failed Remesh", default=True,
         description=("When Quad Remesher fails or does not finish on a remesh pass, run that pass once more "
                      "with a higher Quad Count before the file is given up"))
+    batch_remesh_retry_reseam: bpy.props.BoolProperty(
+        name="Regenerate Seams Before Retry", default=True,
+        description="Clear all seams of the mesh and create new ones with Smart Seams Generator before the repeated remesh")
+    batch_remesh_retry_seam_angle: bpy.props.IntProperty(
+        name="Retry Surface Angle", default=25, min=1, max=89,
+        description="Surface angle (degrees) of the Smart Seams Generator used before the repeated remesh")
     batch_remesh_retry_percent: bpy.props.IntProperty(
         name="Retry Quad Count +%", default=50, min=1, max=300,
         description="Quad Count increase of the repeated remesh, relative to the pass's configured count")
