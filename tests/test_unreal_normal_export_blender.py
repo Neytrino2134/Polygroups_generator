@@ -94,10 +94,15 @@ with TemporaryDirectory() as directory:
                 assert path.read_bytes()[24] == 8  # PNG IHDR bit depth per channel.
                 expected[1] = 1.0 - expected[1]
             assert max(abs(a - b) for a, b in zip(rgba, expected)) < .005, (rgba, expected)
-        for local_info in output.rglob('MeshInfo.json'):
+        for local_info in output.rglob('MeshInfo*.json'):
             document = json.loads(local_info.read_text())
             for item in document['meshes']:
                 assert all((local_info.parent / texture['path']).is_file() for texture in item['textures'])
+            if document.get('Format') == 'FBX':
+                surface = document['fab_technical_details']['materials_and_textures']
+                assert surface['normal_map_orientation'] == preferred
+                assert surface['texture_dimensions'] == [[4, 4]]
+                assert surface['textures'] == 2  # Count the bound normal, not the alternate file.
         assert (image.filepath, image.filepath_raw) == original_paths
         assert node.image == image and source.read_bytes() == before
 

@@ -18,8 +18,8 @@ from polygroups_generator import ui
 s = bpy.context.scene.polygroups_mesh_finalization_settings
 s.mesh_export_sort = 'LODS'
 s.mesh_export_fbx = s.mesh_export_glb = s.mesh_export_gltf = True
-s.mesh_export_info_format = 'JSON'
-assert s.unreal_glb_mode == 'COMBINED'
+assert s.mesh_export_info_format == 'JSON'
+assert s.unreal_glb_mode == 'AUTO'
 meshes = []
 with TemporaryDirectory() as temp:
     root = Path(temp)
@@ -144,6 +144,31 @@ with TemporaryDirectory() as temp:
     assert legacy_info['Engine'] == 'Unreal'
     assert legacy_info['totals']['meshes'] == 3
     assert all(set(item['files']) == {'FBX', 'GLTF'} for item in legacy_info['meshes'])
+    assert all(item['files']['GLTF'].startswith('GLTF/') for item in legacy_info['meshes'])
+    # The quality layout can package each selected asset in one file too.
+    for obj in meshes[1:3]:
+        obj.select_set(True)
+    s.mesh_export_glb = True
+    s.unreal_glb_mode = s.unreal_gltf_mode = 'COMBINED'
+    assert bpy.ops.object.polygroups_export_selected_meshes() == {'FINISHED'}
+    info = json.loads((output / 'MeshInfo.json').read_text())
+    for format in ('FBX', 'GLB', 'GLTF'):
+        directory = output / format
+        local = json.loads((directory / f'MeshInfo_{format}.json').read_text())
+        assert local['Format'] == format and local['Path'] == str(directory.resolve())
+        assert {row['name'] for row in local['meshes']} == {row['name'] for row in info['meshes']}
+        assert all(set(row['files']) == {format} and (directory / row['file']).is_file()
+                   for row in local['meshes'])
+    for base, objects in (('Legacy_01', legacy), ('Tree_19_01', meshes[1:3])):
+        expected = {obj.name for obj in objects}
+        gltf = json.loads((output / 'GLTF' / (base + '.gltf')).read_text())
+        assert {node['name'] for node in gltf['nodes']} == expected
+        glb = (output / 'GLB' / (base + '.glb')).read_bytes()
+        json_length, = struct.unpack_from('<I', glb, 12)
+        assert {node['name'] for node in json.loads(glb[20:20 + json_length])['nodes']} == expected
+        assert {row['files']['GLB'] for row in info['meshes'] if row['name'] in expected} == {f'GLB/{base}.glb'}
+        assert all((output / row['files']['FBX']).is_file() for row in info['meshes'] if row['name'] in expected)
+    s.mesh_export_glb = False
     s.mesh_export_fbx = s.mesh_export_gltf = False
     try:
         result = bpy.ops.object.polygroups_export_selected_meshes()
@@ -171,11 +196,27 @@ with TemporaryDirectory() as temp:
             assert directory.is_dir() and (directory / 'Textures').is_dir()
             assert list(directory.rglob('Textures')) == [directory / 'Textures']
             assert len(list((directory / 'Textures').glob('*.png'))) == 1
-            local = json.loads((directory / 'MeshInfo.json').read_text())
+            local = json.loads((directory / f'MeshInfo_{format}.json').read_text())
+            assert local['Format'] == format and local['Path'] == str(directory.resolve())
             assert local['Engine'] == 'Unreal' and len(local['assets']) == 2
             assert local['totals']['meshes'] == 6
             assert all(set(item['files']) == {format} for item in local['meshes'])
             assert all((directory / item['files'][format]).is_file() for item in local['meshes'])
+            details = local['fab_technical_details']
+            geometry = details['geometry']
+            assert geometry['assets'] == 2 and geometry['pack_of_multiple_assets']
+            assert geometry['total_triangles'] == 72 and geometry['unique_meshes'] == 6
+            assert geometry['includes_lods'] and geometry['lods'] == 2
+            assert geometry['ranges']['total_triangles'] == {'min': 36, 'max': 36}
+            assert geometry['bounding_box_size_x'] == 2 and geometry['bounding_box_unit'] == 'm'
+            assert geometry['quads'] == (36 if format == 'FBX' else 0)
+            assert geometry['triangles'] == (0 if format == 'FBX' else 72)
+            surface = details['materials_and_textures']
+            assert surface['materials'] == 1 and surface['textures'] == 1
+            assert surface['texture_dimensions'] == [[4, 4]]
+            assert surface['texture_resolution'] == 4 and surface['uv_channels'] == 1
+            assert surface['overlapping_uv'] is None and surface['scanned'] is None
+            assert details['rigging_and_animation']['animation_tracks'] == 0
         for number in (1, 2):
             base = f'Tree_19_{number:02d}'
             assert (output / 'GLB' / (base + '.glb')).is_file()

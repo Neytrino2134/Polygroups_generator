@@ -30,6 +30,7 @@ def editable(context):
         and not p.phase2_final_is_running and not p.phase2_auto_render_running
         and not p.batch_is_running and not p.phase2_is_running and not p.phase2_pipeline_running
         and not context.scene.polygroups_baking_settings.bake_task_is_running
+        and not context.scene.polygroups_baking_settings.uv_bake_is_running
         and not context.scene.polygroups_render_settings.is_running)
 
 

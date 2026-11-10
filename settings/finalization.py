@@ -642,13 +642,15 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
     mesh_export_glb: bpy.props.BoolProperty(name="GLB", default=False)
     mesh_export_gltf: bpy.props.BoolProperty(name="GLTF", default=False)
     unreal_glb_mode: bpy.props.EnumProperty(name="GLB Mode", items=(
-        ("COMBINED", "All LODs in One GLB", "One self-contained GLB per asset containing all selected LOD meshes"),
-        ("SEPARATE", "Separate LODs", "One self-contained GLB file per selected mesh")),
-        default="COMBINED")
+        ("COMBINED", "One File per Asset", "One self-contained GLB per asset containing all selected LOD meshes"),
+        ("SEPARATE", "Separate LODs", "One self-contained GLB file per selected mesh"),
+        ("AUTO", "Follow Sort By", "Combine in LOD layouts and export separate files in quality and set layouts")),
+        default="AUTO")
     unreal_gltf_mode: bpy.props.EnumProperty(name="GLTF Mode", items=(
         ("COMBINED", "All LODs in One GLTF", "One embedded GLTF per asset containing its selected LOD meshes"),
-        ("SHARED", "Separate LODs / Shared Textures", "Separate GLTF files for LODs with a shared texture directory")),
-        default="COMBINED")
+        ("SHARED", "Separate LODs / Shared Textures", "Separate GLTF files for LODs with a shared texture directory"),
+        ("AUTO", "Follow Sort By", "Combine in LOD layouts and export separate embedded files in quality and set layouts")),
+        default="AUTO")
     mesh_export_sort: bpy.props.EnumProperty(
         name="Sort By",
         description="Arrange exported FAB meshes by asset set or by mesh quality",
@@ -681,7 +683,7 @@ class POLYGROUPS_PG_mesh_finalization_settings(bpy.types.PropertyGroup):
             ("JSON", "JSON", "Write MeshInfo.json"),
             ("TXT", "TXT", "Write MeshInfo.txt"),
         ),
-        default="NONE",
+        default="JSON",
     )
     blend_export_directory: bpy.props.StringProperty(
         name="Blend Output",

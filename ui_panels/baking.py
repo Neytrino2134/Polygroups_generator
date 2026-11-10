@@ -1,6 +1,7 @@
 """Baking section panels."""
 import bpy
 from ..localization import t
+from ..operators.uvpackmaster_controls import uvpackmaster_packing_schemes
 from .common import (
     draw_optional_prop,
     draw_section_header_icon,
@@ -8,6 +9,37 @@ from .common import (
     section_content_visible,
     uvpackmaster_status,
 )
+
+
+def _draw_uvpackmaster_scheme(layout, context, *, create=False):
+    access = uvpackmaster_packing_schemes(context, ui_drawing=True)
+    scheme = access.active_g_scheme
+    row = layout.row(align=True)
+    if access.g_schemes:
+        row.operator_context = 'INVOKE_DEFAULT'
+        row.operator(
+            "wm.call_menu",
+            text=f"Scheme: {scheme.name} ({len(scheme.groups)})" if scheme else "Select Scheme",
+            icon="GROUP_UVS",
+        ).name = "POLYGROUPS_MT_uvpackmaster_schemes"
+    else:
+        row.label(text="No grouping schemes")
+    if create:
+        row.operator("uvpackmaster4.new_grouping_scheme", text="", icon="ADD").gs_access_desc_id = "packing"
+
+
+def _draw_uvpackmaster_edit_boxes(layout, context):
+    from uvpackmaster4.app_iface import get_prefs
+
+    row = layout.row()
+    row.operator_context = 'EXEC_DEFAULT'
+    prefs = get_prefs()
+    if prefs.box_rendering and prefs.group_scheme_boxes_editing:
+        row.operator("uvpackmaster4.finish_box_rendering", icon="CHECKMARK")
+    else:
+        scheme = uvpackmaster_packing_schemes(context, ui_drawing=True).active_g_scheme
+        row.enabled = scheme is not None and scheme.target_box_editing() and not prefs.box_rendering
+        row.operator("wm.polygroups_uvpackmaster_edit_scheme_boxes", icon="UV")
 
 
 class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
@@ -195,7 +227,8 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             column.separator()
             auto_bake_row = column.row(align=True)
             auto_bake_row.scale_y = 1.3
-            auto_bake_row.enabled = not settings.bake_task_is_running
+            auto_bake_row.enabled = not (settings.bake_task_is_running or settings.autobake_queue_running
+                                         or settings.uv_bake_is_running)
             auto_bake_row.operator_context = 'INVOKE_DEFAULT'
             auto_bake_row.operator(
                 "object.polygroups_checked_prepare_and_bake",
@@ -222,7 +255,7 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                         text=f"{settings.bake_task_progress:.0f}%",
                     )
             material_box = column.box()
-            material_box.enabled = not settings.bake_task_is_running
+            material_box.enabled = not (settings.bake_task_is_running or settings.uv_bake_is_running)
             material_box.label(text=t(context, "material_setup"), icon="MATERIAL")
             material_box.operator(
                 "object.polygroups_check_material_textures",
@@ -256,7 +289,8 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 backface_row.label(text=t(context, "render_hide_backfaces"), icon="HIDE_ON")
 
             bake_box = column.box()
-            bake_box.enabled = not settings.bake_task_is_running
+            bake_box.enabled = not (settings.bake_task_is_running or settings.autobake_queue_running
+                                    or settings.uv_bake_is_running)
             bake_box.label(text=t(context, "bake_action"), icon="RENDER_STILL")
             bake_box.operator(
                 "object.polygroups_checked_bake_selected_to_active",
@@ -268,9 +302,40 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 text=t(context, "prepare_and_bake"),
                 icon="RENDER_RESULT",
             )
+            bake_box.operator(
+                "object.polygroups_remove_unused_slots",
+                text=t(context, "remove_unused_slots"),
+                icon="X",
+            )
+
+            queue_box = column.box()
+            queue_box.label(text="AutoBake Queue", icon="PRESET")
+            controls = queue_box.column(align=True)
+            controls.enabled = not settings.autobake_queue_running
+            row = controls.row(align=True)
+            row.operator("object.polygroups_autobake_queue_edit", text="Add to Queue", icon="ADD").action = "ADD"
+            clear = row.row(align=True)
+            clear.enabled = bool(settings.autobake_queue)
+            clear.operator("object.polygroups_autobake_queue_edit", text="Clear Queue", icon="TRASH").action = "CLEAR"
+            for index, entry in enumerate(settings.autobake_queue):
+                row = controls.row(align=True)
+                target = entry.target.name if entry.target else "Missing low-poly"
+                source = entry.source.name if entry.source else "Missing high-poly" if entry.manual_source else "Auto"
+                icon = {"DONE": "CHECKMARK", "FAILED": "ERROR", "RUNNING": "TIME"}.get(entry.state, "MESH_DATA")
+                row.label(text=f"{target} ← {source}", icon=icon)
+                remove = row.operator("object.polygroups_autobake_queue_edit", text="", icon="X")
+                remove.action, remove.index = "REMOVE", index
+                if entry.message:
+                    controls.label(text=entry.message)
+            controls.operator("object.polygroups_autobake_queue_run", icon="PLAY")
+            if settings.autobake_queue_running:
+                queue_box.progress(factor=settings.autobake_queue_progress / 100, type="BAR",
+                                   text=f"{settings.autobake_queue_progress:.0f}%")
+            if settings.autobake_queue_status:
+                queue_box.label(text=settings.autobake_queue_status)
 
             save_box = column.box()
-            save_box.enabled = not settings.bake_task_is_running
+            save_box.enabled = not (settings.bake_task_is_running or settings.uv_bake_is_running)
             save_box.label(text=t(context, "save_textures_group"), icon="FILE_FOLDER")
             save_box.operator(
                 "object.polygroups_save_bake_textures",
@@ -287,11 +352,13 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                 text=t(context, "merge_materials_textures"),
                 icon="NODE_COMPOSITING",
             )
+            save_box.prop(settings, "merge_duplicate_meshes", text=t(context, "merge_duplicate_meshes"))
 
         content = draw_topic(layout, context, "bake_5", 'UV Bake (Transfer to New UV)', "UV")
         if content is not None:
             column = content.column(align=True)
-            column.enabled = not settings.bake_task_is_running
+            column.enabled = not (settings.bake_task_is_running or settings.uv_bake_is_running
+                                  or settings.autobake_queue_running)
             obj = context.active_object
             if obj is not None and obj.type == 'MESH':
                 column.prop_search(settings, "uv_bake_source_uv", obj.data, "uv_layers", text="From UV")
@@ -301,9 +368,12 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
                     source, target = resolve_uv_maps(obj.data, settings.uv_bake_source_uv, settings.uv_bake_target_uv)
                     column.label(text=f"{source}  ->  {target}", icon="UV_DATA")
                 except (ValueError, StopIteration) as error:
-                    column.label(text=str(error), icon="ERROR")
+                    if len(obj.data.uv_layers) == 1:
+                        column.label(text="Create or pack a new UV map below", icon="INFO")
+                    else:
+                        column.label(text=str(error), icon="ERROR")
             else:
-                column.label(text="Select a mesh with two UV maps", icon="INFO")
+                column.label(text="Select meshes with UV maps", icon="INFO")
             row = column.row(align=True)
             row.prop(settings, "uv_bake_base_color")
             row.prop(settings, "uv_bake_normal")
@@ -311,12 +381,27 @@ class VIEW3D_PT_polygroups_baking(bpy.types.Panel):
             res_row.label(text="Output Resolution")
             res_row.prop(settings, "uv_bake_resolution", expand=True)
             column.prop(settings, "uv_bake_duplicate")
+            actions = column.column(align=True)
+            actions.operator("object.polygroups_uv_bake", text="Create New UV", icon="ADD").action = 'CREATE'
+            actions.operator("object.polygroups_uv_bake", text="Pack to New UV", icon="UV").action = 'PACK'
+            actions.row(align=True).prop(settings, "uv_bake_pack_mode", expand=True)
+            actions.operator("object.polygroups_uv_bake", text="Pack and UV Bake", icon="RENDER_RESULT").action = 'PACK_BAKE'
+            actions.row(align=True).prop(settings, "uv_bake_pack_bake_mode", expand=True)
             column.label(text="New textures + MergeMask are saved to Bakes/<mesh>", icon="INFO")
+            installed, enabled, available = uvpackmaster_status(context)
+            if installed and enabled and available:
+                _draw_uvpackmaster_scheme(column, context)
+                _draw_uvpackmaster_edit_boxes(column, context)
             bake_row = column.row(align=True)
             bake_row.scale_y = 1.3
-            bake_row.operator("object.polygroups_uv_bake", text="UV Bake", icon="RENDER_RESULT")
+            meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+            bake_row.enabled = bool(meshes) and all(len(obj.data.uv_layers) >= 2 for obj in meshes)
+            bake_row.operator("object.polygroups_uv_bake", text="UV Bake", icon="RENDER_RESULT").action = 'BAKE'
+            if settings.uv_bake_is_running or settings.uv_bake_progress > 0:
+                content.progress(factor=settings.uv_bake_progress / 100, type="BAR",
+                                 text=f"{settings.uv_bake_progress:.0f}%")
             if settings.uv_bake_status:
-                column.label(text=settings.uv_bake_status)
+                content.label(text=settings.uv_bake_status)
 
         content = draw_topic(layout, context, "bake_4", 'Cleanup', "TRASH")
         if content is not None:
@@ -527,10 +612,24 @@ class VIEW3D_PT_polygroups_uv_preparation(bpy.types.Panel):
                 content.label(text=t(context, "uvpackmaster_enable_hint"))
                 return
 
-            main_props = context.scene.uvpm4_props.default_main_props
+            from uvpackmaster4.app_iface import get_main_props
+
+            main_props = get_main_props(context)
             content.label(text=t(context, "uvpackmaster_available"), icon="CHECKMARK")
 
+            presets = content.box()
+            presets.enabled = not context.scene.polygroups_baking_settings.uv_bake_is_running
+            presets.label(text="UVPackmaster Presets", icon="PRESET")
+            _draw_uvpackmaster_scheme(presets, context, create=True)
+
+            preset_row = presets.row(align=True)
+            preset_row.operator_context = 'INVOKE_DEFAULT'
+            preset_row.operator("object.polygroups_uvpackmaster_preset", text="Single Tile").preset = "SINGLE_TILE"
+            preset_row.operator("object.polygroups_uvpackmaster_preset", text="Groups to Tiles").preset = "GROUPS_TO_TILES"
+            _draw_uvpackmaster_edit_boxes(content, context)
+
             pack_row = content.row(align=True)
+            pack_row.enabled = presets.enabled
             pack_row.scale_y = 1.3
             pack_row.operator(
                 "object.polygroups_uvpackmaster_pack",

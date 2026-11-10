@@ -9,7 +9,24 @@ from .callbacks import (
 from ..core import foliage_card
 
 
+class POLYGROUPS_PG_autobake_queue_item(bpy.types.PropertyGroup):
+    target: bpy.props.PointerProperty(type=bpy.types.Object)
+    source: bpy.props.PointerProperty(type=bpy.types.Object)
+    manual_source: bpy.props.BoolProperty()
+    state: bpy.props.StringProperty(default="PENDING", options={"SKIP_SAVE"})
+    message: bpy.props.StringProperty(options={"SKIP_SAVE"})
+
+
 class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
+    merge_duplicate_meshes: bpy.props.BoolProperty(
+        name="Duplicate Meshes",
+        description="Merge on copies of the selected meshes in a new Generated.N collection",
+        default=True,
+    )
+    autobake_queue: bpy.props.CollectionProperty(type=POLYGROUPS_PG_autobake_queue_item)
+    autobake_queue_running: bpy.props.BoolProperty(options={"SKIP_SAVE"})
+    autobake_queue_status: bpy.props.StringProperty(options={"SKIP_SAVE"})
+    autobake_queue_progress: bpy.props.FloatProperty(min=0, max=100, options={"SKIP_SAVE"})
     bake_task_is_running: bpy.props.BoolProperty(default=False, options={"SKIP_SAVE"})
     bake_task_stage: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     bake_task_message: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
@@ -53,11 +70,23 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
     )
     uv_bake_duplicate: bpy.props.BoolProperty(
         name="Duplicate Mesh (_UVBake)",
-        description=("Bake onto a copy named <mesh>_UVBake with its own new material and textures; the "
-                     "original mesh, its UV maps and materials stay unchanged"),
+        description=("Work on copies in a new Generated_UVBake.N collection and replace the source UV "
+                     "slot on each copy with the new layout"),
         default=True,
     )
     uv_bake_base_color: bpy.props.BoolProperty(name="Base Color", default=True)
+    uv_bake_pack_mode: bpy.props.EnumProperty(
+        name="Pack to New UV Mode",
+        items=(('TOGETHER', 'Pack Together', 'Pack all selected meshes in one UV layout'),
+               ('SEPARATE', 'Separate', 'Pack each selected mesh independently')),
+        default='SEPARATE',
+    )
+    uv_bake_pack_bake_mode: bpy.props.EnumProperty(
+        name="Pack and UV Bake Mode",
+        items=(('TOGETHER', 'Pack Together', 'Pack all selected meshes and bake one shared texture set and material'),
+               ('SEPARATE', 'Separate', 'Pack and bake each selected mesh independently')),
+        default='SEPARATE',
+    )
     uv_bake_normal: bpy.props.BoolProperty(name="Normal", default=True)
     uv_bake_resolution: bpy.props.EnumProperty(
         name="Output Resolution",
@@ -70,6 +99,8 @@ class POLYGROUPS_PG_baking_settings(bpy.types.PropertyGroup):
         default="2048",
     )
     uv_bake_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
+    uv_bake_is_running: bpy.props.BoolProperty(options={"SKIP_SAVE"})
+    uv_bake_progress: bpy.props.FloatProperty(min=0, max=100, options={"SKIP_SAVE"})
     ray_distance: bpy.props.FloatProperty(
         name="Ray Distance",
         description="Maximum ray distance for selected-to-active baking",

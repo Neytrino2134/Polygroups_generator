@@ -219,7 +219,12 @@ from .unwrap_angle_based import OBJECT_OT_polygroups_average_islands_scale
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_project
 from .unwrap_angle_based import OBJECT_OT_polygroups_smart_uv_unwrap
 from .unwrap_angle_based import OBJECT_OT_polygroups_unwrap_angle_based
-from .uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
+from .uvpackmaster_controls import (
+    OBJECT_OT_polygroups_uvpackmaster_pack,
+    OBJECT_OT_polygroups_uvpackmaster_preset,
+    POLYGROUPS_MT_uvpackmaster_schemes,
+    WM_OT_polygroups_uvpackmaster_edit_scheme_boxes,
+)
 from .uv_bake import OBJECT_OT_polygroups_uv_bake
 
 from .small_islands import (
@@ -253,6 +258,7 @@ from .phase_gate import CLASSES as PHASE_GATE_CLASSES
 from .final_cleanup import CLASSES as FINAL_CLEANUP_CLASSES
 from .relod import OBJECT_OT_polygroups_relod
 from .rebake_queue import CLASSES as REBAKE_QUEUE_CLASSES
+from .autobake_queue import CLASSES as AUTOBAKE_QUEUE_CLASSES
 from .zbrush_cleanup import OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj
 from .phase2_zbrush_export import (
     OBJECT_OT_polygroups_phase2_export_zbrush, OBJECT_OT_polygroups_phase2_launch_zbrush,
@@ -264,6 +270,7 @@ CLASSES = (
     OBJECT_OT_polygroups_phase2_reset_state,
     *PHASE2_START_DIALOG_CLASSES, *INDEX_STEP_CLASSES, *PHASE_GATE_CLASSES, *FINAL_CLEANUP_CLASSES,
     *REBAKE_QUEUE_CLASSES,
+    *AUTOBAKE_QUEUE_CLASSES,
     OBJECT_OT_polygroups_relod,
     OBJECT_OT_polygroups_zbrush_delete_generated, OBJECT_OT_polygroups_zbrush_clear_obj,
     OBJECT_OT_polygroups_phase2_export,
@@ -410,6 +417,9 @@ CLASSES = (
     OBJECT_OT_polygroups_smart_uv_unwrap,
     OBJECT_OT_polygroups_average_islands_scale,
     OBJECT_OT_polygroups_uvpackmaster_pack,
+    OBJECT_OT_polygroups_uvpackmaster_preset,
+    POLYGROUPS_MT_uvpackmaster_schemes,
+    WM_OT_polygroups_uvpackmaster_edit_scheme_boxes,
     OBJECT_OT_polygroups_uv_bake,
     OBJECT_OT_face_sets_to_materials,
     OBJECT_OT_clear_polygroups_materials,

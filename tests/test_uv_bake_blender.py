@@ -54,8 +54,9 @@ with tempfile.TemporaryDirectory() as directory:
     assert bpy.ops.object.polygroups_uv_bake()=={'FINISHED'},s.uv_bake_status
     copy=bpy.data.objects['SM_Rock_01_01_MID_UVBake']
     assert list(obj.data.materials)==[mat] and obj.data.uv_layers['UVMap'].active_render
-    assert copy.data!=obj.data and copy.data.uv_layers.active.name=='UVMap.001'
-    assert copy.data.uv_layers['UVMap.001'].active_render
+    assert copy.data!=obj.data and copy.data.uv_layers.active.name=='UVMap'
+    assert len(copy.data.uv_layers)==1 and copy.data.uv_layers['UVMap'].active_render
+    assert copy.users_collection[0].name=='Generated_UVBake.001'
     new_mat=copy.data.materials[0];assert new_mat.name=='M_SM_Rock_01_01_MID_UVBake'
     base=bpy.data.images['SM_Rock_01_01_MID_UVBake_BaseColor']
     normal=bpy.data.images['SM_Rock_01_01_MID_UVBake_Normal']
@@ -73,10 +74,10 @@ with tempfile.TemporaryDirectory() as directory:
         assert copy[prop]==image.name,prop
     assert new_mat.node_tree.nodes[C.BAKE_ALPHA_NODE].image==mask and copy[C.BAKE_TARGET_MATERIAL_PROP]==new_mat.name
     assert 'M_Rock_Source.001' not in bpy.data.materials  # temporary bake copies are gone
-    # Running again replaces the copy and its textures (no .001).
+    # Running again keeps the previous copy in its own collection.
+    copy.select_set(False);obj.select_set(True);ctx.view_layer.objects.active=obj
     assert bpy.ops.object.polygroups_uv_bake()=={'FINISHED'},s.uv_bake_status
-    names=[o.name for o in bpy.data.objects]+[i.name for i in bpy.data.images]+[m.name for m in bpy.data.materials]
-    assert not [n for n in names if n.endswith('.001') and 'UVBake' in n],names
+    assert ctx.object != copy and ctx.object.users_collection[0].name=='Generated_UVBake.002'
     print('UV_BAKE_DUPLICATE_OK')
     # 2. In place: the mesh itself gets the new material and active UV map.
     obj,mat=source_mesh();s.uv_bake_duplicate=False
@@ -100,3 +101,106 @@ with tempfile.TemporaryDirectory() as directory:
     value=pixel(bpy.data.images['SM_Rock_01_01_MID_UVBake_Normal'],8,8)
     assert abs(value[0]-.25)<.06 and abs(value[1]-.5)<.06,value
     print('UV_BAKE_NORMAL_TANGENT_OK')
+
+    # The new actions process every selected mesh, even when each starts with one map.
+    obj, _ = source_mesh()
+    obj.name = 'Retopo_03.007'
+    obj.data.uv_layers.remove(obj.data.uv_layers['UVMap.001'])
+    for loop in obj.data.uv_layers['UVMap'].data:
+        loop.uv.x += 2
+    other = obj.copy()
+    other.data = obj.data.copy()
+    scene.collection.objects.link(other)
+    other.name = 'Retopo_03.008'
+    other.select_set(True)
+    sources = (obj, other)
+    original_uvs = {mesh: [tuple(loop.uv) for loop in mesh.data.uv_layers['UVMap'].data] for mesh in sources}
+    s.uv_bake_duplicate = True
+    before_objects = set(bpy.data.objects)
+    assert bpy.ops.object.polygroups_uv_bake(action='CREATE') == {'FINISHED'}
+    assert set(bpy.data.objects) == before_objects
+    for mesh in sources:
+        layers = mesh.data.uv_layers
+        assert layers.active.name == 'UVMap_New' and layers['UVMap'].active_render
+        assert [tuple(loop.uv) for loop in layers.active.data] == original_uvs[mesh]
+        layers.remove(layers.active)
+
+    # Test the PACK call boundary with deterministic moved UVs, then run actual Cycles transfer.
+    from unittest.mock import patch
+    from polygroups_generator.operators.uvpackmaster_controls import OBJECT_OT_polygroups_uvpackmaster_pack
+
+    def pack(operator, context):
+        mesh = context.active_object
+        assert set(context.selected_objects) == {mesh}
+        assert mesh.data.uv_layers.active.name == 'UVMap_New'
+        for loop in mesh.data.uv_layers.active.data:
+            loop.uv.x -= 2
+        return {'FINISHED'}
+
+    bpy.types.Scene.uvpm4_props = bpy.props.BoolProperty()
+    try:
+        s.uv_bake_duplicate = True
+        with patch.object(OBJECT_OT_polygroups_uvpackmaster_pack, 'execute', pack):
+            assert bpy.ops.object.polygroups_uv_bake(action='PACK') == {'FINISHED'}
+            packed = tuple(ctx.selected_objects)
+            assert len(packed) == 2
+            assert {mesh.name for mesh in packed} == {'Retopo_03_UVBake.007', 'Retopo_03_UVBake.008'}
+            for mesh in packed:
+                assert len(mesh.data.uv_layers) == 1 and mesh.data.uv_layers.active.name == 'UVMap'
+                assert all(0 <= loop.uv.x <= 1 for loop in mesh.data.uv_layers.active.data)
+                mesh.select_set(False)
+            for mesh in sources:
+                mesh.select_set(True)
+            ctx.view_layer.objects.active = obj
+            assert bpy.ops.object.polygroups_uv_bake(action='PACK_BAKE') == {'FINISHED'}
+            assert len(ctx.selected_objects) == 2 and not set(ctx.selected_objects).intersection(packed)
+            for mesh in ctx.selected_objects:
+                assert len(mesh.data.uv_layers) == 1 and mesh.data.uv_layers.active.name == 'UVMap'
+                assert mesh.data.materials[0].node_tree.nodes[C.BAKE_BASE_COLOR_NODE].image
+                assert any(node.type == 'UVMAP' and node.uv_map == 'UVMap'
+                           for node in mesh.data.materials[0].node_tree.nodes)
+        for mesh in sources:
+            assert len(mesh.data.uv_layers) == 1
+            assert [tuple(loop.uv) for loop in mesh.data.uv_layers.active.data] == original_uvs[mesh]
+
+        for mesh in ctx.selected_objects:
+            mesh.select_set(False)
+        other.data.uv_layers.active.name = 'OtherUV'
+        for mesh, color in zip(sources, ((1, 0, 0, 1), (0, 0, 1, 1))):
+            mesh.select_set(True)
+            material = bpy.data.materials.new(mesh.name + '_Color')
+            material.use_nodes = True
+            material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = color
+            mesh.data.materials[0] = material
+        ctx.view_layer.objects.active = obj
+        pack_calls = []
+
+        def pack_together(operator, context):
+            targets = sorted(context.selected_objects, key=lambda mesh: mesh.name)
+            assert len(targets) == 2
+            pack_calls.append(targets)
+            for index, mesh in enumerate(targets):
+                assert mesh.data.uv_layers.active.name.endswith('_New')
+                for loop in mesh.data.uv_layers.active.data:
+                    loop.uv.x = (loop.uv.x - 2) * .4 + .05 + index * .5
+            return {'FINISHED'}
+
+        s.uv_bake_pack_bake_mode = 'TOGETHER'
+        with patch.object(OBJECT_OT_polygroups_uvpackmaster_pack, 'execute', pack_together):
+            assert bpy.ops.object.polygroups_uv_bake(action='PACK_BAKE') == {'FINISHED'}
+        copies = tuple(ctx.selected_objects)
+        assert len(pack_calls) == 1 and set(pack_calls[0]) == set(copies)
+        assert len({mesh.data.materials[0] for mesh in copies}) == 1
+        assert {mesh.data.uv_layers.active.name for mesh in copies} == {'UVMap', 'OtherUV'}
+        assert all(len(mesh.data.uv_layers) == 1 and mesh.data.uv_layers.active.active_render for mesh in copies)
+        atlas = bpy.data.images[copies[0][C.BAKE_BASE_COLOR_IMAGE_PROP]]
+        assert all(mesh[C.BAKE_BASE_COLOR_IMAGE_PROP] == atlas.name for mesh in copies)
+        left, right = pixel(atlas, 3, 8), pixel(atlas, 12, 8)
+        assert left[0] > .9 and left[2] < .1 and right[2] > .9 and right[0] < .1, (left, right)
+        mask = bpy.data.images[copies[0][C.BAKE_ALPHA_IMAGE_PROP]]
+        assert pixel(mask, 3, 8)[0] > .9 and pixel(mask, 12, 8)[0] > .9 and pixel(mask, 8, 8)[0] < .1
+        assert all([tuple(loop.uv) for loop in mesh.data.uv_layers.active.data] == original_uvs[mesh]
+                   for mesh in sources)
+    finally:
+        del bpy.types.Scene.uvpm4_props
+    print('UV_BAKE_SELECTED_CREATE_PACK_AND_TRANSFER_OK')

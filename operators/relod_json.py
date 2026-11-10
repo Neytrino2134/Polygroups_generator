@@ -29,7 +29,8 @@ def validate_json_update(context):
 def update_json(context, plans, untouched=()):
     from ..core.lod_naming import lod_base
     from ..services import fab_media as media
-    from .mesh_export import _evaluated_mesh_counts, _write_export_mesh_info, _safe_path_token
+    from .mesh_export import _write_export_mesh_info, _write_fab_format_mesh_info, _safe_path_token
+    from .fab_mesh_details import collect_mesh_details
     from .unreal_lod_export import lod_identity
     from .unreal_export_textures import exported_fbx_texture_manifest
     from .smart_lods import LOD_INDEX
@@ -50,10 +51,10 @@ def update_json(context, plans, untouched=()):
         graph = context.evaluated_depsgraph_get()
         for obj in sorted(meshes, key=lambda item: media.natural(item.name)):
             base, role, index = generated[obj] if obj in generated else lod_identity(obj, 'Unreal')
-            vertices, triangles = _evaluated_mesh_counts(obj, graph)
+            vertices, triangles, details = collect_mesh_details(obj, graph, context.scene.unit_settings.scale_length)
             entry = dict(name=obj.name, asset=base, role=role, lod_index=index,
                 lod=f'LOD{index}' if role == 'LOD' else 'HIGH', vertices=vertices, triangles=triangles,
-                collections=[collection.name for collection in obj.users_collection], files={})
+                collections=[collection.name for collection in obj.users_collection], files={}, _fab_details=details)
             format_first = context.scene.polygroups_model_preparation_settings.phase2_export_sort == 'LODS_FORMAT'
             folder = root / 'FBX' if format_first else root / _safe_path_token(base) / 'FBX'
             path = folder / (_safe_path_token(obj.name) + '.fbx')
@@ -71,6 +72,7 @@ def update_json(context, plans, untouched=()):
     with tempfile.TemporaryDirectory(prefix='.relod-json-', dir=root) as temporary:
         _write_export_mesh_info(temporary, 'JSON', entries, 'Unreal', output_directory=root)
         os.replace(Path(temporary) / 'MeshInfo.json', root / 'MeshInfo.json')
+    _write_fab_format_mesh_info(root, entries)
     if document is not None:
         gallery_path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix='.relod-json-', dir=gallery_path.parent) as temporary:

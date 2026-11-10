@@ -84,7 +84,7 @@ class QueueProcessingMixin:
             target, set(bpy.data.objects), set(bpy.data.meshes),
             set(bpy.data.materials), set(bpy.data.images),
         )
-        result = bpy.ops.object.polygroups_checked_prepare_and_bake("EXEC_DEFAULT")
+        result = bpy.ops.object.polygroups_checked_prepare_and_bake("EXEC_DEFAULT", align_selected_source=False)
         if "CANCELLED" in result:
             raise RuntimeError(f"Auto Bake could not start for {target.name}")
 

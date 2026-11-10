@@ -7,9 +7,10 @@ from .mesh_export import (
     _selected_mesh_objects, _export_root_directory, _safe_path_token,
     _detach_export_alpha_maps, _restore_export_alpha_maps,
     _export_at_world_origin, _export_selected_object, _export_gltf_asset,
-    _evaluated_mesh_counts, _write_export_mesh_info, enabled_mesh_export_formats,
+    _evaluated_mesh_counts, _write_export_mesh_info, _write_fab_format_mesh_info, enabled_mesh_export_formats,
 )
 from .unreal_export_textures import export_texture_scope
+from .fab_mesh_details import collect_mesh_details
 
 
 def lod_identity(obj, engine='Unreal'):
@@ -54,19 +55,26 @@ def export_lods(context, settings, report, engine='Unreal', output_root=None, ov
             if any(records[item]['role'] == role and records[item]['lod_index'] == index for item in group):
                 raise ValueError(f'Duplicate {role} index in {base}')
             group.append(obj)
-            vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
+            graph = context.evaluated_depsgraph_get()
+            details = None
+            if engine == 'Unreal' and settings.mesh_export_info_format == 'JSON':
+                vertices, triangles, details = collect_mesh_details(obj, graph, context.scene.unit_settings.scale_length)
+            else:
+                vertices, triangles = _evaluated_mesh_counts(obj, graph)
             records[obj] = dict(name=obj.name, asset=base, role=role, lod_index=index,
                 lod=f'LOD{index}' if role == 'LOD' else 'HIGH',
                 collections=[collection.name for collection in obj.users_collection],
                 vertices=vertices, triangles=triangles, files={})
+            if details is not None:
+                records[obj]['_fab_details'] = details
         tasks = []
         for base in sorted(groups, key=str.casefold):
             objects = groups[base]
             objects.sort(key=lambda obj: -1 if records[obj]['role'] == 'HIGH' else records[obj]['lod_index'])
             for format in formats:
                 folder = root / format if format_first else root / _safe_path_token(base) / format
-                combine = ((format == 'GLTF' and settings.unreal_gltf_mode == 'COMBINED')
-                           or (format == 'GLB' and settings.unreal_glb_mode == 'COMBINED'))
+                combine = ((format == 'GLTF' and settings.unreal_gltf_mode in {'AUTO', 'COMBINED'})
+                           or (format == 'GLB' and settings.unreal_glb_mode in {'AUTO', 'COMBINED'}))
                 if combine:
                     lods = [obj for obj in objects if records[obj]['role'] == 'LOD']
                     if lods:
@@ -128,6 +136,8 @@ def export_lods(context, settings, report, engine='Unreal', output_root=None, ov
                         records[obj].setdefault('file', relative)
                         if format == 'FBX' and normal_mode:
                             records[obj]['textures'] = manifest(obj)
+            if format_first and engine == 'Unreal' and settings.mesh_export_info_format == 'JSON':
+                continue
             local_entries = []
             scope_prefix = scope_folder.relative_to(root)
             for obj in scope_objects:
@@ -140,8 +150,10 @@ def export_lods(context, settings, report, engine='Unreal', output_root=None, ov
                     record.pop('textures', None)
                 local_entries.append(record)
             _write_export_mesh_info(str(scope_folder), settings.mesh_export_info_format, local_entries, engine=engine)
-        _write_export_mesh_info(str(root), settings.mesh_export_info_format,
-                                [records[obj] for base in sorted(groups, key=str.casefold) for obj in groups[base]], engine=engine)
+        entries = [records[obj] for base in sorted(groups, key=str.casefold) for obj in groups[base]]
+        _write_export_mesh_info(str(root), settings.mesh_export_info_format, entries, engine=engine)
+        if engine == 'Unreal' and settings.mesh_export_info_format == 'JSON':
+            _write_fab_format_mesh_info(root, entries)
     except (ValueError, RuntimeError, OSError) as error:
         report({'ERROR'}, str(error))
         return {'CANCELLED'}

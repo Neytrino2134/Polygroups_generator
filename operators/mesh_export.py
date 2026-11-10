@@ -7,7 +7,7 @@ import mimetypes
 import tempfile
 from pathlib import Path
 from urllib.parse import unquote
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 
 import bpy
 
@@ -122,7 +122,7 @@ def _blend_filepath(root_dir, name):
 
 def _asset_folder_token(obj):
     name = obj.name
-    match = re.match(r"^SM_(.+)_(LOW|MID|HIGH)$", name, re.IGNORECASE)
+    match = re.match(r"^SM_(.+)_(LOW|MID|HIGH|LOD\d+)$", name, re.IGNORECASE)
     if match is not None:
         return _safe_path_token(match.group(1))
 
@@ -146,9 +146,9 @@ def _export_root_directory(settings):
 
 def _export_filepath(root_dir, obj, export_format, sort_mode="VARIANT"):
     object_token = _safe_path_token(obj.name)
-    match = re.fullmatch(r"SM_.+_(LOW|MID|HIGH)", obj.name, re.IGNORECASE)
+    match = re.fullmatch(r"SM_.+_(LOW|MID|HIGH|LOD\d+)", obj.name, re.IGNORECASE)
     if match is None:
-        raise ValueError(f"FAB mesh name must end in LOW, MID or HIGH: {obj.name}")
+        raise ValueError(f"FAB mesh name must end in LOW, MID, HIGH or LOD<number>: {obj.name}")
     variant = match.group(1).upper()
     extension = {
         "FBX": ".fbx",
@@ -157,6 +157,33 @@ def _export_filepath(root_dir, obj, export_format, sort_mode="VARIANT"):
     }[export_format]
     folder = _asset_folder_token(obj) if sort_mode == "SET" else variant
     return os.path.join(root_dir, folder, f"{object_token}{extension}")
+
+
+def _fab_export_tasks(root_dir, objects, formats, settings):
+    from .unreal_lod_export import lod_identity
+
+    tasks = []
+    for file_format in formats:
+        format_root = os.path.join(root_dir, file_format) if file_format in {'GLB', 'GLTF'} else root_dir
+        combine = ((file_format == 'GLB' and settings.unreal_glb_mode == 'COMBINED')
+                   or (file_format == 'GLTF' and settings.unreal_gltf_mode == 'COMBINED'))
+        if combine:
+            groups = {}
+            for obj in objects:
+                base, _, _ = lod_identity(obj)
+                groups.setdefault(base, []).append(obj)
+            for base, meshes in groups.items():
+                asset = _safe_path_token(base)
+                folder = os.path.join(format_root, asset) if settings.mesh_export_sort == 'SET' else format_root
+                path = os.path.join(folder, f'{asset}.{file_format.lower()}')
+                tasks.append((meshes, path, file_format))
+        else:
+            tasks.extend(([obj], _export_filepath(format_root, obj, file_format, settings.mesh_export_sort), file_format)
+                         for obj in objects)
+    paths = {os.path.normcase(os.path.abspath(path)) for _, path, _ in tasks}
+    if len(paths) != len(tasks):
+        raise ValueError('Export filenames conflict after filename normalization')
+    return tasks
 
 
 def _evaluated_mesh_counts(obj, depsgraph):
@@ -235,7 +262,7 @@ def _mesh_info_identity(entry, engine):
     return dict(AssetName=configured_name, NameIndex=configured_index)
 
 
-def _write_export_mesh_info(root_dir, export_format, entries, engine=None, *, output_directory=None):
+def _write_export_mesh_info(root_dir, export_format, entries, engine=None, *, output_directory=None, mesh_format=None):
     if export_format == "NONE":
         return
     totals = {
@@ -244,16 +271,22 @@ def _write_export_mesh_info(root_dir, export_format, entries, engine=None, *, ou
         "triangles": sum(item["triangles"] for item in entries),
     }
     if export_format == "JSON":
-        entries = [dict(item, **_mesh_info_identity(item, engine)) for item in entries]
+        from .fab_mesh_details import technical_details
+
         directory = Path(bpy.path.abspath(str(output_directory or root_dir))).resolve()
+        details = (technical_details(directory, mesh_format, entries)
+                   if mesh_format and entries and all('_fab_details' in item for item in entries) else None)
+        entries = [dict(item, **_mesh_info_identity(item, engine)) for item in entries]
         for item in entries:
+            item.pop('_fab_details', None)
             if 'textures' in item:
                 item['textures'] = [dict(texture, path=Path(os.path.relpath(Path(texture['path']).resolve(), directory)).as_posix())
                                     for texture in item['textures']]
         def common(items, key):
             values = {item[key] for item in items}
             return next(iter(values)) if len(values) == 1 else ''
-        filepath = os.path.join(root_dir, "MeshInfo.json")
+        filename = f'MeshInfo_{mesh_format}.json' if mesh_format else 'MeshInfo.json'
+        filepath = os.path.join(root_dir, filename)
         with open(filepath, "w", encoding="utf-8") as output:
             document = {"Path": str(directory),
                         "AssetName": common(entries, 'AssetName'),
@@ -261,6 +294,10 @@ def _write_export_mesh_info(root_dir, export_format, entries, engine=None, *, ou
                         "meshes": entries, "totals": totals}
             if engine is not None:
                 document['Engine'] = engine
+            if mesh_format:
+                document['Format'] = mesh_format
+            if details is not None:
+                document['fab_technical_details'] = details
             if engine in {'Unity', 'Unreal'}:
                 document['polygon_statistics'] = {
                     'unit': 'triangles',
@@ -289,6 +326,26 @@ def _write_export_mesh_info(root_dir, export_format, entries, engine=None, *, ou
             output.write(f'TOTAL\tmeshes: {totals["meshes"]}\t'
                          f'vertices: {totals["vertices"]}\t'
                          f'triangles: {totals["triangles"]}\n')
+
+
+def _write_fab_format_mesh_info(root_dir, entries):
+    """Write per-format reports with paths relative to each report's folder."""
+    root = Path(root_dir)
+    reports = {}
+    for entry in entries:
+        for file_format, relative in entry['files'].items():
+            path = root / relative
+            # LOD layouts already have format folders. Quality/Set layouts
+            # share geometry folders, so put their format indexes at the root.
+            folder = path.parent if path.parent.name == file_format else root / file_format
+            local = Path(os.path.relpath(path, folder)).as_posix()
+            row = dict(entry, file=local, files={file_format: local})
+            if file_format != 'FBX':
+                row.pop('textures', None)
+            reports.setdefault((folder, file_format), []).append(row)
+    for (folder, file_format), rows in reports.items():
+        folder.mkdir(parents=True, exist_ok=True)
+        _write_export_mesh_info(folder, 'JSON', rows, engine='Unreal', mesh_format=file_format)
 
 
 def _export_texture_images(objects):
@@ -594,9 +651,7 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
             return {"CANCELLED"}
 
         try:
-            filepaths = [(obj, _export_filepath(root_dir, obj, format,
-                                                 settings.mesh_export_sort), format)
-                         for obj in mesh_objects for format in formats]
+            tasks = _fab_export_tasks(root_dir, mesh_objects, formats, settings)
         except ValueError as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
@@ -609,36 +664,52 @@ class OBJECT_OT_polygroups_export_selected_meshes(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="OBJECT")
 
         exported_count = 0
-        mesh_info = []
+        mesh_info = {}
         detached_alpha_maps = {}
         from .unreal_export_textures import export_texture_scope
+        from .fab_mesh_details import collect_mesh_details
         try:
             detached_alpha_maps = _detach_export_alpha_maps(mesh_objects)
             with export_texture_scope(mesh_objects, root_dir, formats, settings.unreal_fbx_normal_maps) as (bind, manifest):
-                for obj, filepath, format in filepaths:
+                for objects, filepath, format in tasks:
                     os.makedirs(os.path.dirname(filepath), exist_ok=True)
                     bind(format)
                     bpy.ops.object.select_all(action="DESELECT")
-                    obj.select_set(True)
-                    context.view_layer.objects.active = obj
+                    for obj in objects:
+                        obj.select_set(True)
+                    context.view_layer.objects.active = objects[0]
 
-                    with _export_at_world_origin(obj, context.view_layer):
-                        result = _export_selected_object(filepath, format)
+                    with ExitStack() as stack:
+                        for obj in objects:
+                            stack.enter_context(_export_at_world_origin(obj, context.view_layer))
+                        if format == 'GLTF' and settings.unreal_gltf_mode == 'SHARED':
+                            result = _export_gltf_asset(filepath, embedded=False)
+                        else:
+                            result = _export_selected_object(filepath, format)
                     if "FINISHED" not in result:
-                        raise RuntimeError(f"FAB export failed: {obj.name}")
+                        raise RuntimeError(f"FAB export failed: {os.path.basename(filepath)}")
                     exported_count += 1
                     if settings.mesh_export_info_format == "NONE":
                         continue
                     relative = os.path.relpath(filepath, root_dir).replace(os.sep, '/')
-                    entry = next((item for item in mesh_info if item['name'] == obj.name), None)
-                    if entry is None:
-                        vertices, triangles = _evaluated_mesh_counts(obj, context.evaluated_depsgraph_get())
-                        entry = dict(name=obj.name, file=relative, vertices=vertices, triangles=triangles, files={})
-                        mesh_info.append(entry)
-                    entry['files'][format] = relative
-                    if format == 'FBX':
-                        entry['textures'] = manifest(obj)
-            _write_export_mesh_info(root_dir, settings.mesh_export_info_format, mesh_info, engine='Unreal')
+                    for obj in objects:
+                        if obj not in mesh_info:
+                            graph = context.evaluated_depsgraph_get()
+                            if settings.mesh_export_info_format == 'JSON':
+                                vertices, triangles, details = collect_mesh_details(obj, graph, context.scene.unit_settings.scale_length)
+                            else:
+                                vertices, triangles = _evaluated_mesh_counts(obj, graph)
+                                details = None
+                            mesh_info[obj] = dict(name=obj.name, file=relative, vertices=vertices, triangles=triangles, files={})
+                            if details is not None:
+                                mesh_info[obj]['_fab_details'] = details
+                        entry = mesh_info[obj]
+                        entry['files'][format] = relative
+                        if format == 'FBX':
+                            entry['textures'] = manifest(obj)
+            _write_export_mesh_info(root_dir, settings.mesh_export_info_format, list(mesh_info.values()), engine='Unreal')
+            if settings.mesh_export_info_format == 'JSON':
+                _write_fab_format_mesh_info(root_dir, mesh_info.values())
         except (RuntimeError, ValueError, OSError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}

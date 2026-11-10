@@ -494,7 +494,7 @@ class Phase2Queue:
                     modifier.show_viewport = modifier.show_render = False
             self.view_layer.update()
         bake.bake_task_stage = ''
-        result = bpy.ops.object.polygroups_checked_prepare_and_bake('EXEC_DEFAULT')
+        result = bpy.ops.object.polygroups_checked_prepare_and_bake('EXEC_DEFAULT', align_selected_source=False)
         if not ({'FINISHED', 'RUNNING_MODAL'} & result):
             raise RuntimeError(f'Auto Bake could not start for {low.name}')
 
@@ -799,6 +799,7 @@ def available(context):
                 and ACTIVE_REMESH is None and (ACTIVE_JOB is None or getattr(ACTIVE_JOB,'_rebake_dispatching',False)) and not settings.batch_is_running
                 and not bpy.app.is_job_running('OBJECT_BAKE')
                 and not context.scene.polygroups_baking_settings.bake_task_is_running
+                and not context.scene.polygroups_baking_settings.uv_bake_is_running
                 and not context.scene.polygroups_render_settings.is_running)
 
 

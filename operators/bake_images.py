@@ -379,7 +379,6 @@ def _image_from_object_prop(target, prop_name):
 def _find_object_source_bake_image(target, settings, node_name, current_prop_name, source_prop_name, suffix):
     image = _image_from_object_prop(target, current_prop_name)
     if image is not None and not _is_merged_image(image):
-        target[source_prop_name] = image.name
         return image
 
     image = _image_from_object_prop(target, source_prop_name)
@@ -392,12 +391,10 @@ def _find_object_source_bake_image(target, settings, node_name, current_prop_nam
     if image is None and suffix == "MergeMask":
         image = bpy.data.images.get(_bake_data_name(settings, target, "Alpha"))
     if image is not None:
-        target[source_prop_name] = image.name
         return image
 
     image = _find_bake_image(target, node_name)
     if image is not None and not _is_merged_image(image):
-        target[source_prop_name] = image.name
         return image
 
     return None

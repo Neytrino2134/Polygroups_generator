@@ -95,7 +95,9 @@ def expected_highpoly_name(lowpoly_name):
 def find_matching_highpoly(lowpoly):
     """Find the exact source mesh in the lowpoly's numbered Generated collection."""
     expected_name = expected_highpoly_name(lowpoly.name)
-    collection, _index = generated_collection_info(lowpoly)
+    collection, index = generated_collection_info(lowpoly)
+    if not expected_name and index:
+        expected_name = f"Highpoly_Generated.{index}"
     if not expected_name or collection is None:
         return None, expected_name, collection
     source = next(
@@ -150,8 +152,11 @@ def report_missing_matching_highpoly(operator, context, lowpoly, expected_name, 
         )
 
 
-def run_bake_action(operator, context, action, check_uv=True):
+def run_bake_action(operator, context, action, check_uv=True, align_source=None):
     mesh_objects = selected_mesh_objects(context)
+    if align_source is None:
+        align_source = (action == "PREPARE_AND_BAKE" and len(mesh_objects) == 2
+                        and getattr(operator, "align_selected_source", True))
     if action == "PREPARE_AND_BAKE" and len(mesh_objects) == 1:
         lowpoly = context.active_object
         source, expected_name, collection = auto_select_matching_highpoly(context, lowpoly)
@@ -195,6 +200,7 @@ def run_bake_action(operator, context, action, check_uv=True):
         return bpy.ops.object.polygroups_missing_uv_bake_dialog(
             "INVOKE_DEFAULT",
             bake_action=action,
+            align_source=align_source,
         )
 
     if action == "PREPARE_LOWPOLY":
@@ -206,7 +212,10 @@ def run_bake_action(operator, context, action, check_uv=True):
 
     if action == "PREPARE_AND_BAKE":
         try:
-            return bpy.ops.object.polygroups_bake_task("INVOKE_DEFAULT", prepare_materials=True)
+            overrides = {"align_source": True} if align_source else {}
+            return bpy.ops.object.polygroups_bake_task(
+                "INVOKE_DEFAULT", prepare_materials=True, **overrides,
+            )
         except Exception as error:
             operator.report({"ERROR"}, f"Prepare and bake failed: {error}")
             return {"CANCELLED"}
@@ -229,6 +238,7 @@ class OBJECT_OT_polygroups_missing_uv_bake_dialog(bpy.types.Operator):
     bl_options = {"UNDO", "INTERNAL"}
 
     bake_action: bpy.props.StringProperty(default="BAKE", options={"HIDDEN", "SKIP_SAVE"})
+    align_source: bpy.props.BoolProperty(options={"HIDDEN", "SKIP_SAVE"})
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(
@@ -269,7 +279,7 @@ class OBJECT_OT_polygroups_missing_uv_bake_dialog(bpy.types.Operator):
         settings = context.scene.polygroups_baking_settings
         if not _auto_pack_target_uvs(context, target, settings, self.report, force=True):
             return {"CANCELLED"}
-        return run_bake_action(self, context, self.bake_action, check_uv=False)
+        return run_bake_action(self, context, self.bake_action, check_uv=False, align_source=self.align_source)
 
 
 class OBJECT_OT_polygroups_rename_and_apply_weld(bpy.types.Operator):
@@ -574,13 +584,12 @@ class PolygroupsBakeLowpolyCheckMixin:
         obj = context.active_object
         return obj is not None and obj.type == "MESH"
 
+    def accepts_active_target(self, context):
+        obj = context.active_object
+        return obj is not None and obj.type == "MESH" and is_lowpoly_name(obj.name)
+
     def invoke(self, context, event):
-        active_object = context.active_object
-        if (
-            active_object
-            and active_object.type == "MESH"
-            and is_lowpoly_name(active_object.name)
-        ):
+        if self.accepts_active_target(context):
             return self.execute(context)
 
         return context.window_manager.invoke_props_dialog(
@@ -603,12 +612,7 @@ class PolygroupsBakeLowpolyCheckMixin:
             )
 
     def execute(self, context):
-        active_object = context.active_object
-        if (
-            active_object
-            and active_object.type == "MESH"
-            and is_lowpoly_name(active_object.name)
-        ):
+        if self.accepts_active_target(context):
             return run_bake_action(self, context, self.bake_action)
 
         lowpoly = make_selected_lowpoly_active(context)
@@ -644,10 +648,19 @@ class OBJECT_OT_polygroups_checked_prepare_and_bake(
     bl_label = "Prepare And Bake"
     bl_description = "Check that a Retopo or Retopology mesh is active before preparing and baking"
     bl_options = {"UNDO"}
+    align_selected_source: bpy.props.BoolProperty(default=True, options={"HIDDEN", "SKIP_SAVE"})
 
     bake_action = "PREPARE_AND_BAKE"
     confirm_label = "Make Lowpoly Active + Bake"
     skip_operator_id = "object.polygroups_skip_prepare_and_bake"
+
+    def accepts_active_target(self, context):
+        if super().accepts_active_target(context):
+            return True
+        obj = context.active_object
+        meshes = selected_mesh_objects(context)
+        return (obj in meshes and not is_generated_highpoly_name(obj.name)
+                and (len(meshes) == 2 or (len(meshes) == 1 and generated_collection_info(obj)[0] is not None)))
 
 
 class OBJECT_OT_polygroups_checked_bake_selected_to_active(bpy.types.Operator):

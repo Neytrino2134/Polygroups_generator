@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(dir=ROOT,prefix='test_phase2_export_') as direc
  out=root/'!Unreal';info=json.loads((out/'MeshInfo.json').read_text())
  assert info['Engine']=='Unreal' and info['totals']['meshes']==6
  for fmt in ('GLB','GLTF','FBX'):
-  assert (out/fmt/'MeshInfo.json').exists()
+  assert (out/fmt/f'MeshInfo_{fmt}.json').exists()
   assert len(list((out/fmt).glob('*.'+fmt.lower())))==(6 if fmt=='FBX' else 4)
  assert s.mesh_export_sort==oldsort
  assert all(o.matrix_world==originals[o] for o in meshes)

@@ -20,69 +20,73 @@ from .bake_constants import (
 )
 from .bake_images import (
     _apply_bake_roughness,
+    _find_material_bake_image,
     _find_object_source_bake_image,
     _image_is_readable,
     _image_resolution,
     _principled_bsdf,
     _read_image_pixels,
-    _safe_path_name,
+    _target_bake_material,
 )
 
 
 def _collect_bake_texture_packs(objects, settings):
-    packs = []
+    material_users = {}
+    legacy_users = {}
     for obj in objects:
-        base_image = _find_object_source_bake_image(
-            obj,
-            settings,
-            BAKE_BASE_COLOR_NODE,
-            BAKE_BASE_COLOR_IMAGE_PROP,
-            BAKE_SOURCE_BASE_COLOR_IMAGE_PROP,
-            "BaseColor",
-        )
-        normal_image = _find_object_source_bake_image(
-            obj,
-            settings,
-            BAKE_NORMAL_NODE,
-            BAKE_NORMAL_IMAGE_PROP,
-            BAKE_SOURCE_NORMAL_IMAGE_PROP,
-            "Normal",
-        )
-        alpha_image = _find_object_source_bake_image(
-            obj,
-            settings,
-            BAKE_ALPHA_NODE,
-            BAKE_ALPHA_IMAGE_PROP,
-            BAKE_SOURCE_ALPHA_IMAGE_PROP,
-            "MergeMask",
-        )
-        if alpha_image is None or (base_image is None and normal_image is None):
+        slots = obj.material_slots
+        if not slots or not obj.data.polygons:
             continue
+        used_indices = (0,) if len(slots) == 1 else sorted({polygon.material_index for polygon in obj.data.polygons})
+        used_materials = {slots[index].material for index in used_indices if index < len(slots)}
+        used_materials.discard(None)
+        legacy_material = _target_bake_material(obj)
+        if legacy_material is None and len(used_materials) == 1:
+            legacy_material = next(iter(used_materials))
+        if legacy_material in used_materials:
+            legacy_users.setdefault(legacy_material, []).append(obj)
+        for index in used_indices:
+            if index < len(slots) and (material := slots[index].material) is not None:
+                material_users.setdefault(material, []).append((obj, index))
 
-        packs.append(
-            {
-                "object": obj,
-                "base": base_image,
-                "normal": normal_image,
-                "alpha": alpha_image,
-            },
-        )
+    channels = (
+        ("base", BAKE_BASE_COLOR_NODE, BAKE_BASE_COLOR_IMAGE_PROP, BAKE_SOURCE_BASE_COLOR_IMAGE_PROP, "BaseColor"),
+        ("normal", BAKE_NORMAL_NODE, BAKE_NORMAL_IMAGE_PROP, BAKE_SOURCE_NORMAL_IMAGE_PROP, "Normal"),
+        ("alpha", BAKE_ALPHA_NODE, BAKE_ALPHA_IMAGE_PROP, BAKE_SOURCE_ALPHA_IMAGE_PROP, "MergeMask"),
+    )
+    packs = []
+    for material, users in material_users.items():
+        images = {key: _find_material_bake_image(material, node) for key, node, *_ in channels}
+        # Older bakes may only identify their textures through object properties.
+        if not (images["alpha"] and (images["base"] or images["normal"])):
+            for obj in legacy_users.get(material, ()):
+                candidate = {
+                    key: images[key] or _find_object_source_bake_image(obj, settings, node, current, source, suffix)
+                    for key, node, current, source, suffix in channels
+                }
+                if candidate["alpha"] and (candidate["base"] or candidate["normal"]):
+                    images = candidate
+                    break
+        if images["alpha"] and (images["base"] or images["normal"]):
+            packs.append({"material": material, "users": users, **images})
     return packs
 
 
 def _pack_resolution(pack):
+    alpha_resolution = _image_resolution(pack["alpha"])
+    if alpha_resolution is None:
+        return None
     resolutions = [
         resolution
         for resolution in (
             _image_resolution(pack["base"]),
             _image_resolution(pack["normal"]),
-            _image_resolution(pack.get("alpha")),
         )
         if resolution is not None
     ]
-    if not resolutions or any(resolution != resolutions[0] for resolution in resolutions[1:]):
+    if not resolutions or any(resolution != alpha_resolution for resolution in resolutions):
         return None
-    return resolutions[0]
+    return alpha_resolution
 
 
 def _validate_pack_resolutions(packs):
@@ -213,27 +217,28 @@ def _count_unreadable_pack_images(packs, resolution):
     return count
 
 
-def _merged_pack_name(objects):
-    names = []
-    for obj in sorted(objects, key=lambda item: item.name.lower()):
-        safe_name = _safe_path_name(obj.name)
-        if safe_name not in names:
-            names.append(safe_name)
+def _short_merge_name(name):
+    return f"{name[:6]}___{name[-6:]}" if len(name) > 12 else name
 
-    if len(names) <= 3:
-        base_name = " + ".join(names)
+
+def _merged_pack_name(materials, active_material):
+    first = active_material if active_material in materials else materials[0]
+    if len(materials) == 2:
+        second = next(material for material in materials if material != first)
+        suffix = _short_merge_name(second.name).encode("utf-8")
     else:
-        base_name = f"{names[0]} + {names[1]} + {len(names) - 2} more"
+        suffix = f"{len(materials)}_Materials".encode("utf-8")
+    # Keep both sides of the name within Blender's datablock name limit.
+    prefix = _short_merge_name(first.name).encode("utf-8")
+    if len(prefix) + len(suffix) > 62:
+        prefix_limit = max(31, 62 - len(suffix))
+        prefix = prefix[:prefix_limit]
+        suffix = suffix[:62 - len(prefix)]
+    return f"{prefix.decode('utf-8', 'ignore')}+{suffix.decode('utf-8', 'ignore')}"
 
-    return f"{base_name} Merged"
 
-
-def _ensure_merged_material(pack_name, base_image, normal_image, alpha_image, objects):
-    material_name = f"Merged Material - {_safe_path_name(pack_name)}"
-    material = bpy.data.materials.get(material_name)
-    if material is None:
-        material = bpy.data.materials.new(material_name)
-
+def _ensure_merged_material(pack_name, base_image, normal_image, alpha_image, objects, *, material_name=None):
+    material = bpy.data.materials.new(material_name or pack_name)
     material.use_nodes = True
     material[BAKE_PACK_TYPE_PROP] = BAKE_PACK_TYPE_MERGED
     material[BAKE_PACK_NAME_PROP] = pack_name
@@ -294,21 +299,15 @@ def _ensure_merged_material(pack_name, base_image, normal_image, alpha_image, ob
     return material
 
 
-def _assign_material_to_object(obj, material):
-    material_index = None
-    for index, slot_material in enumerate(obj.data.materials):
-        if slot_material == material:
-            material_index = index
-            break
-
-    if material_index is None:
-        obj.data.materials.append(material)
-        material_index = len(obj.data.materials) - 1
-
-    obj.active_material_index = material_index
-    for polygon in obj.data.polygons:
-        polygon.material_index = material_index
-
+def _assign_material_to_object(obj, material, indices):
+    if (obj.data.users > 1 or not obj.data.is_editable) and any(
+        obj.material_slots[index].link == "DATA" for index in indices
+    ):
+        obj.data = obj.data.copy()
+    for index in indices:
+        obj.material_slots[index].material = material
+    if obj.active_material_index not in indices:
+        obj.active_material_index = indices[0]
     obj[BAKE_MERGED_MATERIAL_PROP] = material.name
 
 

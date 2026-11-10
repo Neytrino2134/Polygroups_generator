@@ -89,7 +89,7 @@ def _manifest(bindings, paths, common, normal_mode):
         key = (slot, material, role, image)
         references[key] = references.get(key, False) or connected
     for (slot, material, role, image), connected in references.items():
-        entry = dict(material_slot=slot, material=material, role=role)
+        entry = dict(material_slot=slot, material=material, role=role, resolution=list(image.size))
         if role == 'Normal' and image in paths:
             for convention in conventions:
                 path = paths[image][convention]

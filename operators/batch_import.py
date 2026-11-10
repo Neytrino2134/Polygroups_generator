@@ -599,8 +599,12 @@ class OBJECT_OT_polygroups_batch_import(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         from . import import_queue
         from .remesh_progress import ACTIVE_REMESH
+        from .sequential_jobs import ACTIVE_JOB
 
         settings = context.scene.polygroups_model_preparation_settings
+        if getattr(ACTIVE_JOB, "_is_autobake_queue", False):
+            self.report({"WARNING"}, "The AutoBake queue is running")
+            return {"CANCELLED"}
         if settings.phase2_is_running or settings.phase2_pipeline_running or settings.phase2_rebake_queue_running:
             self.report({"WARNING"}, "Phase 2 processing is running")
             return {"CANCELLED"}

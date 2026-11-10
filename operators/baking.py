@@ -1,6 +1,7 @@
 import os
 import re
 from array import array
+from contextlib import suppress
 
 import bpy
 import blf
@@ -50,12 +51,10 @@ from .bake_images import (
     _alpha_map_pixels,
     _apply_bake_background,
     _bake_data_name,
-    _bake_pack_data_name,
     _connected_texture_nodes,
     _coverage_from_image,
     _coverage_from_pixels,
     _ensure_bake_material,
-    _ensure_output_image,
     _ensure_target_bake_material,
     _ensure_target_image,
     _extend_background_rgb,
@@ -105,6 +104,7 @@ from .bake_merge import (
     _normalized_to_color,
     _pack_coverage,
     _pack_resolution,
+    _short_merge_name,
     _tag_merged_image,
     _validate_pack_resolutions,
 )
@@ -458,6 +458,13 @@ class OBJECT_OT_polygroups_save_blend_file_as(bpy.types.Operator):
         return bpy.ops.wm.save_as_mainfile("INVOKE_DEFAULT")
 
 
+def _save_bake_channels(output_dir, images):
+    output_name = os.path.basename(output_dir)
+    for channel, image in images:
+        if image is not None:
+            _save_image_as_png(image, os.path.join(output_dir, f"{output_name}_Bake_{channel}.png"))
+
+
 class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
     bl_idname = "object.polygroups_save_bake_textures"
     bl_label = "Save Textures"
@@ -523,21 +530,9 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
         output_dir = os.path.join(blend_dir, "Bakes", output_name)
         os.makedirs(output_dir, exist_ok=True)
 
-        saved_paths = []
-        if base_image is not None:
-            filepath = os.path.join(output_dir, f"{output_name}_Bake_BaseColor.png")
-            _save_image_as_png(base_image, filepath)
-            saved_paths.append(filepath)
-
-        if normal_image is not None:
-            filepath = os.path.join(output_dir, f"{output_name}_Bake_Normal.png")
-            _save_image_as_png(normal_image, filepath)
-            saved_paths.append(filepath)
-
-        if alpha_image is not None:
-            filepath = os.path.join(output_dir, f"{output_name}_Bake_MergeMask.png")
-            _save_image_as_png(alpha_image, filepath)
-            saved_paths.append(filepath)
+        images = (("BaseColor", base_image), ("Normal", normal_image), ("MergeMask", alpha_image))
+        _save_bake_channels(output_dir, images)
+        saved_count = sum(image is not None for _, image in images)
 
         if artifact_image is not None:
             filepath = os.path.join(output_dir, f"{output_name}_Bake_ArtifactMask.png")
@@ -546,9 +541,9 @@ class OBJECT_OT_polygroups_save_bake_textures(bpy.types.Operator):
             except Exception as error:
                 self.report({'ERROR'}, f'Artifact PNG verification/save failed: {error}')
                 return {'CANCELLED'}
-            saved_paths.append(filepath)
+            saved_count += 1
 
-        self.report({"INFO"}, f"Saved {len(saved_paths)} texture(s) to {output_dir}")
+        self.report({"INFO"}, f"Saved {saved_count} texture(s) to {output_dir}")
         return {"FINISHED"}
 
 
@@ -623,18 +618,34 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         target = _active_mesh(context)
-        return target is not None and len(_selected_bake_targets(context)) >= 2
+        settings = context.scene.polygroups_baking_settings
+        return (target is not None and len(_selected_bake_targets(context)) >= 2
+                and not (settings.bake_task_is_running or settings.uv_bake_is_running or settings.autobake_queue_running))
 
     def execute(self, context):
         target = _active_mesh(context)
         settings = context.scene.polygroups_baking_settings
         objects = _selected_bake_targets(context)
-        if any(obj.get(BAKE_ARTIFACT_IMAGE_PROP) for obj in objects):
-            self.report({'WARNING'}, 'Merged projection masks are unsupported; save masks from each original mesh')
+        if not bpy.data.filepath:
+            self.report({"ERROR"}, "Save the blend file first so merged textures have an output folder")
+            return {"CANCELLED"}
+        if context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
         packs = _collect_bake_texture_packs(objects, settings)
         if len(packs) < 2:
-            self.report({"WARNING"}, "Select at least two objects with baked textures and Alpha maps")
+            self.report({"WARNING"}, "Select meshes using at least two distinct baked materials with MergeMask textures")
             return {"CANCELLED"}
+
+        slots = {}
+        for pack in packs:
+            for obj, index in pack["users"]:
+                slots.setdefault(obj, []).append(index)
+        duplicate = settings.merge_duplicate_meshes
+        if not duplicate and any(not obj.is_editable for obj in slots):
+            self.report({"ERROR"}, "Make the selected linked meshes editable before merging")
+            return {"CANCELLED"}
+        if any(obj.get(BAKE_ARTIFACT_IMAGE_PROP) for obj in slots):
+            self.report({'WARNING'}, 'Merged projection masks are unsupported; save masks from each original mesh')
 
         resolution = _validate_pack_resolutions(packs)
         if resolution is None:
@@ -649,46 +660,91 @@ class OBJECT_OT_polygroups_merge_bake_textures(bpy.types.Operator):
         )
         normal_pixels = _fill_normal_background(normal_pixels, merged_coverage)
 
-        pack_objects = [pack["object"] for pack in packs]
-        pack_name = _merged_pack_name(pack_objects)
+        material_name = _merged_pack_name([pack["material"] for pack in packs], target.active_material)
+        root = os.path.join(os.path.dirname(bpy.data.filepath), "Bakes")
+        stem = _safe_path_name(_short_merge_name(target.name)) + "_Merged"
+        output_dir = None
+        images = []
+        copies = {}
+        new_data = set()
+        channels = (
+            ("BaseColor", "sRGB", base_pixels),
+            ("Normal", "Non-Color", normal_pixels),
+            ("MergeMask", "Non-Color", _alpha_map_pixels(merged_coverage)),
+        )
+        try:
+            os.makedirs(root, exist_ok=True)
+            index = 0
+            while output_dir is None:
+                pack_name = f"{stem}.{index:03d}" if index else stem
+                candidate = os.path.join(root, pack_name)
+                try:
+                    os.mkdir(candidate)
+                except FileExistsError:
+                    index += 1
+                else:
+                    output_dir = candidate
+            for channel, colorspace, pixels in channels:
+                image = bpy.data.images.new(
+                    f"{pack_name}_Bake_{channel}",
+                    width=resolution[0], height=resolution[1], alpha=True,
+                )
+                images.append((channel, image))
+                image.colorspace_settings.name = colorspace
+                _write_pixels(image, pixels)
+                _tag_merged_image(image, pack_name)
+            _save_bake_channels(output_dir, images)
+            if duplicate:
+                from .batch_import import _next_generated_collection_index
 
-        base_image = _ensure_output_image(
-            _bake_pack_data_name(settings, pack_name, "Merged_BaseColor"),
-            resolution,
-            "sRGB",
-            (0.0, 0.0, 0.0, 0.0),
-        )
-        normal_image = _ensure_output_image(
-            _bake_pack_data_name(settings, pack_name, "Merged_Normal"),
-            resolution,
-            "Non-Color",
-            (0.5, 0.5, 1.0, 1.0),
-        )
-        alpha_image = _ensure_output_image(
-            _bake_pack_data_name(settings, pack_name, "Merged_MergeMask"),
-            resolution,
-            "Non-Color",
-            (0.0, 0.0, 0.0, 1.0),
-        )
-        _write_pixels(base_image, base_pixels)
-        _write_pixels(normal_image, normal_pixels)
-        _write_pixels(alpha_image, _alpha_map_pixels(merged_coverage))
-        _tag_merged_image(base_image, pack_name)
-        _tag_merged_image(normal_image, pack_name)
-        _tag_merged_image(alpha_image, pack_name)
+                index = _next_generated_collection_index()
+                collection = bpy.data.collections.new(f"Generated.{index:03d}")
+                new_data.add(collection)
+                context.scene.collection.children.link(collection)
+                for obj in objects:
+                    copy = obj.copy()
+                    new_data.add(copy)
+                    mesh = obj.data.copy()
+                    new_data.add(mesh)
+                    copy.data = mesh
+                    collection.objects.link(copy)
+                    copies[obj] = copy
+                for obj, copy in copies.items():
+                    if obj.parent in copies:
+                        copy.parent = copies[obj.parent]
+                slots = {copies[obj]: indices for obj, indices in slots.items()}
+        except (OSError, RuntimeError, ValueError) as error:
+            bpy.data.batch_remove(new_data | {image for _, image in images})
+            if output_dir is not None:
+                for channel, _ in images:
+                    path = os.path.join(output_dir, f"{pack_name}_Bake_{channel}.png")
+                    with suppress(OSError):
+                        os.remove(path)
+                with suppress(OSError):
+                    os.rmdir(output_dir)
+            self.report({"ERROR"}, f"Could not complete merge: {error}")
+            return {"CANCELLED"}
 
+        base_image, normal_image, alpha_image = (image for _, image in images)
         material = _ensure_merged_material(
-            pack_name, base_image, normal_image, alpha_image, pack_objects,
+            pack_name, base_image, normal_image, alpha_image, slots, material_name=material_name,
         )
-        for obj in pack_objects:
+        for obj, indices in slots.items():
             obj[BAKE_MERGED_BASE_COLOR_IMAGE_PROP] = base_image.name
             obj[BAKE_MERGED_NORMAL_IMAGE_PROP] = normal_image.name
             obj[BAKE_MERGED_ALPHA_IMAGE_PROP] = alpha_image.name
-            _assign_material_to_object(obj, material)
-        target.active_material = material
+            _assign_material_to_object(obj, material, indices)
 
-        skipped = len(objects) - len(packs)
-        message = f"Merged {len(packs)} texture pack(s) into {pack_name}"
+        if copies:
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            for copy in copies.values():
+                copy.select_set(True)
+            active_copy = copies.get(target)
+            context.view_layer.objects.active = active_copy if active_copy in slots else next(iter(slots))
+
+        skipped = len(objects) - len(slots)
+        message = f"Merged {len(packs)} materials on {len(slots)} meshes into {material.name} | {output_dir}"
         if skipped:
             message += f", skipped {skipped} object(s)"
         unreadable_images = _count_unreadable_pack_images(packs, resolution)
@@ -744,6 +800,8 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO", "INTERNAL"}
 
     prepare_materials: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
+    align_source: bpy.props.BoolProperty(options={"HIDDEN", "SKIP_SAVE"})
+    require_texture_save: bpy.props.BoolProperty(options={"HIDDEN", "SKIP_SAVE"})
     rebake_final: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_repair_mesh: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
     rebake_delete_current_lods: bpy.props.BoolProperty(default=False, options={"HIDDEN", "SKIP_SAVE"})
@@ -759,7 +817,10 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         if (getattr(ACTIVE_JOB,'_is_rebake_queue',False)
                 and not getattr(ACTIVE_JOB,'_rebake_dispatching',False)):
             return False
-        return (not settings.bake_task_is_running and target is not None
+        if (getattr(ACTIVE_JOB, "_is_autobake_queue", False)
+                and not getattr(ACTIVE_JOB, "_autobake_dispatching", False)):
+            return False
+        return (not settings.bake_task_is_running and not settings.uv_bake_is_running and target is not None
                 and (bool(_source_meshes(context, target)) or bool(MID_PATTERN.fullmatch(target.name))))
 
     def _set_status(self, context, stage, progress, message):
@@ -777,9 +838,27 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         settings = context.scene.polygroups_baking_settings
         self.artifact_repair = None
         projection = getattr(self, 'projection', None)
-        if projection is not None:
-            projection.close()
+        try:
+            if projection is not None:
+                projection.close()
+        except Exception as error:
+            success, cancelled = False, False
+            message = f"Projection cleanup failed: {error}"
+        finally:
             self.projection = None
+            source_transform = getattr(self, "source_transform", None)
+            if source_transform is not None:
+                source, matrix_basis = source_transform
+                try:
+                    source.matrix_basis = matrix_basis
+                    context.view_layer.update()
+                except ReferenceError:
+                    pass  # The source was deleted during the bake.
+                self.source_transform = None
+            selected_to_active = getattr(self, "saved_selected_to_active", None)
+            if selected_to_active is not None:
+                settings.use_selected_to_active, context.scene.render.bake.use_selected_to_active = selected_to_active
+                self.saved_selected_to_active = None
         if not success:
             _invalidate_artifact_mask(self.target)
         settings.bake_task_is_running = False
@@ -876,6 +955,21 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
             self._set_status(context, self.stage, 32, "Preparing lowpoly mesh and AutoCage")
             if self.target.mode != "OBJECT":
                 bpy.ops.object.mode_set(mode="OBJECT")
+            if self.align_source and len(self.sources) == 1 and not self.rebake_final:
+                source = self.sources[0]
+                matrix = source.matrix_world.copy()
+                if matrix.translation != self.target.matrix_world.translation:
+                    self.source_transform = (source, source.matrix_basis.copy())
+                    matrix.translation = self.target.matrix_world.translation
+                    source.matrix_world = matrix
+                    context.view_layer.update()
+                    if (source.matrix_world.translation - self.target.matrix_world.translation).length > 1e-5:
+                        raise RuntimeError("Cannot align the high-poly origin. Check its parenting or transform constraints.")
+            if (self.align_source or self.require_texture_save) and not self.settings.use_selected_to_active:
+                self.saved_selected_to_active = (
+                    self.settings.use_selected_to_active, context.scene.render.bake.use_selected_to_active,
+                )
+                self.settings.use_selected_to_active = True
             if not _apply_auto_cage_if_enabled(context, self.target, self.sources, self.settings, self.report):
                 return self._finish(context, False, "Cage preparation failed")
             self.material, self.base_node, self.normal_node = _ensure_bake_material(self.target, self.settings)
@@ -963,8 +1057,11 @@ class OBJECT_OT_polygroups_bake_task(bpy.types.Operator):
         elif self.stage == "SAVE":
             self._set_status(context, self.stage, 95, "Saving bake textures")
             if (getattr(self, 'final_rebake_session', None) is None
-                    and self.prepare_materials and self.settings.auto_save_textures_after_bake):
-                bpy.ops.object.polygroups_save_bake_textures()
+                    and self.prepare_materials
+                    and (self.settings.auto_save_textures_after_bake or self.require_texture_save)):
+                result = bpy.ops.object.polygroups_save_bake_textures()
+                if self.require_texture_save and "FINISHED" not in result:
+                    return self._finish(context, False, "Saving bake textures failed")
             self.stage = "FINALIZE"
         elif self.stage == "FINALIZE":
             self._set_status(context, self.stage, 99, "Finalizing bake")

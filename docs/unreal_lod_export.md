@@ -22,20 +22,43 @@ Output:
 
 GLTF modes:
 
-- All LODs in One GLTF: an embedded file containing all selected LOD meshes
-  for the asset. High is exported as a separate file.
+- All LODs in One GLTF: an embedded file containing the selected LODs of
+  one asset.
 - Separate LODs / Shared Textures: one GLTF/BIN pair per mesh, referencing
   the common GLTF/Textures directory.
 
-GLB Mode is available when GLB and Sort By = LODs are enabled:
+GLB Mode is available whenever GLB is enabled:
 
-- All LODs in One GLB (default): `<asset>/GLB/<asset>.glb` includes all
-  selected LODs and embeds their materials/textures. Retained High is separate.
+- One File per Asset: embeds the selected LODs and their materials/textures.
 - Separate LODs: one self-contained GLB per selected mesh, as before.
+
+Follow Sort By is the default for both formats. LOD layouts combine the LOD
+chain and export retained High separately. Sets and LOW / MID / HIGH export
+separate files by default. With an explicit combined mode, those two layouts
+package the selected variants or LODs together. Sets saves them under
+`!Unreal/GLB/<asset>/` or `!Unreal/GLTF/<asset>/`. LOW / MID / HIGH saves
+combined files directly in `!Unreal/GLB/` or `!Unreal/GLTF/`. Separate
+files use quality subfolders inside those format folders.
 
 JSON maps each LOD's GLB entry to the shared path in combined mode. Mesh totals
 are unchanged. The regression test parses the GLB JSON chunk to verify that
 multiple LOD nodes and embedded buffers/images are present in the same file.
+
+Mesh Info defaults to JSON. FAB writes `MeshInfo_FBX.json`, `MeshInfo_GLB.json`
+and `MeshInfo_GLTF.json` in the corresponding format folders for the formats
+exported. Each report contains only its own format, with paths relative to
+that report's folder. Sets and quality layouts place these reports under the
+top-level format folders, referencing the geometry in its chosen layout.
+The root `MeshInfo.json` still lists the complete export.
+
+Each format report also contains `fab_technical_details` with Geometry,
+Materials and Textures, and Rigging and Animation values for the Fab listing.
+For packs, `ranges` gives the minimum and maximum per asset family across
+its exported variants. Bounding box values are in scene meters along Blender
+XYZ, using the maximum extent of the variants for each asset. GLB/GLTF mesh
+counts and animation tracks come from the exported streams. FBX geometry
+counts describe the evaluated Blender meshes. `null` marks information
+that needs review, such as UV overlap or scan provenance.
 
 Sort By = LODs / Format uses a format-first layout instead:
 

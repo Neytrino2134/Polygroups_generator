@@ -78,6 +78,7 @@ from .settings.render import (
 )
 
 from .settings.baking import (
+    POLYGROUPS_PG_autobake_queue_item,
     POLYGROUPS_PG_baking_settings,
     POLYGROUPS_PG_resculpting_settings,
 )
@@ -110,6 +111,7 @@ CLASSES = (
     POLYGROUPS_PG_smart_lod_preset,
     POLYGROUPS_PG_mesh_finalization_settings,
     POLYGROUPS_PG_render_settings,
+    POLYGROUPS_PG_autobake_queue_item,
     POLYGROUPS_PG_baking_settings,
     POLYGROUPS_PG_resculpting_settings,
     AIRETOPO_PG_ai_generation_settings,

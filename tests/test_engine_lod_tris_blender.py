@@ -1,12 +1,17 @@
 """Smart LODs presets: Unreal / Unity defaults, add / save / remove, and the Phase 2 engine switch drives them."""
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 import addon_utils,bpy
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT.parent))
 bpy.context.preferences.use_preferences_save=False
 addon_utils.enable(ROOT.name,default_set=False)
 from polygroups_generator.core import smart_lod_presets as presets
+temporary_presets = TemporaryDirectory()
+preset_storage = patch.object(presets, 'preset_path', return_value=Path(temporary_presets.name) / 'presets.json')
+preset_storage.start()
 from polygroups_generator.operators.rebake_lods import FinalRebakeLODs
 from polygroups_generator.operators.relod import ReLODPlan
 ctx=bpy.context
@@ -59,3 +64,5 @@ s.smart_lods_presets.remove(0)
 p.phase2_run_engine='UNITY';p.phase2_run_engine='FAB'
 assert s.smart_lods_count==6 and s.smart_lods_target_6==200
 print('SMART_LODS_PRESETS_OK')
+preset_storage.stop()
+temporary_presets.cleanup()
