@@ -241,6 +241,25 @@ class OBJECT_OT_polygroups_select_import_folder(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class OBJECT_OT_polygroups_select_current_import_folder(bpy.types.Operator):
+    bl_idname = "object.polygroups_select_current_import_folder"
+    bl_label = "Select Current Folder"
+    bl_description = "Use the folder that contains the saved blend file as the import folder"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene is not None and not context.scene.polygroups_model_preparation_settings.batch_is_running
+
+    def execute(self, context):
+        if not bpy.data.filepath:
+            self.report({"WARNING"}, "Save the blend file first")
+            return {"CANCELLED"}
+        context.scene.polygroups_model_preparation_settings.batch_import_directory = os.path.dirname(
+            bpy.path.abspath(bpy.data.filepath))
+        return {"FINISHED"}
+
+
 class OBJECT_OT_polygroups_scan_import_folder(bpy.types.Operator):
     bl_idname = "object.polygroups_scan_import_folder"
     bl_label = "Scan Folder"

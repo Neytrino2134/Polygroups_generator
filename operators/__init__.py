@@ -64,7 +64,7 @@ from .phase2_processing import CLASSES as PHASE2_CLASSES, stop_phase2
 from .batch_import import OBJECT_OT_polygroups_arrange_batch_objects
 from .batch_import import OBJECT_OT_polygroups_scan_import_folder
 from .batch_import import OBJECT_OT_polygroups_append_generated_blends
-from .batch_import import OBJECT_OT_polygroups_select_import_folder
+from .batch_import import OBJECT_OT_polygroups_select_import_folder, OBJECT_OT_polygroups_select_current_import_folder
 from .check_material_textures import OBJECT_OT_polygroups_check_material_textures
 from .remove_unused_slots import OBJECT_OT_polygroups_remove_unused_slots
 from .clear_materials import OBJECT_OT_clear_polygroups_materials
@@ -328,6 +328,7 @@ CLASSES = (
     OBJECT_OT_polygroups_fix_selected_generated_indices,
     OBJECT_OT_polygroups_move_to_new_generated_collection,
     OBJECT_OT_polygroups_select_import_folder,
+    OBJECT_OT_polygroups_select_current_import_folder,
     OBJECT_OT_airetopo_generate_openai_image,
     OBJECT_OT_airetopo_generate_google_image,
     OBJECT_OT_airetopo_refresh_prompt_library,
