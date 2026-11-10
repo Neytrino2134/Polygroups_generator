@@ -238,6 +238,7 @@ class OBJECT_OT_polygroups_select_import_folder(bpy.types.Operator):
             return {"CANCELLED"}
 
         settings.batch_import_directory = directory
+        bpy.ops.object.polygroups_scan_import_folder()
         return {"FINISHED"}
 
 
@@ -257,6 +258,7 @@ class OBJECT_OT_polygroups_select_current_import_folder(bpy.types.Operator):
             return {"CANCELLED"}
         context.scene.polygroups_model_preparation_settings.batch_import_directory = os.path.dirname(
             bpy.path.abspath(bpy.data.filepath))
+        bpy.ops.object.polygroups_scan_import_folder()
         return {"FINISHED"}
 
 

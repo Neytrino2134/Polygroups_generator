@@ -23,4 +23,7 @@ with tempfile.TemporaryDirectory() as directory:
     bpy.ops.wm.save_as_mainfile(filepath=str(Path(directory) / 'a.blend'))
     assert bpy.ops.object.polygroups_select_current_import_folder() == {'FINISHED'}
     assert Path(bpy.path.abspath(p.batch_import_directory)).resolve() == Path(directory).resolve(), p.batch_import_directory
+    (Path(directory) / 'one.fbx').write_bytes(b'x')
+    assert bpy.ops.object.polygroups_select_import_folder(directory=str(directory)) == {'FINISHED'}
+    assert p.batch_current_file == 'Scan complete', p.batch_current_file     # scanned right after the choice
 print('select current import folder ok')
