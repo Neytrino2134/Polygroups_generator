@@ -1,4 +1,4 @@
-"""Start Phase 2 settings stay in sync with Restore / Finalization / Render; presets, defaults, Retopo_01 keep, dialog."""
+﻿"""Start Phase 2 settings stay in sync with Restore / Finalization / Render; presets, defaults, Retopo_01 keep, dialog."""
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -70,7 +70,7 @@ assert lod_tris() == [6000, 3000, 1500, 750, 350], lod_tris()
 assert not any(getattr(p, name) for name in dialog.HIGHPOLY_OPTIONS)
 assert not p.phase2_run_zbrush and not p.phase2_run_cleanup and not p.phase2_resculpt_retopo01
 assert p.phase2_run_mid and p.phase2_run_blend and p.phase2_run_export and p.phase2_run_render
-assert p.phase2_export_fbx and not p.phase2_export_glb and p.phase2_auto_skip_scene
+assert p.phase2_export_fbx and p.phase2_export_glb and p.phase2_auto_skip_scene
 keys = [entry[0] for entry in selected_stages(p)]
 assert 'ZBRUSH' not in keys and 'CLEANUP' not in keys and {'RESTORE', 'PREPARE', 'EXPORT', 'BLEND', 'RENDER'} <= set(keys), keys
 assert bpy.ops.object.polygroups_phase2_start_preset(preset='UNREAL_ZBRUSH') == {'FINISHED'}
@@ -154,3 +154,7 @@ p.phase2_rename_version_index = '01'
 step(owner='PREPARATION', field='phase2_rename_version_index', delta=1)
 assert p.phase2_rename_version_index == '02'
 print('phase2 start sync ok')
+
+assert bpy.context.scene.polygroups_mesh_finalization_settings.unreal_fbx_normal_maps == 'BOTH'
+
+

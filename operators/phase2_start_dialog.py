@@ -21,6 +21,13 @@ SHARED_ON = ('phase2_run_restore', 'phase2_run_prepare', 'phase2_run_export', 'p
              'phase2_run_fix_source', 'phase2_run_uv_repair')
 
 
+def apply_export_defaults(p):
+    """Start Phase 2 / Phase 1-2 defaults: FBX + GLB, FBX normal maps in both conventions."""
+    p.phase2_export_fbx = True
+    p.phase2_export_glb = True
+    p.id_data.polygroups_mesh_finalization_settings.unreal_fbx_normal_maps = 'BOTH'
+
+
 def apply_start_preset(p, preset):
     """Write one of the Start Phase 2 presets; shared properties follow through their sync updates."""
     zbrush = preset == 'UNREAL_ZBRUSH'
@@ -30,7 +37,7 @@ def apply_start_preset(p, preset):
         setattr(p, name, True)
     p.phase2_run_engine = 'FAB'
     apply_engine_lod_tris(p)  # also when FAB was already chosen
-    p.phase2_export_glb = False
+    apply_export_defaults(p)
     for name in HIGHPOLY_OPTIONS:
         setattr(p, name, zbrush)
     # Both presets fix the MID source and result; ZBrush also guards its HIGH remesh
@@ -91,6 +98,7 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         ('RESUME', 'Resume import then Phase 2', '')), options={'SKIP_SAVE'})
 
     def invoke(self, context, event):
+        apply_export_defaults(context.scene.polygroups_model_preparation_settings)
         text = ('Start Phase 2' if self.then == 'PHASE2' else
                 'Resume + Phase 2' if self.then == 'RESUME' else 'Import + Phase 2')
         return context.window_manager.invoke_props_dialog(self, width=460, confirm_text=text)
