@@ -18,17 +18,17 @@ from .common import (
 
 
 def draw_import_folder(layout, context, settings):
+    layout.label(text=t(context, "folder"))
     row = layout.row(align=True)
-    row.label(text=t(context, "folder"))
+    path = settings.batch_import_directory or t(context, "no_folder_selected")
+    row.label(text=path, icon="FILE_FOLDER")
     browse = row.row(align=True)
+    browse.scale_x = 1.0
     browse.enabled = not settings.batch_is_running
     browse.operator_context = "INVOKE_DEFAULT"
     browse.operator("object.polygroups_select_import_folder", text="", icon="FILE_FOLDER")
     browse.operator_context = "EXEC_DEFAULT"
-    browse.operator("object.polygroups_select_current_import_folder", text=t(context, "select_current_folder"),
-                    icon="FILE_BLEND")
-    path = settings.batch_import_directory or t(context, "no_folder_selected")
-    layout.label(text=path, icon="FILE_FOLDER")
+    browse.operator("object.polygroups_select_current_import_folder", text="", icon="FILE_BLEND")
 
 
 class VIEW3D_PT_polygroups_model_preparation(bpy.types.Panel):
