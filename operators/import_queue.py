@@ -1202,7 +1202,7 @@ def schedule_phase2(scene, view_layer, report):
     The batch operator clears ACTIVE_QUEUE only after this queue returns, and Phase 2
     refuses to start while any queue, bake or render is active, so poll on a timer.
     """
-    from .phase2_processing import available
+    from .phase2_processing import available, clear_saved_generated_collections
     deadline = time.monotonic() + PHASE2_START_TIMEOUT
     owner_report = report
 
@@ -1227,6 +1227,11 @@ def schedule_phase2(scene, view_layer, report):
                 end_combined()
                 return None
             report({"INFO"}, t(bpy.context, "batch_phase2_started"))
+            try:
+                # Phase 2 restores from the saved files and must start at Generated.001 again.
+                clear_saved_generated_collections(scene, bpy.data.filepath)
+            except Exception as error:
+                report({"WARNING"}, f"Could not clear Generated.N before Phase 2: {error}")
             try:
                 bpy.ops.object.polygroups_start_phase2("INVOKE_DEFAULT")
             except RuntimeError as error:

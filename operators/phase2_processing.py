@@ -48,8 +48,21 @@ def scan_separated_files(blend_path, recursive=False):
     return files, entries, errors
 
 
-def clear_generated_collections(scene=None):
-    """Remove Generated.N trees; retain objects also linked outside those trees."""
+def clear_saved_generated_collections(scene, blend_path):
+    """Phase 1 + 2 junction: drop the Generated.N that Phase 1 already saved to its own file.
+
+    Phase 2 appends into the first free number, so these leftovers would push it past them. Runs
+    whatever Clear Current Generated.N says; a collection without a saved file is never touched.
+    """
+    saved = {f'Generated.{digits}' for _number, digits, _path in generated_collection_files(blend_path)}
+    if saved:
+        clear_generated_collections(scene, only=saved)
+
+
+def clear_generated_collections(scene=None, only=None):
+    """Remove Generated.N trees; retain objects also linked outside those trees.
+
+    ``only`` limits the removal to these collection names."""
     scene = scene or bpy.context.scene
     reachable, pending = set(), list(scene.collection.children)
     while pending:
@@ -58,7 +71,8 @@ def clear_generated_collections(scene=None):
             reachable.add(col)
             pending.extend(col.children)
     # Marked collections hold unfinished work kept for manual finishing.
-    doomed = {col for col in reachable if NUMBERED.fullmatch(col.name) and not skip_marks.is_marked(col)}
+    doomed = {col for col in reachable if NUMBERED.fullmatch(col.name) and not skip_marks.is_marked(col)
+              and (only is None or col.name in only)}
     parents = {}
     for parent in list(bpy.data.collections) + [scene.collection for scene in bpy.data.scenes]:
         for child in parent.children:
