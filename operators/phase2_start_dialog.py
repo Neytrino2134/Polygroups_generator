@@ -93,13 +93,15 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
     bl_description = 'Check the Phase 2 passes, asset name, indices and export format, then start'
     bl_options = {'INTERNAL'}
     then: bpy.props.EnumProperty(items=(
-        ('PHASE2', 'Start Phase 2', ''), ('IMPORT', 'Import then Phase 2', ''),
+        ('PHASE2', 'Start Phase 2', ''), ('PHASE2_SELECTED', 'Do Selected Phase 2', ''),
+        ('IMPORT', 'Import then Phase 2', ''),
         ('IMPORT_SELECTED', 'Import selected then Phase 2', ''),
         ('RESUME', 'Resume import then Phase 2', '')), options={'SKIP_SAVE'})
 
     def invoke(self, context, event):
         apply_export_defaults(context.scene.polygroups_model_preparation_settings)
         text = ('Start Phase 2' if self.then == 'PHASE2' else
+                'Do Selected Phase 2' if self.then == 'PHASE2_SELECTED' else
                 'Resume + Phase 2' if self.then == 'RESUME' else 'Import + Phase 2')
         return context.window_manager.invoke_props_dialog(self, width=460, confirm_text=text)
 
@@ -155,7 +157,11 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
         steps.label(text='Phase 2 will run', icon='INFO')
         for _key, label, _prop, _function in selected_stages(p):
             steps.label(text=label, icon='CHECKMARK')
-        if self.then != 'PHASE2':
+        if self.then == 'PHASE2_SELECTED':
+            from .phase2_pipeline import selected_generated
+            names = ', '.join(selected_generated(context)) or 'select a Retopo_XX mesh'
+            steps.label(text=f'Only for {names}', icon='RESTRICT_SELECT_OFF')
+        elif self.then != 'PHASE2':
             steps.label(text='Starts after Import Processing finishes', icon='TIME')
         layout.prop(p, 'phase2_run_engine', expand=True)
         if p.phase2_run_prepare:
@@ -188,6 +194,8 @@ class OBJECT_OT_polygroups_phase2_confirm_start(bpy.types.Operator):
             setattr(s, field, asset_name(getattr(s, field)))
         if self.then == 'PHASE2':
             return bpy.ops.object.polygroups_start_phase2('INVOKE_DEFAULT')
+        if self.then == 'PHASE2_SELECTED':
+            return bpy.ops.object.polygroups_phase2_do_selected('INVOKE_DEFAULT')
         try:
             return bpy.ops.object.polygroups_batch_import(
                 'EXEC_DEFAULT', use_file_selection=False, do_selected=self.then == 'IMPORT_SELECTED',

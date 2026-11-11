@@ -22,6 +22,8 @@ settings.phase2_mid_remesh = False
 settings.phase2_blend_export_generated = False  # Keep-highpoly-for-blend is a default now.
 settings.phase2_scan_subfolders = False
 bake = context.scene.polygroups_baking_settings
+# UVPackmaster is not installed in the test Blender; its PACK would only add a Phase 2 warning.
+phase2.Phase2Queue.pack_mesh = lambda self, context, low=None: None
 assert settings.phase2_auto_bake and settings.phase2_repair_artifacts
 assert bake.bake_artifact_mask and bake.bake_artifact_autofill
 

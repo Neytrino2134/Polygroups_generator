@@ -250,7 +250,8 @@ from .relocate_project import WM_OT_airetopo_relocate_project, WM_OT_airetopo_re
 from .detached_groups import WM_OT_airetopo_detach_group, WM_OT_airetopo_group_window_control
 
 from .phase2_blend_export import OBJECT_OT_polygroups_phase2_export_blend, OBJECT_OT_polygroups_phase2_open_blend_folder
-from .phase2_pipeline import OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control
+from .phase2_pipeline import (OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_do_selected,
+                              OBJECT_OT_polygroups_phase2_pipeline_control)
 from .phase2_reset import OBJECT_OT_polygroups_phase2_reset_state
 from .phase2_start_dialog import CLASSES as PHASE2_START_DIALOG_CLASSES
 from .index_step import CLASSES as INDEX_STEP_CLASSES
@@ -266,7 +267,8 @@ from .phase2_zbrush_export import (
 )
 
 CLASSES = (
-    OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_pipeline_control,
+    OBJECT_OT_polygroups_start_phase2, OBJECT_OT_polygroups_phase2_do_selected,
+    OBJECT_OT_polygroups_phase2_pipeline_control,
     OBJECT_OT_polygroups_phase2_reset_state,
     *PHASE2_START_DIALOG_CLASSES, *INDEX_STEP_CLASSES, *PHASE_GATE_CLASSES, *FINAL_CLEANUP_CLASSES,
     *REBAKE_QUEUE_CLASSES,

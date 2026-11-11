@@ -11,8 +11,9 @@ DISPATCHING = False
 
 
 class Phase2Pipeline:
-    def __init__(self, context, report):
+    def __init__(self, context, report, only=None):
         from .phase2_pipeline_stages import selected_stages
+        self.only = list(only or [])   # Do Selected Phase 2: these Generated.N names only
         self.scene, self.view_layer = context.scene, context.view_layer
         self.settings = self.scene.polygroups_model_preparation_settings
         self.report = report
@@ -50,6 +51,8 @@ class Phase2Pipeline:
     def begin(self, context):
         global ACTIVE_PIPELINE
         ACTIVE_PIPELINE = self
+        from ..core import phase2_scope
+        phase2_scope.begin(self.only)
         p = self.settings
         p.phase2_pipeline_running = True
         p.phase2_pipeline_paused = False
@@ -245,6 +248,8 @@ class Phase2Pipeline:
             state = 'FAILED'
         finally:
             DISPATCHING = False
+            from ..core import phase2_scope
+            phase2_scope.clear()
             for settings, name, value, was_set in reversed(self.saved):
                 setattr(settings, name, value) if was_set else settings.property_unset(name)
             self.saved.clear()
@@ -325,9 +330,12 @@ class OBJECT_OT_polygroups_start_phase2(bpy.types.Operator):
         from .zbrush_cleanup import cleanup_pending
         return context.mode == 'OBJECT' and ACTIVE_PIPELINE is None and available(context) and not cleanup_pending()
 
+    def collections(self, context):
+        return None   # every Generated.N file
+
     def execute(self, context):
         try:
-            run = Phase2Pipeline(context, self.report)
+            run = Phase2Pipeline(context, self.report, only=self.collections(context))
             run.begin(context)
         except Exception as error:
             if ACTIVE_PIPELINE is not None:
@@ -357,6 +365,39 @@ class OBJECT_OT_polygroups_start_phase2(bpy.types.Operator):
             with context.temp_override(scene=run.scene, view_layer=run.view_layer):
                 run.step(context)
         return {'PASS_THROUGH'}
+
+
+def selected_generated(context):
+    """Generated.N names holding the selected meshes (a Retopo_XX, Resculpting or any object in it)."""
+    from ..core.phase2_scope import NUMBER
+    parents = {}
+    for col in context.scene.collection.children_recursive:
+        for child in col.children:
+            parents.setdefault(child, col)
+    found = []
+    objects = list(context.selected_objects) or ([context.active_object] if context.active_object else [])
+    for obj in objects:
+        for col in obj.users_collection:
+            while col is not None and not NUMBER.fullmatch(col.name):
+                col = parents.get(col)
+            if col is not None and col.name not in found:
+                found.append(col.name)
+    return found
+
+
+class OBJECT_OT_polygroups_phase2_do_selected(OBJECT_OT_polygroups_start_phase2):
+    bl_idname = 'object.polygroups_phase2_do_selected'
+    bl_label = 'Do Selected Phase 2'
+    bl_description = ('Run the enabled Phase 2 passes only for the Generated.N of the selected Retopo_XX mesh: '
+                      'processing, LODs / Rename (version index from its number: Generated.003 -> 03), '
+                      'export, Blend, ZBrush and render of that asset only')
+
+    @classmethod
+    def poll(cls, context):
+        return super().poll(context) and bool(selected_generated(context))
+
+    def collections(self, context):
+        return selected_generated(context)
 
 
 class OBJECT_OT_polygroups_phase2_pipeline_control(bpy.types.Operator):

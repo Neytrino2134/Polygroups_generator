@@ -9,7 +9,7 @@ from pathlib import Path
 import bpy
 from bpy.app.handlers import persistent
 
-from ..core import phase1_logs, skip_marks
+from ..core import phase1_logs, phase2_scope, skip_marks
 from .batch_import import import_path_sort_key
 from .import_queue import generated_collection_files, redraw
 from .topology_guard import apply_topology_guard
@@ -271,6 +271,49 @@ class Phase2Queue:
         self.phase1_failures = {}
         self.repaired = False      # Phase 1 failed this file but it was fixed by hand afterwards
         self.entry_started = time.monotonic()
+        self.warnings = []         # errors the current collection continued after (see soft)
+        self.primary_done = False  # the highest Retopo is baked: later errors only drop Resculpting
+
+    def warn(self, context, text):
+        """Record an error the collection continues after; it ends with color tag 5."""
+        if context.object and context.object.mode != 'OBJECT':
+            try:
+                bpy.ops.object.mode_set(mode='OBJECT')
+            except RuntimeError:
+                pass
+        self.warnings.append(text)
+        self.report({'WARNING'}, f'{self.entries[self.index][1]}: {text}')
+
+    def soft(self, context, label, action):
+        """Run one optional step; a failure is recorded and processing goes on."""
+        try:
+            action()
+            return True
+        except Exception as error:
+            self.warn(context, f'{label} failed: {error}')
+            return False
+
+    def abort_remesh(self):
+        if self.mid_remesh is not None:
+            try:
+                self.mid_remesh.abort()
+            finally:
+                self.mid_remesh = None
+
+    def after_highest(self, context):
+        """The highest Retopo is final (fixed, remeshed, or kept as it was): pack, then bake."""
+        self.soft(context, 'UV repack', lambda: self.repack_mesh(context))
+        if self.auto_bake:
+            self.stage = 'BAKE_START'
+        else:
+            self.complete()
+
+    def drop_resculpting(self, context, error):
+        """Resculpting_01 failed (HIGH remesh, Setup, its rebake): MID / LOD work goes on without it."""
+        self.abort_remesh()
+        self.restore_bake_settings()
+        self.warn(context, f'Resculpting skipped at {self.stage}: {error}')
+        self.complete()
 
     def begin(self):
         settings = self.settings
@@ -570,7 +613,11 @@ class Phase2Queue:
                                     col.objects.unlink(obj)
             set_collection_excluded(self.collection, self.view_layer, False)
             self.previous_collection = self.collection
-            self.collection.color_tag = 'COLOR_05' if error else 'COLOR_02'
+            self.collection.color_tag = 'COLOR_05' if error or self.warnings else 'COLOR_02'
+            if self.warnings and not error:
+                self.collection[phase2_scope.WARNING_KEY] = '; '.join(self.warnings)
+            elif phase2_scope.WARNING_KEY in self.collection:
+                del self.collection[phase2_scope.WARNING_KEY]
         self.baked_pair = None
         self.primary_pair = None
         self.retopo01 = None
@@ -587,6 +634,7 @@ class Phase2Queue:
         self.notify('failed' if error else 'success', error=error, failed_stage=failed_stage if error else None)
         self.index += 1
         self.stage, self.collection = 'RESTORE', None
+        self.warnings, self.primary_done = [], False
         if not error:
             self.autosave_completed()
 
@@ -605,6 +653,9 @@ class Phase2Queue:
         if error:
             record['error'] = error
             record['failed_stage'] = failed_stage
+        if self.warnings and not error:
+            # Finished and prepared like the others, but check it: some steps failed.
+            record['warnings'] = list(self.warnings)
         if phase1:
             record.update(reason=phase1['reason'], phase1_status=phase1['status'],
                           phase1_failed_stage=phase1['failed_stage'], phase1_failed_pass=phase1['failed_pass'],
@@ -629,6 +680,7 @@ class Phase2Queue:
         self.index += 1
         self.stage, self.collection = 'RESTORE', None
         self.baked_pair = self.primary_pair = self.retopo01 = None
+        self.warnings, self.primary_done = [], False
 
     def finish(self, stopped=False):
         if self.finished:
@@ -660,21 +712,30 @@ class Phase2Queue:
         try:
             if self.stage == 'RESTORE':
                 self.entry_started = time.monotonic()
-                self.collection = restore_collection(path, name, self.scene)
+                self.warnings, self.primary_done = [], False
+                if not path:
+                    # Do Selected Phase 2: the collection is already in the scene; the user picked it.
+                    self.collection = bpy.data.collections.get(name)
+                    if self.collection is None:
+                        raise ValueError(f'{name} is not in this blend file')
+                    skip_marks.clear_all(self.collection)
+                else:
+                    self.collection = restore_collection(path, name, self.scene)
                 if self.previous_collection is not None and self.previous_collection != self.collection:
                     disable_completed_collection(self.previous_collection, self.view_layer)
                     self.previous_collection = None
                 self.view_layer.update()
                 # Phase 1 did not finish this file: import it, mark it, process nothing.
-                phase1 = phase1_logs.failure_for(path, self.phase1_failures)
+                phase1 = phase1_logs.failure_for(path, self.phase1_failures) if path else None
                 # The log is authoritative when it knows the file; the stamp is the fallback without logs.
-                stamped = '' if phase1 or phase1_logs.has_record(path, self.phase1_failures) else skip_marks.stamped_failure(self.collection, file_mtime(path))
+                stamped = '' if not path or phase1 or phase1_logs.has_record(path, self.phase1_failures) \
+                    else skip_marks.stamped_failure(self.collection, file_mtime(path))
                 if phase1 or stamped:
                     self.skip(phase1['reason'] if phase1 else stamped, phase1)
                     return
                 # Saved again after the failure: the user finished it by hand, so process it normally.
-                self.repaired = (phase1_logs.has_record(path, self.phase1_failures)
-                                 or bool(self.collection.get(skip_marks.FAILED_KEY)))
+                self.repaired = bool(path) and (phase1_logs.has_record(path, self.phase1_failures)
+                                                or bool(self.collection.get(skip_marks.FAILED_KEY)))
                 skip_marks.clear_stamp(self.collection)
                 if self.auto_bake and (self.settings.phase2_resculpt_retopo01 or self.settings.phase2_autobake_retopo01):
                     candidates = [obj for obj in self.collection.all_objects if obj.type == 'MESH'
@@ -683,30 +744,41 @@ class Phase2Queue:
                         raise ValueError(f'{self.collection.name}: expected exactly one Retopo_01 / Resculpting_01 mesh')
                     self.retopo01 = candidates[0]
                 guard = self.settings.phase2_topology_guard_highest
+                highest = self.highest_mesh()   # no numbered Retopo at all is a real failure
                 # Double fix: every fix on the MID source (optional) and again on its result.
+                # A failed fix or MID remesh keeps the existing highest Retopo and goes on.
                 if not self.settings.phase2_mid_remesh or self.settings.phase2_fix_source_before_mid:
-                    self.fix_mesh(context, self.highest_mesh(), guard=guard)
+                    self.soft(context, f'{highest.name} fixes', lambda: self.fix_mesh(context, highest, guard=guard))
                 else:
-                    self.remove_loose_parts(context)
+                    self.soft(context, f'{highest.name} loose parts', lambda: self.remove_loose_parts(context))
                 if self.settings.phase2_mid_remesh:
                     from .phase2_mid_remesh import Phase2MidRemesh
-                    self.mid_remesh=Phase2MidRemesh(context,self.collection,self.report)
-                    self.mid_remesh.start(context)
-                    self.stage='MID_REMESH_WAIT'
+                    try:
+                        self.mid_remesh = Phase2MidRemesh(context, self.collection, self.report)
+                        self.mid_remesh.start(context)
+                        self.stage = 'MID_REMESH_WAIT'
+                    except Exception as error:
+                        self.abort_remesh()
+                        self.warn(context, f'MID remesh failed, kept {self.highest_mesh().name}: {error}')
+                        self.after_highest(context)
                 else:
-                    self.repack_mesh(context)
-                    if self.auto_bake:self.stage='BAKE_START'
-                    else:self.complete()
+                    self.after_highest(context)
             elif self.stage == 'MID_REMESH_WAIT':
-                done,progress=self.mid_remesh.poll()
-                self.settings.phase2_status=f'{self.index+1}/{len(self.entries)}: {name} / MID Remesh {progress*100:.0f}%'
+                try:
+                    done, progress = self.mid_remesh.poll()
+                    self.settings.phase2_status = f'{self.index+1}/{len(self.entries)}: {name} / MID Remesh {progress*100:.0f}%'
+                    result = self.mid_remesh.finish(context) if done else None
+                except Exception as error:
+                    self.abort_remesh()
+                    self.warn(context, f'MID remesh failed, kept {self.highest_mesh().name}: {error}')
+                    self.after_highest(context)
+                    return
                 if done:
-                    result=self.mid_remesh.finish(context);self.mid_remesh=None
+                    self.mid_remesh = None
                     # The remesh result (new highest Retopo) gets every fix again, after its unwrap.
-                    self.fix_mesh(context, result, guard=self.settings.phase2_topology_guard_highest)
-                    self.repack_mesh(context)
-                    if self.auto_bake:self.stage='BAKE_START'
-                    else:self.complete()
+                    self.soft(context, f'{result.name} fixes', lambda: self.fix_mesh(
+                        context, result, guard=self.settings.phase2_topology_guard_highest))
+                    self.after_highest(context)
             elif self.stage == 'BAKE_START':
                 self.start_bake(context)
                 self.stage = 'BAKE_WAIT'
@@ -714,6 +786,8 @@ class Phase2Queue:
                 if bake.bake_task_stage != 'DONE':
                     raise RuntimeError(f'Auto Bake failed: {bake.bake_task_message}')
                 self.restore_bake_settings()
+                # From here on only Retopo_01 / Resculpting_01 work follows: its errors never fail the MID.
+                self.primary_done = True
                 if self.retopo01 is not None and (self.settings.phase2_resculpt_retopo01
                                                  or self.settings.phase2_autobake_retopo01):
                     self.fix_retopo01(context, self.retopo01)
@@ -774,8 +848,10 @@ class Phase2Queue:
                 self.complete()
         except Exception as error:
             phase1 = (phase1_logs.failure_for(path, self.phase1_failures)
-                      if self.stage == 'RESTORE' and self.collection is None else None)
-            if phase1:
+                      if path and self.stage == 'RESTORE' and self.collection is None else None)
+            if self.primary_done and self.collection is not None:
+                self.drop_resculpting(context, error)
+            elif phase1:
                 # The unfinished file has nothing restorable (for example no Highpoly): not a Phase 2 error.
                 self.skip(phase1['reason'], phase1)
             else:

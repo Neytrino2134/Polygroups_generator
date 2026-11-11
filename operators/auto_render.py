@@ -44,8 +44,10 @@ def configure_auto_render(context):
 
 
 def asset_targets(context):
+    from ..core import phase2_scope
     settings = context.scene.polygroups_render_settings
-    reachable = set(context.scene.collection.children_recursive)
+    # Do Selected Phase 2 renders only the asset prepared from the selected Generated.N.
+    reachable = set(phase2_scope.keep_assets(context.scene.collection.children_recursive))
     result = []
     for col in bpy.data.collections:
         if col not in reachable or not ASSET.fullmatch(col.name):

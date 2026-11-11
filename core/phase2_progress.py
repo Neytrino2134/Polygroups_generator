@@ -76,6 +76,12 @@ def draw_start(layout, context, p):
     else:
         start.operator_context = 'INVOKE_DEFAULT'
         start.operator('object.polygroups_phase2_confirm_start', text='Start Phase 2 Process', icon='PLAY').then = 'PHASE2'
+        from ..operators.phase2_pipeline import selected_generated
+        names = selected_generated(context)
+        selected = start.row(align=True)
+        selected.enabled = bool(names)
+        selected.operator('object.polygroups_phase2_confirm_start', icon='RESTRICT_SELECT_OFF',
+                          text='Do Selected Phase 2' + (f' ({", ".join(names)})' if names else '')).then = 'PHASE2_SELECTED'
     recovery = layout.row()
     recovery.operator('object.polygroups_phase2_reset_state', text='Reset State', icon='FILE_REFRESH')
     saves = layout.column(align=True)

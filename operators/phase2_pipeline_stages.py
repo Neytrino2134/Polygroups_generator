@@ -28,11 +28,16 @@ def restore(run, context):
             phase2_fix_source_before_mid=p.phase2_run_fix_source,
             phase2_mid_remesh=p.phase2_run_mid).items():
         run.override(p, name, value)
-    entries = phase.scan(context, run.report)
-    if not entries:
-        raise ValueError('No separated Generated collections found')
-    if p.phase2_clear_generated:
-        phase.clear_generated_collections(context.scene)
+    from ..core import phase2_scope
+    if phase2_scope.active():
+        # Do Selected Phase 2: process the Generated.N already in the scene, read no files.
+        entries = [('', name) for name in sorted(phase2_scope.SCOPE['generated'])]
+    else:
+        entries = phase.scan(context, run.report)
+        if not entries:
+            raise ValueError('No separated Generated collections found')
+        if p.phase2_clear_generated:
+            phase.clear_generated_collections(context.scene)
     queue = phase.Phase2Queue(context, entries, rebake, p.phase2_repair_artifacts, run.report)
     queue.on_result = run.collection_result
     run.begin_collections(entries)
@@ -95,6 +100,7 @@ def prepare(run, context):
         version_index=s.unity_asset_index if unity else s.unreal_lod_version_index)
     if not worker.asset or not worker.name_index.isdigit() or not worker.version_index.isdigit():
         raise ValueError('Set an Asset Name and numeric indices in Batch Finalization')
+    worker.prepared = []    # (Generated.N, renamed objects) filled by the steps
     p.phase2_final_is_running = True
     try:
         for fraction, text in OBJECT_OT_polygroups_batch_finalization.steps(worker, context):
@@ -102,24 +108,76 @@ def prepare(run, context):
             yield fraction, text, 'assets completed' in text
     finally:
         p.phase2_final_is_running = False
+        mark_prepared_assets(context, worker.prepared, run.report)
+
+
+def mark_prepared_assets(context, prepared, report):
+    """Find the *_Collection asset of each prepared Generated.N: it joins the Do Selected scope, and
+    one prepared from a collection that continued after Phase 2 errors gets color tag 5."""
+    from .phase2_blend_export import asset_collections
+    from ..core import phase2_scope
+    assets = asset_collections(context.scene)
+    for collection, objects, warning in prepared:
+        names = set()
+        for obj in objects:
+            try:
+                names.add(obj.name)
+            except ReferenceError:
+                pass
+        mine = [col for col in assets if any(name in col.all_objects for name in names)]
+        phase2_scope.add_assets(col.name for col in mine)
+        if warning:
+            for col in mine:
+                col.color_tag = 'COLOR_05'
+                col[phase2_scope.WARNING_KEY] = warning
+            report({'WARNING'}, f'{collection}: prepared with Phase 2 errors (color tag 5): {warning}')
 
 
 def export_prepared(run, context):
+    from ..core import phase2_scope
     p = run.settings
     run.override(p, 'phase2_export_engine', p.phase2_run_engine)
     yield 0, 'Exporting prepared models', False
-    if 'FINISHED' not in bpy.ops.object.polygroups_phase2_export('EXEC_DEFAULT'):
+    if phase2_scope.active():
+        # Only the meshes of the selected asset, replacing its earlier export files.
+        from .phase2_export import prepared_meshes
+        from .rename_objects import ensure_collection_visible_in_view_layer
+        assets = set(phase2_scope.keep_assets(c for c in context.scene.collection.children_recursive
+                                              if c.name.endswith('_Collection')))
+        meshes = [obj for obj in prepared_meshes(context) if any(col in assets for col in obj.users_collection)
+                  or any(obj.name in col.all_objects for col in assets)]
+        if not meshes:
+            yield 1, 'Export: no prepared asset for the selected collection', True
+            return
+        for col in assets:
+            ensure_collection_visible_in_view_layer(context, col)
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in meshes:
+            obj.hide_viewport = obj.hide_select = False
+            obj.hide_set(False)
+            obj.select_set(True)
+        context.view_layer.objects.active = meshes[0]
+        result = bpy.ops.object.polygroups_phase2_export('EXEC_DEFAULT', selected_only=True)
+    else:
+        result = bpy.ops.object.polygroups_phase2_export('EXEC_DEFAULT')
+    if 'FINISHED' not in result:
         raise RuntimeError(p.phase2_export_status)
     yield 1, p.phase2_export_status, True
 
 
 def export_blend(run, context):
     from .phase2_blend_export import asset_collections, generated_collections, blend_file_stem, export_collection_blend
+    from ..core import phase2_scope
+    from ..core.skip_marks import is_marked
     p = run.settings
-    collections = asset_collections(context.scene)
+    collections = phase2_scope.keep_assets(asset_collections(context.scene))
     if p.phase2_blend_export_generated:
-        collections += generated_collections(context.scene)
+        # A Generated.N that failed in Phase 2 is written as well, so its file is never missing.
+        collections += phase2_scope.keep_generated(generated_collections(context.scene, include_marked=True))
     if not collections:
+        if phase2_scope.active():
+            yield 1, 'Export Blend: nothing to export for the selected collection', True
+            return
         raise ValueError('No collections available for Blend export')
     names = [blend_file_stem(col) for col in collections]
     if len(set(name.casefold() for name in names)) != len(names):
@@ -134,7 +192,7 @@ def export_blend(run, context):
         yield i/len(names), f'Export Blend {i+1}/{len(names)}: {name}', False
         export_collection_blend(col, str(folder / (name + '.blend')), p.phase2_blend_export_pack,
             reset_y=p.phase2_blend_export_reset_y and col.name.endswith('_Collection'))
-        if delete and col in generated:
+        if delete and col in generated and not is_marked(col):   # failed ones stay for manual work
             from .zbrush_cleanup import delete_generated
             delete_generated([col])
             deleted += 1
@@ -146,8 +204,15 @@ def export_blend(run, context):
 def zbrush(run, context):
     from . import phase2_zbrush_export as export
     from ..core import zbrush_export as zb
+    from ..core import phase2_scope
     p = run.settings
     candidates = export.batch_candidates(context.scene)
+    if phase2_scope.active():
+        names = phase2_scope.SCOPE['generated']
+        candidates = [item for item in candidates if item[0] in names]
+        if not candidates:
+            yield 1, 'ZBrush: no Resculpting_01 with Multires in the selected collection', True
+            return
     if not candidates:
         raise ValueError('ZBrush requires Resculpting_01_Highpoly_Generated.N with Multires')
     root = zb.output_root(bpy.data.filepath, bpy.path.abspath(p.phase2_zbrush_directory))
@@ -204,8 +269,9 @@ def zbrush(run, context):
 def cleanup(run, context):
     from .phase2_blend_export import generated_collections
     from .zbrush_cleanup import delete_generated, clear_mesh_folder, focus_blender
+    from ..core import phase2_scope
     files, folders = clear_mesh_folder(run.zbrush_root) if run.zbrush_root else (0, 0)
-    cols, objects = delete_generated(generated_collections(context.scene))
+    cols, objects = delete_generated(phase2_scope.keep_generated(generated_collections(context.scene)))
     if run.zbrush_root:
         focus_blender()
     yield 1, f'Cleanup: {cols} collections / {objects} objects / {files} files / {folders} folders', True

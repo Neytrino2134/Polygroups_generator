@@ -143,8 +143,15 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
         s = context.scene.polygroups_mesh_finalization_settings
         if not p.phase2_final_lods and not p.phase2_final_rename:
             raise ValueError('Enable Prepare LODs or Rename')
+        from ..core import phase2_scope
         packs = finalization_packs(context)
         slots = asset_slots(packs)
+        if phase2_scope.active():
+            # Do Selected Phase 2: one Generated.N; its number gives the version (Generated.003 -> 3rd).
+            packs = [pack for pack in packs if pack[0].name in phase2_scope.SCOPE['generated']]
+            if not packs:
+                raise ValueError('The selected Generated.N has no numbered Retopo mesh to prepare')
+            slots = [(phase2_scope.generated_number(col.name) or 1) - 1 for col, _source, _meshes in packs]
         if len({source for col, source, meshes in packs}) != len(packs):
             raise ValueError('A source mesh belongs to multiple Generated collections')
         if p.phase2_final_lods:
@@ -230,6 +237,9 @@ class OBJECT_OT_polygroups_batch_finalization(SequentialJob, bpy.types.Operator)
                     for obj in generated:
                         obj[LOD_SOURCE] = source.name
                     completed_collections.append(col)
+                    if hasattr(self, 'prepared'):
+                        self.prepared.append((col.name, list(targets) + list(generated),
+                                              col.get(phase2_scope.WARNING_KEY, '')))
                 yield .02 + .98*(ordinal+1)/len(packs), f'{ordinal+1}/{len(packs)} assets completed'
         finally:
             for name, value in saved.items():
