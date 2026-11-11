@@ -124,6 +124,9 @@ with tempfile.TemporaryDirectory() as directory:
     retopo.select_set(True)
     ctx.view_layer.objects.active = retopo
     assert selected_generated(ctx) == ['Generated.003']
+    # Both operators keep working callbacks (a registered subclass used to break the parent's poll).
+    bpy.ops.object.polygroups_start_phase2.poll()
+    bpy.ops.object.polygroups_phase2_do_selected.poll()
     queues = []
     runner = SimpleNamespace(settings=p, report=lambda *_: None, detail=lambda *_: None,
                              override=lambda owner, name, value: setattr(owner, name, value),

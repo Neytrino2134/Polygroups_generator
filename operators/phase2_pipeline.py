@@ -319,16 +319,15 @@ def stop_pipeline(*_):
         ACTIVE_PIPELINE.finish(bpy.context, 'STOPPED')
 
 
-class OBJECT_OT_polygroups_start_phase2(bpy.types.Operator):
-    bl_idname = 'object.polygroups_start_phase2'
-    bl_label = 'Start Phase 2 Process'
-    bl_description = 'Run all enabled Phase 2 passes sequentially with one queue'
+def can_start(context):
+    from .phase2_processing import available
+    from .zbrush_cleanup import cleanup_pending
+    return context.mode == 'OBJECT' and ACTIVE_PIPELINE is None and available(context) and not cleanup_pending()
 
-    @classmethod
-    def poll(cls, context):
-        from .phase2_processing import available
-        from .zbrush_cleanup import cleanup_pending
-        return context.mode == 'OBJECT' and ACTIVE_PIPELINE is None and available(context) and not cleanup_pending()
+
+class Phase2StartRunner:
+    """Shared execute/modal. A plain mixin: Blender breaks the callbacks of a registered
+    operator class when another registered operator subclasses it."""
 
     def collections(self, context):
         return None   # every Generated.N file
@@ -367,6 +366,16 @@ class OBJECT_OT_polygroups_start_phase2(bpy.types.Operator):
         return {'PASS_THROUGH'}
 
 
+class OBJECT_OT_polygroups_start_phase2(Phase2StartRunner, bpy.types.Operator):
+    bl_idname = 'object.polygroups_start_phase2'
+    bl_label = 'Start Phase 2 Process'
+    bl_description = 'Run all enabled Phase 2 passes sequentially with one queue'
+
+    @classmethod
+    def poll(cls, context):
+        return can_start(context)
+
+
 def selected_generated(context):
     """Generated.N names holding the selected meshes (a Retopo_XX, Resculpting or any object in it)."""
     from ..core.phase2_scope import NUMBER
@@ -385,7 +394,7 @@ def selected_generated(context):
     return found
 
 
-class OBJECT_OT_polygroups_phase2_do_selected(OBJECT_OT_polygroups_start_phase2):
+class OBJECT_OT_polygroups_phase2_do_selected(Phase2StartRunner, bpy.types.Operator):
     bl_idname = 'object.polygroups_phase2_do_selected'
     bl_label = 'Do Selected Phase 2'
     bl_description = ('Run the enabled Phase 2 passes only for the Generated.N of the selected Retopo_XX mesh: '
@@ -394,7 +403,7 @@ class OBJECT_OT_polygroups_phase2_do_selected(OBJECT_OT_polygroups_start_phase2)
 
     @classmethod
     def poll(cls, context):
-        return super().poll(context) and bool(selected_generated(context))
+        return can_start(context) and bool(selected_generated(context))
 
     def collections(self, context):
         return selected_generated(context)
